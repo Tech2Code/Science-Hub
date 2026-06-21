@@ -1,0 +1,14 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.leftCol { display: flex; flex-direction: column; gap: 1rem; flex: 1; }
+
+.rightCol { width: 100%; }
+
+@media (min-width: 1280px) {
+  .layout { flex-direction: row; align-items: flex-start; }
+  .rightCol { width: 18rem; flex-shrink: 0; }
+}

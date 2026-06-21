@@ -1,0 +1,64 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { revalidateTag } from "next/cache";
+import { getProducts } from "@/lib/db";
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search");
+    const products = await getProducts(search);
+    return NextResponse.json(products);
+  } catch (error) {
+    console.error("GET /api/products error:", error);
+    return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const {
+      name,
+      description,
+      sku,
+      unit,
+      price,
+      gstRate,
+      stock,
+      minStock,
+      categoryId,
+      brandId,
+    } = body;
+
+    if (!name || price === undefined) {
+      return NextResponse.json({ error: "Name and price are required" }, { status: 400 });
+    }
+
+    const product = await prisma.product.create({
+      data: {
+        name,
+        description,
+        sku,
+        unit,
+        price: parseFloat(price),
+        gstRate: gstRate !== undefined ? parseFloat(gstRate) : 18,
+        stock: stock !== undefined ? parseInt(stock) : 0,
+        minStock: minStock !== undefined ? parseInt(minStock) : 5,
+        categoryId: categoryId || null,
+        brandId: brandId || null,
+      },
+      include: {
+        category: true,
+        brand: true,
+      },
+    });
+
+    revalidateTag("products", { expire: 0 });
+    revalidateTag("reports", { expire: 0 });
+    return NextResponse.json(product, { status: 201 });
+  } catch (error) {
+    console.error("POST /api/products error:", error);
+    return NextResponse.json({ error: "Failed to create product" }, { status: 500 });
+  }
+}

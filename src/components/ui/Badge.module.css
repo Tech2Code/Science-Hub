@@ -1,0 +1,16 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.paid    { background: var(--c-green-bg);  color: var(--c-green-text);  }
+.partial { background: var(--c-amber-bg);  color: var(--c-amber-text);  }
+.unpaid  { background: var(--c-red-bg);    color: var(--c-red-text);    }
+.neutral { background: var(--c-bg-sub);    color: var(--c-text-3);      }
+.blue    { background: var(--c-blue-bg);   color: var(--c-blue-text);   }

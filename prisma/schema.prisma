@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("staff")
+  createdAt DateTime @default(now())
+  invoices  Invoice[]
+}
+
+model Customer {
+  id        String    @id @default(cuid())
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  city      String?
+  state     String?
+  pincode   String?
+  gstin     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  invoices  Invoice[]
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  products Product[]
+}
+
+model Brand {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  products Product[]
+}
+
+model Product {
+  id           String        @id @default(cuid())
+  name         String
+  description  String?
+  sku          String?       @unique
+  unit         String        @default("Nos")
+  price        Float
+  gstRate      Float         @default(18)
+  stock        Int           @default(0)
+  minStock     Int           @default(5)
+  categoryId   String?
+  brandId      String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  category     Category?     @relation(fields: [categoryId], references: [id])
+  brand        Brand?        @relation(fields: [brandId], references: [id])
+  invoiceItems InvoiceItem[]
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  invoiceNumber String        @unique
+  date          DateTime      @default(now())
+  dueDate       DateTime?
+  customerId    String
+  userId        String
+  status        String        @default("unpaid")
+  subtotal      Float
+  cgst          Float         @default(0)
+  sgst          Float         @default(0)
+  igst          Float         @default(0)
+  total         Float
+  paidAmount    Float         @default(0)
+  notes         String?
+  isInterState  Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  customer      Customer      @relation(fields: [customerId], references: [id])
+  createdBy     User          @relation(fields: [userId], references: [id])
+  items         InvoiceItem[]
+  payments      Payment[]
+}
+
+model InvoiceItem {
+  id        String  @id @default(cuid())
+  invoiceId String
+  productId String
+  name      String
+  quantity  Float
+  unit      String
+  price     Float
+  gstRate   Float
+  gstAmount Float
+  total     Float
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  amount    Float
+  method    String   @default("cash")
+  reference String?
+  date      DateTime @default(now())
+  notes     String?
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}

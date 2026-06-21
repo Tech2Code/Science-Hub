@@ -1,0 +1,528 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import { Button } from "@/components/ui/Button";
+import { StatusBadge } from "@/components/ui/Badge";
+import { fetchCached, bustCache } from "@/lib/useCache";
+import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { Input, Select, FormField } from "@/components/ui/Input";
+
+interface InvoiceItem {
+  id: string; name: string; unit: string;
+  quantity: number; price: number; gstRate: number; gstAmount: number; total: number;
+}
+interface Payment {
+  id: string; date: string; amount: number; method: string; reference: string;
+}
+interface Invoice {
+  id: string; invoiceNumber: string; date: string; dueDate?: string; createdAt: string;
+  status: string; isInterState: boolean;
+  customer: { name: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; gstin: string; };
+  items: InvoiceItem[];
+  payments: Payment[];
+  subtotal: number; cgst: number; sgst: number; igst: number;
+  total: number; paidAmount: number; notes: string;
+}
+
+const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
+const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+
+function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
+  return (
+    <div style={{
+      width: w, height: h, borderRadius: r,
+      background: "var(--c-border)",
+      animation: "skPulse 1.4s ease-in-out infinite",
+    }} />
+  );
+}
+
+function InvoiceSkeleton() {
+  return (
+    <>
+      <style>{`@keyframes skPulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
+      <div className="page-stack">
+        {/* toolbar */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:"0.75rem" }}>
+          <Sk w={180} h={14} />
+          <div style={{ display:"flex", gap:"0.5rem" }}>
+            <Sk w={80} h={32} r={8} />
+            <Sk w={100} h={32} r={8} />
+          </div>
+        </div>
+
+        {/* header card */}
+        <div className="card" style={{ padding:"1.25rem", display:"flex", flexWrap:"wrap", gap:"1rem", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            <Sk w={160} h={22} />
+            <Sk w={100} h={14} />
+          </div>
+          <div style={{ display:"flex", gap:"0.5rem" }}>
+            <Sk w={90} h={32} r={8} />
+            <Sk w={110} h={32} r={8} />
+          </div>
+        </div>
+
+        {/* invoice body card */}
+        <div className="card" style={{ padding:"1.25rem" }}>
+          {/* meta rows */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.75rem", marginBottom:"1.25rem" }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                <Sk w={80} h={11} />
+                <Sk w="70%" h={15} />
+              </div>
+            ))}
+          </div>
+
+          {/* table header */}
+          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr", gap:"0.5rem", marginBottom:"0.5rem" }}>
+            {["Item", "Qty", "Rate", "GST", "Total"].map(col => (
+              <Sk key={col} w="80%" h={11} />
+            ))}
+          </div>
+
+          {/* table rows */}
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr", gap:"0.5rem", marginBottom:"0.5rem" }}>
+              <Sk w="90%" h={14} />
+              <Sk w="60%" h={14} />
+              <Sk w="70%" h={14} />
+              <Sk w="50%" h={14} />
+              <Sk w="80%" h={14} />
+            </div>
+          ))}
+
+          {/* totals */}
+          <div style={{ marginTop:"1rem", display:"flex", flexDirection:"column", alignItems:"flex-end", gap:8 }}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} style={{ display:"flex", gap:"1rem" }}>
+                <Sk w={100} h={14} />
+                <Sk w={80} h={14} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+export default function InvoiceDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({ amount: "", method: "Cash", reference: "" });
+  const [addingPayment, setAddingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
+
+  async function load(force = false) {
+    try {
+      const data = await fetchCached<Invoice>(`/api/invoices/${id}`, force);
+      setInvoice(data);
+    } catch { setError("Invoice not found."); }
+    setLoading(false);
+  }
+  useEffect(() => { load(); }, [id]);
+
+  // Auto-trigger print/save-as-PDF when ?print=1 is in the URL
+  useEffect(() => {
+    if (!invoice) return;
+    const shouldPrint = new URLSearchParams(window.location.search).get("print") === "1";
+    if (shouldPrint) {
+      const timer = setTimeout(() => window.print(), 400);
+      return () => clearTimeout(timer);
+    }
+  }, [invoice]);
+
+  async function handleAddPayment(e: React.FormEvent) {
+    e.preventDefault();
+    const amt = parseFloat(paymentForm.amount);
+    if (isNaN(amt) || amt <= 0) { setPaymentError("Enter a valid amount."); return; }
+    if (amt > balance) { setPaymentError(`Amount cannot exceed balance due (₹${fmt(balance)}).`); return; }
+    setPaymentError(""); setAddingPayment(true);
+    const res = await fetch(`/api/invoices/${id}/payment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: amt, method: paymentForm.method, reference: paymentForm.reference }),
+    });
+    setAddingPayment(false);
+    if (res.ok) {
+      setShowPaymentForm(false);
+      setPaymentForm({ amount: "", method: "Cash", reference: "" });
+      bustCache(`/api/invoices/${id}`);
+      load(true);
+    } else {
+      const d = await res.json().catch(() => ({}));
+      setPaymentError(d?.error ?? "Failed to record payment.");
+    }
+  }
+
+  if (loading) return <InvoiceSkeleton />;
+  if (error || !invoice) return <div className="loading-center" style={{ color: "var(--c-red)" }}>{error || "Invoice not found."}</div>;
+
+  const balance = invoice.total - invoice.paidAmount;
+
+  return (
+    <>
+      <style>{`
+        #invoice-print-area {
+          --inv-bg:#fff;--inv-bg2:#f8fafc;--inv-bg3:#f1f5f9;--inv-bg4:#e2e8f0;
+          --inv-bd:#475569;--inv-bd2:#94a3b8;
+          --inv-tx:#0f172a;--inv-tx2:#334155;--inv-tx3:#64748b;
+          --inv-brand:#1e3a8a;--inv-green:#059669;--inv-blue:#2563eb;--inv-red:#dc2626;
+        }
+        .dark #invoice-print-area {
+          --inv-bg:#0f172a;--inv-bg2:#1e293b;--inv-bg3:#1e293b;--inv-bg4:#334155;
+          --inv-bd:#475569;--inv-bd2:#334155;
+          --inv-tx:#f1f5f9;--inv-tx2:#cbd5e1;--inv-tx3:#94a3b8;
+          --inv-brand:#93c5fd;--inv-green:#34d399;--inv-blue:#60a5fa;--inv-red:#f87171;
+        }
+        @page { size: A4 portrait; margin: 12mm 8mm; }
+        @media print {
+          *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+          html,body{background:#fff!important;color:#0f172a!important}
+          body *{visibility:hidden!important}
+          #invoice-print-area,#invoice-print-area *{visibility:visible!important}
+          #invoice-print-area{
+            position:absolute!important;top:0!important;left:0!important;
+            width:100%!important;height:auto!important;padding:4px!important;
+            box-shadow:none!important;border-radius:0!important;
+            --inv-bg:#fff!important;--inv-bg2:#f8fafc!important;--inv-bg3:#f1f5f9!important;--inv-bg4:#e2e8f0!important;
+            --inv-bd:#475569!important;--inv-bd2:#94a3b8!important;
+            --inv-tx:#0f172a!important;--inv-tx2:#334155!important;--inv-tx3:#64748b!important;
+            --inv-brand:#1e3a8a!important;--inv-green:#059669!important;--inv-blue:#2563eb!important;--inv-red:#dc2626!important;
+          }
+          #invoice-print-area > div { height:auto!important; overflow:visible!important; }
+          #invoice-print-area table { height:auto!important; border-collapse:collapse!important; }
+          #invoice-print-area thead { display:table-header-group!important; }
+          #invoice-print-area tfoot { display:table-footer-group!important; }
+          #invoice-print-area tbody tr { break-inside:avoid!important; page-break-inside:avoid!important; }
+          #invoice-print-area tfoot tr { break-inside:avoid!important; page-break-inside:avoid!important; }
+        }
+      `}</style>
+
+      <div className="page-stack">
+        {/* Toolbar */}
+        <div className="page-header no-print">
+          <Breadcrumb items={[{ label: "Invoices", href: "/invoices" }, { label: invoice.invoiceNumber }]} />
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+            <StatusBadge status={invoice.status} />
+            {invoice.status !== "paid" && (
+              <Button variant="editOutline" size="sm" href={`/invoices/edit/${id}`}>Edit Invoice</Button>
+            )}
+            {balance > 0 && (
+              <Button
+                variant="greenPrimary"
+                size="sm"
+                onClick={() => {
+                  setPaymentForm({ amount: "", method: "Cash", reference: "" });
+                  setPaymentError("");
+                  setShowPaymentForm(true);
+                }}
+              >
+                + Record Payment
+              </Button>
+            )}
+            <Button variant="secondary" size="sm" onClick={() => window.print()}>
+              Download / Print PDF
+            </Button>
+          </div>
+        </div>
+
+        {/* Payment form */}
+        {showPaymentForm && (
+          <div className="card no-print" style={{ padding: "1.25rem" }}>
+            <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text)", marginBottom: "0.75rem" }}>Record Payment</h3>
+            {paymentError && <div className="error-banner" style={{ marginBottom: "0.75rem" }}>{paymentError}</div>}
+            <form onSubmit={handleAddPayment} style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
+              <FormField label="Amount (₹)">
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    value={paymentForm.amount}
+                    onChange={(e) => { setPaymentError(""); setPaymentForm((p) => ({ ...p, amount: e.target.value })); }}
+                    placeholder={`e.g. ${balance.toFixed(2)}`}
+                    sz="sm"
+                    style={{ width: "9rem" }}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPaymentForm((p) => ({ ...p, amount: balance.toFixed(2) }))}
+                    style={{
+                      fontSize: "0.7rem", fontWeight: 600, padding: "0.2rem 0.5rem",
+                      borderRadius: "0.375rem", border: "1px solid var(--c-green-border)",
+                      background: "var(--c-green-bg)", color: "var(--c-green-text)",
+                      cursor: "pointer", whiteSpace: "nowrap",
+                    }}
+                  >
+                    Full ₹{fmt(balance)}
+                  </button>
+                </div>
+                <p style={{ fontSize: "0.7rem", color: "var(--c-text-4)", marginTop: "0.2rem" }}>
+                  Balance due: ₹{fmt(balance)}
+                </p>
+              </FormField>
+              <FormField label="Method">
+                <Select
+                  value={paymentForm.method}
+                  onChange={(e) => setPaymentForm((p) => ({ ...p, method: e.target.value }))}
+                  sz="sm"
+                >
+                  {PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
+                </Select>
+              </FormField>
+              <FormField label="Reference / UTR">
+                <Input
+                  type="text"
+                  value={paymentForm.reference}
+                  onChange={(e) => setPaymentForm((p) => ({ ...p, reference: e.target.value }))}
+                  placeholder="Optional"
+                  sz="sm"
+                  style={{ width: "10rem" }}
+                />
+              </FormField>
+              <div style={{ display: "flex", gap: "0.5rem", paddingBottom: "0.125rem" }}>
+                <Button type="submit" variant="greenPrimary" size="sm" loading={addingPayment} fullScreen disabled={addingPayment}>
+                  {addingPayment ? "Saving…" : "Save Payment"}
+                </Button>
+                <Button type="button" variant="secondary" size="sm" onClick={() => setShowPaymentForm(false)}>Cancel</Button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Invoice print area */}
+        <div id="invoice-print-area"
+          style={{ background: "var(--inv-bg)", color: "var(--inv-tx)", borderRadius: "0.75rem", boxShadow: "var(--c-shadow-sm)" }}>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th colSpan={invoice.isInterState ? 10 : 11}
+                    style={{ background: "var(--inv-brand)", color: "var(--inv-bg)", textAlign: "center",
+                      padding: "10px 0", fontWeight: 700, letterSpacing: "0.15em", fontSize: 14,
+                      textTransform: "uppercase", border: "1px solid var(--inv-bd)" }}>
+                    TAX INVOICE
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td rowSpan={invoice.dueDate ? 5 : 4} colSpan={invoice.isInterState ? 5 : 6}
+                    style={{ border: "1px solid var(--inv-bd)", padding: "14px 16px", verticalAlign: "top" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                      <span style={{ fontSize: 16 }}>⚗️</span>
+                      <strong style={{ fontSize: 14, color: "var(--inv-brand)" }}>Science Hub</strong>
+                    </div>
+                    <div style={{ color: "var(--inv-tx2)", lineHeight: 1.6 }}>
+                      <div>Industrial &amp; Laboratory Solutions</div>
+                      <div>Pooth Khurd, Delhi – 110039</div>
+                      <div>Ph: +91-9968597044</div>
+                      <div>sciencehub.center@gmail.com</div>
+                    </div>
+                  </td>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,whiteSpace:"nowrap",background:"var(--inv-bg2)",width:"14%" }}>Invoice No.</td>
+                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",fontWeight:700,color:"var(--inv-tx)" }}>{invoice.invoiceNumber}</td>
+                </tr>
+                <tr>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Invoice Date</td>
+                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
+                    {new Date(invoice.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
+                  </td>
+                </tr>
+                <tr>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Created At</td>
+                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
+                    {new Date(invoice.createdAt).toLocaleString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:true})}
+                  </td>
+                </tr>
+                {invoice.dueDate && (
+                  <tr>
+                    <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Due Date</td>
+                    <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
+                      {new Date(invoice.dueDate).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
+                    </td>
+                  </tr>
+                )}
+                <tr>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Supply Type</td>
+                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",
+                    color: invoice.isInterState ? "var(--inv-blue)" : "var(--inv-green)", fontWeight:600 }}>
+                    {invoice.isInterState ? "Inter-state (IGST)" : "Intra-state (CGST+SGST)"}
+                  </td>
+                </tr>
+
+                {/* Bill To */}
+                <tr>
+                  <td colSpan={invoice.isInterState ? 10 : 11} style={{ border:"1px solid var(--inv-bd)",padding:0 }}>
+                    <div style={{ background:"var(--inv-bg3)",padding:"5px 14px",fontSize:11,fontWeight:700,
+                      textTransform:"uppercase",letterSpacing:"0.1em",color:"var(--inv-tx2)",borderBottom:"1px solid var(--inv-bd)" }}>
+                      Bill To
+                    </div>
+                    <div style={{ padding:"10px 14px" }}>
+                      <div style={{ fontWeight:700,fontSize:13,color:"var(--inv-tx)",marginBottom:2 }}>{invoice.customer.name}</div>
+                      {invoice.customer.address && <div style={{ color:"var(--inv-tx2)" }}>{invoice.customer.address}</div>}
+                      <div style={{ color:"var(--inv-tx2)" }}>{[invoice.customer.city,invoice.customer.state,invoice.customer.pincode].filter(Boolean).join(", ")}</div>
+                      <div style={{ display:"flex",gap:16,marginTop:4 }}>
+                        {invoice.customer.phone && <span style={{ color:"var(--inv-tx3)" }}>Ph: {invoice.customer.phone}</span>}
+                        {invoice.customer.gstin && (
+                          <span style={{ fontFamily:"monospace",fontWeight:600,color:"var(--inv-tx2)",
+                            background:"var(--inv-bg3)",border:"1px solid var(--inv-bd2)",borderRadius:3,padding:"1px 6px" }}>
+                            GSTIN: {invoice.customer.gstin}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+
+                {/* Items header */}
+                <tr style={{ background:"var(--inv-bg3)",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:"0.05em",color:"var(--inv-tx2)" }}>
+                  {[
+                    ["#","center","3%"],["Description","left","35%"],["HSN","center","5%"],
+                    ["Qty","center","4%"],["Unit","center","4%"],["Rate (₹)","right","9%"],
+                    ["Taxable (₹)","right","9%"],["GST%","center","4%"],
+                  ].map(([label, align, width]) => (
+                    <td key={label} style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:align as "left"|"right"|"center",width }}>{label}</td>
+                  ))}
+                  {invoice.isInterState
+                    ? <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"10%" }}>IGST (₹)</td>
+                    : <>
+                        <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"9%" }}>CGST (₹)</td>
+                        <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"9%" }}>SGST (₹)</td>
+                      </>
+                  }
+                  <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"11%" }}>Total (₹)</td>
+                </tr>
+
+                {/* Item rows */}
+                {invoice.items.map((item, idx) => {
+                  const taxable = item.quantity * item.price;
+                  const halfGst = item.gstAmount / 2;
+                  const rowBg = idx % 2 === 1 ? "var(--inv-bg2)" : "var(--inv-bg)";
+                  const c = (content: React.ReactNode, align: "left"|"right"|"center" = "center", bold = false) => (
+                    <td style={{ border:"1px solid var(--inv-bd)",padding:"7px 8px",textAlign:align,
+                      fontWeight:bold?700:undefined,background:rowBg,color:bold?"var(--inv-tx)":"var(--inv-tx2)" }}>
+                      {content}
+                    </td>
+                  );
+                  return (
+                    <tr key={item.id}>
+                      {c(idx + 1)}
+                      <td style={{ border:"1px solid var(--inv-bd)",padding:"7px 10px",background:rowBg,fontWeight:600,color:"var(--inv-tx)",wordBreak:"break-word" }}>{item.name}</td>
+                      {c("—")}{c(item.quantity)}{c(item.unit)}
+                      {c(fmt(item.price),"right")}
+                      {c(fmt(taxable),"right")}
+                      {c(`${item.gstRate}%`)}
+                      {invoice.isInterState
+                        ? c(fmt(item.gstAmount),"right")
+                        : <>{c(fmt(halfGst),"right")}{c(fmt(halfGst),"right")}</>}
+                      {c(fmt(item.total),"right",true)}
+                    </tr>
+                  );
+                })}
+
+                {/* Notes + Totals */}
+                <tr>
+                  <td colSpan={invoice.isInterState ? 5 : 6} rowSpan={invoice.isInterState ? 6 : 7}
+                    style={{ border:"1px solid var(--inv-bd)",padding:"14px 16px",verticalAlign:"top",color:"var(--inv-tx3)" }}>
+                    <div style={{ display:"flex",flexDirection:"column",height:"100%",minHeight:120 }}>
+                      <div style={{ marginTop:"auto" }}>
+                        {invoice.notes
+                          ? <><div style={{ fontWeight:700,textTransform:"uppercase",fontSize:11,marginBottom:4,color:"var(--inv-tx2)" }}>Notes</div><p>{invoice.notes}</p></>
+                          : <p style={{ fontStyle:"italic",opacity:0.5 }}>No notes</p>}
+                        <p style={{ marginTop:10,fontSize:11,opacity:0.55 }}>This is a computer-generated invoice.</p>
+                        <div style={{ marginTop:16,marginLeft:8,marginRight:8,borderTop:"1px solid var(--inv-bd2)",paddingTop:8 }}>
+                          <div style={{ fontSize:11,fontWeight:600,color:"var(--inv-tx2)",marginBottom:20 }}>For Science Hub</div>
+                          <div style={{ fontSize:10,color:"var(--inv-tx3)" }}>Authorised Signatory</div>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>Subtotal</td>
+                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.subtotal)}</td>
+                </tr>
+                {invoice.isInterState ? (
+                  <tr>
+                    <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>IGST</td>
+                    <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.igst)}</td>
+                  </tr>
+                ) : (
+                  <>
+                    <tr>
+                      <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>CGST</td>
+                      <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.cgst)}</td>
+                    </tr>
+                    <tr>
+                      <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>SGST</td>
+                      <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.sgst)}</td>
+                    </tr>
+                  </>
+                )}
+                <tr>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",fontWeight:700,color:"var(--inv-tx)",background:"var(--inv-bg4)",fontSize:13 }}>Grand Total</td>
+                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",textAlign:"right",fontWeight:700,color:"var(--inv-tx)",background:"var(--inv-bg4)",fontSize:13 }}>₹{fmt(invoice.total)}</td>
+                </tr>
+                <tr>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-green)",background:"var(--inv-bg2)" }}>Paid</td>
+                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-green)",fontWeight:600,background:"var(--inv-bg2)" }}>₹{fmt(invoice.paidAmount)}</td>
+                </tr>
+                <tr>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",fontWeight:700,color:"var(--inv-tx)",background:"var(--inv-bg3)" }}>Balance Due</td>
+                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",textAlign:"right",fontWeight:700,fontSize:14,background:"var(--inv-bg3)",
+                    color: balance > 0 ? "var(--inv-red)" : "var(--inv-green)" }}>₹{fmt(balance)}</td>
+                </tr>
+
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={invoice.isInterState ? 10 : 11}
+                    style={{ border:"1px solid var(--inv-bd)",padding:"8px 16px",textAlign:"center",fontSize:11,color:"var(--inv-tx3)",background:"var(--inv-bg2)" }}>
+                    Thank you for your business · Science Hub · sciencehub.center@gmail.com · +91-9968597044
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        {/* Payment history */}
+        {invoice.payments.length > 0 && (
+          <div className="card no-print">
+            <div style={{ padding:"1rem 1.25rem",borderBottom:"1px solid var(--c-border)" }}>
+              <h2 style={{ fontWeight:600,color:"var(--c-text)",fontSize:"0.875rem" }}>Payment History</h2>
+            </div>
+            <div className="table-wrap">
+              <table className="table-base">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Method</th>
+                    <th>Reference</th>
+                    <th className="table-th-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoice.payments.map((p) => (
+                    <tr key={p.id}>
+                      <td style={{ color:"var(--c-text-3)" }}>{new Date(p.date).toLocaleDateString("en-IN")}</td>
+                      <td style={{ color:"var(--c-text-3)" }}>{p.method}</td>
+                      <td style={{ color:"var(--c-text-4)",fontFamily:"var(--font-mono)",fontSize:"0.75rem" }}>{p.reference || "—"}</td>
+                      <td className="table-td-right" style={{ fontWeight:500,color:"var(--c-green)" }}>₹{fmt(p.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}

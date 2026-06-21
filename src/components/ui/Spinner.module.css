@@ -1,0 +1,14 @@
+@keyframes spinAnim {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  animation: spinAnim 0.7s linear infinite;
+  color: var(--c-blue, #2563eb);
+}
+
+.sm  { width: 1rem;    height: 1rem;    }
+.md  { width: 1.75rem; height: 1.75rem; }
+.lg  { width: 2.5rem;  height: 2.5rem;  }

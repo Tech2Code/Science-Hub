@@ -1,0 +1,212 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0d9488 100%);
+  padding: 1rem;
+  position: relative;
+}
+
+.grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.08;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.wrap {
+  position: relative;
+  width: 100%;
+  max-width: 22rem;
+}
+
+.brand {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+.brandIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 1rem;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  margin-bottom: 1rem;
+  backdrop-filter: blur(4px);
+  font-size: 1.5rem;
+}
+.brandName {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+.brandSub {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #93c5fd;
+  margin-top: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.card {
+  background: #fff;
+  border-radius: 1rem;
+  box-shadow: 0 25px 50px -12px rgba(15,23,42,0.5);
+  padding: 2rem;
+}
+
+.cardTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 1.5rem;
+}
+
+.errorBox {
+  margin-bottom: 1.25rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+  font-size: 0.875rem;
+}
+
+.formStack { display: flex; flex-direction: column; gap: 1.25rem; }
+
+.fieldLabel {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #475569;
+  margin-bottom: 0.375rem;
+}
+
+.input {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input::placeholder { color: #94a3b8; }
+.input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+}
+
+.submitBtn {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  outline: none;
+}
+.submitBtn:hover:not(:disabled) { background: #1d4ed8; }
+.submitBtn:disabled { background: #93c5fd; cursor: not-allowed; }
+.submitBtn:focus-visible { box-shadow: 0 0 0 3px rgba(37,99,235,0.45); }
+
+.hint {
+  margin-top: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(4px);
+  padding: 1rem 1.25rem;
+  font-size: 0.875rem;
+  color: #bfdbfe;
+}
+.hintTitle {
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+.hintRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.75rem;
+  color: #93c5fd;
+  margin-bottom: 0.25rem;
+}
+.hintKey { color: #60a5fa; }
+.fillBtn {
+  margin-top: 0.75rem;
+  width: 100%;
+  padding: 0.375rem 0;
+  border-radius: 0.5rem;
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.fillBtn:hover { background: rgba(255,255,255,0.2); }
+
+.footer {
+  text-align: center;
+  color: rgba(147,197,253,0.5);
+  font-size: 0.75rem;
+  margin-top: 1rem;
+}
+
+/* ── Forgot / reset password ─────── */
+.forgotRow {
+  text-align: center;
+  margin-top: 0.75rem;
+}
+.forgotLink {
+  font-size: 0.8125rem;
+  color: rgba(147,197,253,0.8);
+  text-decoration: none;
+}
+.forgotLink:hover { color: #93c5fd; text-decoration: underline; }
+
+.successText {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+.resetHintText {
+  font-size: 0.75rem;
+  color: #93c5fd;
+  margin-bottom: 0.5rem;
+}
+.resetHintCode {
+  display: block;
+  font-size: 0.75rem;
+  color: #60a5fa;
+  font-family: var(--font-mono), monospace;
+  background: rgba(255,255,255,0.08);
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.625rem;
+}
+.inlineCode {
+  background: rgba(255,255,255,0.1);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-family: var(--font-mono), monospace;
+}
