@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
+import { bustCache } from "@/lib/useCache";
 
 const INDIA_STATES = [
   "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat",
@@ -51,7 +52,10 @@ export default function EditCustomerPage() {
       body: JSON.stringify(form),
     });
     setSaving(false);
-    if (res.ok) router.push("/customers");
+    if (res.ok) {
+      bustCache("/api/customers");
+      router.push("/customers");
+    }
     else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to update customer."); }
   }
 

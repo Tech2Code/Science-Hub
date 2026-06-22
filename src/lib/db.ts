@@ -97,7 +97,7 @@ export const getReportSummary = unstable_cache(
     const allProducts = await prisma.product.findMany({
       select: { stock: true, minStock: true },
     });
-    const lowStockCount = allProducts.filter((p) => p.stock <= p.minStock).length;
+    const lowStockCount = allProducts.filter((p) => p.stock < p.minStock).length;
     const recent = await prisma.invoice.findMany({
       orderBy: { date: "desc" },
       take: 5,
@@ -156,7 +156,7 @@ export const getReportStock = unstable_cache(
       orderBy: { stock: "asc" },
       include: { category: true, brand: true },
     });
-    return allProducts.filter((p) => p.stock <= p.minStock);
+    return allProducts.filter((p) => p.stock < p.minStock);
   },
   ["report-stock"],
   { tags: ["reports"] }

@@ -30,17 +30,14 @@
   margin-bottom: 2rem;
 }
 .brandIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 3.5rem;
   height: 3.5rem;
   border-radius: 1rem;
-  background: rgba(255,255,255,0.1);
-  border: 1px solid rgba(255,255,255,0.2);
   margin-bottom: 1rem;
-  backdrop-filter: blur(4px);
-  font-size: 1.5rem;
+  object-fit: contain;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
 }
 .brandName {
   font-size: 1.5rem;

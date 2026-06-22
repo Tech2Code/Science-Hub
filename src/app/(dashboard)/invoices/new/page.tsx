@@ -8,6 +8,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Spinner } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import styles from "./new.module.css";
+import { bustCache } from "@/lib/useCache";
 
 interface Customer { id: string; name: string; city: string; state: string; gstin: string; }
 interface Product { id: string; name: string; unit: string; price: number; gstRate: number; stock: number; }
@@ -96,7 +97,13 @@ export default function NewInvoicePage() {
       }),
     });
     setSaving(false);
-    if (res.ok) { const d = await res.json(); router.push(`/invoices/${d.id}`); }
+    if (res.ok) {
+      const d = await res.json();
+      bustCache("/api/invoices");
+      bustCache("/api/reports?type=summary");
+      bustCache("/api/reports?type=outstanding");
+      router.push(`/invoices/${d.id}`);
+    }
     else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to create invoice."); }
   }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(
@@ -43,6 +44,8 @@ export async function PUT(
       data,
       include: { category: true, brand: true },
     });
+    revalidateTag("products", { expire: 0 });
+    revalidateTag("reports", { expire: 0 });
     return NextResponse.json(product);
   } catch (error) {
     console.error(error);
@@ -57,6 +60,8 @@ export async function DELETE(
   try {
     const { id } = await params;
     await prisma.product.delete({ where: { id } });
+    revalidateTag("products", { expire: 0 });
+    revalidateTag("reports", { expire: 0 });
     return NextResponse.json({ message: "Product deleted" });
   } catch (error) {
     console.error(error);

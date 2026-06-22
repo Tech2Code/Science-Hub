@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import styles from "../login/login.module.css";
 
 export default function ForgotPasswordPage() {
@@ -45,7 +46,7 @@ export default function ForgotPasswordPage() {
         <div className={styles.grid} />
         <div className={styles.wrap}>
           <div className={styles.brand}>
-            <div className={styles.brandIcon}>⚗️</div>
+            <img src="/logo.png" alt="Science Hub" className={styles.brandIcon} />
             <h1 className={styles.brandName}>Science Hub</h1>
             <p className={styles.brandSub}>Reset Password</p>
           </div>
@@ -68,7 +69,7 @@ export default function ForgotPasswordPage() {
       <div className={styles.grid} />
       <div className={styles.wrap}>
         <div className={styles.brand}>
-          <div className={styles.brandIcon}>⚗️</div>
+          <img src="/logo.png" alt="Science Hub" className={styles.brandIcon} />
           <h1 className={styles.brandName}>Science Hub</h1>
           <p className={styles.brandSub}>Reset Password</p>
         </div>
@@ -91,39 +92,33 @@ export default function ForgotPasswordPage() {
             </div>
             <div>
               <label htmlFor="fp-token" className={styles.fieldLabel}>Reset token</label>
-              <input
+              <PasswordInput
                 id="fp-token"
-                type="password"
                 required
                 value={resetToken}
                 onChange={(e) => setResetToken(e.target.value)}
                 placeholder="From ADMIN_RESET_TOKEN in .env"
-                className={styles.input}
               />
             </div>
             <div>
               <label htmlFor="fp-pass" className={styles.fieldLabel}>New password</label>
-              <input
+              <PasswordInput
                 id="fp-pass"
-                type="password"
                 required
                 minLength={8}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Min. 8 characters"
-                className={styles.input}
               />
             </div>
             <div>
               <label htmlFor="fp-confirm" className={styles.fieldLabel}>Confirm new password</label>
-              <input
+              <PasswordInput
                 id="fp-confirm"
-                type="password"
                 required
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Repeat new password"
-                className={styles.input}
               />
             </div>
             <Button type="submit" variant="primary" size="full" loading={loading} fullScreen disabled={loading}>

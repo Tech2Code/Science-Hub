@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import styles from "./login.module.css";
 
 export default function LoginPage() {
@@ -32,7 +33,7 @@ export default function LoginPage() {
       <div className={styles.grid} />
       <div className={styles.wrap}>
         <div className={styles.brand}>
-          <div className={styles.brandIcon}>⚗️</div>
+          <img src="/logo.png" alt="Science Hub" className={styles.brandIcon} />
           <h1 className={styles.brandName}>Science Hub</h1>
           <p className={styles.brandSub}>Billing &amp; Inventory</p>
         </div>
@@ -56,15 +57,13 @@ export default function LoginPage() {
             </div>
             <div>
               <label htmlFor="password" className={styles.fieldLabel}>Password</label>
-              <input
+              <PasswordInput
                 id="password"
-                type="password"
                 autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className={styles.input}
               />
             </div>
             <Button type="submit" variant="primary" size="full" loading={loading} fullScreen disabled={loading}>
@@ -73,12 +72,8 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <div className={styles.forgotRow}>
-          <Link href="/forgot-password" className={styles.forgotLink}>Forgot password?</Link>
-        </div>
-
         <div className={styles.hint}>
-          <p className={styles.hintTitle}>Default login credentials</p>
+          <p className={styles.hintTitle}>Login credentials</p>
           <div className={styles.hintRow}>
             <span className={styles.hintKey}>Email</span>
             <span>admin@sciencehub.com</span>
@@ -94,6 +89,10 @@ export default function LoginPage() {
           >
             Fill credentials
           </button>
+        </div>
+
+        <div className={styles.forgotRow}>
+          <Link href="/forgot-password" className={styles.forgotLink}>Forgot password?</Link>
         </div>
 
         <p className={styles.footer}>Science Hub © {new Date().getFullYear()}</p>

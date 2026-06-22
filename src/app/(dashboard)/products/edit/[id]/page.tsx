@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
+import { bustCache } from "@/lib/useCache";
 
 const UNITS = ["Nos", "Kg", "Ltr", "Box", "Pack", "Set", "Mtr", "Pcs"];
 const GST_RATES = [0, 5, 12, 18, 28];
@@ -70,8 +71,12 @@ export default function EditProductPage() {
       }),
     });
     setSaving(false);
-    if (res.ok) router.push("/products");
-    else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to update product."); }
+    if (res.ok) {
+      bustCache("/api/products");
+      bustCache("/api/reports?type=summary");
+      bustCache("/api/reports?type=stock");
+      router.push("/products");
+    } else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to update product."); }
   }
 
   function handleSubmit(e: React.FormEvent) {

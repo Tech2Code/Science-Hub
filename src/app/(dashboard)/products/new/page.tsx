@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
+import { bustCache } from "@/lib/useCache";
 
 const UNITS = ["Nos", "Kg", "Ltr", "Box", "Pack", "Set", "Mtr", "Pcs"];
 const GST_RATES = [0, 5, 12, 18, 28];
@@ -18,7 +19,7 @@ export default function NewProductPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [form, setForm] = useState({
     name: "", sku: "", description: "", unit: "Nos",
-    price: "", gstRate: "18", stock: "0", minStock: "0",
+    price: "", gstRate: "18", stock: "0", minStock: "5",
     brandId: "", categoryId: "",
   });
   const [error, setError] = useState("");
@@ -54,7 +55,12 @@ export default function NewProductPage() {
       }),
     });
     setSaving(false);
-    if (res.ok) router.push("/products");
+    if (res.ok) {
+      bustCache("/api/products");
+      bustCache("/api/reports?type=summary");
+      bustCache("/api/reports?type=stock");
+      router.push("/products");
+    }
     else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to save product."); }
   }
 

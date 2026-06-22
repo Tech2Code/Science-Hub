@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -25,6 +26,7 @@ export async function POST(request: NextRequest) {
 
     const category = await prisma.category.create({ data: { name } });
 
+    revalidateTag("products", { expire: 0 });
     return NextResponse.json(category, { status: 201 });
   } catch (error) {
     console.error("POST /api/categories error:", error);

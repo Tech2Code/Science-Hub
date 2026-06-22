@@ -8,12 +8,12 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
-  email     String   @unique
+  email     String    @unique
   password  String
-  role      String   @default("staff")
-  createdAt DateTime @default(now())
+  role      String    @default("staff")
+  createdAt DateTime  @default(now())
   invoices  Invoice[]
 }
 
@@ -58,9 +58,9 @@ model Product {
   brandId      String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
-  category     Category?     @relation(fields: [categoryId], references: [id])
-  brand        Brand?        @relation(fields: [brandId], references: [id])
   invoiceItems InvoiceItem[]
+  brand        Brand?        @relation(fields: [brandId], references: [id])
+  category     Category?     @relation(fields: [categoryId], references: [id])
 }
 
 model Invoice {

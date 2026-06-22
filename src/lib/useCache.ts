@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 
-const TTL_MS = 120_000;
+const TTL_MS = 0;
 
 interface Entry<T> { data: T; at: number }
 const store = new Map<string, Entry<unknown>>();
