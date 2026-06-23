@@ -180,31 +180,36 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         <div className={styles.userBlock}>
-          <div className={styles.userRow}>
-            <div style={{ position: "relative", flexShrink: 0 }}>
-              <div className={styles.userAvatar} style={{
-                background: session?.user?.role === "admin" ? "#6366f1" : "#22c55e",
-                color: "#fff",
-                border: `1.5px solid ${session?.user?.role === "admin" ? "#f59e0b" : "#94a3b8"}`,
-              }}>
-                {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
+          <Link href="/admin" onClick={handleNavClick} style={{ textDecoration: "none" }}>
+            <div className={styles.userRow} style={{ cursor: "pointer", borderRadius: "0.625rem", padding: "0.25rem", transition: "background 0.15s" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            >
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                <div className={styles.userAvatar} style={{
+                  background: session?.user?.role === "admin" ? "#6366f1" : "#22c55e",
+                  color: "#fff",
+                  border: `1.5px solid ${session?.user?.role === "admin" ? "#f59e0b" : "#94a3b8"}`,
+                }}>
+                  {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
+                </div>
+                <div style={{
+                  position: "absolute", bottom: -1, right: -1,
+                  width: 11, height: 11, borderRadius: "50%",
+                  background: session?.user?.role === "admin" ? "#f59e0b" : "#94a3b8",
+                  border: "1.5px solid var(--c-sidebar)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 6, color: "#fff", fontWeight: 900, lineHeight: 1,
+                }}>
+                  {session?.user?.role === "admin" ? "★" : "·"}
+                </div>
               </div>
-              <div style={{
-                position: "absolute", bottom: -1, right: -1,
-                width: 11, height: 11, borderRadius: "50%",
-                background: session?.user?.role === "admin" ? "#f59e0b" : "#94a3b8",
-                border: "1.5px solid var(--c-sidebar)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 6, color: "#fff", fontWeight: 900, lineHeight: 1,
-              }}>
-                {session?.user?.role === "admin" ? "★" : "·"}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className={styles.userName}>{session?.user?.name ?? "User"}</div>
+                <div className={styles.userEmail}>{session?.user?.email}</div>
               </div>
             </div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div className={styles.userName}>{session?.user?.name ?? "User"}</div>
-              <div className={styles.userEmail}>{session?.user?.email}</div>
-            </div>
-          </div>
+          </Link>
         </div>
       </aside>
 
@@ -244,28 +249,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <div className={styles.topbarRight}>
             <ThemeToggle />
-            <div className={styles.userChip}>
-              <div style={{ position: "relative", flexShrink: 0 }}>
-                <div className={styles.topbarAvatar} style={{
-                  background: session?.user?.role === "admin" ? "#6366f1" : "#22c55e",
-                  color: "#fff",
-                  border: `1.5px solid ${session?.user?.role === "admin" ? "#f59e0b" : "#94a3b8"}`,
-                }}>
-                  {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
+            <Link href="/admin" style={{ textDecoration: "none" }}>
+              <div className={styles.userChip} style={{ cursor: "pointer", borderRadius: "0.5rem", padding: "0.25rem 0.375rem", transition: "background 0.15s" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--c-bg-sub)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+              >
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <div className={styles.topbarAvatar} style={{
+                    background: session?.user?.role === "admin" ? "#6366f1" : "#22c55e",
+                    color: "#fff",
+                    border: `1.5px solid ${session?.user?.role === "admin" ? "#f59e0b" : "#94a3b8"}`,
+                  }}>
+                    {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
+                  </div>
+                  <div style={{
+                    position: "absolute", bottom: -1, right: -1,
+                    width: 10, height: 10, borderRadius: "50%",
+                    background: session?.user?.role === "admin" ? "#f59e0b" : "#94a3b8",
+                    border: "1.5px solid var(--c-bg)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 5, color: "#fff", fontWeight: 900, lineHeight: 1,
+                  }}>
+                    {session?.user?.role === "admin" ? "★" : "·"}
+                  </div>
                 </div>
-                <div style={{
-                  position: "absolute", bottom: -1, right: -1,
-                  width: 10, height: 10, borderRadius: "50%",
-                  background: session?.user?.role === "admin" ? "#f59e0b" : "#94a3b8",
-                  border: "1.5px solid var(--c-bg)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 5, color: "#fff", fontWeight: 900, lineHeight: 1,
-                }}>
-                  {session?.user?.role === "admin" ? "★" : "·"}
-                </div>
+                <span className={styles.topbarName}>{session?.user?.name}</span>
               </div>
-              <span className={styles.topbarName}>{session?.user?.name}</span>
-            </div>
+            </Link>
             <button onClick={() => signOut({ callbackUrl: "/login" })} className={styles.signOutBtn}>
               Sign out
             </button>
