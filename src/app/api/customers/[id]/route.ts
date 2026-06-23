@@ -37,7 +37,7 @@ export async function PUT(
     revalidateTag(`customer-${id}`, { expire: 0 });
     revalidateTag("customers", { expire: 0 });
     if (session?.user?.id) {
-      await logActivity(session.user.id, "update_customer", `Updated customer "${customer.name}"`, id, "customer");
+      await logActivity(session.user.id, "update_customer", `Updated customer "${customer.name}" | Phone: ${phone || "—"} | Email: ${email || "—"} | City: ${city || "—"}${state ? ", " + state : ""} | GSTIN: ${gstin || "—"}`, id, "customer");
     }
     return NextResponse.json(customer);
   } catch (error) {
@@ -60,12 +60,12 @@ export async function DELETE(
         { status: 400 }
       );
     }
-    const customer = await prisma.customer.findUnique({ where: { id }, select: { name: true } });
+    const customer = await prisma.customer.findUnique({ where: { id }, select: { name: true, phone: true, city: true, gstin: true } });
     await prisma.customer.delete({ where: { id } });
     revalidateTag(`customer-${id}`, { expire: 0 });
     revalidateTag("customers", { expire: 0 });
     if (session?.user?.id && customer) {
-      await logActivity(session.user.id, "delete_customer", `Deleted customer "${customer.name}"`, id, "customer");
+      await logActivity(session.user.id, "delete_customer", `Deleted customer "${customer.name}" | Phone: ${customer.phone || "—"} | City: ${customer.city || "—"} | GSTIN: ${customer.gstin || "—"}`, id, "customer");
     }
     return NextResponse.json({ message: "Customer deleted" });
   } catch (error) {

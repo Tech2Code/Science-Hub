@@ -66,7 +66,7 @@ export const getProducts = unstable_cache(
         ? { OR: [{ name: { contains: search } }, { sku: { contains: search } }] }
         : undefined,
       orderBy: { name: "asc" },
-      include: { category: true, brand: true },
+      include: { category: true, brand: true, _count: { select: { invoiceItems: true } } },
     });
   },
   ["products"],

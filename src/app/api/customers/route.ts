@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     revalidateTag("customers", { expire: 0 });
     if (session?.user?.id) {
-      await logActivity(session.user.id, "add_customer", `Added customer "${name}"`, customer.id, "customer");
+      await logActivity(session.user.id, "add_customer", `Added customer "${name}" | Phone: ${phone || "—"} | City: ${city || "—"} | GSTIN: ${gstin || "—"}`, customer.id, "customer");
     }
     return NextResponse.json(customer, { status: 201 });
   } catch (error) {

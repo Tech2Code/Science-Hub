@@ -121,8 +121,8 @@ export async function PUT(
     revalidateTag("reports", { expire: 0 });
     const sess = await getServerSession(authOptions);
     if (sess?.user?.id) {
-      const inv = invoice as { invoiceNumber?: string; customer?: { name?: string } };
-      await logActivity(sess.user.id, "update_invoice", `Edited invoice ${inv.invoiceNumber ?? id} for ${inv.customer?.name ?? ""}`, id, "invoice");
+      const inv = invoice as { invoiceNumber?: string; customer?: { name?: string }; total?: number; items?: unknown[] };
+      await logActivity(sess.user.id, "update_invoice", `Edited invoice ${inv.invoiceNumber ?? id} for ${inv.customer?.name ?? ""} | Total: ₹${(inv.total ?? 0).toFixed(2)} | Items: ${inv.items?.length ?? 0} | Tax: ${inter ? "IGST" : "CGST+SGST"}`, id, "invoice");
     }
     return NextResponse.json(invoice);
   } catch (error) {
@@ -138,13 +138,13 @@ export async function DELETE(
   try {
     const { id } = await params;
     const sess = await getServerSession(authOptions);
-    const inv = await prisma.invoice.findUnique({ where: { id }, select: { invoiceNumber: true } });
+    const inv = await prisma.invoice.findUnique({ where: { id }, select: { invoiceNumber: true, total: true, customer: { select: { name: true } } } });
     await prisma.invoice.delete({ where: { id } });
     revalidateTag(`invoice-${id}`, { expire: 0 });
     revalidateTag("invoices", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
     if (sess?.user?.id && inv) {
-      await logActivity(sess.user.id, "delete_invoice", `Deleted invoice ${inv.invoiceNumber}`, id, "invoice");
+      await logActivity(sess.user.id, "delete_invoice", `Deleted invoice ${inv.invoiceNumber} | Customer: ${inv.customer?.name ?? "—"} | Total: ₹${inv.total.toFixed(2)}`, id, "invoice");
     }
     return NextResponse.json({ message: "Invoice deleted" });
   } catch (error) {

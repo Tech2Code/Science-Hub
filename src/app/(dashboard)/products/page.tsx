@@ -20,6 +20,7 @@ interface Product {
   stock: number;
   minStock: number;
   sku: string;
+  _count?: { invoiceItems: number };
 }
 
 export default function ProductsPage() {
@@ -43,6 +44,7 @@ export default function ProductsPage() {
         setConfirmLoading(true);
         setDeleting(id);
         const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
+        const data = await res.json().catch(() => ({}));
         setConfirmLoading(false);
         setConfirmState(null);
         setDeleting(null);
@@ -50,7 +52,7 @@ export default function ProductsPage() {
           mutate();
           toast({ type: "success", title: "Product deleted", message: `"${name}" removed from catalog.` });
         } else {
-          toast({ type: "error", title: "Delete failed", message: "Could not delete product." });
+          toast({ type: "error", title: "Delete failed", message: data.error ?? "Could not delete product." });
         }
       },
     });
@@ -114,6 +116,7 @@ export default function ProductsPage() {
                 <th className="table-th-right">Price</th>
                 <th className="table-th-right">GST %</th>
                 <th className="table-th-right">Stock</th>
+                <th className="table-th-right">Invoices</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -121,7 +124,7 @@ export default function ProductsPage() {
               {loading ? (
                 <TableSkeleton cols={8} />
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={8} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={9} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
                   {search ? "No products match your search." : "No products yet. Add one to get started."}
                 </td></tr>
               ) : visible.map((p) => {
@@ -147,6 +150,21 @@ export default function ProductsPage() {
                       }}>
                         {p.stock} {p.unit}{isLow && " ⚠"}
                       </span>
+                    </td>
+                    <td data-label="Invoices" className="table-td-right">
+                      {(() => {
+                        const count = p._count?.invoiceItems ?? 0;
+                        return count > 0 ? (
+                          <span style={{
+                            display: "inline-block", padding: "0.125rem 0.5rem", borderRadius: "9999px",
+                            fontSize: "0.75rem", fontWeight: 500,
+                            background: "var(--c-blue-bg)", color: "var(--c-blue)",
+                            border: "1px solid var(--c-blue-border)",
+                          }}>{count}</span>
+                        ) : (
+                          <span style={{ color: "var(--c-text-4)", fontSize: "0.8rem" }}>—</span>
+                        );
+                      })()}
                     </td>
                     <td data-mobile-full>
                       <div className="table-actions">

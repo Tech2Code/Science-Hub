@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
     if (session?.user?.id) {
-      await logActivity(session.user.id, "add_product", `Added product "${name}"`, product.id, "product");
+      await logActivity(session.user.id, "add_product", `Added product "${name}" | SKU: ${sku || "—"} | Price: ₹${parseFloat(price).toFixed(2)} | GST: ${gstRate ?? 18}% | Stock: ${stock ?? 0} ${unit || "Nos"}`, product.id, "product");
     }
     return NextResponse.json(product, { status: 201 });
   } catch (error) {

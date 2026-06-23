@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { logActivity } from "@/lib/activity";
 
 const USER_SELECT = {
   id: true,
@@ -108,6 +109,11 @@ export async function PUT(request: NextRequest) {
       select: USER_SELECT,
     });
 
+    if (hashedPassword !== undefined) {
+      await logActivity(session.user.id, "change_password", `Changed own password`, session.user.id, "user");
+    } else {
+      await logActivity(session.user.id, "update_profile", `Updated own profile | Name: ${updated.name} | Email: ${updated.email}`, session.user.id, "user");
+    }
     return NextResponse.json(updated);
   } catch (error) {
     console.error("PUT /api/admin/profile error:", error);

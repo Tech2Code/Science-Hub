@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { logActivity } from "@/lib/activity";
 
 const USER_SELECT = {
   id: true,
@@ -90,6 +91,8 @@ export async function POST(request: NextRequest) {
       select: USER_SELECT,
     });
 
+    const { session } = auth;
+    await logActivity(session.user.id, "add_user", `Created user "${name}" | Role: ${role} | Email: ${email}`, user.id, "user");
     return NextResponse.json(user, { status: 201 });
   } catch (error) {
     console.error("POST /api/admin/users error:", error);

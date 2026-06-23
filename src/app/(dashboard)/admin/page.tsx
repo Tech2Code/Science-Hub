@@ -30,16 +30,24 @@ type Role = "admin" | "staff";
 
 // ── Action metadata ──────────────────────────────────────
 const ACTION_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  create_invoice:  { label: "Invoice Created",  color: "var(--c-blue)",        bg: "var(--c-blue-bg)",   border: "var(--c-blue-border)"  },
-  update_invoice:  { label: "Invoice Updated",  color: "var(--c-blue)",        bg: "var(--c-blue-bg)",   border: "var(--c-blue-border)"  },
-  delete_invoice:  { label: "Invoice Deleted",  color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)"   },
-  record_payment:  { label: "Payment Recorded", color: "var(--c-green-text)",  bg: "var(--c-green-bg)",  border: "var(--c-green-border)" },
-  add_customer:    { label: "Customer Added",   color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
-  update_customer: { label: "Customer Updated", color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
-  delete_customer: { label: "Customer Deleted", color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)"   },
-  add_product:     { label: "Product Added",    color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)"       },
-  update_product:  { label: "Product Updated",  color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)"       },
-  delete_product:  { label: "Product Deleted",  color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)"   },
+  create_invoice:  { label: "Invoice Created",   color: "var(--c-blue)",        bg: "var(--c-blue-bg)",   border: "var(--c-blue-border)"  },
+  update_invoice:  { label: "Invoice Updated",   color: "var(--c-blue)",        bg: "var(--c-blue-bg)",   border: "var(--c-blue-border)"  },
+  delete_invoice:  { label: "Invoice Deleted",   color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)"   },
+  record_payment:  { label: "Payment Recorded",  color: "var(--c-green-text)",  bg: "var(--c-green-bg)",  border: "var(--c-green-border)" },
+  add_customer:    { label: "Customer Added",    color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
+  update_customer: { label: "Customer Updated",  color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
+  delete_customer: { label: "Customer Deleted",  color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)"   },
+  add_product:     { label: "Product Added",     color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)"       },
+  update_product:  { label: "Product Updated",   color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)"       },
+  delete_product:  { label: "Product Deleted",   color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)"   },
+  add_brand:       { label: "Brand Added",       color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)"       },
+  delete_brand:    { label: "Brand Deleted",     color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)"   },
+  add_category:    { label: "Category Added",    color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)"       },
+  add_user:        { label: "User Created",      color: "var(--c-blue)",        bg: "var(--c-blue-bg)",   border: "var(--c-blue-border)"  },
+  update_user:     { label: "User Updated",      color: "var(--c-blue)",        bg: "var(--c-blue-bg)",   border: "var(--c-blue-border)"  },
+  delete_user:     { label: "User Deleted",      color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)"   },
+  update_profile:  { label: "Profile Updated",   color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)"       },
+  change_password: { label: "Password Changed",  color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -112,7 +120,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inp: React.CSSProperties = {
   width: "100%", padding: "0.5rem 0.75rem", borderRadius: "var(--c-radius-sm)",
-  border: "1px solid var(--c-border)", background: "var(--c-bg-input)",
+  border: "1px solid var(--c-border-md)", background: "var(--c-bg-card)",
   color: "var(--c-text)", fontSize: "0.875rem", outline: "none",
   fontFamily: "var(--font-sans)", boxSizing: "border-box",
 };
@@ -246,17 +254,25 @@ export default function AdminPage() {
   }
 
   async function deleteUser() {
-    if (!deleteConfirm) return; setDeleteLoading(true);
-    const res = await fetch(`/api/admin/users/${deleteConfirm.id}`, { method: "DELETE" });
-    const data = await res.json(); setDeleteLoading(false);
-    if (!res.ok) {
+    if (!deleteConfirm) return;
+    const target = deleteConfirm; // capture before any async state change
+    setDeleteLoading(true);
+    try {
+      const res = await fetch(`/api/admin/users/${target.id}`, { method: "DELETE" });
+      const data = await res.json();
+      setDeleteLoading(false);
       setDeleteConfirm(null);
-      toast({ type: "error", title: "Delete failed", message: data.error ?? "Could not delete user." });
-      return;
+      if (!res.ok) {
+        toast({ type: "error", title: "Delete failed", message: data.error ?? "Could not delete user." });
+        return;
+      }
+      setUsers(prev => prev.filter(u => u.id !== target.id));
+      toast({ type: "success", title: "User deleted", message: `"${target.name}" removed.` });
+    } catch {
+      setDeleteLoading(false);
+      setDeleteConfirm(null);
+      toast({ type: "error", title: "Delete failed", message: "Network error. Please try again." });
     }
-    const deletedName = deleteConfirm.name;
-    setUsers(prev => prev.filter(u => u.id !== deleteConfirm.id)); setDeleteConfirm(null);
-    toast({ type: "success", title: "User deleted", message: `"${deletedName}" removed.` });
   }
 
   const selfId = session?.user?.id;
@@ -284,6 +300,21 @@ export default function AdminPage() {
       <style>{`
         @media (max-width: 900px) { .admin-two-col { flex-direction: column !important; } .admin-role-sidebar { width: 100% !important; position: static !important; flex-direction: row !important; } }
         @media (max-width: 540px) { .admin-role-sidebar { flex-direction: column !important; } }
+        .admin-fg4 { display: grid; grid-template-columns: 1fr 1fr 1fr 8rem; gap: 0.875rem; }
+        .admin-fg3 { display: grid; grid-template-columns: 1fr 1fr 8rem; gap: 0.875rem; }
+        .admin-fg3pw { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.875rem; }
+        .admin-fg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        @media (max-width: 640px) {
+          .admin-fg4 { grid-template-columns: 1fr 1fr; }
+          .admin-fg3 { grid-template-columns: 1fr 1fr; }
+          .admin-fg3pw { grid-template-columns: 1fr; }
+          .admin-fg2 { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 400px) {
+          .admin-fg4 { grid-template-columns: 1fr; }
+          .admin-fg3 { grid-template-columns: 1fr; }
+        }
+        .admin-inp:focus { border-color: var(--c-blue) !important; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
       `}</style>
       <ConfirmDialog
         open={!!deleteConfirm}
@@ -321,9 +352,9 @@ export default function AdminPage() {
             </div>
           ) : editingProfile ? (
             <form onSubmit={saveProfile} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                <Field label="Full Name"><input style={inp} value={profileForm.name} onChange={e => setProfileForm(p => ({ ...p, name: e.target.value }))} required /></Field>
-                <Field label="Email"><input style={inp} type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} required /></Field>
+              <div className="admin-fg2">
+                <Field label="Full Name"><input className="admin-inp" style={inp} value={profileForm.name} onChange={e => setProfileForm(p => ({ ...p, name: e.target.value }))} required /></Field>
+                <Field label="Email"><input className="admin-inp" style={inp} type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} required /></Field>
               </div>
               {profileMsg && <Msg m={profileMsg} />}
               <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -380,10 +411,10 @@ export default function AdminPage() {
           </div>
           {changingPw && (
             <form onSubmit={savePassword} style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.875rem" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.875rem" }}>
-                <Field label="Current Password"><input style={inp} type="password" value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))} required placeholder="••••••••" /></Field>
-                <Field label="New Password"><input style={inp} type="password" value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))} required placeholder="min. 6 characters" /></Field>
-                <Field label="Confirm Password"><input style={inp} type="password" value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} required placeholder="repeat new password" /></Field>
+              <div className="admin-fg3pw">
+                <Field label="Current Password"><input className="admin-inp" style={inp} type="password" value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))} required placeholder="••••••••" /></Field>
+                <Field label="New Password"><input className="admin-inp" style={inp} type="password" value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))} required placeholder="min. 6 characters" /></Field>
+                <Field label="Confirm Password"><input className="admin-inp" style={inp} type="password" value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} required placeholder="repeat new password" /></Field>
               </div>
               {pwMsg && <Msg m={pwMsg} />}
               <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -409,12 +440,12 @@ export default function AdminPage() {
           <div style={{ padding: "1.25rem", borderBottom: "1px solid var(--c-border)", background: "var(--c-bg-sub)" }}>
             <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "var(--c-text)", marginBottom: "0.875rem" }}>New User</div>
             <form onSubmit={addUser} style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 8rem", gap: "0.875rem" }}>
-                <Field label="Full Name"><input style={inp} value={addForm.name} onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))} required placeholder="Jane Smith" /></Field>
-                <Field label="Email"><input style={inp} type="email" value={addForm.email} onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))} required placeholder="jane@example.com" /></Field>
-                <Field label="Password"><input style={inp} type="password" value={addForm.password} onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))} required placeholder="min. 6 characters" /></Field>
+              <div className="admin-fg4">
+                <Field label="Full Name"><input className="admin-inp" style={inp} value={addForm.name} onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))} required placeholder="Jane Smith" /></Field>
+                <Field label="Email"><input className="admin-inp" style={inp} type="email" value={addForm.email} onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))} required placeholder="jane@example.com" /></Field>
+                <Field label="Password"><input className="admin-inp" style={inp} type="password" value={addForm.password} onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))} required placeholder="min. 6 characters" /></Field>
                 <Field label="Role">
-                  <select style={{ ...inp, cursor: "pointer" }} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>
+                  <select className="admin-inp" style={{ ...inp, cursor: "pointer" }} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>
                     <option value="staff">Staff</option>
                     <option value="admin">Admin</option>
                   </select>
@@ -434,11 +465,11 @@ export default function AdminPage() {
           <div style={{ padding: "1.25rem", borderBottom: "1px solid var(--c-border)", background: "var(--c-bg-sub)" }}>
             <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "var(--c-text)", marginBottom: "0.875rem" }}>Edit: {editUser.name}</div>
             <form onSubmit={saveEdit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 8rem", gap: "0.875rem" }}>
-                <Field label="Full Name"><input style={inp} value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} required /></Field>
-                <Field label="Email"><input style={inp} type="email" value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} required /></Field>
+              <div className="admin-fg3">
+                <Field label="Full Name"><input className="admin-inp" style={inp} value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} required /></Field>
+                <Field label="Email"><input className="admin-inp" style={inp} type="email" value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} required /></Field>
                 <Field label="Role">
-                  <select style={{ ...inp, cursor: "pointer" }} value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value as Role }))}>
+                  <select className="admin-inp" style={{ ...inp, cursor: "pointer" }} value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value as Role }))}>
                     <option value="staff">Staff</option>
                     <option value="admin">Admin</option>
                   </select>
@@ -447,7 +478,7 @@ export default function AdminPage() {
               <div style={{ paddingTop: "0.75rem", borderTop: "1px solid var(--c-border)" }}>
                 <div style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", marginBottom: "0.5rem" }}>New password — leave blank to keep current</div>
                 <div style={{ maxWidth: "20rem" }}>
-                  <Field label="New Password"><input style={inp} type="password" value={editForm.newPassword} onChange={e => setEditForm(p => ({ ...p, newPassword: e.target.value }))} placeholder="min. 6 characters" /></Field>
+                  <Field label="New Password"><input className="admin-inp" style={inp} type="password" value={editForm.newPassword} onChange={e => setEditForm(p => ({ ...p, newPassword: e.target.value }))} placeholder="min. 6 characters" /></Field>
                 </div>
               </div>
               {editMsg && <Msg m={editMsg} />}
@@ -525,12 +556,12 @@ export default function AdminPage() {
         {/* Filters */}
         <div style={{ padding: "0.75rem 1.25rem", borderBottom: "1px solid var(--c-border)", display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
           <input
-            type="search" placeholder="Search actions or details…" value={logsSearch}
+            className="admin-inp" type="search" placeholder="Search actions or details…" value={logsSearch}
             onChange={e => setLogsSearch(e.target.value)}
             style={{ ...inp, maxWidth: "18rem", padding: "0.375rem 0.75rem" }}
           />
           <select
-            style={{ ...inp, width: "auto", padding: "0.375rem 0.75rem", cursor: "pointer" }}
+            className="admin-inp" style={{ ...inp, width: "auto", padding: "0.375rem 0.75rem", cursor: "pointer" }}
             value={logsFilter}
             onChange={e => { setLogsFilter(e.target.value); setLogsOffset(0); }}
           >

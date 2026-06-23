@@ -50,7 +50,7 @@ export async function PUT(
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
     if (session?.user?.id) {
-      await logActivity(session.user.id, "update_product", `Updated product "${product.name}"`, id, "product");
+      await logActivity(session.user.id, "update_product", `Updated product "${product.name}" | SKU: ${product.sku || "—"} | Price: ₹${product.price.toFixed(2)} | GST: ${product.gstRate}% | Stock: ${product.stock} ${product.unit || "Nos"}`, id, "product");
     }
     return NextResponse.json(product);
   } catch (error) {
@@ -66,12 +66,22 @@ export async function DELETE(
   try {
     const { id } = await params;
     const session = await getServerSession(authOptions);
-    const product = await prisma.product.findUnique({ where: { id }, select: { name: true } });
+    const product = await prisma.product.findUnique({ where: { id }, select: { name: true, sku: true, price: true, stock: true, unit: true } });
+    if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
+
+    const invoiceItemCount = await prisma.invoiceItem.count({ where: { productId: id } });
+    if (invoiceItemCount > 0) {
+      return NextResponse.json(
+        { error: `Cannot delete "${product.name}" — it appears in ${invoiceItemCount} invoice line item(s). Remove it from those invoices first.` },
+        { status: 400 }
+      );
+    }
+
     await prisma.product.delete({ where: { id } });
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
     if (session?.user?.id && product) {
-      await logActivity(session.user.id, "delete_product", `Deleted product "${product.name}"`, id, "product");
+      await logActivity(session.user.id, "delete_product", `Deleted product "${product.name}" | SKU: ${product.sku || "—"} | Price: ₹${product.price.toFixed(2)} | Stock: ${product.stock} ${product.unit || "Nos"}`, id, "product");
     }
     return NextResponse.json({ message: "Product deleted" });
   } catch (error) {

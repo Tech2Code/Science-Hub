@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { logActivity } from "@/lib/activity";
 
 const USER_SELECT = {
   id: true,
@@ -149,6 +150,8 @@ export async function PUT(
       select: USER_SELECT,
     });
 
+    const pwChanged = hashedPassword !== undefined;
+    await logActivity(session.user.id, "update_user", `Updated user "${updated.name}" | Email: ${updated.email} | Role: ${updated.role}${pwChanged ? " | Password reset" : ""}`, id, "user");
     return NextResponse.json(updated);
   } catch (error) {
     console.error("PUT /api/admin/users/[id] error:", error);
@@ -193,8 +196,18 @@ export async function DELETE(
       }
     }
 
+    // Prevent deletion if the user has created invoices (FK constraint on Invoice.userId)
+    const invoiceCount = await prisma.invoice.count({ where: { userId: id } });
+    if (invoiceCount > 0) {
+      return NextResponse.json(
+        { error: `Cannot delete "${targetUser.name}" — they have created ${invoiceCount} invoice(s). Delete those invoices first or reassign them.` },
+        { status: 400 }
+      );
+    }
+
     await prisma.user.delete({ where: { id } });
 
+    await logActivity(session.user.id, "delete_user", `Deleted user "${targetUser.name}" | Role: ${targetUser.role} | Email: ${targetUser.email}`, id, "user");
     return NextResponse.json({ message: "User deleted" });
   } catch (error) {
     console.error("DELETE /api/admin/users/[id] error:", error);

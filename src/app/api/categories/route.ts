@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { logActivity } from "@/lib/activity";
 
 export async function GET() {
   try {
@@ -27,6 +30,10 @@ export async function POST(request: NextRequest) {
     const category = await prisma.category.create({ data: { name } });
 
     revalidateTag("products", { expire: 0 });
+    const session = await getServerSession(authOptions);
+    if (session?.user?.id) {
+      await logActivity(session.user.id, "add_category", `Added category "${name}"`, category.id, "category");
+    }
     return NextResponse.json(category, { status: 201 });
   } catch (error) {
     console.error("POST /api/categories error:", error);
