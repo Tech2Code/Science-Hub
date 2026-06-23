@@ -146,21 +146,21 @@ export default function DashboardPage() {
               <tbody>
                 {(data?.recentInvoices ?? []).map((inv) => (
                   <tr key={inv.id}>
-                    <td>
+                    <td data-mobile-full>
                       <Link href={`/invoices/${inv.id}`} className={styles.invNum}>
                         {inv.invoiceNumber}
                       </Link>
                     </td>
-                    <td className={styles.invDate}>
+                    <td data-mobile-hide className={styles.invDate}>
                       <div>{new Date(inv.date).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" })}</div>
-                      <div style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: 2 }}>
+                      <div className="date-sub" style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: 2 }}>
                         {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                       </div>
                     </td>
-                    <td className={styles.invCust}>{inv.customerName}</td>
-                    <td className={`table-td-right ${styles.invAmt}`}>₹{inv.total.toLocaleString("en-IN")}</td>
-                    <td className={`table-td-right ${styles.invBal}`}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN")}</td>
-                    <td><StatusBadge status={inv.status} /></td>
+                    <td data-label="Customer" className={styles.invCust}>{inv.customerName}</td>
+                    <td data-label="Total" className={`table-td-right ${styles.invAmt}`}>₹{inv.total.toLocaleString("en-IN")}</td>
+                    <td data-label="Balance" className={`table-td-right ${styles.invBal}`}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN")}</td>
+                    <td data-label="Status"><StatusBadge status={inv.status} /></td>
                   </tr>
                 ))}
               </tbody>

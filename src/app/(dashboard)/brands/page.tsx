@@ -7,6 +7,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
+import { useToast } from "@/components/ui/Toast";
 
 interface Brand {
   id: string;
@@ -26,6 +27,7 @@ export default function BrandsPage() {
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -41,6 +43,7 @@ export default function BrandsPage() {
     if (r.ok) {
       setNewName("");
       mutate();
+      toast({ type: "success", title: "Brand added", message: `"${name}" added to catalog.` });
     } else {
       const d = await r.json();
       setError(d.error ?? "Failed to add brand");
@@ -54,10 +57,15 @@ export default function BrandsPage() {
       message: `Delete "${name}"? Products assigned to this brand will be unassigned.`,
       onConfirm: async () => {
         setConfirmLoading(true);
-        await fetch(`/api/brands/${id}`, { method: "DELETE" });
+        const res = await fetch(`/api/brands/${id}`, { method: "DELETE" });
         setConfirmLoading(false);
         setConfirmState(null);
-        mutate();
+        if (res.ok) {
+          mutate();
+          toast({ type: "success", title: "Brand deleted", message: `"${name}" removed.` });
+        } else {
+          toast({ type: "error", title: "Delete failed", message: "Could not delete brand." });
+        }
       },
     });
   }
@@ -150,9 +158,9 @@ export default function BrandsPage() {
                 </td></tr>
               ) : visible.map((b, i) => (
                 <tr key={b.id}>
-                  <td style={{ color: "var(--c-text-4)", fontSize: "0.8125rem" }}>{i + 1}</td>
-                  <td style={{ fontWeight: 500, color: "var(--c-text)" }}>{b.name}</td>
-                  <td className="table-td-right">
+                  <td data-mobile-hide style={{ color: "var(--c-text-4)", fontSize: "0.8125rem" }}>{i + 1}</td>
+                  <td data-mobile-full style={{ fontWeight: 500, color: "var(--c-text)" }}>{b.name}</td>
+                  <td data-label="Products" className="table-td-right">
                     <span style={{
                       display: "inline-block", padding: "0.125rem 0.5rem", borderRadius: "9999px",
                       fontSize: "0.75rem", fontWeight: 500,

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { revalidateTag } from "next/cache";
 import { getCustomers } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
 
 export async function GET() {
   try {
@@ -15,6 +18,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
     const body = await request.json();
     const { name, phone, email, address, city, state, pincode, gstin } = body;
 
@@ -27,6 +31,9 @@ export async function POST(request: NextRequest) {
     });
 
     revalidateTag("customers", { expire: 0 });
+    if (session?.user?.id) {
+      await logActivity(session.user.id, "add_customer", `Added customer "${name}"`, customer.id, "customer");
+    }
     return NextResponse.json(customer, { status: 201 });
   } catch (error) {
     console.error("POST /api/customers error:", error);

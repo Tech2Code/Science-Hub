@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { revalidateTag } from "next/cache";
+import { logActivity } from "@/lib/activity";
 
 export async function POST(
   request: NextRequest,
@@ -8,6 +11,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    const session = await getServerSession(authOptions);
     const body = await request.json();
     const { amount, method, reference, notes } = body;
 
@@ -15,7 +19,10 @@ export async function POST(
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
     }
 
-    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+      include: { customer: true },
+    });
     if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
     await prisma.payment.create({
@@ -45,6 +52,18 @@ export async function POST(
     revalidateTag(`invoice-${id}`, { expire: 0 });
     revalidateTag("invoices", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
+
+    if (session?.user?.id) {
+      const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+      await logActivity(
+        session.user.id,
+        "record_payment",
+        `Recorded payment ₹${fmt(parseFloat(amount))} via ${method || "Cash"} for invoice ${invoice.invoiceNumber} (${invoice.customer.name})`,
+        id,
+        "invoice"
+      );
+    }
+
     return NextResponse.json(updated, { status: 201 });
   } catch (error) {
     console.error(error);

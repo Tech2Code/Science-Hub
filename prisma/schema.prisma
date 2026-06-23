@@ -8,13 +8,28 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  name      String
-  email     String    @unique
-  password  String
-  role      String    @default("staff")
-  createdAt DateTime  @default(now())
-  invoices  Invoice[]
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  password     String
+  role         String        @default("staff")
+  createdAt    DateTime      @default(now())
+  invoices     Invoice[]
+  activityLogs ActivityLog[]
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action     String
+  details    String
+  entityId   String?
+  entityType String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model Customer {

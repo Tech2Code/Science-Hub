@@ -15,7 +15,7 @@
   border: 1px solid var(--c-border);
   box-shadow: var(--c-shadow);
   padding: 1.25rem;
-  transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s, border-color 0.2s, color 0.2s;
   cursor: pointer;
   text-decoration: none;
   display: block;
@@ -100,7 +100,7 @@
   font-size: 0.875rem;
   font-weight: 500;
   text-decoration: none;
-  transition: border-color 0.15s, color 0.15s, box-shadow 0.15s;
+  transition: background-color 0.2s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
 .quickBtn:hover {
   border-color: var(--c-blue-border);
@@ -120,7 +120,7 @@
   border-radius: 1rem;
   box-shadow: var(--c-shadow-sm);
   overflow: hidden;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, border-color 0.2s;
 }
 .recentHeader {
   display: flex;

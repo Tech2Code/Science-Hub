@@ -3,6 +3,7 @@
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState, useCallback } from "react";
 import { useTheme } from "@/lib/theme";
 import styles from "./layout.module.css";
@@ -39,6 +40,11 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
     </svg>
   ),
+  admin: ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+    </svg>
+  ),
   brands: ({ className }) => (
     <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
@@ -47,13 +53,14 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
 };
 
 const navItems = [
-  { href: "/",           label: "Dashboard", iconKey: "dashboard" },
-  { href: "/customers", label: "Customers", iconKey: "customers" },
-  { href: "/products",  label: "Products",  iconKey: "products"  },
-  { href: "/brands",    label: "Brands",    iconKey: "brands"    },
-  { href: "/invoices",  label: "Invoices",  iconKey: "invoices"  },
-  { href: "/payments",  label: "Payments",  iconKey: "payments"  },
-  { href: "/reports",   label: "Reports",   iconKey: "reports"   },
+  { href: "/",          label: "Dashboard", iconKey: "dashboard", adminOnly: false },
+  { href: "/customers", label: "Customers", iconKey: "customers", adminOnly: false },
+  { href: "/products",  label: "Products",  iconKey: "products",  adminOnly: false },
+  { href: "/brands",    label: "Brands",    iconKey: "brands",    adminOnly: false },
+  { href: "/invoices",  label: "Invoices",  iconKey: "invoices",  adminOnly: false },
+  { href: "/payments",  label: "Payments",  iconKey: "payments",  adminOnly: false },
+  { href: "/reports",   label: "Reports",   iconKey: "reports",   adminOnly: false },
+  { href: "/admin",     label: "Admin",     iconKey: "admin",     adminOnly: true  },
 ];
 
 function isMobile() {
@@ -61,29 +68,29 @@ function isMobile() {
 }
 
 function ThemeToggle() {
-  const { theme, toggle } = useTheme();
-  const isDark = theme === "dark";
+  const { toggle } = useTheme();
   return (
     <button
       onClick={toggle}
       aria-label="Toggle dark mode"
-      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      title="Toggle dark mode"
       className={styles.toggleTrack}
-      style={{ background: isDark ? "#3b82f6" : "#e2e8f0" }}
     >
       <span className={styles.toggleIcons}>
-        <svg className={styles.toggleIconSun} style={{ opacity: isDark ? 0 : 0.6 }} fill="currentColor" viewBox="0 0 20 20">
+        <svg className={styles.toggleIconSun} fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
         </svg>
-        <svg className={styles.toggleIconMoon} style={{ opacity: isDark ? 0.8 : 0 }} fill="currentColor" viewBox="0 0 20 20">
+        <svg className={styles.toggleIconMoon} fill="currentColor" viewBox="0 0 20 20">
           <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
         </svg>
       </span>
-      <span className={[styles.toggleThumb, isDark ? styles.toggleThumbOn : ""].join(" ")}>
-        {isDark
-          ? <svg style={{ width:"0.875rem",height:"0.875rem",color:"#3b82f6" }} fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" /></svg>
-          : <svg style={{ width:"0.875rem",height:"0.875rem",color:"#f59e0b" }} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" /></svg>
-        }
+      <span className={styles.toggleThumb}>
+        <svg className={styles.toggleThumbSun} fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
+        </svg>
+        <svg className={styles.toggleThumbMoon} fill="currentColor" viewBox="0 0 20 20">
+          <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+        </svg>
       </span>
     </button>
   );
@@ -121,7 +128,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <div className={styles.loadingScreen}>
         <div className={styles.loadingInner}>
-          <img src="/logo.png" alt="Science Hub" className={styles.loadingIcon} />
+          <Image src="/logo.png" alt="Science Hub" width={40} height={40} className={styles.loadingIcon} />
           <span className={styles.loadingText}>Loading…</span>
         </div>
       </div>
@@ -143,7 +150,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar */}
       <aside className={[styles.sidebar, sidebarOpen ? styles.sidebarOpen : styles.sidebarClosed].join(" ")}>
         <div className={styles.sidebarLogo}>
-          <img src="/logo.png" alt="Science Hub" className={styles.logoIcon} />
+          <Image src="/logo.png" alt="Science Hub" width={36} height={36} className={styles.logoIcon} />
           <div className={styles.logoText}>
             <div className={styles.logoName}>Science Hub</div>
             <div className={styles.logoSub}>Billing &amp; Inventory</div>
@@ -151,7 +158,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <nav className={styles.nav}>
-          {navItems.map((item) => {
+          {navItems.filter(item => !item.adminOnly || session?.user?.role === "admin").map((item) => {
             const isActive = item.href === "/"
               ? pathname === "/"
               : pathname.startsWith(item.href);
@@ -174,8 +181,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div className={styles.userBlock}>
           <div className={styles.userRow}>
-            <div className={styles.userAvatar}>
-              {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <div className={styles.userAvatar} style={{
+                background: session?.user?.role === "admin" ? "#6366f1" : "#22c55e",
+                color: "#fff",
+                border: `1.5px solid ${session?.user?.role === "admin" ? "#f59e0b" : "#94a3b8"}`,
+              }}>
+                {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
+              </div>
+              <div style={{
+                position: "absolute", bottom: -1, right: -1,
+                width: 11, height: 11, borderRadius: "50%",
+                background: session?.user?.role === "admin" ? "#f59e0b" : "#94a3b8",
+                border: "1.5px solid var(--c-sidebar)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 6, color: "#fff", fontWeight: 900, lineHeight: 1,
+              }}>
+                {session?.user?.role === "admin" ? "★" : "·"}
+              </div>
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className={styles.userName}>{session?.user?.name ?? "User"}</div>
@@ -222,8 +245,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className={styles.topbarRight}>
             <ThemeToggle />
             <div className={styles.userChip}>
-              <div className={styles.topbarAvatar}>
-                {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                <div className={styles.topbarAvatar} style={{
+                  background: session?.user?.role === "admin" ? "#6366f1" : "#22c55e",
+                  color: "#fff",
+                  border: `1.5px solid ${session?.user?.role === "admin" ? "#f59e0b" : "#94a3b8"}`,
+                }}>
+                  {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
+                </div>
+                <div style={{
+                  position: "absolute", bottom: -1, right: -1,
+                  width: 10, height: 10, borderRadius: "50%",
+                  background: session?.user?.role === "admin" ? "#f59e0b" : "#94a3b8",
+                  border: "1.5px solid var(--c-bg)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 5, color: "#fff", fontWeight: 900, lineHeight: 1,
+                }}>
+                  {session?.user?.role === "admin" ? "★" : "·"}
+                </div>
               </div>
               <span className={styles.topbarName}>{session?.user?.name}</span>
             </div>

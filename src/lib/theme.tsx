@@ -1,34 +1,35 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext } from "react";
 
-type Theme = "light" | "dark";
-const ThemeContext = createContext<{ theme: Theme; toggle: () => void }>({
-  theme: "light",
-  toggle: () => {},
-});
+const ThemeContext = createContext<{ toggle: () => void }>({ toggle: () => {} });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
-
-  useEffect(() => {
-    const saved = localStorage.getItem("theme") as Theme | null;
-    const preferred = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    const initial = saved ?? preferred;
-    setTheme(initial);
-    document.documentElement.classList.toggle("dark", initial === "dark");
-  }, []);
-
   const toggle = () => {
-    setTheme((prev) => {
-      const next = prev === "light" ? "dark" : "light";
-      localStorage.setItem("theme", next);
+    const next = document.documentElement.classList.contains("dark") ? "light" : "dark";
+    localStorage.setItem("theme", next);
+
+    const apply = () => {
       document.documentElement.classList.toggle("dark", next === "dark");
-      return next;
-    });
+      document.documentElement.style.colorScheme = next;
+    };
+
+    if (document.startViewTransition) {
+      // Suppress element-level CSS transitions for the duration of the View Transition
+      // so they don't create a second animation when the DOM is revealed.
+      document.documentElement.setAttribute("data-vt", "");
+      const vt = document.startViewTransition(apply);
+      vt.finished.finally(() => document.documentElement.removeAttribute("data-vt"));
+    } else {
+      apply();
+    }
   };
 
-  return <ThemeContext.Provider value={{ theme, toggle }}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={{ toggle }}>
+      {children}
+    </ThemeContext.Provider>
+  );
 }
 
 export const useTheme = () => useContext(ThemeContext);

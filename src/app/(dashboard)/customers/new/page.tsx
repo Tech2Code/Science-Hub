@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
+import { useToast } from "@/components/ui/Toast";
 
 const INDIA_STATES = [
   "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat",
@@ -18,6 +19,7 @@ const INDIA_STATES = [
 
 export default function NewCustomerPage() {
   const router = useRouter();
+  const toast = useToast();
   const [form, setForm] = useState({
     name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "",
   });
@@ -41,6 +43,7 @@ export default function NewCustomerPage() {
     setSaving(false);
     if (res.ok) {
       bustCache("/api/customers");
+      toast({ type: "success", title: "Customer created", message: "New customer added." });
       router.push("/customers");
     } else {
       const d = await res.json().catch(() => ({}));

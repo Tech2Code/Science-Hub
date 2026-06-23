@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
+import { useToast } from "@/components/ui/Toast";
 
 const INDIA_STATES = [
   "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat",
@@ -19,6 +20,7 @@ const INDIA_STATES = [
 
 export default function EditCustomerPage() {
   const router = useRouter();
+  const toast = useToast();
   const { id } = useParams<{ id: string }>();
   const [form, setForm] = useState({
     name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "",
@@ -54,6 +56,7 @@ export default function EditCustomerPage() {
     setSaving(false);
     if (res.ok) {
       bustCache("/api/customers");
+      toast({ type: "success", title: "Customer updated", message: "Changes saved." });
       router.push("/customers");
     }
     else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to update customer."); }

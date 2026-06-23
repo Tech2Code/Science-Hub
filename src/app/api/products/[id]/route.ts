@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { logActivity } from "@/lib/activity";
 
 export async function GET(
   request: NextRequest,
@@ -26,6 +29,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
+    const session = await getServerSession(authOptions);
     const body = await request.json();
     const { name, description, sku, unit, price, gstRate, stock, minStock, categoryId, brandId } = body;
     const data: Record<string, unknown> = {};
@@ -40,12 +44,14 @@ export async function PUT(
     if (categoryId !== undefined) data.categoryId = categoryId || null;
     if (brandId !== undefined) data.brandId = brandId || null;
     const product = await prisma.product.update({
-      where: { id },
-      data,
+      where: { id }, data,
       include: { category: true, brand: true },
     });
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
+    if (session?.user?.id) {
+      await logActivity(session.user.id, "update_product", `Updated product "${product.name}"`, id, "product");
+    }
     return NextResponse.json(product);
   } catch (error) {
     console.error(error);
@@ -59,9 +65,14 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const session = await getServerSession(authOptions);
+    const product = await prisma.product.findUnique({ where: { id }, select: { name: true } });
     await prisma.product.delete({ where: { id } });
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
+    if (session?.user?.id && product) {
+      await logActivity(session.user.id, "delete_product", `Deleted product "${product.name}"`, id, "product");
+    }
     return NextResponse.json({ message: "Product deleted" });
   } catch (error) {
     console.error(error);

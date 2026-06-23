@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { fetchCached, bustCache } from "@/lib/useCache";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Select, FormField } from "@/components/ui/Input";
+import { useToast } from "@/components/ui/Toast";
 
 interface InvoiceItem {
   id: string; name: string; unit: string;
@@ -118,6 +119,7 @@ export default function InvoiceDetailPage() {
   const [paymentForm, setPaymentForm] = useState({ amount: "", method: "Cash", reference: "" });
   const [addingPayment, setAddingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  const toast = useToast();
 
   async function load(force = false) {
     try {
@@ -155,6 +157,7 @@ export default function InvoiceDetailPage() {
       setPaymentForm({ amount: "", method: "Cash", reference: "" });
       bustCache(`/api/invoices/${id}`);
       load(true);
+      toast({ type: "success", title: "Payment recorded", message: `₹${parseFloat(paymentForm.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })} via ${paymentForm.method}` });
     } else {
       const d = await res.json().catch(() => ({}));
       setPaymentError(d?.error ?? "Failed to record payment.");
@@ -511,10 +514,10 @@ export default function InvoiceDetailPage() {
                 <tbody>
                   {invoice.payments.map((p) => (
                     <tr key={p.id}>
-                      <td style={{ color:"var(--c-text-3)" }}>{new Date(p.date).toLocaleDateString("en-IN")}</td>
-                      <td style={{ color:"var(--c-text-3)" }}>{p.method}</td>
-                      <td style={{ color:"var(--c-text-4)",fontFamily:"var(--font-mono)",fontSize:"0.75rem" }}>{p.reference || "—"}</td>
-                      <td className="table-td-right" style={{ fontWeight:500,color:"var(--c-green)" }}>₹{fmt(p.amount)}</td>
+                      <td data-label="Date" style={{ color:"var(--c-text-3)" }}>{new Date(p.date).toLocaleDateString("en-IN")}</td>
+                      <td data-label="Method" style={{ color:"var(--c-text-3)" }}>{p.method}</td>
+                      <td data-mobile-hide style={{ color:"var(--c-text-4)",fontFamily:"var(--font-mono)",fontSize:"0.75rem" }}>{p.reference || "—"}</td>
+                      <td data-label="Amount" data-mobile-full className="table-td-right" style={{ fontWeight:500,color:"var(--c-green)" }}>₹{fmt(p.amount)}</td>
                     </tr>
                   ))}
                 </tbody>

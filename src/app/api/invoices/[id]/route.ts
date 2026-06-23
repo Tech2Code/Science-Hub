@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidateTag } from "next/cache";
 import { getInvoice } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
 
 export async function GET(
   request: NextRequest,
@@ -118,6 +119,11 @@ export async function PUT(
     revalidateTag(`invoice-${id}`, { expire: 0 });
     revalidateTag("invoices", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
+    const sess = await getServerSession(authOptions);
+    if (sess?.user?.id) {
+      const inv = invoice as { invoiceNumber?: string; customer?: { name?: string } };
+      await logActivity(sess.user.id, "update_invoice", `Edited invoice ${inv.invoiceNumber ?? id} for ${inv.customer?.name ?? ""}`, id, "invoice");
+    }
     return NextResponse.json(invoice);
   } catch (error) {
     console.error(error);
@@ -131,10 +137,15 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const sess = await getServerSession(authOptions);
+    const inv = await prisma.invoice.findUnique({ where: { id }, select: { invoiceNumber: true } });
     await prisma.invoice.delete({ where: { id } });
     revalidateTag(`invoice-${id}`, { expire: 0 });
     revalidateTag("invoices", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
+    if (sess?.user?.id && inv) {
+      await logActivity(sess.user.id, "delete_invoice", `Deleted invoice ${inv.invoiceNumber}`, id, "invoice");
+    }
     return NextResponse.json({ message: "Invoice deleted" });
   } catch (error) {
     console.error(error);

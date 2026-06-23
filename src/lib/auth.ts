@@ -24,16 +24,21 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         token.role = (user as { role?: string }).role;
+      }
+      // When client calls update({ name, email }), mirror those into the token
+      if (trigger === "update" && session) {
+        if (session.name)  token.name  = session.name;
+        if (session.email) token.email = session.email;
       }
       return token;
     },
     async session({ session, token }) {
       if (token) {
-        session.user.id = token.id as string;
+        session.user.id   = token.id   as string;
         session.user.role = token.role as string;
       }
       return session;

@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import styles from "./new.module.css";
 import { bustCache } from "@/lib/useCache";
+import { useToast } from "@/components/ui/Toast";
 
 interface Customer { id: string; name: string; city: string; state: string; gstin: string; }
 interface Product { id: string; name: string; unit: string; price: number; gstRate: number; stock: number; }
@@ -21,6 +22,7 @@ const SELLER_STATE = "Rajasthan";
 
 export default function NewInvoicePage() {
   const router = useRouter();
+  const toast = useToast();
   const searchParams = useSearchParams();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -102,6 +104,7 @@ export default function NewInvoicePage() {
       bustCache("/api/invoices");
       bustCache("/api/reports?type=summary");
       bustCache("/api/reports?type=outstanding");
+      toast({ type: "success", title: "Invoice created", message: "Invoice saved successfully." });
       router.push(`/invoices/${d.id}`);
     }
     else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to create invoice."); }

@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
+import { useToast } from "@/components/ui/Toast";
 
 interface Customer {
   id: string;
@@ -27,6 +28,7 @@ export default function CustomersPage() {
     title: string; message: string; onConfirm: () => void;
   } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const toast = useToast();
 
   function handleDelete(id: string, name: string) {
     setConfirmState({
@@ -35,11 +37,16 @@ export default function CustomersPage() {
       onConfirm: async () => {
         setConfirmLoading(true);
         setDeleting(id);
-        await fetch(`/api/customers/${id}`, { method: "DELETE" });
+        const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
         setConfirmLoading(false);
         setConfirmState(null);
         setDeleting(null);
-        mutate();
+        if (res.ok) {
+          mutate();
+          toast({ type: "success", title: "Customer deleted", message: `"${name}" removed.` });
+        } else {
+          toast({ type: "error", title: "Delete failed", message: "Could not delete customer." });
+        }
       },
     });
   }
@@ -110,12 +117,12 @@ export default function CustomersPage() {
                 </td></tr>
               ) : visible.map((c) => (
                 <tr key={c.id}>
-                  <td style={{ fontWeight: 500, color: "var(--c-text)" }}>{c.name}</td>
-                  <td style={{ color: "var(--c-text-3)" }}>{c.phone || "—"}</td>
-                  <td style={{ color: "var(--c-text-3)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{c.gstin || "—"}</td>
-                  <td style={{ color: "var(--c-text-3)" }}>{c.city || "—"}</td>
-                  <td className="table-td-right" style={{ color: "var(--c-text-2)" }}>{c._count?.invoices ?? 0}</td>
-                  <td>
+                  <td data-mobile-full style={{ fontWeight: 500, color: "var(--c-text)" }}>{c.name}</td>
+                  <td data-label="Phone" style={{ color: "var(--c-text-3)" }}>{c.phone || "—"}</td>
+                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{c.gstin || "—"}</td>
+                  <td data-label="City" style={{ color: "var(--c-text-3)" }}>{c.city || "—"}</td>
+                  <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-text-2)" }}>{c._count?.invoices ?? 0}</td>
+                  <td data-mobile-full>
                     <div className="table-actions">
                       <Button variant="viewOutline" size="sm" href={`/customers/${c.id}`}>View</Button>
                       <Button variant="editOutline" size="sm" href={`/customers/edit/${c.id}`}>Edit</Button>

@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidateTag } from "next/cache";
 import { getInvoices } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
 
 export async function GET(request: NextRequest) {
   try {
@@ -143,6 +144,7 @@ export async function POST(request: NextRequest) {
 
     revalidateTag("invoices", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
+    await logActivity(user.id, "create_invoice", `Created invoice ${invoiceNumber} for ${invoice.customer.name}`, invoice.id, "invoice");
     return NextResponse.json(invoice, { status: 201 });
   } catch (error) {
     console.error("POST /api/invoices error:", error);

@@ -7,6 +7,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
+import { useToast } from "@/components/ui/Toast";
 
 interface Product {
   id: string;
@@ -32,6 +33,7 @@ export default function ProductsPage() {
     title: string; message: string; onConfirm: () => void;
   } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const toast = useToast();
 
   function handleDelete(id: string, name: string) {
     setConfirmState({
@@ -40,11 +42,16 @@ export default function ProductsPage() {
       onConfirm: async () => {
         setConfirmLoading(true);
         setDeleting(id);
-        await fetch(`/api/products/${id}`, { method: "DELETE" });
+        const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
         setConfirmLoading(false);
         setConfirmState(null);
         setDeleting(null);
-        mutate();
+        if (res.ok) {
+          mutate();
+          toast({ type: "success", title: "Product deleted", message: `"${name}" removed from catalog.` });
+        } else {
+          toast({ type: "error", title: "Delete failed", message: "Could not delete product." });
+        }
       },
     });
   }
@@ -121,16 +128,16 @@ export default function ProductsPage() {
                 const isLow = p.stock <= p.minStock;
                 return (
                   <tr key={p.id}>
-                    <td>
+                    <td data-mobile-full>
                       <div style={{ fontWeight: 500, color: "var(--c-text)" }}>{p.name}</div>
                       {p.sku && <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)", fontFamily: "var(--font-mono)" }}>{p.sku}</div>}
                     </td>
-                    <td style={{ color: "var(--c-text-3)" }}>{p.brand?.name ?? "—"}</td>
-                    <td style={{ color: "var(--c-text-3)" }}>{p.category?.name ?? "—"}</td>
-                    <td style={{ color: "var(--c-text-3)" }}>{p.unit}</td>
-                    <td className="table-td-right" style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{p.price.toLocaleString("en-IN")}</td>
-                    <td className="table-td-right" style={{ color: "var(--c-text-3)" }}>{p.gstRate}%</td>
-                    <td className="table-td-right">
+                    <td data-label="Brand" style={{ color: "var(--c-text-3)" }}>{p.brand?.name ?? "—"}</td>
+                    <td data-mobile-hide style={{ color: "var(--c-text-3)" }}>{p.category?.name ?? "—"}</td>
+                    <td data-mobile-hide style={{ color: "var(--c-text-3)" }}>{p.unit}</td>
+                    <td data-label="Price" className="table-td-right" style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{p.price.toLocaleString("en-IN")}</td>
+                    <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-text-3)" }}>{p.gstRate}%</td>
+                    <td data-label="Stock" data-mobile-full className="table-td-right">
                       <span style={{
                         display: "inline-block", padding: "0.125rem 0.5rem", borderRadius: "9999px",
                         fontSize: "0.75rem", fontWeight: 500,
@@ -141,7 +148,7 @@ export default function ProductsPage() {
                         {p.stock} {p.unit}{isLow && " ⚠"}
                       </span>
                     </td>
-                    <td>
+                    <td data-mobile-full>
                       <div className="table-actions">
                         <Button variant="editOutline" size="sm" href={`/products/edit/${p.id}`}>Edit</Button>
                         <Button

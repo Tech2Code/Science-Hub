@@ -10,7 +10,7 @@
   font-size: 0.875rem;
   font-family: var(--font-sans);
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: background-color 0.2s, color 0.2s, border-color 0.15s, box-shadow 0.15s;
   appearance: none;
 }
 .input::placeholder,

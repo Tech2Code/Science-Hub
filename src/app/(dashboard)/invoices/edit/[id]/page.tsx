@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Sk } from "@/components/ui/Skeleton";
 import { fetchCached, bustCache } from "@/lib/useCache";
+import { useToast } from "@/components/ui/Toast";
 import styles from "./edit.module.css";
 
 const SELLER_STATE = "Rajasthan";
@@ -28,6 +29,7 @@ interface InvoiceData {
 
 export default function EditInvoicePage() {
   const router = useRouter();
+  const toast = useToast();
   const { id } = useParams<{ id: string }>();
   const [invoice, setInvoice] = useState<InvoiceData | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -110,7 +112,7 @@ export default function EditInvoicePage() {
       }),
     });
     setSaving(false);
-    if (res.ok) { bustCache(`/api/invoices/${id}`); router.push(`/invoices/${id}`); }
+    if (res.ok) { bustCache(`/api/invoices/${id}`); toast({ type: "success", title: "Invoice updated", message: "Changes saved." }); router.push(`/invoices/${id}`); }
     else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to update invoice."); }
   }
 

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
+import { useToast } from "@/components/ui/Toast";
 
 const UNITS = ["Nos", "Kg", "Ltr", "Box", "Pack", "Set", "Mtr", "Pcs"];
 const GST_RATES = [0, 5, 12, 18, 28];
@@ -15,6 +16,7 @@ interface Category { id: string; name: string; }
 
 export default function NewProductPage() {
   const router = useRouter();
+  const toast = useToast();
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [form, setForm] = useState({
@@ -59,6 +61,7 @@ export default function NewProductPage() {
       bustCache("/api/products");
       bustCache("/api/reports?type=summary");
       bustCache("/api/reports?type=stock");
+      toast({ type: "success", title: "Product created", message: "New product added to catalog." });
       router.push("/products");
     }
     else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to save product."); }

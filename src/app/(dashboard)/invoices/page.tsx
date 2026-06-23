@@ -86,26 +86,32 @@ export default function InvoicesPage() {
                 </td></tr>
               ) : visible.map((inv) => (
                 <tr key={inv.id}>
-                  <td>
+                  <td data-mobile-full>
                     <a href={`/invoices/${inv.id}`} style={{ fontWeight: 500, color: "var(--c-blue)", textDecoration: "none" }}>
                       {inv.invoiceNumber}
                     </a>
                   </td>
-                  <td style={{ color: "var(--c-text-3)" }}>
+                  <td data-mobile-hide style={{ color: "var(--c-text-3)" }}>
                     <div>{new Date(inv.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
-                    <div style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: 2 }}>
+                    <div className="date-sub" style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: 2 }}>
                       {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                     </div>
                   </td>
-                  <td style={{ color: "var(--c-text-2)" }}>{inv.customer?.name}</td>
-                  <td className="table-td-right" style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td className="table-td-right" style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td className="table-td-right" style={{ color: "var(--c-text)" }}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td><StatusBadge status={inv.status} /></td>
-                  <td>
+                  <td data-label="Customer" style={{ color: "var(--c-text-2)" }}>{inv.customer?.name}</td>
+                  <td data-label="Total" className="table-td-right" style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  <td data-label="Balance" className="table-td-right" style={{ color: "var(--c-text)" }}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  <td data-label="Status"><StatusBadge status={inv.status} /></td>
+                  <td data-mobile-full>
                     <div className="table-actions">
                       <Button variant="viewOutline" size="sm" href={`/invoices/${inv.id}`}>View</Button>
-                      <Button variant="ghost" size="sm" onClick={() => window.open(`/invoices/${inv.id}?print=1`)}>PDF</Button>
+                      <Button variant="viewOutline" size="sm" onClick={() => {
+                        const iframe = document.createElement('iframe');
+                        Object.assign(iframe.style, { position: 'fixed', width: '0', height: '0', top: '0', left: '0', border: 'none', visibility: 'hidden' });
+                        iframe.src = `/invoices/${inv.id}?print=1`;
+                        document.body.appendChild(iframe);
+                        setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 30000);
+                      }}>PDF</Button>
                       {inv.status !== "paid" && (
                         <Button variant="editOutline" size="sm" href={`/invoices/edit/${inv.id}`}>Edit</Button>
                       )}

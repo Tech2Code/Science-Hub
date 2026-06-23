@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { revalidateTag } from "next/cache";
 import { getProducts } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,19 +20,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
     const body = await request.json();
-    const {
-      name,
-      description,
-      sku,
-      unit,
-      price,
-      gstRate,
-      stock,
-      minStock,
-      categoryId,
-      brandId,
-    } = body;
+    const { name, description, sku, unit, price, gstRate, stock, minStock, categoryId, brandId } = body;
 
     if (!name || price === undefined) {
       return NextResponse.json({ error: "Name and price are required" }, { status: 400 });
@@ -37,10 +30,7 @@ export async function POST(request: NextRequest) {
 
     const product = await prisma.product.create({
       data: {
-        name,
-        description,
-        sku,
-        unit,
+        name, description, sku, unit,
         price: parseFloat(price),
         gstRate: gstRate !== undefined ? parseFloat(gstRate) : 18,
         stock: stock !== undefined ? parseInt(stock) : 0,
@@ -48,14 +38,14 @@ export async function POST(request: NextRequest) {
         categoryId: categoryId || null,
         brandId: brandId || null,
       },
-      include: {
-        category: true,
-        brand: true,
-      },
+      include: { category: true, brand: true },
     });
 
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
+    if (session?.user?.id) {
+      await logActivity(session.user.id, "add_product", `Added product "${name}"`, product.id, "product");
+    }
     return NextResponse.json(product, { status: 201 });
   } catch (error) {
     console.error("POST /api/products error:", error);

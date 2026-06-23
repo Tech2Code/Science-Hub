@@ -99,20 +99,20 @@ export default function PaymentsPage() {
                 const mc = METHOD_COLORS[p.method] ?? METHOD_COLORS.Other;
                 return (
                   <tr key={p.id}>
-                    <td style={{ color: "var(--c-text-3)" }}>
+                    <td data-label="Date" style={{ color: "var(--c-text-3)" }}>
                       <div>{new Date(p.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
-                      <div style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: 2 }}>
+                      <div className="date-sub" style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: 2 }}>
                         {new Date(p.date).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                       </div>
                     </td>
-                    <td style={{ fontWeight: 500, color: "var(--c-text)" }}>{p.invoice.customer.name}</td>
-                    <td>
+                    <td data-label="Customer" style={{ fontWeight: 500, color: "var(--c-text)" }}>{p.invoice.customer.name}</td>
+                    <td data-label="Invoice">
                       <Link href={`/invoices/${p.invoiceId}`}
                         style={{ fontWeight: 500, color: "var(--c-blue)", textDecoration: "none" }}>
                         {p.invoice.invoiceNumber}
                       </Link>
                     </td>
-                    <td>
+                    <td data-label="Method">
                       <span style={{
                         display: "inline-block", padding: "0.125rem 0.5rem", borderRadius: "9999px",
                         fontSize: "0.75rem", fontWeight: 500,
@@ -121,10 +121,10 @@ export default function PaymentsPage() {
                         {p.method}
                       </span>
                     </td>
-                    <td style={{ color: "var(--c-text-4)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
+                    <td data-mobile-hide style={{ color: "var(--c-text-4)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
                       {p.reference || "—"}
                     </td>
-                    <td className="table-td-right" style={{ fontWeight: 600, color: "var(--c-green)" }}>
+                    <td data-label="Amount" data-mobile-full className="table-td-right" style={{ fontWeight: 600, color: "var(--c-green)" }}>
                       ₹{p.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </td>
                   </tr>

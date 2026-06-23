@@ -126,21 +126,21 @@ export default function CustomerViewPage() {
                 <tr><td colSpan={6} style={{ textAlign: "center", padding: "2.5rem", color: "var(--c-text-4)" }}>No invoices yet.</td></tr>
               ) : customer.invoices.map((inv) => (
                 <tr key={inv.id}>
-                  <td>
+                  <td data-mobile-full>
                     <Link href={`/invoices/${inv.id}`} style={{ fontWeight: 500, color: "var(--c-blue)", textDecoration: "none" }}>
                       {inv.invoiceNumber}
                     </Link>
                   </td>
-                  <td style={{ color: "var(--c-text-3)" }}>
+                  <td data-label="Date" style={{ color: "var(--c-text-3)" }}>
                     <div>{new Date(inv.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
-                    <div style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: 2 }}>
+                    <div className="date-sub" style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: 2 }}>
                       {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                     </div>
                   </td>
-                  <td className="table-td-right" style={{ color: "var(--c-text)" }}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td className="table-td-right" style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td className="table-td-right" style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td><StatusBadge status={inv.status} /></td>
+                  <td data-label="Total" className="table-td-right" style={{ color: "var(--c-text)" }}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  <td data-label="Balance" className="table-td-right" style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  <td data-label="Status"><StatusBadge status={inv.status} /></td>
                 </tr>
               ))}
             </tbody>

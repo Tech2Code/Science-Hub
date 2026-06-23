@@ -72,25 +72,6 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <div className={styles.hint}>
-          <p className={styles.hintTitle}>Login credentials</p>
-          <div className={styles.hintRow}>
-            <span className={styles.hintKey}>Email</span>
-            <span>admin@sciencehub.com</span>
-          </div>
-          <div className={styles.hintRow}>
-            <span className={styles.hintKey}>Password</span>
-            <span>admin123</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => { setEmail("admin@sciencehub.com"); setPassword("admin123"); }}
-            className={styles.fillBtn}
-          >
-            Fill credentials
-          </button>
-        </div>
-
         <div className={styles.forgotRow}>
           <Link href="/forgot-password" className={styles.forgotLink}>Forgot password?</Link>
         </div>

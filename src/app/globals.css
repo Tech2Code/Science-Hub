@@ -2,6 +2,8 @@
    Design tokens  (light mode)
 ───────────────────────────────────────────── */
 :root {
+  color-scheme: light;
+
   /* Surface */
   --c-bg:          #f8fafc;
   --c-bg-card:     #ffffff;
@@ -68,6 +70,8 @@
    Dark mode overrides
 ───────────────────────────────────────────── */
 .dark {
+  color-scheme: dark;
+
   --c-bg:          #020617;
   --c-bg-card:     #0f172a;
   --c-bg-sub:      #1e293b;
@@ -117,7 +121,15 @@
 /* ─────────────────────────────────────────────
    Base reset & global styles
 ───────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after {
+  box-sizing: border-box; margin: 0; padding: 0;
+  transition: color 0.2s, background-color 0.2s, border-color 0.2s;
+}
+/* While View Transition is running, kill element-level transitions so they
+   don't create a second animation when the DOM is revealed after the cross-fade. */
+[data-vt] *, [data-vt] *::before, [data-vt] *::after {
+  transition: none !important;
+}
 
 html { height: 100%; }
 
@@ -128,7 +140,7 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.3s, color 0.3s;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 a { color: inherit; text-decoration: none; }
@@ -189,6 +201,15 @@ input, textarea, select {
    Print
 ───────────────────────────────────────────── */
 @media print { .no-print { display: none !important; } }
+
+/* ─────────────────────────────────────────────
+   Theme toggle — View Transitions cross-fade
+───────────────────────────────────────────── */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.2s;
+  animation-timing-function: ease;
+}
 
 /* ─────────────────────────────────────────────
    Reduced motion
@@ -259,6 +280,59 @@ input, textarea, select {
 .table-th-right { text-align: right !important; }
 .table-td-right { text-align: right; }
 
+/* ── Mobile card tables (@media ≤640px) ──────── */
+@media (max-width: 640px) {
+  .table-wrap { overflow-x: unset; }
+  .table-base { display: block; }
+  .table-base thead { display: none; }
+  .table-base tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+  .table-base tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem 1rem;
+    background: var(--c-bg-card);
+    border: 1px solid var(--c-border);
+    border-radius: var(--c-radius-sm);
+    padding: 0.875rem 0.75rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .table-base tbody tr:hover td { background: transparent; }
+  .table-base tbody td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 0;
+    border-bottom: none;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+  .table-base tbody td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: var(--c-text-4);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.2rem;
+  }
+  /* Actions cell: stretch content to full width for easy tapping */
+  .table-base tbody td[data-mobile-full] > .table-actions { width: 100%; }
+  .table-base tbody td[data-mobile-hide] { display: none; }
+  .table-base tbody td[data-mobile-full] { grid-column: 1 / -1; }
+  .table-base tbody td[colspan] { grid-column: 1 / -1; }
+  .table-base tbody td.table-td-right { text-align: left; }
+  /* Hide time sub-line in date cells — too noisy on mobile */
+  .table-base tbody .date-sub,
+  .table-base tbody td > div + div[style*="0.7rem"] { display: none; }
+}
+
 .error-banner {
   padding: 0.75rem 1rem;
   border-radius: var(--c-radius-sm);
@@ -277,7 +351,6 @@ input, textarea, select {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  transition: background-color 0.2s;
 }
 
 .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -340,6 +413,12 @@ input, textarea, select {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  flex-wrap: wrap;
+}
+@media (max-width: 480px) {
+  .filter-tabs-row { flex-direction: column; align-items: stretch; }
+  .filter-tabs { width: 100%; justify-content: space-between; }
+  .filter-tab { flex: 1; text-align: center; padding: 0.375rem 0.5rem; font-size: 0.8125rem; }
 }
 
 /* ── Status/filter tab strip ─────────────── */
@@ -422,7 +501,7 @@ input, textarea, select {
   font-size: 0.875rem;
   font-family: var(--font-sans);
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: background-color 0.2s, color 0.2s, border-color 0.15s, box-shadow 0.15s;
 }
 .search-input::placeholder { color: var(--c-text-4); }
 .search-input:focus {

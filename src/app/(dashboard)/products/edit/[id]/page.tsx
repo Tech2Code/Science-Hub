@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
+import { useToast } from "@/components/ui/Toast";
 
 const UNITS = ["Nos", "Kg", "Ltr", "Box", "Pack", "Set", "Mtr", "Pcs"];
 const GST_RATES = [0, 5, 12, 18, 28];
@@ -22,6 +23,7 @@ interface FormData {
 
 export default function EditProductPage() {
   const router = useRouter();
+  const toast = useToast();
   const { id } = useParams<{ id: string }>();
   const [form, setForm] = useState<FormData>({
     name: "", sku: "", description: "", unit: "Nos",
@@ -75,6 +77,7 @@ export default function EditProductPage() {
       bustCache("/api/products");
       bustCache("/api/reports?type=summary");
       bustCache("/api/reports?type=stock");
+      toast({ type: "success", title: "Product updated", message: "Changes saved." });
       router.push("/products");
     } else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to update product."); }
   }

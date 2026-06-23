@@ -106,19 +106,19 @@ export default function ReportsPage() {
                 const isOverdue = inv.dueDate && new Date(inv.dueDate) < new Date() && inv.status !== "paid";
                 return (
                   <tr key={inv.id} style={isOverdue ? { background: "var(--c-red-bg)" } : undefined}>
-                    <td>
+                    <td data-label="Invoice">
                       <Link href={`/invoices/${inv.id}`} className="table-link">
                         {inv.invoiceNumber}
                       </Link>
                     </td>
-                    <td style={{ color: "var(--c-text-2)" }}>{inv.customer.name}</td>
-                    <td style={{ color: "var(--c-text-3)" }}>
+                    <td data-label="Customer" style={{ color: "var(--c-text-2)" }}>{inv.customer.name}</td>
+                    <td data-mobile-hide style={{ color: "var(--c-text-3)" }}>
                       <div>{new Date(inv.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
                       <div className="date-sub">
                         {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                       </div>
                     </td>
-                    <td>
+                    <td data-label="Due Date">
                       {inv.dueDate ? (
                         <span style={{ color: isOverdue ? "var(--c-red)" : "var(--c-text-3)", fontWeight: isOverdue ? 500 : undefined }}>
                           {new Date(inv.dueDate).toLocaleDateString("en-IN")}
@@ -128,12 +128,12 @@ export default function ReportsPage() {
                         <span style={{ color: "var(--c-text-4)" }}>—</span>
                       )}
                     </td>
-                    <td className="table-td-right" style={{ color: "var(--c-text-2)" }}>₹{inv.total.toLocaleString("en-IN")}</td>
-                    <td className="table-td-right" style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN")}</td>
-                    <td className="table-td-right" style={{ fontWeight: 500, color: "var(--c-text)" }}>
+                    <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-text-2)" }}>₹{inv.total.toLocaleString("en-IN")}</td>
+                    <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN")}</td>
+                    <td data-label="Balance" className="table-td-right" style={{ fontWeight: 500, color: "var(--c-text)" }}>
                       ₹{(inv.total - inv.paidAmount).toLocaleString("en-IN")}
                     </td>
-                    <td><StatusBadge status={inv.status} /></td>
+                    <td data-label="Status" data-mobile-full><StatusBadge status={inv.status} /></td>
                   </tr>
                 );
               })}
@@ -186,7 +186,7 @@ export default function ReportsPage() {
                 const critical = p.stock === 0;
                 return (
                   <tr key={p.id} style={critical ? { background: "var(--c-red-bg)" } : undefined}>
-                    <td style={{ fontWeight: 500, color: "var(--c-text)" }}>
+                    <td data-mobile-full style={{ fontWeight: 500, color: "var(--c-text)" }}>
                       <Link href={`/products/edit/${p.id}`}
                         style={{ color: "inherit", textDecoration: "none" }}
                         onMouseEnter={(e) => (e.currentTarget.style.color = "var(--c-blue)")}
@@ -204,15 +204,15 @@ export default function ReportsPage() {
                         </span>
                       )}
                     </td>
-                    <td style={{ color: "var(--c-text-3)" }}>{p.brand?.name || "—"}</td>
-                    <td style={{ color: "var(--c-text-4)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{p.sku || "—"}</td>
-                    <td className="table-td-right">
+                    <td data-label="Brand" style={{ color: "var(--c-text-3)" }}>{p.brand?.name || "—"}</td>
+                    <td data-mobile-hide style={{ color: "var(--c-text-4)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{p.sku || "—"}</td>
+                    <td data-label="Stock" className="table-td-right">
                       <span style={{ fontWeight: 600, color: critical ? "var(--c-red)" : "var(--c-amber)" }}>
                         {p.stock} {p.unit}
                       </span>
                     </td>
-                    <td className="table-td-right" style={{ color: "var(--c-text-3)" }}>{p.minStock} {p.unit}</td>
-                    <td className="table-td-right" style={{ fontWeight: 500, color: "var(--c-red)" }}>
+                    <td data-label="Min" className="table-td-right" style={{ color: "var(--c-text-3)" }}>{p.minStock} {p.unit}</td>
+                    <td data-label="Deficit" className="table-td-right" style={{ fontWeight: 500, color: "var(--c-red)" }}>
                       {deficit > 0 ? `−${deficit} ${p.unit}` : "—"}
                     </td>
                   </tr>
