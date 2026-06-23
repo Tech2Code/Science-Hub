@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 
@@ -38,6 +38,7 @@ export default function CustomersPage() {
         setConfirmLoading(true);
         setDeleting(id);
         const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
+        const data = await res.json().catch(() => ({}));
         setConfirmLoading(false);
         setConfirmState(null);
         setDeleting(null);
@@ -45,7 +46,7 @@ export default function CustomersPage() {
           mutate();
           toast({ type: "success", title: "Customer deleted", message: `"${name}" removed.` });
         } else {
-          toast({ type: "error", title: "Delete failed", message: "Could not delete customer." });
+          toast({ type: "error", title: "Delete failed", message: data.error ?? "Could not delete customer." });
         }
       },
     });
@@ -57,6 +58,11 @@ export default function CustomersPage() {
     c.gstin?.toLowerCase().includes(search.toLowerCase()) ||
     c.city?.toLowerCase().includes(search.toLowerCase())
   );
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (page > maxPage) setPage(maxPage);
+  }, [filtered.length, page]);
 
   const { visible } = usePagination(filtered, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
@@ -123,7 +129,7 @@ export default function CustomersPage() {
                   <td data-label="City" style={{ color: "var(--c-text-3)" }}>{c.city || "—"}</td>
                   <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-text-2)" }}>{c._count?.invoices ?? 0}</td>
                   <td data-mobile-full>
-                    <div className="table-actions">
+                    <div className="table-actions" style={{ flexWrap: "wrap" }}>
                       <Button variant="viewOutline" size="sm" href={`/customers/${c.id}`}>View</Button>
                       <Button variant="editOutline" size="sm" href={`/customers/edit/${c.id}`}>Edit</Button>
                       <Button

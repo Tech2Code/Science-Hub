@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { fetchCached, bustCache } from "@/lib/useCache";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
+import { Spinner } from "@/components/ui/Spinner";
+import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 
 interface InvoiceItem {
   id: string; name: string; unit: string;
@@ -119,7 +121,12 @@ export default function InvoiceDetailPage() {
   const [paymentForm, setPaymentForm] = useState({ amount: "", method: "Cash", reference: "" });
   const [addingPayment, setAddingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const toast = useToast();
+  const router = useRouter();
 
   async function load(force = false) {
     try {
@@ -164,6 +171,106 @@ export default function InvoiceDetailPage() {
     }
   }
 
+  async function generatePdfBlob(): Promise<Blob | null> {
+    const el = document.getElementById("invoice-print-area");
+    if (!el) return null;
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+      const canvas = await html2canvas(el, {
+        scale: 2, useCORS: true, backgroundColor: "#fff",
+        onclone: (clonedDoc) => {
+          // Force light mode so PDF always has white background regardless of user theme
+          clonedDoc.documentElement.classList.remove("dark");
+        },
+      });
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const imgW = 210;
+      const imgH = (canvas.height * imgW) / canvas.width;
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, imgW, imgH);
+      return pdf.output("blob");
+    } catch { return null; }
+  }
+
+  async function handleShare(channel: "native" | "whatsapp" | "email" | "copy") {
+    setShareOpen(false);
+    if (!invoice) return;
+    const num = invoice.invoiceNumber;
+    const customer = invoice.customer.name;
+
+    // Generate PDF for all channels
+    setShareLoading(true);
+    await document.fonts.ready;
+    const blob = await generatePdfBlob();
+    setShareLoading(false);
+    if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
+
+    const file = new File([blob], `${num}.pdf`, { type: "application/pdf" });
+
+    // Helper to trigger a PDF download
+    const downloadPdf = () => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `${num}.pdf`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    };
+
+    if (channel === "native") {
+      try {
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: `Invoice ${num}` });
+        } else {
+          downloadPdf();
+          toast({ type: "success", title: "PDF Downloaded", message: `${num}.pdf saved to your device.` });
+        }
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") toast({ type: "error", title: "Share failed", message: "Could not open share sheet." });
+      }
+      return;
+    }
+
+    if (channel === "whatsapp") {
+      downloadPdf();
+      const text = `Hi, please find the invoice PDF (${num}) from Science Hub.\nAmount: ₹${fmt(invoice.total)} | Customer: ${customer}`;
+      setTimeout(() => window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank"), 400);
+      toast({ type: "info", title: "PDF Downloaded", message: "PDF saved. Attach it in WhatsApp." });
+      return;
+    }
+
+    if (channel === "email") {
+      downloadPdf();
+      const subject = encodeURIComponent(`Invoice ${num} — Science Hub`);
+      const body = encodeURIComponent(`Dear ${customer},\n\nPlease find the attached invoice PDF (${num}).\nAmount: ₹${fmt(invoice.total)}\n\nThank you for your business.\n\nRegards,\nScience Hub`);
+      setTimeout(() => window.open(`mailto:?subject=${subject}&body=${body}`, "_blank"), 400);
+      toast({ type: "info", title: "PDF Downloaded", message: "PDF saved. Attach it to your email." });
+      return;
+    }
+
+    if (channel === "copy") {
+      downloadPdf();
+      toast({ type: "success", title: "PDF Downloaded", message: `${num}.pdf saved to your device.` });
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/invoices/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast({ type: "success", title: "Deleted", message: `Invoice moved to bin.` });
+        router.push("/invoices");
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete invoice." });
+      }
+    } catch {
+      toast({ type: "error", title: "Delete failed", message: "Network error." });
+    }
+    setDeleting(false);
+    setDeleteConfirm(false);
+  }
+
   if (loading) return <InvoiceSkeleton />;
   if (error || !invoice) return <div className="loading-center" style={{ color: "var(--c-red)" }}>{error || "Invoice not found."}</div>;
 
@@ -171,6 +278,35 @@ export default function InvoiceDetailPage() {
 
   return (
     <>
+      <ConfirmDialog
+        open={deleteConfirm}
+        title="Delete Invoice"
+        message={`Move invoice ${invoice?.invoiceNumber} to bin? You can restore it within 30 days.`}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => { if (!deleting) setDeleteConfirm(false); }}
+      />
+      {shareLoading && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.5)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{
+            background: "var(--c-bg-card)", borderRadius: "0.75rem",
+            padding: "2rem 2.5rem", boxShadow: "0 20px 50px rgba(0,0,0,0.4)",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: "0.875rem",
+            minWidth: "13rem",
+          }}>
+            <Spinner size="lg" />
+            <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--c-text-2)" }}>
+              Preparing PDF…
+            </span>
+          </div>
+        </div>
+      )}
       <style>{`
         #invoice-print-area {
           --inv-bg:#fff;--inv-bg2:#f8fafc;--inv-bg3:#f1f5f9;--inv-bg4:#e2e8f0;
@@ -233,6 +369,76 @@ export default function InvoiceDetailPage() {
             <Button variant="secondary" size="sm" onClick={() => window.print()}>
               Download / Print PDF
             </Button>
+            <Button variant="dangerOutline" size="sm" loading={deleting} onClick={() => setDeleteConfirm(true)}>
+              Delete
+            </Button>
+            {/* Share PDF button */}
+            <div style={{ position: "relative" }}>
+              <Button variant="secondary" size="sm" loading={shareLoading} onClick={() => setShareOpen(o => !o)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "0.375rem" }}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                Share PDF
+              </Button>
+              {shareOpen && (
+                <>
+                  <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setShareOpen(false)} />
+                  <div style={{
+                    position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 100,
+                    background: "var(--c-bg-card)",
+                    border: "1px solid var(--c-border-md)",
+                    borderRadius: "0.5rem",
+                    boxShadow: "0 8px 24px -4px rgba(0,0,0,.18), 0 2px 8px -2px rgba(0,0,0,.12)",
+                    minWidth: "15rem", overflow: "hidden",
+                    padding: "0.375rem 0",
+                  }}>
+                    <div style={{
+                      padding: "0.5rem 1rem 0.375rem",
+                      fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.06em",
+                      textTransform: "uppercase", color: "var(--c-text-4)",
+                      borderBottom: "1px solid var(--c-border)",
+                      marginBottom: "0.25rem",
+                    }}>Share PDF</div>
+                    {([
+                      typeof navigator !== "undefined" && "share" in navigator ? {
+                        key: "native", label: "Share / Send File",
+                        icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>,
+                        color: "var(--c-blue)",
+                      } : null,
+                      {
+                        key: "whatsapp", label: "WhatsApp",
+                        icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>,
+                        color: "#25d366",
+                      },
+                      {
+                        key: "email", label: "Email",
+                        icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
+                        color: "var(--c-text-2)",
+                      },
+                      {
+                        key: "copy", label: "Download PDF",
+                        icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>,
+                        color: "var(--c-text-2)",
+                      },
+                    ] as const).filter(Boolean).map((opt) => (
+                      <button
+                        key={opt!.key}
+                        onClick={() => handleShare(opt!.key as "native" | "whatsapp" | "email" | "copy")}
+                        style={{
+                          display: "flex", alignItems: "center", gap: "0.75rem",
+                          width: "100%", padding: "0.625rem 1rem",
+                          background: "none", border: "none", cursor: "pointer",
+                          fontSize: "0.875rem", color: "var(--c-text)", textAlign: "left",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "var(--c-bg-sub)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                      >
+                        <span style={{ color: opt!.color, flexShrink: 0, display: "flex" }}>{opt!.icon}</span>
+                        {opt!.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -319,9 +525,9 @@ export default function InvoiceDetailPage() {
                 <tr>
                   <td rowSpan={invoice.dueDate ? 5 : 4} colSpan={invoice.isInterState ? 5 : 6}
                     style={{ border: "1px solid var(--inv-bd)", padding: "14px 16px", verticalAlign: "top" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                      <span style={{ fontSize: 16 }}>⚗️</span>
-                      <strong style={{ fontSize: 14, color: "var(--inv-brand)" }}>Science Hub</strong>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <img src="/logo.png" alt="Science Hub" style={{ width: 36, height: 36, objectFit: "contain", flexShrink: 0 }} />
+                      <strong style={{ fontSize: 15, color: "var(--inv-brand)" }}>Science Hub</strong>
                     </div>
                     <div style={{ color: "var(--inv-tx2)", lineHeight: 1.6 }}>
                       <div>Industrial &amp; Laboratory Solutions</div>

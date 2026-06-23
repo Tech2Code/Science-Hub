@@ -11,18 +11,17 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
     const session = await getServerSession(authOptions);
     const brand = await prisma.brand.findUnique({ where: { id }, select: { name: true, _count: { select: { products: true } } } });
+    if (!brand) return NextResponse.json({ error: "Brand not found" }, { status: 404 });
 
-    // Unassign products before deleting (brandId is optional)
-    await prisma.product.updateMany({ where: { brandId: id }, data: { brandId: null } });
-    await prisma.brand.delete({ where: { id } });
+    await prisma.brand.update({ where: { id }, data: { deletedAt: new Date() } });
 
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
-    if (session?.user?.id && brand) {
-      const affected = brand._count.products > 0 ? ` | ${brand._count.products} product(s) unassigned` : "";
-      await logActivity(session.user.id, "delete_brand", `Deleted brand "${brand.name}"${affected}`, id, "brand");
+    if (session?.user?.id) {
+      const affected = brand._count.products > 0 ? ` | ${brand._count.products} product(s) still assigned` : "";
+      await logActivity(session.user.id, "delete_brand", `Moved brand "${brand.name}" to bin${affected}`, id, "brand");
     }
-    return NextResponse.json({ message: "Brand deleted" });
+    return NextResponse.json({ message: "Brand moved to bin" });
   } catch (error) {
     console.error("DELETE /api/brands/[id] error:", error);
     return NextResponse.json({ error: "Failed to delete brand" }, { status: 500 });

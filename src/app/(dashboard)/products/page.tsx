@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
-import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 
@@ -64,6 +64,11 @@ export default function ProductsPage() {
     p.brand?.name?.toLowerCase().includes(search.toLowerCase()) ||
     p.category?.name?.toLowerCase().includes(search.toLowerCase())
   );
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (page > maxPage) setPage(maxPage);
+  }, [filtered.length, page]);
 
   const { visible } = usePagination(filtered, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };

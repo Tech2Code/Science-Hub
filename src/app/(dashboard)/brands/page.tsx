@@ -171,14 +171,16 @@ export default function BrandsPage() {
                       {b._count.products} {b._count.products === 1 ? "product" : "products"}
                     </span>
                   </td>
-                  <td>
-                    <Button
-                      variant="dangerOutline"
-                      size="sm"
-                      onClick={() => handleDelete(b.id, b.name)}
-                    >
-                      Delete
-                    </Button>
+                  <td data-mobile-full>
+                    <div className="table-actions">
+                      <Button
+                        variant="dangerOutline"
+                        size="sm"
+                        onClick={() => handleDelete(b.id, b.name)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}

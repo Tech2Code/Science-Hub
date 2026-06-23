@@ -44,19 +44,22 @@ model Customer {
   gstin     String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
   invoices  Invoice[]
 }
 
 model Category {
-  id       String    @id @default(cuid())
-  name     String    @unique
-  products Product[]
+  id        String    @id @default(cuid())
+  name      String    @unique
+  deletedAt DateTime?
+  products  Product[]
 }
 
 model Brand {
-  id       String    @id @default(cuid())
-  name     String    @unique
-  products Product[]
+  id        String    @id @default(cuid())
+  name      String    @unique
+  deletedAt DateTime?
+  products  Product[]
 }
 
 model Product {
@@ -73,6 +76,7 @@ model Product {
   brandId      String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
   invoiceItems InvoiceItem[]
   brand        Brand?        @relation(fields: [brandId], references: [id])
   category     Category?     @relation(fields: [categoryId], references: [id])
@@ -96,6 +100,7 @@ model Invoice {
   isInterState  Boolean       @default(false)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
   customer      Customer      @relation(fields: [customerId], references: [id])
   createdBy     User          @relation(fields: [userId], references: [id])
   items         InvoiceItem[]

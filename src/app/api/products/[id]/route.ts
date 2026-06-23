@@ -68,22 +68,13 @@ export async function DELETE(
     const session = await getServerSession(authOptions);
     const product = await prisma.product.findUnique({ where: { id }, select: { name: true, sku: true, price: true, stock: true, unit: true } });
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
-
-    const invoiceItemCount = await prisma.invoiceItem.count({ where: { productId: id } });
-    if (invoiceItemCount > 0) {
-      return NextResponse.json(
-        { error: `Cannot delete "${product.name}" — it appears in ${invoiceItemCount} invoice line item(s). Remove it from those invoices first.` },
-        { status: 400 }
-      );
-    }
-
-    await prisma.product.delete({ where: { id } });
+    await prisma.product.update({ where: { id }, data: { deletedAt: new Date() } });
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
-    if (session?.user?.id && product) {
-      await logActivity(session.user.id, "delete_product", `Deleted product "${product.name}" | SKU: ${product.sku || "—"} | Price: ₹${product.price.toFixed(2)} | Stock: ${product.stock} ${product.unit || "Nos"}`, id, "product");
+    if (session?.user?.id) {
+      await logActivity(session.user.id, "delete_product", `Moved product "${product.name}" to bin | SKU: ${product.sku || "—"} | Price: ₹${product.price.toFixed(2)} | Stock: ${product.stock} ${product.unit || "Nos"}`, id, "product");
     }
-    return NextResponse.json({ message: "Product deleted" });
+    return NextResponse.json({ message: "Product moved to bin" });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });

@@ -53,21 +53,16 @@ export async function DELETE(
   try {
     const { id } = await params;
     const session = await getServerSession(authOptions);
-    const invoiceCount = await prisma.invoice.count({ where: { customerId: id } });
-    if (invoiceCount > 0) {
-      return NextResponse.json(
-        { error: `Cannot delete customer with ${invoiceCount} existing invoice(s)` },
-        { status: 400 }
-      );
-    }
     const customer = await prisma.customer.findUnique({ where: { id }, select: { name: true, phone: true, city: true, gstin: true } });
-    await prisma.customer.delete({ where: { id } });
+    if (!customer) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
+    await prisma.customer.update({ where: { id }, data: { deletedAt: new Date() } });
     revalidateTag(`customer-${id}`, { expire: 0 });
     revalidateTag("customers", { expire: 0 });
-    if (session?.user?.id && customer) {
-      await logActivity(session.user.id, "delete_customer", `Deleted customer "${customer.name}" | Phone: ${customer.phone || "—"} | City: ${customer.city || "—"} | GSTIN: ${customer.gstin || "—"}`, id, "customer");
+    revalidateTag("reports", { expire: 0 });
+    if (session?.user?.id) {
+      await logActivity(session.user.id, "delete_customer", `Moved customer "${customer.name}" to bin | Phone: ${customer.phone || "—"} | City: ${customer.city || "—"} | GSTIN: ${customer.gstin || "—"}`, id, "customer");
     }
-    return NextResponse.json({ message: "Customer deleted" });
+    return NextResponse.json({ message: "Customer moved to bin" });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Failed to delete customer" }, { status: 500 });

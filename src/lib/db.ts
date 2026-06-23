@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache";
 
 export const getInvoices = unstable_cache(
   async (status?: string | null, customerId?: string | null) => {
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { deletedAt: null };
     if (status) where.status = status;
     if (customerId) where.customerId = customerId;
     return prisma.invoice.findMany({
@@ -35,6 +35,7 @@ export const getInvoice = unstable_cache(
 export const getCustomers = unstable_cache(
   async () => {
     return prisma.customer.findMany({
+      where: { deletedAt: null },
       orderBy: { name: "asc" },
       include: { _count: { select: { invoices: true } } },
     });
@@ -63,8 +64,8 @@ export const getProducts = unstable_cache(
   async (search?: string | null) => {
     return prisma.product.findMany({
       where: search
-        ? { OR: [{ name: { contains: search } }, { sku: { contains: search } }] }
-        : undefined,
+        ? { deletedAt: null, OR: [{ name: { contains: search } }, { sku: { contains: search } }] }
+        : { deletedAt: null },
       orderBy: { name: "asc" },
       include: { category: true, brand: true, _count: { select: { invoiceItems: true } } },
     });
@@ -80,14 +81,14 @@ export const getReportSummary = unstable_cache(
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
     const invoicesThisMonth = await prisma.invoice.count({
-      where: { date: { gte: monthStart, lt: monthEnd } },
+      where: { deletedAt: null, date: { gte: monthStart, lt: monthEnd } },
     });
     const revenueAgg = await prisma.invoice.aggregate({
-      where: { date: { gte: monthStart, lt: monthEnd } },
+      where: { deletedAt: null, date: { gte: monthStart, lt: monthEnd } },
       _sum: { total: true },
     });
     const unpaidInvoices = await prisma.invoice.findMany({
-      where: { status: { in: ["unpaid", "partial"] } },
+      where: { deletedAt: null, status: { in: ["unpaid", "partial"] } },
       select: { total: true, paidAmount: true },
     });
     const outstandingAmount = unpaidInvoices.reduce(
@@ -95,10 +96,12 @@ export const getReportSummary = unstable_cache(
       0
     );
     const allProducts = await prisma.product.findMany({
+      where: { deletedAt: null },
       select: { stock: true, minStock: true },
     });
     const lowStockCount = allProducts.filter((p) => p.stock < p.minStock).length;
     const recent = await prisma.invoice.findMany({
+      where: { deletedAt: null },
       orderBy: { date: "desc" },
       take: 5,
       include: { customer: { select: { name: true } } },
@@ -129,7 +132,7 @@ export const getReportSummary = unstable_cache(
 export const getReportOutstanding = unstable_cache(
   async () => {
     const invoices = await prisma.invoice.findMany({
-      where: { status: { in: ["unpaid", "partial"] } },
+      where: { deletedAt: null, status: { in: ["unpaid", "partial"] } },
       orderBy: { date: "asc" },
       include: { customer: { select: { id: true, name: true } } },
     });
@@ -153,6 +156,7 @@ export const getReportOutstanding = unstable_cache(
 export const getReportStock = unstable_cache(
   async () => {
     const allProducts = await prisma.product.findMany({
+      where: { deletedAt: null },
       orderBy: { stock: "asc" },
       include: { category: true, brand: true },
     });

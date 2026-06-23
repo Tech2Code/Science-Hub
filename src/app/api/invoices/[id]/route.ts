@@ -139,14 +139,14 @@ export async function DELETE(
     const { id } = await params;
     const sess = await getServerSession(authOptions);
     const inv = await prisma.invoice.findUnique({ where: { id }, select: { invoiceNumber: true, total: true, customer: { select: { name: true } } } });
-    await prisma.invoice.delete({ where: { id } });
+    await prisma.invoice.update({ where: { id }, data: { deletedAt: new Date() } });
     revalidateTag(`invoice-${id}`, { expire: 0 });
     revalidateTag("invoices", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
     if (sess?.user?.id && inv) {
-      await logActivity(sess.user.id, "delete_invoice", `Deleted invoice ${inv.invoiceNumber} | Customer: ${inv.customer?.name ?? "—"} | Total: ₹${inv.total.toFixed(2)}`, id, "invoice");
+      await logActivity(sess.user.id, "delete_invoice", `Moved invoice ${inv.invoiceNumber} to bin | Customer: ${inv.customer?.name ?? "—"} | Total: ₹${inv.total.toFixed(2)}`, id, "invoice");
     }
-    return NextResponse.json({ message: "Invoice deleted" });
+    return NextResponse.json({ message: "Invoice moved to bin" });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Failed to delete invoice" }, { status: 500 });

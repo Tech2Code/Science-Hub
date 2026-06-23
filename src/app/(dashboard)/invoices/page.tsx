@@ -4,8 +4,11 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
+import { Spinner } from "@/components/ui/Spinner";
+import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
 
 interface Invoice {
   id: string;
@@ -25,16 +28,73 @@ export default function InvoicesPage() {
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const toast = useToast();
 
   const apiUrl = filter === "All" ? "/api/invoices" : `/api/invoices?status=${filter}`;
-  const { data, loading } = useFetch<Invoice[]>(apiUrl);
+  const { data, loading, mutate } = useFetch<Invoice[]>(apiUrl);
   const invoices = data ?? [];
 
   useEffect(() => { setPage(1); }, [filter]);
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(invoices.length / PAGE_SIZE));
+    if (page > maxPage) setPage(maxPage);
+  }, [invoices.length, page]);
 
   const { visible } = usePagination(invoices, page, showAll);
 
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/invoices/${deleteTarget.id}`, { method: "DELETE" });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        mutate();
+        toast({ type: "success", title: "Moved to bin", message: `${deleteTarget.invoiceNumber} moved to bin. You can restore it within 30 days.` });
+      } else {
+        toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete invoice." });
+      }
+    } catch {
+      toast({ type: "error", title: "Delete failed", message: "Network error." });
+    }
+    setDeleting(false);
+    setDeleteTarget(null);
+  }
+
   return (
+    <>
+    <ConfirmDialog
+      open={!!deleteTarget}
+      title="Move to Bin"
+      message={`Move invoice ${deleteTarget?.invoiceNumber} to bin? You can restore it within 30 days.`}
+      confirmLabel="Move to Bin"
+      variant="danger"
+      loading={deleting}
+      onConfirm={handleDelete}
+      onCancel={() => { if (!deleting) setDeleteTarget(null); }}
+    />
+    {pdfLoading && (
+      <div style={{
+        position: "fixed", inset: 0, zIndex: 9999,
+        background: "rgba(0,0,0,0.5)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <div style={{
+          background: "var(--c-bg-card)", borderRadius: "0.75rem",
+          padding: "2rem 2.5rem", boxShadow: "0 20px 50px rgba(0,0,0,0.4)",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: "0.875rem",
+          minWidth: "13rem",
+        }}>
+          <Spinner size="lg" />
+          <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--c-text-2)" }}>
+            Preparing PDF…
+          </span>
+        </div>
+      </div>
+    )}
     <div className="page-stack">
       <div className="page-header">
         <div>
@@ -103,18 +163,55 @@ export default function InvoicesPage() {
                   <td data-label="Balance" className="table-td-right" style={{ color: "var(--c-text)" }}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   <td data-label="Status"><StatusBadge status={inv.status} /></td>
                   <td data-mobile-full>
-                    <div className="table-actions">
+                    <div className="table-actions" style={{ flexWrap: "wrap" }}>
                       <Button variant="viewOutline" size="sm" href={`/invoices/${inv.id}`}>View</Button>
-                      <Button variant="viewOutline" size="sm" onClick={() => {
-                        const iframe = document.createElement('iframe');
-                        Object.assign(iframe.style, { position: 'fixed', width: '0', height: '0', top: '0', left: '0', border: 'none', visibility: 'hidden' });
-                        iframe.src = `/invoices/${inv.id}?print=1`;
+                      <Button variant="viewOutline" size="sm" onClick={async () => {
+                        if (pdfLoading) return;
+                        setPdfLoading(inv.id);
+                        const iframe = document.createElement("iframe");
+                        Object.assign(iframe.style, { position: "fixed", width: "850px", height: "1200px", top: "-9999px", left: "-9999px", border: "none", opacity: "0", pointerEvents: "none" });
+                        const cleanup = () => { try { document.body.removeChild(iframe); } catch {} setPdfLoading(null); };
+                        const safetyTimer = setTimeout(cleanup, 45000);
+                        iframe.onload = async () => {
+                          // Poll until invoice-print-area has rendered content
+                          const el = await new Promise<HTMLElement | null>(resolve => {
+                            let tries = 0;
+                            const check = () => {
+                              const area = iframe.contentDocument?.getElementById("invoice-print-area");
+                              if (area?.querySelector("tbody tr")) { resolve(area); return; }
+                              if (++tries > 40) { resolve(null); return; }
+                              setTimeout(check, 250);
+                            };
+                            setTimeout(check, 250);
+                          });
+                          if (!el) { clearTimeout(safetyTimer); cleanup(); return; }
+                          await new Promise(r => setTimeout(r, 400));
+                          try {
+                            const html2canvas = (await import("html2canvas")).default;
+                            const { jsPDF } = await import("jspdf");
+                            const canvas = await html2canvas(el, {
+                              scale: 2, useCORS: true, backgroundColor: "#fff",
+                              onclone: (clonedDoc) => { clonedDoc.documentElement.classList.remove("dark"); },
+                            });
+                            const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+                            const imgW = 210;
+                            const imgH = (canvas.height * imgW) / canvas.width;
+                            pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, imgW, imgH);
+                            const url = URL.createObjectURL(pdf.output("blob"));
+                            const a = document.createElement("a");
+                            a.href = url; a.download = `${inv.invoiceNumber}.pdf`;
+                            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                            setTimeout(() => URL.revokeObjectURL(url), 2000);
+                          } catch {}
+                          clearTimeout(safetyTimer); cleanup();
+                        };
                         document.body.appendChild(iframe);
-                        setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 30000);
-                      }}>PDF</Button>
+                        iframe.src = `/invoices/${inv.id}`;
+                      }}>Download PDF</Button>
                       {inv.status !== "paid" && (
                         <Button variant="editOutline" size="sm" href={`/invoices/edit/${inv.id}`}>Edit</Button>
                       )}
+                      <Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(inv)}>Delete</Button>
                     </div>
                   </td>
                 </tr>
@@ -133,5 +230,6 @@ export default function InvoicesPage() {
         )}
       </div>
     </div>
+    </>
   );
 }
