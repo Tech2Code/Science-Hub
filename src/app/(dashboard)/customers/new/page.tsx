@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
@@ -52,6 +53,8 @@ export default function NewCustomerPage() {
   }
 
   return (
+    <>
+    {saving && <OverlayLoader text="Saving…" />}
     <div className="page-stack" style={{ maxWidth: "42rem" }}>
       <Breadcrumb items={[{ label: "Customers", href: "/customers" }, { label: "New Customer" }]} />
 
@@ -100,12 +103,13 @@ export default function NewCustomerPage() {
         </FormField>
 
         <div className="form-actions">
-          <Button type="submit" variant="primary" loading={saving} fullScreen disabled={saving}>
-            {saving ? "Saving…" : "Add Customer"}
+          <Button type="submit" variant="primary" disabled={saving}>
+            Add Customer
           </Button>
           <Button variant="secondary" href="/customers">Cancel</Button>
         </div>
       </form>
     </div>
+    </>
   );
 }

@@ -55,6 +55,13 @@ export async function DELETE(
     const session = await getServerSession(authOptions);
     const customer = await prisma.customer.findUnique({ where: { id }, select: { name: true, phone: true, city: true, gstin: true } });
     if (!customer) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
+    const invoiceCount = await prisma.invoice.count({ where: { customerId: id, deletedAt: null } });
+    if (invoiceCount > 0) {
+      return NextResponse.json(
+        { error: `"${customer.name}" has ${invoiceCount} invoice${invoiceCount > 1 ? "s" : ""} and cannot be deleted. Delete those invoices first.` },
+        { status: 400 }
+      );
+    }
     await prisma.customer.update({ where: { id }, data: { deletedAt: new Date() } });
     revalidateTag(`customer-${id}`, { expire: 0 });
     revalidateTag("customers", { expire: 0 });

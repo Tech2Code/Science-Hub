@@ -8,6 +8,7 @@ import { logActivity } from "@/lib/activity";
 export async function GET() {
   try {
     const brands = await prisma.brand.findMany({
+      where: { deletedAt: null },
       orderBy: { name: "asc" },
       include: { _count: { select: { products: true } } },
     });

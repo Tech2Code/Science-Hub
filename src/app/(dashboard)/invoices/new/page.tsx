@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
-import { Spinner } from "@/components/ui/Spinner";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import styles from "./new.module.css";
 import { bustCache } from "@/lib/useCache";
@@ -126,6 +126,8 @@ export default function NewInvoicePage() {
   };
 
   return (
+    <>
+    {saving && <OverlayLoader text="Creating invoice…" />}
     <div className="page-stack">
       <Breadcrumb items={[{ label: "Invoices", href: "/invoices" }, { label: "New Invoice" }]} />
       <div>
@@ -400,11 +402,9 @@ export default function NewInvoicePage() {
                   type="submit"
                   variant="primary"
                   size="full"
-                  loading={saving}
-                  fullScreen
                   disabled={saving || items.length === 0 || !customerId}
                 >
-                  {saving ? "Creating…" : "Create Invoice"}
+                  Create Invoice
                 </Button>
                 <Button
                   type="button"
@@ -424,5 +424,6 @@ export default function NewInvoicePage() {
         </div>
       </form>
     </div>
+    </>
   );
 }

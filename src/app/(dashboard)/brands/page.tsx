@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/Button";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
@@ -54,17 +55,18 @@ export default function BrandsPage() {
   function handleDelete(id: string, name: string) {
     setConfirmState({
       title: "Delete Brand",
-      message: `Delete "${name}"? Products assigned to this brand will be unassigned.`,
+      message: `Move "${name}" to bin?`,
       onConfirm: async () => {
         setConfirmLoading(true);
         const res = await fetch(`/api/brands/${id}`, { method: "DELETE" });
+        const d = await res.json().catch(() => ({}));
         setConfirmLoading(false);
         setConfirmState(null);
         if (res.ok) {
           mutate();
-          toast({ type: "success", title: "Brand deleted", message: `"${name}" removed.` });
+          toast({ type: "success", title: "Brand deleted", message: `"${name}" moved to bin.` });
         } else {
-          toast({ type: "error", title: "Delete failed", message: "Could not delete brand." });
+          toast({ type: "error", title: "Cannot delete brand", message: d.error ?? "Could not delete brand." });
         }
       },
     });
@@ -78,6 +80,8 @@ export default function BrandsPage() {
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
 
   return (
+    <>
+    {saving && <OverlayLoader text="Adding…" />}
     <div className="page-stack">
       <ConfirmDialog
         open={!!confirmState}
@@ -117,8 +121,8 @@ export default function BrandsPage() {
               borderColor: error ? "var(--c-red-border)" : undefined,
             }}
           />
-          <Button type="submit" variant="primary" loading={saving} fullScreen disabled={!newName.trim()}>
-            {saving ? "Adding…" : "+ Add Brand"}
+          <Button type="submit" variant="primary" disabled={!newName.trim() || saving}>
+            + Add Brand
           </Button>
         </form>
         {error && <p style={{ marginTop: "0.5rem", fontSize: "0.8125rem", color: "var(--c-red-text)" }}>{error}</p>}
@@ -198,5 +202,6 @@ export default function BrandsPage() {
         )}
       </div>
     </div>
+    </>
   );
 }

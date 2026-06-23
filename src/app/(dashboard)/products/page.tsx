@@ -29,7 +29,6 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<{
     title: string; message: string; onConfirm: () => void;
   } | null>(null);
@@ -42,12 +41,10 @@ export default function ProductsPage() {
       message: `Delete "${name}"? This will permanently remove it from your catalog.`,
       onConfirm: async () => {
         setConfirmLoading(true);
-        setDeleting(id);
         const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
         const data = await res.json().catch(() => ({}));
         setConfirmLoading(false);
         setConfirmState(null);
-        setDeleting(null);
         if (res.ok) {
           mutate();
           toast({ type: "success", title: "Product deleted", message: `"${name}" removed from catalog.` });
@@ -177,10 +174,9 @@ export default function ProductsPage() {
                         <Button
                           variant="dangerOutline"
                           size="sm"
-                          loading={deleting === p.id}
                           onClick={() => handleDelete(p.id, p.name)}
                         >
-                          {deleting === p.id ? "Deleting…" : "Delete"}
+                          Delete
                         </Button>
                       </div>
                     </td>

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
@@ -71,6 +72,8 @@ export default function EditCustomerPage() {
   if (loading) return <div className="loading-center">Loading customer…</div>;
 
   return (
+    <>
+    {saving && <OverlayLoader text="Saving…" />}
     <div className="page-stack" style={{ maxWidth: "42rem" }}>
       <ConfirmDialog
         open={confirmOpen}
@@ -136,12 +139,13 @@ export default function EditCustomerPage() {
         </FormField>
 
         <div className="form-actions">
-          <Button type="submit" variant="primary" loading={saving} fullScreen disabled={saving}>
-            {saving ? "Saving…" : "Update Customer"}
+          <Button type="submit" variant="primary" disabled={saving}>
+            Update Customer
           </Button>
           <Button variant="secondary" href="/customers">Cancel</Button>
         </div>
       </form>
     </div>
+    </>
   );
 }

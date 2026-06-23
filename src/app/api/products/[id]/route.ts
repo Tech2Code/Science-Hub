@@ -68,6 +68,13 @@ export async function DELETE(
     const session = await getServerSession(authOptions);
     const product = await prisma.product.findUnique({ where: { id }, select: { name: true, sku: true, price: true, stock: true, unit: true } });
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    const invoiceItemCount = await prisma.invoiceItem.count({ where: { productId: id } });
+    if (invoiceItemCount > 0) {
+      return NextResponse.json(
+        { error: `"${product.name}" is used in ${invoiceItemCount} invoice line item${invoiceItemCount > 1 ? "s" : ""} and cannot be deleted.` },
+        { status: 400 }
+      );
+    }
     await prisma.product.update({ where: { id }, data: { deletedAt: new Date() } });
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });

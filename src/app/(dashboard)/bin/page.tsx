@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useFetch } from "@/lib/useCache";
@@ -53,7 +54,7 @@ function TypeSection({
   items: BinItem[];
   onRestore: (item: BinItem) => void;
   onDeleteForever: (item: BinItem) => void;
-  restoring: string | null;
+  restoring: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const m = TYPE_META[type];
@@ -135,7 +136,7 @@ function TypeSection({
                       <Button
                         variant="editOutline"
                         size="sm"
-                        loading={restoring === item.id}
+                        disabled={restoring}
                         onClick={() => onRestore(item)}
                       >
                         Restore
@@ -143,6 +144,7 @@ function TypeSection({
                       <Button
                         variant="dangerOutline"
                         size="sm"
+                        disabled={restoring}
                         onClick={() => onDeleteForever(item)}
                       >
                         Delete Forever
@@ -164,19 +166,18 @@ export default function BinPage() {
   const items = data ?? [];
   const toast = useToast();
 
-  const [restoring, setRestoring] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
   const [confirmState, setConfirmState] = useState<{
     title: string; message: string; onConfirm: () => void;
   } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
   async function handleRestore(item: BinItem) {
-    setRestoring(item.id);
+    setRestoring(true);
     try {
       const res = await fetch(`/api/bin/${item.type}/${item.id}`, { method: "POST" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
-        mutate();
         toast({ type: "success", title: "Restored", message: `"${item.name}" restored successfully.` });
       } else {
         toast({ type: "error", title: "Restore failed", message: d.error ?? "Could not restore item." });
@@ -184,7 +185,8 @@ export default function BinPage() {
     } catch {
       toast({ type: "error", title: "Restore failed", message: "Network error." });
     }
-    setRestoring(null);
+    setRestoring(false);
+    mutate();
   }
 
   function handleDeleteForever(item: BinItem) {
@@ -221,6 +223,8 @@ export default function BinPage() {
   const totalCount = items.length;
 
   return (
+    <>
+    {restoring && <OverlayLoader text="Restoring…" />}
     <div className="page-stack">
       <ConfirmDialog
         open={!!confirmState}
@@ -277,5 +281,6 @@ export default function BinPage() {
         ))
       )}
     </div>
+    </>
   );
 }

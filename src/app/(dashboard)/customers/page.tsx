@@ -23,7 +23,6 @@ export default function CustomersPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<{
     title: string; message: string; onConfirm: () => void;
   } | null>(null);
@@ -36,12 +35,10 @@ export default function CustomersPage() {
       message: `Delete "${name}"? All associated data will be permanently removed.`,
       onConfirm: async () => {
         setConfirmLoading(true);
-        setDeleting(id);
         const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
         const data = await res.json().catch(() => ({}));
         setConfirmLoading(false);
         setConfirmState(null);
-        setDeleting(null);
         if (res.ok) {
           mutate();
           toast({ type: "success", title: "Customer deleted", message: `"${name}" removed.` });
@@ -135,10 +132,9 @@ export default function CustomersPage() {
                       <Button
                         variant="dangerOutline"
                         size="sm"
-                        loading={deleting === c.id}
                         onClick={() => handleDelete(c.id, c.name)}
                       >
-                        {deleting === c.id ? "Deleting…" : "Delete"}
+                        Delete
                       </Button>
                     </div>
                   </td>

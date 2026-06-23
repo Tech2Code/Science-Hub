@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 
@@ -296,6 +297,12 @@ export default function AdminPage() {
   ];
 
   return (
+    <>
+    {profileSaving && <OverlayLoader text="Saving profile…" />}
+    {pwSaving && <OverlayLoader text="Updating password…" />}
+    {addSaving && <OverlayLoader text="Creating user…" />}
+    {editSaving && <OverlayLoader text="Saving changes…" />}
+    {logsLoading && <OverlayLoader text="Loading logs…" />}
     <div>
       <style>{`
         @media (max-width: 900px) { .admin-two-col { flex-direction: column !important; } .admin-role-sidebar { width: 100% !important; position: static !important; flex-direction: row !important; } }
@@ -358,7 +365,7 @@ export default function AdminPage() {
               </div>
               {profileMsg && <Msg m={profileMsg} />}
               <div style={{ display: "flex", gap: "0.5rem" }}>
-                <Button type="submit" variant="primary" size="sm" loading={profileSaving}>Save Changes</Button>
+                <Button type="submit" variant="primary" size="sm" disabled={profileSaving}>Save Changes</Button>
                 <Button type="button" variant="secondary" size="sm" onClick={() => { setEditingProfile(false); setProfileForm({ name: profile!.name, email: profile!.email }); }}>Cancel</Button>
               </div>
             </form>
@@ -418,7 +425,7 @@ export default function AdminPage() {
               </div>
               {pwMsg && <Msg m={pwMsg} />}
               <div style={{ display: "flex", gap: "0.5rem" }}>
-                <Button type="submit" variant="primary" size="sm" loading={pwSaving}>Update Password</Button>
+                <Button type="submit" variant="primary" size="sm" disabled={pwSaving}>Update Password</Button>
                 <Button type="button" variant="secondary" size="sm" onClick={() => { setChangingPw(false); setPwForm({ current: "", next: "", confirm: "" }); setPwMsg(null); }}>Cancel</Button>
               </div>
             </form>
@@ -453,7 +460,7 @@ export default function AdminPage() {
               </div>
               {addMsg && <Msg m={addMsg} />}
               <div style={{ display: "flex", gap: "0.5rem" }}>
-                <Button type="submit" variant="primary" size="sm" loading={addSaving}>Create User</Button>
+                <Button type="submit" variant="primary" size="sm" disabled={addSaving}>Create User</Button>
                 <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", role: "staff" }); setAddMsg(null); }}>Cancel</Button>
               </div>
             </form>
@@ -483,7 +490,7 @@ export default function AdminPage() {
               </div>
               {editMsg && <Msg m={editMsg} />}
               <div style={{ display: "flex", gap: "0.5rem" }}>
-                <Button type="submit" variant="primary" size="sm" loading={editSaving}>Save Changes</Button>
+                <Button type="submit" variant="primary" size="sm" disabled={editSaving}>Save Changes</Button>
                 <Button type="button" variant="secondary" size="sm" onClick={() => { setEditUser(null); setEditMsg(null); }}>Cancel</Button>
               </div>
             </form>
@@ -610,7 +617,7 @@ export default function AdminPage() {
         {/* Load more */}
         {logs.length < logsTotal && !logsSearch && (
           <div style={{ padding: "0.875rem 1.25rem", borderTop: "1px solid var(--c-border)", textAlign: "center" }}>
-            <Button variant="secondary" size="sm" loading={logsLoading} onClick={() => loadLogs(logsOffset + LOGS_LIMIT, logsFilter)}>
+            <Button variant="secondary" size="sm" disabled={logsLoading} onClick={() => loadLogs(logsOffset + LOGS_LIMIT, logsFilter)}>
               Load more ({logsTotal - logs.length} remaining)
             </Button>
           </div>
@@ -659,5 +666,6 @@ export default function AdminPage() {
 
       </div>{/* end two-col flex */}
     </div>
+    </>
   );
 }

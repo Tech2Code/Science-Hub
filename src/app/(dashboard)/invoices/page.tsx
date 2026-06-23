@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
-import { Spinner } from "@/components/ui/Spinner";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 
@@ -76,25 +76,7 @@ export default function InvoicesPage() {
       onConfirm={handleDelete}
       onCancel={() => { if (!deleting) setDeleteTarget(null); }}
     />
-    {pdfLoading && (
-      <div style={{
-        position: "fixed", inset: 0, zIndex: 9999,
-        background: "rgba(0,0,0,0.5)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-      }}>
-        <div style={{
-          background: "var(--c-bg-card)", borderRadius: "0.75rem",
-          padding: "2rem 2.5rem", boxShadow: "0 20px 50px rgba(0,0,0,0.4)",
-          display: "flex", flexDirection: "column", alignItems: "center", gap: "0.875rem",
-          minWidth: "13rem",
-        }}>
-          <Spinner size="lg" />
-          <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--c-text-2)" }}>
-            Preparing PDF…
-          </span>
-        </div>
-      </div>
-    )}
+    {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
     <div className="page-stack">
       <div className="page-header">
         <div>
@@ -208,10 +190,10 @@ export default function InvoicesPage() {
                         document.body.appendChild(iframe);
                         iframe.src = `/invoices/${inv.id}`;
                       }}>Download PDF</Button>
+                      <Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(inv)}>Delete</Button>
                       {inv.status !== "paid" && (
                         <Button variant="editOutline" size="sm" href={`/invoices/edit/${inv.id}`}>Edit</Button>
                       )}
-                      <Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(inv)}>Delete</Button>
                     </div>
                   </td>
                 </tr>

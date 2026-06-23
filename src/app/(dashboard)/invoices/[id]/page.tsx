@@ -8,7 +8,7 @@ import { fetchCached, bustCache } from "@/lib/useCache";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
-import { Spinner } from "@/components/ui/Spinner";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 
 interface InvoiceItem {
@@ -288,25 +288,8 @@ export default function InvoiceDetailPage() {
         onConfirm={handleDelete}
         onCancel={() => { if (!deleting) setDeleteConfirm(false); }}
       />
-      {shareLoading && (
-        <div style={{
-          position: "fixed", inset: 0, zIndex: 9999,
-          background: "rgba(0,0,0,0.5)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <div style={{
-            background: "var(--c-bg-card)", borderRadius: "0.75rem",
-            padding: "2rem 2.5rem", boxShadow: "0 20px 50px rgba(0,0,0,0.4)",
-            display: "flex", flexDirection: "column", alignItems: "center", gap: "0.875rem",
-            minWidth: "13rem",
-          }}>
-            <Spinner size="lg" />
-            <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--c-text-2)" }}>
-              Preparing PDF…
-            </span>
-          </div>
-        </div>
-      )}
+      {shareLoading && <OverlayLoader text="Preparing PDF…" />}
+      {addingPayment && <OverlayLoader text="Saving payment…" />}
       <style>{`
         #invoice-print-area {
           --inv-bg:#fff;--inv-bg2:#f8fafc;--inv-bg3:#f1f5f9;--inv-bg4:#e2e8f0;
@@ -369,12 +352,12 @@ export default function InvoiceDetailPage() {
             <Button variant="secondary" size="sm" onClick={() => window.print()}>
               Download / Print PDF
             </Button>
-            <Button variant="dangerOutline" size="sm" loading={deleting} onClick={() => setDeleteConfirm(true)}>
+            <Button variant="dangerOutline" size="sm" disabled={deleting} onClick={() => setDeleteConfirm(true)}>
               Delete
             </Button>
             {/* Share PDF button */}
             <div style={{ position: "relative" }}>
-              <Button variant="secondary" size="sm" loading={shareLoading} onClick={() => setShareOpen(o => !o)}>
+              <Button variant="secondary" size="sm" disabled={shareLoading} onClick={() => setShareOpen(o => !o)}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "0.375rem" }}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
                 Share PDF
               </Button>
@@ -497,8 +480,8 @@ export default function InvoiceDetailPage() {
                 />
               </FormField>
               <div style={{ display: "flex", gap: "0.5rem", paddingBottom: "0.125rem" }}>
-                <Button type="submit" variant="greenPrimary" size="sm" loading={addingPayment} fullScreen disabled={addingPayment}>
-                  {addingPayment ? "Saving…" : "Save Payment"}
+                <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment}>
+                  Save Payment
                 </Button>
                 <Button type="button" variant="secondary" size="sm" onClick={() => setShowPaymentForm(false)}>Cancel</Button>
               </div>

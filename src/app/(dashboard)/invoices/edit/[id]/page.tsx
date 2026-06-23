@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Sk } from "@/components/ui/Skeleton";
 import { fetchCached, bustCache } from "@/lib/useCache";
@@ -153,6 +154,8 @@ export default function EditInvoicePage() {
   if (!invoice) return null;
 
   return (
+    <>
+    {saving && <OverlayLoader text="Saving invoice…" />}
     <div className="page-stack">
       <Breadcrumb items={[
         { label: "Invoices", href: "/invoices" },
@@ -366,11 +369,9 @@ export default function EditInvoicePage() {
                   type="submit"
                   variant="primary"
                   size="full"
-                  loading={saving}
-                  fullScreen
                   disabled={saving || items.length === 0}
                 >
-                  {saving ? "Saving…" : "Update Invoice"}
+                  Update Invoice
                 </Button>
                 <Button variant="secondary" href={`/invoices/${id}`} size="full">
                   Cancel
@@ -381,5 +382,6 @@ export default function EditInvoicePage() {
         </div>
       </form>
     </div>
+    </>
   );
 }

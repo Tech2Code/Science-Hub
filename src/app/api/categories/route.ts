@@ -8,6 +8,7 @@ import { logActivity } from "@/lib/activity";
 export async function GET() {
   try {
     const categories = await prisma.category.findMany({
+      where: { deletedAt: null },
       orderBy: { name: "asc" },
     });
 
