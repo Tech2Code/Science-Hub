@@ -9,9 +9,19 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
+  const [emailError, setEmailError] = useState("");
+
+  function handleEmailBlur() {
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setEmailError("Please enter a valid email address.");
+    } else {
+      setEmailError("");
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (emailError || !email) return;
     setError("");
     setLoading(true);
     try {
@@ -79,7 +89,7 @@ export default function ForgotPasswordPage() {
                 Enter your account email and we&apos;ll send you a reset link.
               </p>
               {error && <div className={styles.errorBox}>{error}</div>}
-              <form onSubmit={handleSubmit} className={styles.formStack}>
+              <form onSubmit={handleSubmit} className={styles.formStack} noValidate>
                 <div>
                   <label htmlFor="email" className={styles.fieldLabel}>Email address</label>
                   <input
@@ -88,10 +98,13 @@ export default function ForgotPasswordPage() {
                     required
                     autoComplete="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError(""); }}
+                    onBlur={handleEmailBlur}
                     placeholder="you@sciencehub.in"
                     className={styles.input}
+                    style={emailError ? { borderColor: "var(--c-red, #dc2626)" } : {}}
                   />
+                  {emailError && <p style={{ fontSize: "0.8rem", color: "var(--c-red, #dc2626)", marginTop: "0.25rem" }}>{emailError}</p>}
                 </div>
                 <button type="submit" className={styles.submitBtn} disabled={loading}>
                   {loading ? "Sending…" : "Send reset link"}

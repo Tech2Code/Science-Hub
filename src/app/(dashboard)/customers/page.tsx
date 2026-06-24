@@ -15,7 +15,9 @@ interface Customer {
   email: string;
   gstin: string;
   city: string;
+  createdAt?: string;
   _count?: { invoices: number };
+  createdBy?: string | null;
 }
 
 export default function CustomersPage() {
@@ -109,13 +111,15 @@ export default function CustomersPage() {
                 <th>Phone / Email</th>
                 <th>GSTIN</th>
                 <th>City</th>
+                <th>Created By</th>
+                <th>Created At</th>
                 <th className="table-th-right">Invoices</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={6} />
+                <TableSkeleton cols={8} />
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={6} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
                   {search ? "No customers match your search." : "No customers yet. Add one to get started."}
@@ -129,6 +133,10 @@ export default function CustomersPage() {
                   </td>
                   <td data-mobile-hide style={{ color: "var(--c-text-3)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{c.gstin || "—"}</td>
                   <td data-label="City" style={{ color: "var(--c-text-3)" }}>{c.city || "—"}</td>
+                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{c.createdBy ?? "—"}</td>
+                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                    {c.createdAt ? new Date(c.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—"}
+                  </td>
                   <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-text-2)" }}>{c._count?.invoices ?? 0}</td>
                   <td data-mobile-full>
                     <div className="table-actions" style={{ flexWrap: "wrap" }}>

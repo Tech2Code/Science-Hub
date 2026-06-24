@@ -171,7 +171,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState({ name: "", email: "", password: "", role: "staff" as Role });
+  const [addForm, setAddForm] = useState({ name: "", email: "", password: "", confirmPassword: "", role: "staff" as Role });
   const [addSaving, setAddSaving] = useState(false);
   const [addMsg, setAddMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [editUser, setEditUser] = useState<User | null>(null);
@@ -232,11 +232,14 @@ export default function AdminPage() {
   }
 
   async function addUser(e: React.FormEvent) {
-    e.preventDefault(); setAddSaving(true); setAddMsg(null);
+    e.preventDefault();
+    if (addForm.password !== addForm.confirmPassword) { setAddMsg({ type: "err", text: "Passwords do not match." }); return; }
+    if (addForm.password.length < 6) { setAddMsg({ type: "err", text: "Password must be at least 6 characters." }); return; }
+    setAddSaving(true); setAddMsg(null);
     const res = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(addForm) });
     const data = await res.json(); setAddSaving(false);
     if (!res.ok) { setAddMsg({ type: "err", text: data.error }); return; }
-    setUsers(prev => [...prev, data]); setAddForm({ name: "", email: "", password: "", role: "staff" }); setAddOpen(false); setAddMsg(null);
+    setUsers(prev => [...prev, data]); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddOpen(false); setAddMsg(null);
     toast({ type: "success", title: "User created", message: `"${data.name}" added to the system.` });
   }
 
@@ -374,9 +377,9 @@ export default function AdminPage() {
                 <Field label="Login Email — used to sign in to this app"><input className="admin-inp" style={inp} type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} required /></Field>
               </div>
               {profileMsg && <Msg m={profileMsg} />}
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <Button type="submit" variant="primary" size="sm" disabled={profileSaving}>Save Changes</Button>
+              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                 <Button type="button" variant="secondary" size="sm" onClick={() => { setEditingProfile(false); setProfileForm({ name: profile!.name, email: profile!.email }); }}>Cancel</Button>
+                <Button type="submit" variant="primary" size="sm" disabled={profileSaving}>Save Changes</Button>
               </div>
             </form>
           ) : (
@@ -437,9 +440,9 @@ export default function AdminPage() {
                 <Field label="Confirm Password"><input className="admin-inp" style={inp} type="password" value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} required placeholder="repeat new password" /></Field>
               </div>
               {pwMsg && <Msg m={pwMsg} />}
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <Button type="submit" variant="primary" size="sm" disabled={pwSaving}>Update Password</Button>
+              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                 <Button type="button" variant="secondary" size="sm" onClick={() => { setChangingPw(false); setPwForm({ current: "", next: "", confirm: "" }); setPwMsg(null); }}>Cancel</Button>
+                <Button type="submit" variant="primary" size="sm" disabled={pwSaving}>Update Password</Button>
               </div>
             </form>
           )}
@@ -464,6 +467,7 @@ export default function AdminPage() {
                 <Field label="Full Name"><input className="admin-inp" style={inp} value={addForm.name} onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))} required placeholder="Jane Smith" /></Field>
                 <Field label="Email"><input className="admin-inp" style={inp} type="email" value={addForm.email} onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))} required placeholder="jane@example.com" /></Field>
                 <Field label="Password"><input className="admin-inp" style={inp} type="password" value={addForm.password} onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))} required placeholder="min. 6 characters" /></Field>
+                <Field label="Re-enter Password"><input className="admin-inp" style={inp} type="password" value={addForm.confirmPassword} onChange={e => setAddForm(p => ({ ...p, confirmPassword: e.target.value }))} required placeholder="repeat password" /></Field>
                 <Field label="Role">
                   <select className="admin-inp" style={{ ...inp, cursor: "pointer" }} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>
                     <option value="staff">Staff</option>
@@ -472,9 +476,9 @@ export default function AdminPage() {
                 </Field>
               </div>
               {addMsg && <Msg m={addMsg} />}
-              <div style={{ display: "flex", gap: "0.5rem" }}>
+              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); }}>Cancel</Button>
                 <Button type="submit" variant="primary" size="sm" disabled={addSaving}>Create User</Button>
-                <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", role: "staff" }); setAddMsg(null); }}>Cancel</Button>
               </div>
             </form>
           </div>
@@ -502,9 +506,9 @@ export default function AdminPage() {
                 </div>
               </div>
               {editMsg && <Msg m={editMsg} />}
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <Button type="submit" variant="primary" size="sm" disabled={editSaving}>Save Changes</Button>
+              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                 <Button type="button" variant="secondary" size="sm" onClick={() => { setEditUser(null); setEditMsg(null); }}>Cancel</Button>
+                <Button type="submit" variant="primary" size="sm" disabled={editSaving}>Save Changes</Button>
               </div>
             </form>
           </div>

@@ -57,3 +57,8 @@
   color: var(--c-text-4);
   margin-top: 0.25rem;
 }
+.errorMsg {
+  font-size: 0.75rem;
+  color: var(--c-red-text, #dc2626);
+  margin-top: 0.25rem;
+}

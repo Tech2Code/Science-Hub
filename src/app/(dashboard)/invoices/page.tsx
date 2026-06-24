@@ -16,6 +16,7 @@ interface Invoice {
   date: string;
   createdAt: string;
   customer: { name: string };
+  createdBy?: { id: string; name: string };
   total: number;
   paidAmount: number;
   status: string;
@@ -43,7 +44,8 @@ export default function InvoicesPage() {
         const q = search.toLowerCase();
         return (
           inv.invoiceNumber.toLowerCase().includes(q) ||
-          inv.customer?.name?.toLowerCase().includes(q)
+          inv.customer?.name?.toLowerCase().includes(q) ||
+          inv.createdBy?.name?.toLowerCase().includes(q)
         );
       })
     : invoices;
@@ -118,7 +120,7 @@ export default function InvoicesPage() {
         <div className="card-toolbar">
           <input
             type="search"
-            placeholder="Search by invoice no. or customer…"
+            placeholder="Search by invoice no., customer or staff name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="search-input"
@@ -135,6 +137,7 @@ export default function InvoicesPage() {
                 <th>Invoice No.</th>
                 <th>Date</th>
                 <th>Customer</th>
+                <th>Created By</th>
                 <th className="table-th-right">Total</th>
                 <th className="table-th-right">Paid</th>
                 <th className="table-th-right">Balance</th>
@@ -144,9 +147,9 @@ export default function InvoicesPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={8} />
+                <TableSkeleton cols={9} />
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={8} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={9} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
                   {search.trim() ? `No invoices match "${search}".` : "No invoices found."}
                 </td></tr>
               ) : visible.map((inv) => (
@@ -163,6 +166,7 @@ export default function InvoicesPage() {
                     </div>
                   </td>
                   <td data-label="Customer" style={{ color: "var(--c-text-2)" }}>{inv.customer?.name}</td>
+                  <td data-label="Created By" style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{inv.createdBy?.name ?? "—"}</td>
                   <td data-label="Total" className="table-td-right" style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   <td data-label="Balance" className="table-td-right" style={{ color: "var(--c-text)" }}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
@@ -170,6 +174,7 @@ export default function InvoicesPage() {
                   <td data-mobile-full>
                     <div className="table-actions" style={{ flexWrap: "wrap" }}>
                       <Button variant="viewOutline" size="sm" href={`/invoices/${inv.id}`}>View</Button>
+                      <Button variant="editOutline" size="sm" href={`/invoices/edit/${inv.id}`}>Edit</Button>
                       <Button variant="viewOutline" size="sm" onClick={async () => {
                         if (pdfLoading) return;
                         setPdfLoading(inv.id);
@@ -280,9 +285,8 @@ export default function InvoicesPage() {
                         };
                         document.body.appendChild(iframe);
                         iframe.src = `/invoices/${inv.id}`;
-                      }}>Download PDF</Button>
+                      }}>PDF</Button>
                       <Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(inv)}>Delete</Button>
-                      <Button variant="editOutline" size="sm" href={`/invoices/edit/${inv.id}`}>Edit</Button>
                     </div>
                   </td>
                 </tr>

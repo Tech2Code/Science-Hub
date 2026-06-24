@@ -11,8 +11,22 @@ export async function GET() {
       orderBy: { name: "asc" },
       include: { _count: { select: { products: true } } },
     });
-
-    return NextResponse.json(brands);
+    const ids = brands.map((b) => b.id);
+    const logs = await prisma.activityLog.findMany({
+      where: { entityId: { in: ids }, action: "add_brand" },
+      select: { entityId: true, createdAt: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    const logMap = new Map(logs.map((l) => [l.entityId, l]));
+    const result = brands.map((b) => {
+      const log = logMap.get(b.id);
+      return {
+        ...b,
+        createdBy: log?.user.name ?? null,
+        createdAt: (b as unknown as { createdAt?: Date | null }).createdAt ?? log?.createdAt ?? null,
+      };
+    });
+    return NextResponse.json(result);
   } catch (error) {
     console.error("GET /api/brands error:", error);
     return NextResponse.json({ error: "Failed to fetch brands" }, { status: 500 });

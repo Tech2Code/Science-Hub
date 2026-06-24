@@ -10,7 +10,15 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search");
     const products = await getProducts(search);
-    return NextResponse.json(products);
+    const ids = products.map((p) => p.id);
+    const logs = await prisma.activityLog.findMany({
+      where: { entityId: { in: ids }, action: "add_product" },
+      select: { entityId: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    const createdByMap = new Map(logs.map((l) => [l.entityId, l.user.name]));
+    const result = products.map((p) => ({ ...p, createdBy: createdByMap.get(p.id) ?? null }));
+    return NextResponse.json(result);
   } catch (error) {
     console.error("GET /api/products error:", error);
     return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });

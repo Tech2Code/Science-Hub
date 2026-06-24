@@ -24,16 +24,26 @@ export default function NewCustomerPage() {
   const [form, setForm] = useState({
     name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "",
   });
+  const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+    if (name === "name" || name === "phone") {
+      setErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) { setError("Customer name is required."); return; }
+    const newErrors: { name?: string; phone?: string } = {};
+    if (!form.name.trim()) newErrors.name = "Customer name is required.";
+    if (!form.phone.trim()) newErrors.phone = "Phone number is required.";
+    else if (!/^\d{10}$/.test(form.phone.trim())) newErrors.phone = "Enter a valid 10-digit phone number.";
+    if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
+    setErrors({});
     setError("");
     setSaving(true);
     const res = await fetch("/api/customers", {
@@ -66,13 +76,15 @@ export default function NewCustomerPage() {
       {error && <div className="error-banner">{error}</div>}
 
       <form onSubmit={handleSubmit} className="form-card">
-        <FormField label="Customer Name" required>
-          <Input name="name" required value={form.name} onChange={handleChange} placeholder="e.g. ABC Enterprises" autoFocus />
+        <FormField label="Customer Name" required error={errors.name}>
+          <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. ABC Enterprises" autoFocus
+            style={errors.name ? { borderColor: "var(--c-red-border, #fca5a5)" } : undefined} />
         </FormField>
 
         <div className="form-grid-2">
-          <FormField label="Phone">
-            <Input name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="10-digit mobile" />
+          <FormField label="Phone" required error={errors.phone}>
+            <Input name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="10-digit mobile"
+              style={errors.phone ? { borderColor: "var(--c-red-border, #fca5a5)" } : undefined} />
           </FormField>
           <FormField label="Email">
             <Input name="email" type="email" value={form.email} onChange={handleChange} placeholder="billing@customer.com" />

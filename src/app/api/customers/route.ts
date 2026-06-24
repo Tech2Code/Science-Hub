@@ -8,7 +8,15 @@ import { logActivity } from "@/lib/activity";
 export async function GET() {
   try {
     const customers = await getCustomers();
-    return NextResponse.json(customers);
+    const ids = customers.map((c) => c.id);
+    const logs = await prisma.activityLog.findMany({
+      where: { entityId: { in: ids }, action: "add_customer" },
+      select: { entityId: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    const createdByMap = new Map(logs.map((l) => [l.entityId, l.user.name]));
+    const result = customers.map((c) => ({ ...c, createdBy: createdByMap.get(c.id) ?? null }));
+    return NextResponse.json(result);
   } catch (error) {
     console.error("GET /api/customers error:", error);
     return NextResponse.json({ error: "Failed to fetch customers" }, { status: 500 });

@@ -13,7 +13,9 @@ import { useToast } from "@/components/ui/Toast";
 interface Brand {
   id: string;
   name: string;
+  createdAt?: string;
   _count: { products: number };
+  createdBy?: string | null;
 }
 
 export default function BrandsPage() {
@@ -149,13 +151,15 @@ export default function BrandsPage() {
               <tr>
                 <th>#</th>
                 <th>Brand Name</th>
+                <th>Created By</th>
+                <th>Created At</th>
                 <th className="table-th-right">Products</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={4} />
+                <TableSkeleton cols={6} />
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={4} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
                   {search ? "No brands match your search." : "No brands yet. Add one above."}
@@ -164,6 +168,10 @@ export default function BrandsPage() {
                 <tr key={b.id}>
                   <td data-mobile-hide style={{ color: "var(--c-text-4)", fontSize: "0.8125rem" }}>{i + 1}</td>
                   <td data-mobile-full style={{ fontWeight: 500, color: "var(--c-text)" }}>{b.name}</td>
+                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{b.createdBy ?? "—"}</td>
+                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                    {b.createdAt ? new Date(b.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—"}
+                  </td>
                   <td data-label="Products" className="table-td-right">
                     <span style={{
                       display: "inline-block", padding: "0.125rem 0.5rem", borderRadius: "9999px",

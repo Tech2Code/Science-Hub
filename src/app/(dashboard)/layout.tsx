@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState, useCallback } from "react";
 import { useTheme } from "@/lib/theme";
+import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import styles from "./layout.module.css";
 
 const NavIcons: Record<string, React.FC<{ className?: string }>> = {
@@ -114,6 +115,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobile, setMobile] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
 
   // Set initial state based on viewport after mount
   useEffect(() => {
@@ -154,6 +157,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className={styles.shell}>
+      <ConfirmDialog
+        open={confirmSignOut}
+        title="Sign out"
+        message="Are you sure you want to sign out?"
+        confirmLabel="Sign out"
+        variant="danger"
+        loading={loggingOut}
+        onConfirm={async () => { setLoggingOut(true); await signOut({ callbackUrl: "/login" }); }}
+        onCancel={() => { if (!loggingOut) setConfirmSignOut(false); }}
+      />
       {/* Mobile backdrop */}
       {mobile && sidebarOpen && (
         <div className={styles.backdrop} onClick={() => setSidebarOpen(false)} />
@@ -300,8 +313,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <span className={styles.topbarName}>{session?.user?.name}</span>
               </div>
             </Link>
-            <button onClick={() => signOut({ callbackUrl: "/login" })} className={styles.signOutBtn}>
-              Sign out
+            <button
+              onClick={() => setConfirmSignOut(true)}
+              className={styles.signOutBtn}
+              disabled={loggingOut}
+            >
+              {loggingOut ? (
+                <svg style={{ width: 14, height: 14, animation: "spin 0.7s linear infinite", display: "inline-block" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" d="M12 2a10 10 0 0 1 10 10" />
+                </svg>
+              ) : "Sign out"}
             </button>
           </div>
         </header>

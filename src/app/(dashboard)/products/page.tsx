@@ -20,7 +20,9 @@ interface Product {
   stock: number;
   minStock: number;
   sku: string;
+  createdAt?: string;
   _count?: { invoiceItems: number };
+  createdBy?: string | null;
 }
 
 export default function ProductsPage() {
@@ -118,13 +120,15 @@ export default function ProductsPage() {
                 <th className="table-th-right">Price</th>
                 <th className="table-th-right">GST %</th>
                 <th className="table-th-right">Stock</th>
+                <th>Created By</th>
+                <th>Created At</th>
                 <th className="table-th-right">Invoices</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={8} />
+                <TableSkeleton cols={11} />
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={9} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
                   {search ? "No products match your search." : "No products yet. Add one to get started."}
@@ -145,13 +149,17 @@ export default function ProductsPage() {
                     <td data-label="Stock" data-mobile-full className="table-td-right">
                       <span style={{
                         display: "inline-block", padding: "0.125rem 0.5rem", borderRadius: "9999px",
-                        fontSize: "0.75rem", fontWeight: 500,
+                        fontSize: "0.75rem", fontWeight: 500, whiteSpace: "nowrap",
                         background: isLow ? "var(--c-red-bg)" : "var(--c-green-bg)",
                         color: isLow ? "var(--c-red-text)" : "var(--c-green-text)",
                         border: `1px solid ${isLow ? "var(--c-red-border)" : "var(--c-green-border)"}`,
                       }}>
                         {p.stock} {p.unit}{isLow && " ⚠"}
                       </span>
+                    </td>
+                    <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{p.createdBy ?? "—"}</td>
+                    <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                      {p.createdAt ? new Date(p.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—"}
                     </td>
                     <td data-label="Invoices" className="table-td-right">
                       {(() => {

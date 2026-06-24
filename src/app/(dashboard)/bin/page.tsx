@@ -17,6 +17,7 @@ interface BinItem {
   meta: string;
   deletedAt: string;
   daysLeft: number;
+  deletedBy?: string;
 }
 
 const TYPE_META: Record<BinType, { plural: string; color: string; bg: string; border: string }> = {
@@ -99,17 +100,19 @@ function TypeSection({
         <div className="table-wrap">
           <table className="table-base" style={{ tableLayout: "fixed", minWidth: "560px" }}>
             <colgroup>
+              <col style={{ width: "20%" }} />
               <col style={{ width: "22%" }} />
-              <col style={{ width: "28%" }} />
               <col style={{ width: "14%" }} />
               <col style={{ width: "12%" }} />
-              <col style={{ width: "24%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "20%" }} />
             </colgroup>
             <thead>
               <tr>
                 <th>Name</th>
                 <th>Details</th>
                 <th>Deleted On</th>
+                <th>Deleted By</th>
                 <th>Expires</th>
                 <th>Actions</th>
               </tr>
@@ -127,6 +130,9 @@ function TypeSection({
                     {new Date(item.deletedAt).toLocaleDateString("en-IN", {
                       day: "2-digit", month: "short", year: "numeric",
                     })}
+                  </td>
+                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                    {item.deletedBy ?? <span style={{ color: "var(--c-text-4)" }}>—</span>}
                   </td>
                   <td data-label="Expires">
                     <DaysLeftPill daysLeft={item.daysLeft} />
@@ -255,7 +261,7 @@ export default function BinPage() {
           <div className="table-wrap">
             <table className="table-base">
               <thead><tr><th>Name</th><th>Details</th><th>Deleted On</th><th>Expires</th><th>Actions</th></tr></thead>
-              <tbody><TableSkeleton cols={5} /></tbody>
+              <tbody><TableSkeleton cols={6} /></tbody>
             </table>
           </div>
         </div>

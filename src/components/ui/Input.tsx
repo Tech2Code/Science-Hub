@@ -34,9 +34,10 @@ interface FieldProps {
   label: string;
   required?: boolean;
   hint?: string;
+  error?: string;
   children: React.ReactNode;
 }
-export function FormField({ label, required, hint, children }: FieldProps) {
+export function FormField({ label, required, hint, error, children }: FieldProps) {
   return (
     <div className={styles.field}>
       <label className={styles.label}>
@@ -44,7 +45,8 @@ export function FormField({ label, required, hint, children }: FieldProps) {
         {required && <span className={styles.required}> *</span>}
       </label>
       {children}
-      {hint && <p className={styles.hint}>{hint}</p>}
+      {error && <p className={styles.errorMsg}>{error}</p>}
+      {!error && hint && <p className={styles.hint}>{hint}</p>}
     </div>
   );
 }

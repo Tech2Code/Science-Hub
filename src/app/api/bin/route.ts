@@ -81,6 +81,27 @@ export async function GET() {
       }),
     ]);
 
+    // Look up who deleted each item from ActivityLog (batch, no schema change needed)
+    const allIds = [
+      ...invoices.map(i => i.id),
+      ...customers.map(c => c.id),
+      ...products.map(p => p.id),
+      ...brands.map(b => b.id),
+      ...categories.map(c => c.id),
+    ];
+    const deleteLogs = await prisma.activityLog.findMany({
+      where: { entityId: { in: allIds }, action: { startsWith: "delete_" } },
+      select: { entityId: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    // Keep only the most recent delete log per entity
+    const deletedByMap = new Map<string, string>();
+    for (const log of deleteLogs) {
+      if (log.entityId && !deletedByMap.has(log.entityId)) {
+        deletedByMap.set(log.entityId, log.user.name);
+      }
+    }
+
     type BinItem = {
       id: string;
       type: "invoice" | "customer" | "product" | "brand" | "category";
@@ -88,6 +109,7 @@ export async function GET() {
       meta: string;
       deletedAt: string;
       daysLeft: number;
+      deletedBy?: string;
     };
 
     const items: BinItem[] = [
@@ -100,6 +122,7 @@ export async function GET() {
           meta: `${inv.customer.name} • ₹${inv.total.toLocaleString("en-IN")}`,
           deletedAt: (inv.deletedAt as Date).toISOString(),
           daysLeft: Math.max(0, 30 - daysSince),
+          deletedBy: deletedByMap.get(inv.id),
         };
       }),
       ...customers.map((c) => {
@@ -111,6 +134,7 @@ export async function GET() {
           meta: [c.phone, c.city].filter(Boolean).join(" • "),
           deletedAt: (c.deletedAt as Date).toISOString(),
           daysLeft: Math.max(0, 30 - daysSince),
+          deletedBy: deletedByMap.get(c.id),
         };
       }),
       ...products.map((p) => {
@@ -122,6 +146,7 @@ export async function GET() {
           meta: [p.sku, `₹${p.price.toLocaleString("en-IN")}`].filter(Boolean).join(" • "),
           deletedAt: (p.deletedAt as Date).toISOString(),
           daysLeft: Math.max(0, 30 - daysSince),
+          deletedBy: deletedByMap.get(p.id),
         };
       }),
       ...brands.map((b) => {
@@ -133,6 +158,7 @@ export async function GET() {
           meta: "",
           deletedAt: (b.deletedAt as Date).toISOString(),
           daysLeft: Math.max(0, 30 - daysSince),
+          deletedBy: deletedByMap.get(b.id),
         };
       }),
       ...categories.map((cat) => {
@@ -144,6 +170,7 @@ export async function GET() {
           meta: "",
           deletedAt: (cat.deletedAt as Date).toISOString(),
           daysLeft: Math.max(0, 30 - daysSince),
+          deletedBy: deletedByMap.get(cat.id),
         };
       }),
     ];

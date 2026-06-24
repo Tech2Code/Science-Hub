@@ -22,6 +22,7 @@ interface Payment {
 interface Invoice {
   id: string; invoiceNumber: string; date: string; dueDate?: string; createdAt: string;
   status: string; isInterState: boolean;
+  createdBy?: { id: string; name: string };
   customer: { name: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; gstin: string; };
   items: InvoiceItem[];
   payments: Payment[];
@@ -296,12 +297,30 @@ export default function InvoiceDetailPage() {
     } catch { return null; }
   }
 
+  async function handleDownload() {
+    if (!invoice) return;
+    setShareLoading(true);
+    await document.fonts.ready;
+    const blob = await generatePdfBlob();
+    setShareLoading(false);
+    if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${invoice.invoiceNumber}.pdf`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
   function handlePrint() {
     if (!invoice) return;
     const prev = document.title;
     document.title = invoice.invoiceNumber;
+    const onAfterPrint = () => {
+      window.removeEventListener("afterprint", onAfterPrint);
+      document.title = prev;
+    };
+    window.addEventListener("afterprint", onAfterPrint);
     window.print();
-    setTimeout(() => { document.title = prev; }, 1000);
   }
 
   async function handleShare(channel: "native" | "whatsapp" | "email" | "copy") {
@@ -319,13 +338,13 @@ export default function InvoiceDetailPage() {
 
     const file = new File([blob], `${num}.pdf`, { type: "application/pdf" });
 
-    // Helper to trigger a PDF download
+    // Helper to trigger a PDF download.
     const downloadPdf = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = `${num}.pdf`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
     };
 
     if (channel === "native") {
@@ -334,7 +353,6 @@ export default function InvoiceDetailPage() {
           await navigator.share({ files: [file], title: `Invoice ${num}` });
         } else {
           downloadPdf();
-          toast({ type: "success", title: "PDF Downloaded", message: `${num}.pdf saved to your device.` });
         }
       } catch (err) {
         if ((err as Error).name !== "AbortError") toast({ type: "error", title: "Share failed", message: "Could not open share sheet." });
@@ -385,7 +403,6 @@ export default function InvoiceDetailPage() {
 
     if (channel === "copy") {
       downloadPdf();
-      toast({ type: "success", title: "PDF Downloaded", message: `${num}.pdf saved to your device.` });
     }
   }
 
@@ -483,8 +500,11 @@ export default function InvoiceDetailPage() {
                 + Record Payment
               </Button>
             )}
+            <Button variant="secondary" size="sm" onClick={handleDownload}>
+              Download PDF
+            </Button>
             <Button variant="secondary" size="sm" onClick={handlePrint}>
-              Download / Print PDF
+              Print
             </Button>
             <Button variant="dangerOutline" size="sm" disabled={deleting} onClick={() => setDeleteConfirm(true)}>
               Delete
@@ -528,11 +548,6 @@ export default function InvoiceDetailPage() {
                       {
                         key: "email", label: "Email",
                         icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
-                        color: "var(--c-text-2)",
-                      },
-                      {
-                        key: "copy", label: "Download PDF",
-                        icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>,
                         color: "var(--c-text-2)",
                       },
                     ] as const).filter(Boolean).map((opt) => (
@@ -659,15 +674,15 @@ export default function InvoiceDetailPage() {
                   <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",fontWeight:700,color:"var(--inv-tx)" }}>{invoice.invoiceNumber}</td>
                 </tr>
                 <tr>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Invoice Date</td>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Invoice Created At (Date/Time)</td>
                   <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
-                    {new Date(invoice.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
+                    {new Date(invoice.createdAt).toLocaleString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:true})}
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Created At</td>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Created By</td>
                   <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
-                    {new Date(invoice.createdAt).toLocaleString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:true})}
+                    {invoice.createdBy?.name ?? "—"}
                   </td>
                 </tr>
                 {invoice.dueDate && (
