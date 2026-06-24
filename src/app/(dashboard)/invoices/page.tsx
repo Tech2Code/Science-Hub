@@ -26,6 +26,7 @@ const STATUS_TABS: StatusFilter[] = ["All", "unpaid", "partial", "paid"];
 
 export default function InvoicesPage() {
   const [filter, setFilter] = useState<StatusFilter>("All");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [pdfLoading, setPdfLoading] = useState<string | null>(null);
@@ -37,13 +38,23 @@ export default function InvoicesPage() {
   const { data, loading, mutate } = useFetch<Invoice[]>(apiUrl);
   const invoices = data ?? [];
 
-  useEffect(() => { setPage(1); }, [filter]);
-  useEffect(() => {
-    const maxPage = Math.max(1, Math.ceil(invoices.length / PAGE_SIZE));
-    if (page > maxPage) setPage(maxPage);
-  }, [invoices.length, page]);
+  const filtered = search.trim()
+    ? invoices.filter((inv) => {
+        const q = search.toLowerCase();
+        return (
+          inv.invoiceNumber.toLowerCase().includes(q) ||
+          inv.customer?.name?.toLowerCase().includes(q)
+        );
+      })
+    : invoices;
 
-  const { visible } = usePagination(invoices, page, showAll);
+  useEffect(() => { setPage(1); }, [filter, search]);
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (page > maxPage) setPage(maxPage);
+  }, [filtered.length, page]);
+
+  const { visible } = usePagination(filtered, page, showAll);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -81,12 +92,14 @@ export default function InvoicesPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Invoices</h1>
-          <p className="page-sub">{invoices.length} invoices</p>
+          <p className="page-sub">
+            {loading ? "Loading…" : search.trim() ? `${filtered.length} of ${invoices.length} invoices` : `${invoices.length} invoices`}
+          </p>
         </div>
         <Button variant="primary" href="/invoices/new">+ New Invoice</Button>
       </div>
 
-      {/* Status filter tabs + show-all toggle */}
+      {/* Status filter tabs */}
       <div className="filter-tabs-row">
         <div className="filter-tabs">
           {STATUS_TABS.map((tab) => (
@@ -99,12 +112,22 @@ export default function InvoicesPage() {
             </button>
           ))}
         </div>
-        {!loading && (
-          <ShowAllToggle total={invoices.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
-        )}
       </div>
 
       <div className="card">
+        <div className="card-toolbar">
+          <input
+            type="search"
+            placeholder="Search by invoice no. or customer…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="search-input"
+            style={{ flex: 1 }}
+          />
+          {!loading && (
+            <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
+          )}
+        </div>
         <div className="table-wrap">
           <table className="table-base">
             <thead>
@@ -122,9 +145,9 @@ export default function InvoicesPage() {
             <tbody>
               {loading ? (
                 <TableSkeleton cols={8} />
-              ) : invoices.length === 0 ? (
+              ) : filtered.length === 0 ? (
                 <tr><td colSpan={8} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
-                  No invoices found.
+                  {search.trim() ? `No invoices match "${search}".` : "No invoices found."}
                 </td></tr>
               ) : visible.map((inv) => (
                 <tr key={inv.id}>
@@ -171,14 +194,82 @@ export default function InvoicesPage() {
                           try {
                             const html2canvas = (await import("html2canvas")).default;
                             const { jsPDF } = await import("jspdf");
+                            const A4_PX = 794;
+                            const SCALE = 2;
+
+                            // Measure row boundaries at A4 width before capture
+                            const prevW = el.style.width, prevMin = el.style.minWidth, prevMax = el.style.maxWidth;
+                            el.style.width = `${A4_PX}px`;
+                            el.style.minWidth = `${A4_PX}px`;
+                            el.style.maxWidth = `${A4_PX}px`;
+                            el.getBoundingClientRect();
+                            const elTop = el.getBoundingClientRect().top;
+                            const rowSplitPoints = Array.from(el.querySelectorAll("tbody tr, tfoot tr")).map(
+                              (row) => Math.round(((row as HTMLElement).getBoundingClientRect().bottom - elTop) * SCALE)
+                            );
+                            const colHdrRow = el.querySelector("#invoice-col-header") as HTMLElement | null;
+                            const colHdrTop = colHdrRow ? Math.round((colHdrRow.getBoundingClientRect().top - elTop) * SCALE) : 0;
+                            const colHdrH   = colHdrRow ? Math.round(colHdrRow.getBoundingClientRect().height * SCALE) : 0;
+                            el.style.width = prevW; el.style.minWidth = prevMin; el.style.maxWidth = prevMax;
+
                             const canvas = await html2canvas(el, {
-                              scale: 2, useCORS: true, backgroundColor: "#fff",
-                              onclone: (clonedDoc) => { clonedDoc.documentElement.classList.remove("dark"); },
+                              scale: SCALE, useCORS: true, backgroundColor: "#fff",
+                              width: A4_PX, windowWidth: A4_PX,
+                              onclone: (clonedDoc) => {
+                                clonedDoc.documentElement.classList.remove("dark");
+                                const printEl = clonedDoc.getElementById("invoice-print-area");
+                                if (printEl) {
+                                  printEl.style.width = `${A4_PX}px`;
+                                  printEl.style.minWidth = `${A4_PX}px`;
+                                  printEl.style.maxWidth = `${A4_PX}px`;
+                                }
+                              },
                             });
                             const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-                            const imgW = 210;
-                            const imgH = (canvas.height * imgW) / canvas.width;
-                            pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, imgW, imgH);
+                            const pageW = pdf.internal.pageSize.getWidth();
+                            const pageH = pdf.internal.pageSize.getHeight();
+                            const M = 5;
+                            const contentW = pageW - M * 2;
+                            const contentH = pageH - M * 2;
+                            const mmPerPx = contentW / canvas.width;
+                            const pageHeightPx = Math.floor(contentH / mmPerPx);
+
+                            const cropPage = (s: number, e: number, prependHeader: boolean) => {
+                              const rowH = e - s;
+                              const extraH = prependHeader ? colHdrH : 0;
+                              const pc = document.createElement("canvas");
+                              pc.width = canvas.width; pc.height = extraH + rowH;
+                              const ctx = pc.getContext("2d")!;
+                              ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, extraH + rowH);
+                              if (prependHeader) {
+                                ctx.drawImage(canvas, 0, colHdrTop, canvas.width, colHdrH, 0, 0, canvas.width, colHdrH);
+                              }
+                              ctx.drawImage(canvas, 0, s, canvas.width, rowH, 0, extraH, canvas.width, rowH);
+                              return pc.toDataURL("image/jpeg", 0.95);
+                            };
+
+                            const contentPageHeightPx = pageHeightPx - colHdrH;
+
+                            if (canvas.height <= pageHeightPx) {
+                              pdf.addImage(cropPage(0, canvas.height, false), "JPEG", M, M, contentW, canvas.height * mmPerPx);
+                            } else {
+                              let start = 0, pageNum = 0;
+                              while (start < canvas.height) {
+                                const available = pageNum === 0 ? pageHeightPx : contentPageHeightPx;
+                                const idealEnd = Math.min(start + available, canvas.height);
+                                let splitAt = idealEnd;
+                                if (idealEnd < canvas.height) {
+                                  const safe = rowSplitPoints.filter(b => b > start && b <= idealEnd);
+                                  if (safe.length > 0) splitAt = safe[safe.length - 1];
+                                }
+                                const ph = pageNum > 0;
+                                const totalH = (splitAt - start) + (ph ? colHdrH : 0);
+                                if (pageNum > 0) pdf.addPage();
+                                pdf.addImage(cropPage(start, splitAt, ph), "JPEG", M, M, contentW, totalH * mmPerPx);
+                                start = splitAt; pageNum++;
+                              }
+                            }
+
                             const url = URL.createObjectURL(pdf.output("blob"));
                             const a = document.createElement("a");
                             a.href = url; a.download = `${inv.invoiceNumber}.pdf`;
@@ -191,9 +282,7 @@ export default function InvoicesPage() {
                         iframe.src = `/invoices/${inv.id}`;
                       }}>Download PDF</Button>
                       <Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(inv)}>Delete</Button>
-                      {inv.status !== "paid" && (
-                        <Button variant="editOutline" size="sm" href={`/invoices/edit/${inv.id}`}>Edit</Button>
-                      )}
+                      <Button variant="editOutline" size="sm" href={`/invoices/edit/${inv.id}`}>Edit</Button>
                     </div>
                   </td>
                 </tr>
@@ -201,9 +290,9 @@ export default function InvoicesPage() {
             </tbody>
           </table>
         </div>
-        {!loading && invoices.length > 0 && (
+        {!loading && filtered.length > 0 && (
           <Pagination
-            total={invoices.length}
+            total={filtered.length}
             page={page}
             showAll={showAll}
             onPage={setPage}

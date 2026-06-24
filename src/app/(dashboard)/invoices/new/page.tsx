@@ -18,12 +18,11 @@ interface LineItem {
   qty: number; price: number; gstRate: number;
 }
 
-const SELLER_STATE = "Rajasthan";
-
 export default function NewInvoicePage() {
   const router = useRouter();
   const toast = useToast();
   const searchParams = useSearchParams();
+  const [sellerState, setSellerState] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customerId, setCustomerId] = useState("");
@@ -40,6 +39,7 @@ export default function NewInvoicePage() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   useEffect(() => {
+    fetch("/api/settings").then((r) => r.json()).then((s) => { setSellerState(s.state ?? ""); }).catch(() => {});
     fetch("/api/customers").then((r) => r.json()).then((all: Customer[]) => {
       setCustomers(all);
       const prefillId = searchParams.get("customerId");
@@ -48,7 +48,7 @@ export default function NewInvoicePage() {
         if (found) {
           setCustomerId(found.id);
           setCustomerSearch(found.name);
-          setIsInterState(found.state && found.state !== SELLER_STATE ? true : false);
+          setIsInterState(found.state && found.state !== sellerState ? true : false);
         }
       }
     }).catch(() => {});
@@ -63,8 +63,8 @@ export default function NewInvoicePage() {
     setCustomerId(c.id);
     setCustomerSearch(c.name);
     setShowCustomerDropdown(false);
-    setIsInterState(c.state && c.state !== SELLER_STATE ? true : false);
-  }, []);
+    setIsInterState(c.state && c.state !== sellerState ? true : false);
+  }, [sellerState]);
 
   function addProduct(p: Product) {
     setItems((prev) => [...prev, { productId: p.id, productName: p.name, unit: p.unit, qty: 1, price: p.price, gstRate: p.gstRate }]);

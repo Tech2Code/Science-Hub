@@ -29,10 +29,11 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.role = (user as { role?: string }).role;
       }
-      // When client calls update({ name, email }), mirror those into the token
+      // When client calls updateSession({ name, email }), mirror into the token
       if (trigger === "update" && session) {
         if (session.name)  token.name  = session.name;
         if (session.email) token.email = session.email;
+        if (session.role)  token.role  = session.role;
       }
       return token;
     },

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
 
 export async function POST(
@@ -48,10 +47,6 @@ export async function POST(
       data: { paidAmount, status },
       include: { payments: { orderBy: { date: "desc" } } },
     });
-
-    revalidateTag(`invoice-${id}`, { expire: 0 });
-    revalidateTag("invoices", { expire: 0 });
-    revalidateTag("reports", { expire: 0 });
 
     if (session?.user?.id) {
       const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2 });

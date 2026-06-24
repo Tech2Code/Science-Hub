@@ -2,66 +2,34 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/Button";
-import { PasswordInput } from "@/components/ui/PasswordInput";
 import styles from "../login/login.module.css";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [resetToken, setResetToken] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (newPassword !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
     setLoading(true);
     try {
-      const res = await fetch("/api/reset-password", {
+      const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, newPassword, resetToken }),
+        body: JSON.stringify({ email }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to reset password.");
+        setError(data.error ?? "Something went wrong. Please try again.");
       } else {
-        setSuccess(true);
+        setSent(true);
       }
-    } finally {
-      setLoading(false);
+    } catch {
+      setError("Network error. Please try again.");
     }
-  }
-
-  if (success) {
-    return (
-      <div className={styles.page}>
-        <div className={styles.grid} />
-        <div className={styles.wrap}>
-          <div className={styles.brand}>
-            <img src="/logo.png" alt="Science Hub" className={styles.brandIcon} />
-            <h1 className={styles.brandName}>Science Hub</h1>
-            <p className={styles.brandSub}>Reset Password</p>
-          </div>
-          <div className={styles.card}>
-            <h2 className={styles.cardTitle}>Password updated</h2>
-            <p className={styles.successText}>
-              Your password has been reset successfully. Sign in with your new password.
-            </p>
-            <Button variant="primary" size="full" href="/login">
-              Back to Sign In
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
+    setLoading(false);
   }
 
   return (
@@ -71,73 +39,74 @@ export default function ForgotPasswordPage() {
         <div className={styles.brand}>
           <img src="/logo.png" alt="Science Hub" className={styles.brandIcon} />
           <h1 className={styles.brandName}>Science Hub</h1>
-          <p className={styles.brandSub}>Reset Password</p>
+          <p className={styles.brandSub}>Billing &amp; Inventory</p>
         </div>
 
         <div className={styles.card}>
-          <h2 className={styles.cardTitle}>Reset your password</h2>
-          {error && <div className={styles.errorBox}>{error}</div>}
-          <form onSubmit={handleSubmit} className={styles.formStack}>
-            <div>
-              <label htmlFor="fp-email" className={styles.fieldLabel}>Email address</label>
-              <input
-                id="fp-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@sciencehub.in"
-                className={styles.input}
-              />
-            </div>
-            <div>
-              <label htmlFor="fp-token" className={styles.fieldLabel}>Reset token</label>
-              <PasswordInput
-                id="fp-token"
-                required
-                value={resetToken}
-                onChange={(e) => setResetToken(e.target.value)}
-                placeholder="From ADMIN_RESET_TOKEN in .env"
-              />
-            </div>
-            <div>
-              <label htmlFor="fp-pass" className={styles.fieldLabel}>New password</label>
-              <PasswordInput
-                id="fp-pass"
-                required
-                minLength={8}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Min. 8 characters"
-              />
-            </div>
-            <div>
-              <label htmlFor="fp-confirm" className={styles.fieldLabel}>Confirm new password</label>
-              <PasswordInput
-                id="fp-confirm"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Repeat new password"
-              />
-            </div>
-            <Button type="submit" variant="primary" size="full" loading={loading} fullScreen disabled={loading}>
-              {loading ? "Resetting…" : "Reset Password"}
-            </Button>
-          </form>
+          {sent ? (
+            <>
+              <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: "50%",
+                  background: "#dcfce7", display: "flex", alignItems: "center",
+                  justifyContent: "center", margin: "0 auto 1rem",
+                }}>
+                  <svg width="24" height="24" fill="none" stroke="#16a34a" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                </div>
+                <h2 className={styles.cardTitle} style={{ marginBottom: "0.5rem" }}>Check your inbox</h2>
+              </div>
+              <p className={styles.successText}>
+                If <strong>{email}</strong> is registered, a password reset link has been sent.
+                The link expires in <strong>1 hour</strong>.
+              </p>
+              <p className={styles.successText} style={{ marginBottom: 0, fontSize: "0.8125rem", color: "#94a3b8" }}>
+                Didn&apos;t receive it? Check your spam folder, or{" "}
+                <button
+                  onClick={() => setSent(false)}
+                  style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", padding: 0, fontSize: "inherit", textDecoration: "underline" }}
+                >
+                  try again
+                </button>
+                .
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className={styles.cardTitle}>Reset your password</h2>
+              <p className={styles.successText}>
+                Enter your account email and we&apos;ll send you a reset link.
+              </p>
+              {error && <div className={styles.errorBox}>{error}</div>}
+              <form onSubmit={handleSubmit} className={styles.formStack}>
+                <div>
+                  <label htmlFor="email" className={styles.fieldLabel}>Email address</label>
+                  <input
+                    id="email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@sciencehub.in"
+                    className={styles.input}
+                  />
+                </div>
+                <button type="submit" className={styles.submitBtn} disabled={loading}>
+                  {loading ? "Sending…" : "Send reset link"}
+                </button>
+              </form>
+            </>
+          )}
         </div>
 
-        <div className={styles.hint}>
-          <p className={styles.hintTitle}>Setup instructions</p>
-          <p className={styles.resetHintText}>
-            Add this line to your <code className={styles.inlineCode}>.env</code> file:
-          </p>
-          <code className={styles.resetHintCode}>ADMIN_RESET_TOKEN=your-secret-key</code>
+        <div className={styles.forgotLinks}>
+          <Link href="/find-email" className={styles.forgotLink}>Forgot email?</Link>
+          <Link href="/login" className={styles.forgotLink}>← Back to sign in</Link>
         </div>
 
-        <p className={styles.footer}>
-          <Link href="/login" className={styles.forgotLink}>← Back to Sign In</Link>
-        </p>
+        <p className={styles.footer}>Science Hub © {new Date().getFullYear()}</p>
       </div>
     </div>
   );

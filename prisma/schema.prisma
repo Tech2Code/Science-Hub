@@ -8,14 +8,27 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(cuid())
-  name         String
-  email        String        @unique
-  password     String
-  role         String        @default("staff")
-  createdAt    DateTime      @default(now())
-  invoices     Invoice[]
-  activityLogs ActivityLog[]
+  id            String               @id @default(cuid())
+  name          String
+  email         String               @unique
+  password      String
+  role          String               @default("staff")
+  createdAt     DateTime             @default(now())
+  invoices      Invoice[]
+  activityLogs  ActivityLog[]
+  resetTokens   PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
 }
 
 model ActivityLog {
@@ -131,4 +144,20 @@ model Payment {
   date      DateTime @default(now())
   notes     String?
   invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model BusinessSettings {
+  id              String   @id @default("singleton")
+  name            String   @default("Science Hub")
+  tagline         String   @default("")
+  email           String   @default("")
+  phone           String   @default("")
+  address         String   @default("")
+  city            String   @default("")
+  state           String   @default("")
+  pincode         String   @default("")
+  gstin           String   @default("")
+  gmailUser       String   @default("")
+  gmailAppPassword String  @default("")
+  updatedAt       DateTime @updatedAt
 }

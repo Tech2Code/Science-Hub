@@ -185,29 +185,29 @@ export default function AdminPage() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [logsTotal, setLogsTotal] = useState(0);
   const [logsLoading, setLogsLoading] = useState(false);
-  const [logsOffset, setLogsOffset] = useState(0);
+  const [logsPage, setLogsPage] = useState(1);
   const [logsFilter, setLogsFilter] = useState(""); // filter by userId
   const [logsSearch, setLogsSearch] = useState(""); // text search
-  const LOGS_LIMIT = 50;
+  const LOGS_LIMIT = 20;
 
-  const loadLogs = useCallback(async (offset: number, userId: string) => {
+  const loadLogs = useCallback(async (page: number, userId: string) => {
     setLogsLoading(true);
+    const offset = (page - 1) * LOGS_LIMIT;
     const qs = new URLSearchParams({ limit: String(LOGS_LIMIT), offset: String(offset) });
     if (userId) qs.set("userId", userId);
     const res = await fetch(`/api/admin/activity?${qs}`);
     const data = await res.json();
     setLogsLoading(false);
     if (res.ok) {
-      if (offset === 0) setLogs(data.logs);
-      else setLogs(prev => [...prev, ...data.logs]);
+      setLogs(data.logs);
       setLogsTotal(data.total);
-      setLogsOffset(offset);
+      setLogsPage(page);
     }
   }, []);
 
   useEffect(() => { fetch("/api/admin/profile").then(r => r.json()).then(d => { setProfile(d); setProfileForm({ name: d.name, email: d.email }); }).finally(() => setProfileLoading(false)); }, []);
   useEffect(() => { if (!isAdmin) return; setUsersLoading(true); fetch("/api/admin/users").then(r => r.json()).then(setUsers).finally(() => setUsersLoading(false)); }, [isAdmin]);
-  useEffect(() => { if (isAdmin) loadLogs(0, logsFilter); }, [isAdmin, logsFilter, loadLogs]);
+  useEffect(() => { if (isAdmin) loadLogs(1, logsFilter); }, [isAdmin, logsFilter, loadLogs]);
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault(); setProfileSaving(true); setProfileMsg(null);
@@ -215,7 +215,7 @@ export default function AdminPage() {
     const data = await res.json(); setProfileSaving(false);
     if (!res.ok) { setProfileMsg({ type: "err", text: data.error }); return; }
     setProfile(data); setEditingProfile(false); setProfileMsg(null);
-    await updateSession({ name: data.name, email: data.email });
+    await updateSession({ name: data.name, email: data.email, role: data.role });
     toast({ type: "success", title: "Profile updated", message: "Your name and email have been saved." });
   }
 
@@ -278,7 +278,9 @@ export default function AdminPage() {
 
   const selfId = session?.user?.id;
 
-  // Filter logs by text search on details/user name
+  const logsTotalPages = Math.max(1, Math.ceil(logsTotal / LOGS_LIMIT));
+
+  // Client-side text search filters the current page only
   const visibleLogs = logsSearch
     ? logs.filter(l => l.details.toLowerCase().includes(logsSearch.toLowerCase()) || l.user.name.toLowerCase().includes(logsSearch.toLowerCase()))
     : logs;
@@ -302,7 +304,6 @@ export default function AdminPage() {
     {pwSaving && <OverlayLoader text="Updating password…" />}
     {addSaving && <OverlayLoader text="Creating user…" />}
     {editSaving && <OverlayLoader text="Saving changes…" />}
-    {logsLoading && <OverlayLoader text="Loading logs…" />}
     <div>
       <style>{`
         @media (max-width: 900px) { .admin-two-col { flex-direction: column !important; } .admin-role-sidebar { width: 100% !important; position: static !important; flex-direction: row !important; } }
@@ -354,14 +355,23 @@ export default function AdminPage() {
         </div>
         <div style={{ padding: "1.25rem" }}>
           {profileLoading ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              {[120, 200, 80].map((w, i) => <div key={i} style={{ height: 16, width: w, borderRadius: 6, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />)}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "1.25rem", flexWrap: "wrap" }}>
+              {/* Avatar */}
+              <div style={{ width: 52, height: 52, borderRadius: "50%", background: "var(--c-border)", flexShrink: 0, animation: "skPulse 1.4s ease-in-out infinite" }} />
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "0.25rem" }}>
+                <div style={{ height: 18, width: 160, borderRadius: 5, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
+                <div style={{ height: 14, width: 210, borderRadius: 5, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
+                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
+                  <div style={{ height: 22, width: 70, borderRadius: 99, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
+                  <div style={{ height: 14, width: 120, borderRadius: 5, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite", alignSelf: "center" }} />
+                </div>
+              </div>
             </div>
           ) : editingProfile ? (
             <form onSubmit={saveProfile} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               <div className="admin-fg2">
                 <Field label="Full Name"><input className="admin-inp" style={inp} value={profileForm.name} onChange={e => setProfileForm(p => ({ ...p, name: e.target.value }))} required /></Field>
-                <Field label="Email"><input className="admin-inp" style={inp} type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} required /></Field>
+                <Field label="Login Email — used to sign in to this app"><input className="admin-inp" style={inp} type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} required /></Field>
               </div>
               {profileMsg && <Msg m={profileMsg} />}
               <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -397,7 +407,10 @@ export default function AdminPage() {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: "1.0625rem", fontWeight: 700, color: "var(--c-text)" }}>{profile?.name}</div>
-                <div style={{ fontSize: "0.875rem", color: "var(--c-text-3)", marginTop: "0.125rem" }}>{profile?.email}</div>
+                <div style={{ fontSize: "0.875rem", color: "var(--c-text-3)", marginTop: "0.125rem" }}>
+                  {profile?.email}
+                  <span style={{ marginLeft: "0.5rem", fontSize: "0.7rem", color: "var(--c-text-4)", fontWeight: 500, background: "var(--c-bg-sub)", border: "1px solid var(--c-border)", borderRadius: 4, padding: "0.1rem 0.4rem" }}>login email</span>
+                </div>
                 <div style={{ display: "flex", gap: "0.625rem", marginTop: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
                   <RoleBadge role={profile?.role ?? ""} />
                   <span style={{ fontSize: "0.75rem", color: "var(--c-text-4)" }}>Joined {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</span>
@@ -511,7 +524,23 @@ export default function AdminPage() {
             </thead>
             <tbody>
               {usersLoading ? (
-                <tr><td colSpan={5} style={{ textAlign: "center", padding: "2rem", color: "var(--c-text-4)" }}>Loading…</td></tr>
+                Array.from({ length: 4 }).map((_, i) => (
+                  <tr key={i}>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--c-border)", flexShrink: 0, animation: "skPulse 1.4s ease-in-out infinite" }} />
+                        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                          <div style={{ height: 13, width: 110, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
+                          <div style={{ height: 11, width: 150, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
+                        </div>
+                      </div>
+                    </td>
+                    <td><div style={{ height: 22, width: 60, borderRadius: 99, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} /></td>
+                    <td className="table-td-right"><div style={{ height: 13, width: 24, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite", marginLeft: "auto" }} /></td>
+                    <td><div style={{ height: 13, width: 90, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} /></td>
+                    <td><div style={{ height: 28, width: 80, borderRadius: 6, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} /></td>
+                  </tr>
+                ))
               ) : users.map((u) => {
                 const isSelf = u.id === selfId;
                 return (
@@ -557,7 +586,7 @@ export default function AdminPage() {
             <h2 style={{ fontWeight: 600, fontSize: "0.9375rem", color: "var(--c-text)" }}>Activity Log</h2>
             <p style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", marginTop: "0.125rem" }}>{logsTotal} total actions recorded</p>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => loadLogs(0, logsFilter)}>↻ Refresh</Button>
+          <Button variant="secondary" size="sm" onClick={() => loadLogs(logsPage, logsFilter)}>↻ Refresh</Button>
         </div>
 
         {/* Filters */}
@@ -570,13 +599,13 @@ export default function AdminPage() {
           <select
             className="admin-inp" style={{ ...inp, width: "auto", padding: "0.375rem 0.75rem", cursor: "pointer" }}
             value={logsFilter}
-            onChange={e => { setLogsFilter(e.target.value); setLogsOffset(0); }}
+            onChange={e => { setLogsFilter(e.target.value); setLogsPage(1); }}
           >
             <option value="">All users</option>
             {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
           {(logsSearch || logsFilter) && (
-            <button onClick={() => { setLogsSearch(""); setLogsFilter(""); }} style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", background: "none", border: "none", cursor: "pointer", padding: "0.375rem 0" }}>
+            <button onClick={() => { setLogsSearch(""); setLogsFilter(""); setLogsPage(1); }} style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", background: "none", border: "none", cursor: "pointer", padding: "0.375rem 0" }}>
               Clear filters
             </button>
           )}
@@ -584,6 +613,12 @@ export default function AdminPage() {
 
         <div className="table-wrap">
           <table className="table-base">
+            <colgroup>
+              <col style={{ width: "200px" }} />
+              <col style={{ width: "160px" }} />
+              <col />
+              <col style={{ width: "160px" }} />
+            </colgroup>
             <thead>
               <tr>
                 <th>User</th>
@@ -594,7 +629,19 @@ export default function AdminPage() {
             </thead>
             <tbody>
               {logsLoading && logs.length === 0 ? (
-                <tr><td colSpan={4} style={{ textAlign: "center", padding: "2.5rem", color: "var(--c-text-4)" }}>Loading activity…</td></tr>
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    <td>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                        <div style={{ height: 13, width: [90, 110, 80, 100, 95, 105, 88, 115][i % 8], borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
+                        <div style={{ height: 20, width: 52, borderRadius: 99, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
+                      </div>
+                    </td>
+                    <td><div style={{ height: 22, width: [100, 120, 95, 130, 108, 118, 100, 125][i % 8], borderRadius: 99, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} /></td>
+                    <td><div style={{ height: 13, width: "80%", borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} /></td>
+                    <td><div style={{ height: 13, width: 110, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} /></td>
+                  </tr>
+                ))
               ) : visibleLogs.length === 0 ? (
                 <tr><td colSpan={4} style={{ textAlign: "center", padding: "2.5rem", color: "var(--c-text-4)" }}>
                   {logsSearch || logsFilter ? "No matching activity found." : "No activity recorded yet. Actions will appear here as staff use the app."}
@@ -602,8 +649,13 @@ export default function AdminPage() {
               ) : visibleLogs.map(log => (
                 <tr key={log.id}>
                   <td data-label="User">
-                    <div style={{ fontWeight: 600, fontSize: "0.8125rem", color: "var(--c-text)" }}>{log.user.name}</div>
-                    <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)" }}><RoleBadge role={log.user.role} /></div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <UserAvatar name={log.user.name} role={log.user.role} size={30} />
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: "0.8125rem", color: "var(--c-text)", lineHeight: 1.3 }}>{log.user.name}</div>
+                        <RoleBadge role={log.user.role} />
+                      </div>
+                    </div>
                   </td>
                   <td data-label="Action"><ActionBadge action={log.action} /></td>
                   <td data-mobile-full style={{ color: "var(--c-text-2)", fontSize: "0.8125rem" }}>{log.details}</td>
@@ -614,12 +666,32 @@ export default function AdminPage() {
           </table>
         </div>
 
-        {/* Load more */}
-        {logs.length < logsTotal && !logsSearch && (
-          <div style={{ padding: "0.875rem 1.25rem", borderTop: "1px solid var(--c-border)", textAlign: "center" }}>
-            <Button variant="secondary" size="sm" disabled={logsLoading} onClick={() => loadLogs(logsOffset + LOGS_LIMIT, logsFilter)}>
-              Load more ({logsTotal - logs.length} remaining)
-            </Button>
+        {/* Pagination */}
+        {logsTotal > LOGS_LIMIT && (
+          <div style={{
+            padding: "0.75rem 1.25rem",
+            borderTop: "1px solid var(--c-border)",
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap",
+          }}>
+            <span style={{ fontSize: "0.8125rem", color: "var(--c-text-4)" }}>
+              {logsTotal} total · page {logsPage} of {logsTotalPages}
+            </span>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <Button
+                variant="secondary" size="sm"
+                disabled={logsLoading || logsPage <= 1}
+                onClick={() => loadLogs(logsPage - 1, logsFilter)}
+              >
+                ← Prev
+              </Button>
+              <Button
+                variant="secondary" size="sm"
+                disabled={logsLoading || logsPage >= logsTotalPages}
+                onClick={() => loadLogs(logsPage + 1, logsFilter)}
+              >
+                Next →
+              </Button>
+            </div>
           </div>
         )}
       </div>

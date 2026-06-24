@@ -10,6 +10,7 @@ import { Input, Select, FormField } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import Image from "next/image";
 
 interface InvoiceItem {
   id: string; name: string; unit: string;
@@ -26,6 +27,11 @@ interface Invoice {
   payments: Payment[];
   subtotal: number; cgst: number; sgst: number; igst: number;
   total: number; paidAmount: number; notes: string;
+}
+
+interface BusinessSettings {
+  name: string; tagline: string; email: string; phone: string;
+  address: string; city: string; state: string; pincode: string; gstin: string;
 }
 
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
@@ -115,6 +121,7 @@ function InvoiceSkeleton() {
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [settings, setSettings] = useState<BusinessSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -130,19 +137,40 @@ export default function InvoiceDetailPage() {
 
   async function load(force = false) {
     try {
-      const data = await fetchCached<Invoice>(`/api/invoices/${id}`, force);
+      const [data, s] = await Promise.all([
+        fetchCached<Invoice>(`/api/invoices/${id}`, force),
+        fetchCached<BusinessSettings>("/api/settings"),
+      ]);
       setInvoice(data);
+      setSettings(s);
     } catch { setError("Invoice not found."); }
     setLoading(false);
   }
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => {
+    Promise.all([
+      fetchCached<Invoice>(`/api/invoices/${id}`),
+      fetchCached<BusinessSettings>("/api/settings"),
+    ]).then(([data, s]) => {
+      setInvoice(data as Invoice);
+      setSettings(s as BusinessSettings);
+      setLoading(false);
+    }).catch(() => {
+      setError("Invoice not found.");
+      setLoading(false);
+    });
+  }, [id]);
 
   // Auto-trigger print/save-as-PDF when ?print=1 is in the URL
   useEffect(() => {
     if (!invoice) return;
     const shouldPrint = new URLSearchParams(window.location.search).get("print") === "1";
     if (shouldPrint) {
-      const timer = setTimeout(() => window.print(), 400);
+      const timer = setTimeout(() => {
+        const prev = document.title;
+        document.title = invoice.invoiceNumber;
+        window.print();
+        setTimeout(() => { document.title = prev; }, 1000);
+      }, 400);
       return () => clearTimeout(timer);
     }
   }, [invoice]);
@@ -177,19 +205,103 @@ export default function InvoiceDetailPage() {
     try {
       const html2canvas = (await import("html2canvas")).default;
       const { jsPDF } = await import("jspdf");
+      const A4_PX = 794;
+      const SCALE = 2;
+
+      // Temporarily resize to A4 width to measure exact row boundary positions
+      const prevW = el.style.width, prevMin = el.style.minWidth, prevMax = el.style.maxWidth;
+      el.style.width = `${A4_PX}px`;
+      el.style.minWidth = `${A4_PX}px`;
+      el.style.maxWidth = `${A4_PX}px`;
+      el.getBoundingClientRect(); // force reflow
+      const elRect = el.getBoundingClientRect();
+      const elTop = elRect.top;
+      // Collect bottom edge of every row (tbody + tfoot) in canvas pixels
+      const rowSplitPoints = Array.from(el.querySelectorAll("tbody tr, tfoot tr")).map(
+        (row) => Math.round(((row as HTMLElement).getBoundingClientRect().bottom - elTop) * SCALE)
+      );
+      // Measure the column header row to repeat it on subsequent pages
+      const colHdrRow = el.querySelector("#invoice-col-header") as HTMLElement | null;
+      const colHdrTop = colHdrRow ? Math.round((colHdrRow.getBoundingClientRect().top - elTop) * SCALE) : 0;
+      const colHdrH   = colHdrRow ? Math.round(colHdrRow.getBoundingClientRect().height * SCALE) : 0;
+      el.style.width = prevW;
+      el.style.minWidth = prevMin;
+      el.style.maxWidth = prevMax;
+
       const canvas = await html2canvas(el, {
-        scale: 2, useCORS: true, backgroundColor: "#fff",
+        scale: SCALE, useCORS: true, backgroundColor: "#fff",
+        width: A4_PX, windowWidth: A4_PX,
         onclone: (clonedDoc) => {
-          // Force light mode so PDF always has white background regardless of user theme
           clonedDoc.documentElement.classList.remove("dark");
+          const printEl = clonedDoc.getElementById("invoice-print-area");
+          if (printEl) {
+            printEl.style.width = `${A4_PX}px`;
+            printEl.style.minWidth = `${A4_PX}px`;
+            printEl.style.maxWidth = `${A4_PX}px`;
+          }
         },
       });
+
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const imgW = 210;
-      const imgH = (canvas.height * imgW) / canvas.width;
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, imgW, imgH);
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const M = 5; // 5mm margin all sides
+      const contentW = pageW - M * 2;
+      const contentH = pageH - M * 2;
+      const mmPerPx = contentW / canvas.width;
+      const pageHeightPx = Math.floor(contentH / mmPerPx);
+
+      const cropPage = (startPx: number, endPx: number, prependHeader: boolean) => {
+        const rowH = endPx - startPx;
+        const extraH = prependHeader ? colHdrH : 0;
+        const pc = document.createElement("canvas");
+        pc.width = canvas.width;
+        pc.height = extraH + rowH;
+        const ctx = pc.getContext("2d")!;
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, canvas.width, extraH + rowH);
+        if (prependHeader) {
+          ctx.drawImage(canvas, 0, colHdrTop, canvas.width, colHdrH, 0, 0, canvas.width, colHdrH);
+        }
+        ctx.drawImage(canvas, 0, startPx, canvas.width, rowH, 0, extraH, canvas.width, rowH);
+        return pc.toDataURL("image/jpeg", 0.95);
+      };
+
+      // Pages 2+ have less usable height because the header is prepended
+      const contentPageHeightPx = pageHeightPx - colHdrH;
+
+      if (canvas.height <= pageHeightPx) {
+        pdf.addImage(cropPage(0, canvas.height, false), "JPEG", M, M, contentW, canvas.height * mmPerPx);
+      } else {
+        let start = 0;
+        let pageNum = 0;
+        while (start < canvas.height) {
+          const available = pageNum === 0 ? pageHeightPx : contentPageHeightPx;
+          const idealEnd = Math.min(start + available, canvas.height);
+          let splitAt = idealEnd;
+          if (idealEnd < canvas.height) {
+            const safe = rowSplitPoints.filter(b => b > start && b <= idealEnd);
+            if (safe.length > 0) splitAt = safe[safe.length - 1];
+          }
+          const prependHeader = pageNum > 0;
+          const totalH = (splitAt - start) + (prependHeader ? colHdrH : 0);
+          if (pageNum > 0) pdf.addPage();
+          pdf.addImage(cropPage(start, splitAt, prependHeader), "JPEG", M, M, contentW, totalH * mmPerPx);
+          start = splitAt;
+          pageNum++;
+        }
+      }
+
       return pdf.output("blob");
     } catch { return null; }
+  }
+
+  function handlePrint() {
+    if (!invoice) return;
+    const prev = document.title;
+    document.title = invoice.invoiceNumber;
+    window.print();
+    setTimeout(() => { document.title = prev; }, 1000);
   }
 
   async function handleShare(channel: "native" | "whatsapp" | "email" | "copy") {
@@ -231,19 +343,43 @@ export default function InvoiceDetailPage() {
     }
 
     if (channel === "whatsapp") {
-      downloadPdf();
-      const text = `Hi, please find the invoice PDF (${num}) from Science Hub.\nAmount: ₹${fmt(invoice.total)} | Customer: ${customer}`;
-      setTimeout(() => window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank"), 400);
-      toast({ type: "info", title: "PDF Downloaded", message: "PDF saved. Attach it in WhatsApp." });
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: `Invoice ${num}`, text: `Invoice ${num} from Science Hub — ₹${fmt(invoice.total)}` });
+        } catch (err) {
+          if ((err as Error).name !== "AbortError") toast({ type: "error", title: "Share failed", message: "Could not open share sheet." });
+        }
+      } else {
+        toast({ type: "error", title: "Not supported", message: "File sharing is not supported on this browser." });
+      }
       return;
     }
 
     if (channel === "email") {
-      downloadPdf();
-      const subject = encodeURIComponent(`Invoice ${num} — Science Hub`);
-      const body = encodeURIComponent(`Dear ${customer},\n\nPlease find the attached invoice PDF (${num}).\nAmount: ₹${fmt(invoice.total)}\n\nThank you for your business.\n\nRegards,\nScience Hub`);
-      setTimeout(() => window.open(`mailto:?subject=${subject}&body=${body}`, "_blank"), 400);
-      toast({ type: "info", title: "PDF Downloaded", message: "PDF saved. Attach it to your email." });
+      const toEmail = invoice.customer.email;
+      if (!toEmail) {
+        toast({ type: "error", title: "No email on file", message: "This customer has no email address. Add one on the customer profile." });
+        return;
+      }
+      setShareLoading(true);
+      try {
+        const formData = new FormData();
+        formData.append("pdf", blob, `${num}.pdf`);
+        formData.append("to", toEmail);
+        formData.append("invoiceNumber", num);
+        formData.append("customerName", customer);
+        formData.append("total", fmt(invoice.total));
+        const res = await fetch("/api/send-invoice", { method: "POST", body: formData });
+        if (res.ok) {
+          toast({ type: "success", title: "Email sent", message: `Invoice ${num} sent to ${toEmail}` });
+        } else {
+          const d = await res.json().catch(() => ({}));
+          toast({ type: "error", title: "Email failed", message: d.error ?? "Could not send email." });
+        }
+      } catch {
+        toast({ type: "error", title: "Email failed", message: "Network error. Could not send email." });
+      }
+      setShareLoading(false);
       return;
     }
 
@@ -333,9 +469,7 @@ export default function InvoiceDetailPage() {
           <Breadcrumb items={[{ label: "Invoices", href: "/invoices" }, { label: invoice.invoiceNumber }]} />
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
             <StatusBadge status={invoice.status} />
-            {invoice.status !== "paid" && (
-              <Button variant="editOutline" size="sm" href={`/invoices/edit/${id}`}>Edit Invoice</Button>
-            )}
+            <Button variant="editOutline" size="sm" href={`/invoices/edit/${id}`}>Edit Invoice</Button>
             {balance > 0 && (
               <Button
                 variant="greenPrimary"
@@ -349,7 +483,7 @@ export default function InvoiceDetailPage() {
                 + Record Payment
               </Button>
             )}
-            <Button variant="secondary" size="sm" onClick={() => window.print()}>
+            <Button variant="secondary" size="sm" onClick={handlePrint}>
               Download / Print PDF
             </Button>
             <Button variant="dangerOutline" size="sm" disabled={deleting} onClick={() => setDeleteConfirm(true)}>
@@ -496,7 +630,7 @@ export default function InvoiceDetailPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr>
-                  <th colSpan={invoice.isInterState ? 10 : 11}
+                  <th colSpan={invoice.isInterState ? 9 : 10}
                     style={{ background: "var(--inv-brand)", color: "var(--inv-bg)", textAlign: "center",
                       padding: "10px 0", fontWeight: 700, letterSpacing: "0.15em", fontSize: 14,
                       textTransform: "uppercase", border: "1px solid var(--inv-bd)" }}>
@@ -506,17 +640,19 @@ export default function InvoiceDetailPage() {
               </thead>
               <tbody>
                 <tr>
-                  <td rowSpan={invoice.dueDate ? 5 : 4} colSpan={invoice.isInterState ? 5 : 6}
+                  <td rowSpan={invoice.dueDate ? 5 : 4} colSpan={invoice.isInterState ? 4 : 5}
                     style={{ border: "1px solid var(--inv-bd)", padding: "14px 16px", verticalAlign: "top" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                      <img src="/logo.png" alt="Science Hub" style={{ width: 36, height: 36, objectFit: "contain", flexShrink: 0 }} />
-                      <strong style={{ fontSize: 15, color: "var(--inv-brand)" }}>Science Hub</strong>
+                      <Image src="/logo.png" alt={settings?.name ?? "Logo"} width={36} height={36} style={{ width: 36, height: 36, objectFit: "contain", flexShrink: 0 }} />
+                      <strong style={{ fontSize: 15, color: "var(--inv-brand)" }}>{settings?.name}</strong>
                     </div>
                     <div style={{ color: "var(--inv-tx2)", lineHeight: 1.6 }}>
-                      <div>Industrial &amp; Laboratory Solutions</div>
-                      <div>Pooth Khurd, Delhi – 110039</div>
-                      <div>Ph: +91-9968597044</div>
-                      <div>sciencehub.center@gmail.com</div>
+                      {settings?.tagline && <div>{settings.tagline}</div>}
+                      {(settings?.address || settings?.city || settings?.state || settings?.pincode) && (
+                        <div>{[settings?.address, settings?.city, settings?.state, settings?.pincode].filter(Boolean).join(", ")}</div>
+                      )}
+                      {settings?.phone && <div>Ph: {settings.phone}</div>}
+                      {settings?.email && <div>{settings.email}</div>}
                     </div>
                   </td>
                   <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,whiteSpace:"nowrap",background:"var(--inv-bg2)",width:"14%" }}>Invoice No.</td>
@@ -552,7 +688,7 @@ export default function InvoiceDetailPage() {
 
                 {/* Bill To */}
                 <tr>
-                  <td colSpan={invoice.isInterState ? 10 : 11} style={{ border:"1px solid var(--inv-bd)",padding:0 }}>
+                  <td colSpan={invoice.isInterState ? 9 : 10} style={{ border:"1px solid var(--inv-bd)",padding:0 }}>
                     <div style={{ background:"var(--inv-bg3)",padding:"5px 14px",fontSize:11,fontWeight:700,
                       textTransform:"uppercase",letterSpacing:"0.1em",color:"var(--inv-tx2)",borderBottom:"1px solid var(--inv-bd)" }}>
                       Bill To
@@ -561,8 +697,9 @@ export default function InvoiceDetailPage() {
                       <div style={{ fontWeight:700,fontSize:13,color:"var(--inv-tx)",marginBottom:2 }}>{invoice.customer.name}</div>
                       {invoice.customer.address && <div style={{ color:"var(--inv-tx2)" }}>{invoice.customer.address}</div>}
                       <div style={{ color:"var(--inv-tx2)" }}>{[invoice.customer.city,invoice.customer.state,invoice.customer.pincode].filter(Boolean).join(", ")}</div>
-                      <div style={{ display:"flex",gap:16,marginTop:4 }}>
+                      <div style={{ display:"flex",gap:16,marginTop:4,flexWrap:"wrap" }}>
                         {invoice.customer.phone && <span style={{ color:"var(--inv-tx3)" }}>Ph: {invoice.customer.phone}</span>}
+                        {invoice.customer.email && <span style={{ color:"var(--inv-tx3)" }}>Email: {invoice.customer.email}</span>}
                         {invoice.customer.gstin && (
                           <span style={{ fontFamily:"monospace",fontWeight:600,color:"var(--inv-tx2)",
                             background:"var(--inv-bg3)",border:"1px solid var(--inv-bd2)",borderRadius:3,padding:"1px 6px" }}>
@@ -575,22 +712,22 @@ export default function InvoiceDetailPage() {
                 </tr>
 
                 {/* Items header */}
-                <tr style={{ background:"var(--inv-bg3)",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:"0.05em",color:"var(--inv-tx2)" }}>
+                <tr id="invoice-col-header" style={{ background:"var(--inv-bg3)",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:"0.05em",color:"var(--inv-tx2)" }}>
                   {[
-                    ["#","center","3%"],["Description","left","35%"],["HSN","center","5%"],
-                    ["Qty","center","4%"],["Unit","center","4%"],["Rate (₹)","right","9%"],
-                    ["Taxable (₹)","right","9%"],["GST%","center","4%"],
+                    ["#","center","3%"],["Description","left","25%"],
+                    ["Qty","center","5%"],["Unit","center","5%"],["Rate (₹)","right","9%"],
+                    ["Taxable (₹)","right","9%"],["GST%","center","5%"],
                   ].map(([label, align, width]) => (
-                    <td key={label} style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:align as "left"|"right"|"center",width }}>{label}</td>
+                    <td key={label} style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:align as "left"|"right"|"center",width,whiteSpace:"nowrap" }}>{label}</td>
                   ))}
                   {invoice.isInterState
-                    ? <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"10%" }}>IGST (₹)</td>
+                    ? <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"10%",whiteSpace:"nowrap" }}>IGST (₹)</td>
                     : <>
-                        <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"9%" }}>CGST (₹)</td>
-                        <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"9%" }}>SGST (₹)</td>
+                        <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"9%",whiteSpace:"nowrap" }}>CGST (₹)</td>
+                        <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"9%",whiteSpace:"nowrap" }}>SGST (₹)</td>
                       </>
                   }
-                  <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"11%" }}>Total (₹)</td>
+                  <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"10%",whiteSpace:"nowrap" }}>Total (₹)</td>
                 </tr>
 
                 {/* Item rows */}
@@ -608,7 +745,7 @@ export default function InvoiceDetailPage() {
                     <tr key={item.id}>
                       {c(idx + 1)}
                       <td style={{ border:"1px solid var(--inv-bd)",padding:"7px 10px",background:rowBg,fontWeight:600,color:"var(--inv-tx)",wordBreak:"break-word" }}>{item.name}</td>
-                      {c("—")}{c(item.quantity)}{c(item.unit)}
+                      {c(item.quantity)}{c(item.unit)}
                       {c(fmt(item.price),"right")}
                       {c(fmt(taxable),"right")}
                       {c(`${item.gstRate}%`)}
@@ -622,7 +759,7 @@ export default function InvoiceDetailPage() {
 
                 {/* Notes + Totals */}
                 <tr>
-                  <td colSpan={invoice.isInterState ? 5 : 6} rowSpan={invoice.isInterState ? 6 : 7}
+                  <td colSpan={invoice.isInterState ? 4 : 5} rowSpan={invoice.isInterState ? 6 : 7}
                     style={{ border:"1px solid var(--inv-bd)",padding:"14px 16px",verticalAlign:"top",color:"var(--inv-tx3)" }}>
                     <div style={{ display:"flex",flexDirection:"column",height:"100%",minHeight:120 }}>
                       <div style={{ marginTop:"auto" }}>
@@ -631,7 +768,7 @@ export default function InvoiceDetailPage() {
                           : <p style={{ fontStyle:"italic",opacity:0.5 }}>No notes</p>}
                         <p style={{ marginTop:10,fontSize:11,opacity:0.55 }}>This is a computer-generated invoice.</p>
                         <div style={{ marginTop:16,marginLeft:8,marginRight:8,borderTop:"1px solid var(--inv-bd2)",paddingTop:8 }}>
-                          <div style={{ fontSize:11,fontWeight:600,color:"var(--inv-tx2)",marginBottom:20 }}>For Science Hub</div>
+                          <div style={{ fontSize:11,fontWeight:600,color:"var(--inv-tx2)",marginBottom:20 }}>For {settings?.name}</div>
                           <div style={{ fontSize:10,color:"var(--inv-tx3)" }}>Authorised Signatory</div>
                         </div>
                       </div>
@@ -674,9 +811,9 @@ export default function InvoiceDetailPage() {
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={invoice.isInterState ? 10 : 11}
+                  <td colSpan={invoice.isInterState ? 9 : 10}
                     style={{ border:"1px solid var(--inv-bd)",padding:"8px 16px",textAlign:"center",fontSize:11,color:"var(--inv-tx3)",background:"var(--inv-bg2)" }}>
-                    Thank you for your business · Science Hub · sciencehub.center@gmail.com · +91-9968597044
+                    Thank you for your business · {settings?.name}{settings?.email ? ` · ${settings.email}` : ""}{settings?.phone ? ` · ${settings.phone}` : ""}
                   </td>
                 </tr>
               </tfoot>

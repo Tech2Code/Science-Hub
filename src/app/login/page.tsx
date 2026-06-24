@@ -72,8 +72,9 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <div className={styles.forgotRow}>
+        <div className={styles.forgotLinks}>
           <Link href="/forgot-password" className={styles.forgotLink}>Forgot password?</Link>
+          <Link href="/find-email" className={styles.forgotLink}>Forgot email?</Link>
         </div>
 
         <p className={styles.footer}>Science Hub © {new Date().getFullYear()}</p>

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { revalidateTag } from "next/cache";
 import { getCustomer } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 
@@ -34,8 +33,6 @@ export async function PUT(
       where: { id },
       data: { name, phone, email, address, city, state, pincode, gstin },
     });
-    revalidateTag(`customer-${id}`, { expire: 0 });
-    revalidateTag("customers", { expire: 0 });
     if (session?.user?.id) {
       await logActivity(session.user.id, "update_customer", `Updated customer "${customer.name}" | Phone: ${phone || "—"} | Email: ${email || "—"} | City: ${city || "—"}${state ? ", " + state : ""} | GSTIN: ${gstin || "—"}`, id, "customer");
     }
@@ -63,9 +60,6 @@ export async function DELETE(
       );
     }
     await prisma.customer.update({ where: { id }, data: { deletedAt: new Date() } });
-    revalidateTag(`customer-${id}`, { expire: 0 });
-    revalidateTag("customers", { expire: 0 });
-    revalidateTag("reports", { expire: 0 });
     if (session?.user?.id) {
       await logActivity(session.user.id, "delete_customer", `Moved customer "${customer.name}" to bin | Phone: ${customer.phone || "—"} | City: ${customer.city || "—"} | GSTIN: ${customer.gstin || "—"}`, id, "customer");
     }

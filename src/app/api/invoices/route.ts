@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { revalidateTag } from "next/cache";
 import { getInvoices } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 
@@ -142,8 +141,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    revalidateTag("invoices", { expire: 0 });
-    revalidateTag("reports", { expire: 0 });
     await logActivity(user.id, "create_invoice", `Created invoice ${invoiceNumber} for ${invoice.customer.name} | Total: ₹${invoice.total.toFixed(2)} | Items: ${invoiceItems.length} | Tax: ${isInterState ? "IGST" : "CGST+SGST"}`, invoice.id, "invoice");
     return NextResponse.json(invoice, { status: 201 });
   } catch (error) {

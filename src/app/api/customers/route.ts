@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { revalidateTag } from "next/cache";
 import { getCustomers } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 
@@ -30,7 +29,6 @@ export async function POST(request: NextRequest) {
       data: { name, phone, email, address, city, state, pincode, gstin },
     });
 
-    revalidateTag("customers", { expire: 0 });
     if (session?.user?.id) {
       await logActivity(session.user.id, "add_customer", `Added customer "${name}" | Phone: ${phone || "—"} | City: ${city || "—"} | GSTIN: ${gstin || "—"}`, customer.id, "customer");
     }

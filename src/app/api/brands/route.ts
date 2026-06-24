@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
@@ -31,7 +30,6 @@ export async function POST(request: NextRequest) {
 
     const brand = await prisma.brand.create({ data: { name } });
 
-    revalidateTag("products", { expire: 0 });
     const session = await getServerSession(authOptions);
     if (session?.user?.id) {
       await logActivity(session.user.id, "add_brand", `Added brand "${name}"`, brand.id, "brand");

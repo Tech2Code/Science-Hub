@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
@@ -47,8 +46,6 @@ export async function PUT(
       where: { id }, data,
       include: { category: true, brand: true },
     });
-    revalidateTag("products", { expire: 0 });
-    revalidateTag("reports", { expire: 0 });
     if (session?.user?.id) {
       await logActivity(session.user.id, "update_product", `Updated product "${product.name}" | SKU: ${product.sku || "—"} | Price: ₹${product.price.toFixed(2)} | GST: ${product.gstRate}% | Stock: ${product.stock} ${product.unit || "Nos"}`, id, "product");
     }
@@ -76,8 +73,6 @@ export async function DELETE(
       );
     }
     await prisma.product.update({ where: { id }, data: { deletedAt: new Date() } });
-    revalidateTag("products", { expire: 0 });
-    revalidateTag("reports", { expire: 0 });
     if (session?.user?.id) {
       await logActivity(session.user.id, "delete_product", `Moved product "${product.name}" to bin | SKU: ${product.sku || "—"} | Price: ₹${product.price.toFixed(2)} | Stock: ${product.stock} ${product.unit || "Nos"}`, id, "product");
     }

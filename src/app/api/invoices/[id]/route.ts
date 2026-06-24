@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { revalidateTag } from "next/cache";
 import { getInvoice } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 
@@ -39,15 +38,11 @@ export async function PUT(
       return NextResponse.json(invoice);
     }
 
-    // Full invoice edit — only allowed when invoice has no payments (unpaid)
     const existing = await prisma.invoice.findUnique({
       where: { id },
       select: { paidAmount: true, status: true },
     });
     if (!existing) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
-    if (existing.status === "paid") {
-      return NextResponse.json({ error: "Paid invoices cannot be edited." }, { status: 400 });
-    }
 
     // Fetch product info for names/units
     const productIds = items.map((i: { productId: string }) => i.productId);
@@ -116,9 +111,6 @@ export async function PUT(
       });
     });
 
-    revalidateTag(`invoice-${id}`, { expire: 0 });
-    revalidateTag("invoices", { expire: 0 });
-    revalidateTag("reports", { expire: 0 });
     const sess = await getServerSession(authOptions);
     if (sess?.user?.id) {
       const inv = invoice as { invoiceNumber?: string; customer?: { name?: string }; total?: number; items?: unknown[] };
@@ -140,9 +132,6 @@ export async function DELETE(
     const sess = await getServerSession(authOptions);
     const inv = await prisma.invoice.findUnique({ where: { id }, select: { invoiceNumber: true, total: true, customer: { select: { name: true } } } });
     await prisma.invoice.update({ where: { id }, data: { deletedAt: new Date() } });
-    revalidateTag(`invoice-${id}`, { expire: 0 });
-    revalidateTag("invoices", { expire: 0 });
-    revalidateTag("reports", { expire: 0 });
     if (sess?.user?.id && inv) {
       await logActivity(sess.user.id, "delete_invoice", `Moved invoice ${inv.invoiceNumber} to bin | Customer: ${inv.customer?.name ?? "—"} | Total: ₹${inv.total.toFixed(2)}`, id, "invoice");
     }

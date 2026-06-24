@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
@@ -23,8 +22,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
     await prisma.brand.update({ where: { id }, data: { deletedAt: new Date() } });
 
-    revalidateTag("products", { expire: 0 });
-    revalidateTag("reports", { expire: 0 });
     if (session?.user?.id) {
       const affected = brand._count.products > 0 ? ` | ${brand._count.products} product(s) still assigned` : "";
       await logActivity(session.user.id, "delete_brand", `Moved brand "${brand.name}" to bin${affected}`, id, "brand");

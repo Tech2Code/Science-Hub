@@ -12,6 +12,7 @@ interface Customer {
   id: string;
   name: string;
   phone: string;
+  email: string;
   gstin: string;
   city: string;
   _count?: { invoices: number };
@@ -52,6 +53,7 @@ export default function CustomersPage() {
   const filtered = customers.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.phone?.includes(search) ||
+    c.email?.toLowerCase().includes(search.toLowerCase()) ||
     c.gstin?.toLowerCase().includes(search.toLowerCase()) ||
     c.city?.toLowerCase().includes(search.toLowerCase())
   );
@@ -89,7 +91,7 @@ export default function CustomersPage() {
         <div className="card-toolbar">
           <input
             type="search"
-            placeholder="Search by name, phone, GSTIN, or city…"
+            placeholder="Search by name, phone, email, GSTIN, or city…"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             className="search-input"
@@ -104,7 +106,7 @@ export default function CustomersPage() {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Phone</th>
+                <th>Phone / Email</th>
                 <th>GSTIN</th>
                 <th>City</th>
                 <th className="table-th-right">Invoices</th>
@@ -121,7 +123,10 @@ export default function CustomersPage() {
               ) : visible.map((c) => (
                 <tr key={c.id}>
                   <td data-mobile-full style={{ fontWeight: 500, color: "var(--c-text)" }}>{c.name}</td>
-                  <td data-label="Phone" style={{ color: "var(--c-text-3)" }}>{c.phone || "—"}</td>
+                  <td data-label="Phone / Email" style={{ color: "var(--c-text-3)" }}>
+                    <div>{c.phone || "—"}</div>
+                    {c.email && <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)", marginTop: 2 }}>{c.email}</div>}
+                  </td>
                   <td data-mobile-hide style={{ color: "var(--c-text-3)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{c.gstin || "—"}</td>
                   <td data-label="City" style={{ color: "var(--c-text-3)" }}>{c.city || "—"}</td>
                   <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-text-2)" }}>{c._count?.invoices ?? 0}</td>

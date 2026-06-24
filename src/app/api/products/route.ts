@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { revalidateTag } from "next/cache";
 import { getProducts } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 
@@ -41,8 +40,6 @@ export async function POST(request: NextRequest) {
       include: { category: true, brand: true },
     });
 
-    revalidateTag("products", { expire: 0 });
-    revalidateTag("reports", { expire: 0 });
     if (session?.user?.id) {
       await logActivity(session.user.id, "add_product", `Added product "${name}" | SKU: ${sku || "—"} | Price: ₹${parseFloat(price).toFixed(2)} | GST: ${gstRate ?? 18}% | Stock: ${stock ?? 0} ${unit || "Nos"}`, product.id, "product");
     }

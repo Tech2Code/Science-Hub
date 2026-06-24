@@ -57,6 +57,8 @@ export default function EditCustomerPage() {
     setSaving(false);
     if (res.ok) {
       bustCache("/api/customers");
+      bustCache(`/api/customers/${id}`);
+      bustCache("/api/invoices");
       toast({ type: "success", title: "Customer updated", message: "Changes saved." });
       router.push("/customers");
     }

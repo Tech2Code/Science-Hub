@@ -10,7 +10,6 @@ import { fetchCached, bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import styles from "./edit.module.css";
 
-const SELLER_STATE = "Rajasthan";
 
 interface Product {
   id: string; name: string; unit: string; price: number; gstRate: number; stock: number;
@@ -51,11 +50,6 @@ export default function EditInvoicePage() {
     ]).then(([inv, prods]) => {
       const invoice = inv as InvoiceData;
       const products = prods as Product[];
-      if (invoice?.status === "paid") {
-        setError("Paid invoices cannot be edited.");
-        setLoading(false);
-        return;
-      }
       setInvoice(invoice);
       setProducts(products);
       setIsInterState(invoice.isInterState ?? false);

@@ -14,6 +14,18 @@ const USER_SELECT = {
   _count: { select: { invoices: true } },
 } as const;
 
+async function resolveSessionUser(session: Awaited<ReturnType<typeof getServerSession>>) {
+  if (!session?.user) return null;
+  // Prefer id lookup; fall back to email for sessions created before token.id was wired up
+  if (session.user.id) {
+    return prisma.user.findUnique({ where: { id: session.user.id } });
+  }
+  if (session.user.email) {
+    return prisma.user.findUnique({ where: { email: session.user.email } });
+  }
+  return null;
+}
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -21,16 +33,18 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: USER_SELECT,
-    });
+    const user = await resolveSessionUser(session);
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json(user);
+    const result = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: USER_SELECT,
+    });
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error("GET /api/admin/profile error:", error);
     return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 });
@@ -52,9 +66,7 @@ export async function PUT(request: NextRequest) {
       newPassword?: string;
     };
 
-    const currentUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-    });
+    const currentUser = await resolveSessionUser(session);
 
     if (!currentUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -100,7 +112,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const updated = await prisma.user.update({
-      where: { id: session.user.id },
+      where: { id: currentUser.id },
       data: {
         ...(name !== undefined && { name }),
         ...(email !== undefined && { email }),
@@ -110,9 +122,9 @@ export async function PUT(request: NextRequest) {
     });
 
     if (hashedPassword !== undefined) {
-      await logActivity(session.user.id, "change_password", `Changed own password`, session.user.id, "user");
+      await logActivity(currentUser.id, "change_password", `Changed own password`, currentUser.id, "user");
     } else {
-      await logActivity(session.user.id, "update_profile", `Updated own profile | Name: ${updated.name} | Email: ${updated.email}`, session.user.id, "user");
+      await logActivity(currentUser.id, "update_profile", `Updated own profile | Name: ${updated.name} | Email: ${updated.email}`, currentUser.id, "user");
     }
     return NextResponse.json(updated);
   } catch (error) {
