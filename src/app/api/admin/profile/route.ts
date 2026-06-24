@@ -14,7 +14,7 @@ const USER_SELECT = {
   _count: { select: { invoices: true } },
 } as const;
 
-async function resolveSessionUser(session: Awaited<ReturnType<typeof getServerSession>>) {
+async function resolveSessionUser(session: Awaited<ReturnType<typeof getServerSession<typeof authOptions>>>) {
   if (!session?.user) return null;
   // Prefer id lookup; fall back to email for sessions created before token.id was wired up
   if (session.user.id) {
