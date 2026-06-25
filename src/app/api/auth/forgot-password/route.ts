@@ -11,8 +11,12 @@ export async function POST(req: NextRequest) {
 
     const user = await prisma.user.findUnique({ where: { email } });
 
-    // Always return success — never reveal whether an email is registered
-    if (!user) return NextResponse.json({ ok: true });
+    if (!user) {
+      return NextResponse.json(
+        { error: "No account found with this email address." },
+        { status: 404 }
+      );
+    }
 
     // Check Gmail is configured before generating token
     const biz = await getBusinessSettings();

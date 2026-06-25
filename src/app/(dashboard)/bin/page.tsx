@@ -7,6 +7,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { Cell, type Column } from "@/components/ui/Table";
 
 type BinType = "invoice" | "customer" | "product" | "brand" | "category";
 
@@ -47,6 +48,15 @@ function DaysLeftPill({ daysLeft }: { daysLeft: number }) {
     </span>
   );
 }
+
+const BIN_COLUMNS: Column[] = [
+  { label: "Name",       mobile: "full+label" },
+  { label: "Details",    mobile: "label" },
+  { label: "Deleted On", mobile: "label" },
+  { label: "Deleted By", mobile: "label" },
+  { label: "Expires",    mobile: "label" },
+  { label: "Actions",    mobile: "full+label" },
+];
 
 function TypeSection({
   type, items, onRestore, onDeleteForever, restoring,
@@ -98,65 +108,42 @@ function TypeSection({
 
       {open && (
         <div className="table-wrap">
-          <table className="table-base" style={{ tableLayout: "fixed", minWidth: "560px" }}>
-            <colgroup>
-              <col style={{ width: "20%" }} />
-              <col style={{ width: "22%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "20%" }} />
-            </colgroup>
+          <table className="table-base">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Details</th>
-                <th>Deleted On</th>
-                <th>Deleted By</th>
-                <th>Expires</th>
-                <th>Actions</th>
+                {BIN_COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
-                  <td data-mobile-full style={{ fontWeight: 500, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <Cell col={BIN_COLUMNS[0]} style={{ fontWeight: 500, color: "var(--c-text)" }}>
                     {item.name}
-                  </td>
-                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  </Cell>
+                  <Cell col={BIN_COLUMNS[1]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
                     {item.meta || <span style={{ color: "var(--c-text-4)" }}>—</span>}
-                  </td>
-                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                  </Cell>
+                  <Cell col={BIN_COLUMNS[2]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
                     {new Date(item.deletedAt).toLocaleDateString("en-IN", {
                       day: "2-digit", month: "short", year: "numeric",
                     })}
-                  </td>
-                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                  </Cell>
+                  <Cell col={BIN_COLUMNS[3]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
                     {item.deletedBy ?? <span style={{ color: "var(--c-text-4)" }}>—</span>}
-                  </td>
-                  <td data-label="Expires">
+                  </Cell>
+                  <Cell col={BIN_COLUMNS[4]}>
                     <DaysLeftPill daysLeft={item.daysLeft} />
-                  </td>
-                  <td data-mobile-full>
+                  </Cell>
+                  <Cell col={BIN_COLUMNS[5]}>
                     <div className="table-actions">
-                      <Button
-                        variant="editOutline"
-                        size="sm"
-                        disabled={restoring}
-                        onClick={() => onRestore(item)}
-                      >
+                      <Button variant="editOutline" size="sm" disabled={restoring} onClick={() => onRestore(item)}>
                         Restore
                       </Button>
-                      <Button
-                        variant="dangerOutline"
-                        size="sm"
-                        disabled={restoring}
-                        onClick={() => onDeleteForever(item)}
-                      >
+                      <Button variant="dangerOutline" size="sm" disabled={restoring} onClick={() => onDeleteForever(item)}>
                         Delete Forever
                       </Button>
                     </div>
-                  </td>
+                  </Cell>
                 </tr>
               ))}
             </tbody>

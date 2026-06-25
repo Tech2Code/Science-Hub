@@ -549,7 +549,7 @@ export default function AdminPage() {
                 const isSelf = u.id === selfId;
                 return (
                   <tr key={u.id} style={editUser?.id === u.id ? { background: "var(--c-blue-bg)" } : {}}>
-                    <td data-mobile-full>
+                    <td data-mobile-full data-label="User">
                       <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
                         <UserAvatar name={u.name} role={u.role} isSelf={isSelf} size={32} />
                         <div>
@@ -562,10 +562,10 @@ export default function AdminPage() {
                     </td>
                     <td data-label="Role"><RoleBadge role={u.role} /></td>
                     <td data-label="Invoices" className="table-td-right" style={{ color: "var(--c-text-3)" }}>{u._count.invoices}</td>
-                    <td data-mobile-hide style={{ color: "var(--c-text-4)", fontSize: "0.8rem" }}>
+                    <td data-label="Joined" style={{ color: "var(--c-text-4)", fontSize: "0.8rem" }}>
                       {new Date(u.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                     </td>
-                    <td data-mobile-full>
+                    <td data-mobile-full data-label="Actions">
                       {isSelf ? (
                         <span style={{ fontSize: "0.78rem", color: "var(--c-text-4)", fontStyle: "italic" }}>Use My Profile above</span>
                       ) : (
@@ -662,7 +662,7 @@ export default function AdminPage() {
                     </div>
                   </td>
                   <td data-label="Action"><ActionBadge action={log.action} /></td>
-                  <td data-mobile-full style={{ color: "var(--c-text-2)", fontSize: "0.8125rem" }}>{log.details}</td>
+                  <td data-mobile-full data-label="Details" style={{ color: "var(--c-text-2)", fontSize: "0.8125rem" }}>{log.details}</td>
                   <td data-label="Time" style={{ color: "var(--c-text-4)", fontSize: "0.78rem", whiteSpace: "nowrap" }}>{fmtTime(log.createdAt)}</td>
                 </tr>
               ))}

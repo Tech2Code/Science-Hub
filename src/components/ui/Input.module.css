@@ -15,6 +15,14 @@
 }
 .input::placeholder,
 .textarea::placeholder { color: var(--c-text-4); }
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--c-bg-input) inset !important;
+  -webkit-text-fill-color: var(--c-text) !important;
+  caret-color: var(--c-text);
+  transition: background-color 5000s ease-in-out 0s;
+}
 .input:focus,
 .textarea:focus,
 .select:focus {

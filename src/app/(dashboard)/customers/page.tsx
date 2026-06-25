@@ -7,6 +7,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { Cell, type Column } from "@/components/ui/Table";
 
 interface Customer {
   id: string;
@@ -19,6 +20,17 @@ interface Customer {
   _count?: { invoices: number };
   createdBy?: string | null;
 }
+
+const COLUMNS: Column[] = [
+  { label: "Name",          mobile: "full+label" },
+  { label: "Phone / Email", mobile: "label" },
+  { label: "GSTIN",         mobile: "label" },
+  { label: "City",          mobile: "label" },
+  { label: "Created By",    mobile: "label" },
+  { label: "Created At",    mobile: "label" },
+  { label: "Invoices",      cls: "table-th-right", mobile: "label" },
+  { label: "Actions",       mobile: "full+label" },
+];
 
 export default function CustomersPage() {
   const { data, loading, mutate } = useFetch<Customer[]>("/api/customers");
@@ -107,50 +119,37 @@ export default function CustomersPage() {
           <table className="table-base">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Phone / Email</th>
-                <th>GSTIN</th>
-                <th>City</th>
-                <th>Created By</th>
-                <th>Created At</th>
-                <th className="table-th-right">Invoices</th>
-                <th>Actions</th>
+                {COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={8} />
+                <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={COLUMNS.length} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
                   {search ? "No customers match your search." : "No customers yet. Add one to get started."}
                 </td></tr>
               ) : visible.map((c) => (
                 <tr key={c.id}>
-                  <td data-mobile-full style={{ fontWeight: 500, color: "var(--c-text)" }}>{c.name}</td>
-                  <td data-label="Phone / Email" style={{ color: "var(--c-text-3)" }}>
+                  <Cell col={COLUMNS[0]} style={{ fontWeight: 500, color: "var(--c-text)" }}>{c.name}</Cell>
+                  <Cell col={COLUMNS[1]} style={{ color: "var(--c-text-3)" }}>
                     <div>{c.phone || "—"}</div>
                     {c.email && <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)", marginTop: 2 }}>{c.email}</div>}
-                  </td>
-                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{c.gstin || "—"}</td>
-                  <td data-label="City" style={{ color: "var(--c-text-3)" }}>{c.city || "—"}</td>
-                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{c.createdBy ?? "—"}</td>
-                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                  </Cell>
+                  <Cell col={COLUMNS[2]} style={{ color: "var(--c-text-3)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{c.gstin || "—"}</Cell>
+                  <Cell col={COLUMNS[3]} style={{ color: "var(--c-text-3)" }}>{c.city || "—"}</Cell>
+                  <Cell col={COLUMNS[4]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{c.createdBy ?? "—"}</Cell>
+                  <Cell col={COLUMNS[5]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
                     {c.createdAt ? new Date(c.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—"}
-                  </td>
-                  <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-text-2)" }}>{c._count?.invoices ?? 0}</td>
-                  <td data-mobile-full>
+                  </Cell>
+                  <Cell col={COLUMNS[6]} style={{ color: "var(--c-text-2)" }}>{c._count?.invoices ?? 0}</Cell>
+                  <Cell col={COLUMNS[7]}>
                     <div className="table-actions" style={{ flexWrap: "wrap" }}>
                       <Button variant="viewOutline" size="sm" href={`/customers/${c.id}`}>View</Button>
                       <Button variant="editOutline" size="sm" href={`/customers/edit/${c.id}`}>Edit</Button>
-                      <Button
-                        variant="dangerOutline"
-                        size="sm"
-                        onClick={() => handleDelete(c.id, c.name)}
-                      >
-                        Delete
-                      </Button>
+                      <Button variant="dangerOutline" size="sm" onClick={() => handleDelete(c.id, c.name)}>Delete</Button>
                     </div>
-                  </td>
+                  </Cell>
                 </tr>
               ))}
             </tbody>

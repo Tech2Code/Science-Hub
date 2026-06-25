@@ -456,7 +456,7 @@ export default function InvoiceDetailPage() {
           --inv-tx:#f1f5f9;--inv-tx2:#cbd5e1;--inv-tx3:#94a3b8;
           --inv-brand:#93c5fd;--inv-green:#34d399;--inv-blue:#60a5fa;--inv-red:#f87171;
         }
-        @page { size: A4 portrait; margin: 12mm 8mm; }
+        @page { size: A4 portrait; margin: 5mm; }
         @media print {
           *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
           html,body{background:#fff!important;color:#0f172a!important}

@@ -9,6 +9,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { Cell, type Column } from "@/components/ui/Table";
 
 interface Brand {
   id: string;
@@ -17,6 +18,15 @@ interface Brand {
   _count: { products: number };
   createdBy?: string | null;
 }
+
+const COLUMNS: Column[] = [
+  { label: "#",          mobile: "hide" },
+  { label: "Brand Name", mobile: "full+label" },
+  { label: "Created By", mobile: "label" },
+  { label: "Created At", mobile: "label" },
+  { label: "Products",   cls: "table-th-right", mobile: "full+label" },
+  { label: "Actions",    mobile: "full+label" },
+];
 
 export default function BrandsPage() {
   const { data, loading, mutate } = useFetch<Brand[]>("/api/brands");
@@ -149,30 +159,25 @@ export default function BrandsPage() {
           <table className="table-base">
             <thead>
               <tr>
-                <th>#</th>
-                <th>Brand Name</th>
-                <th>Created By</th>
-                <th>Created At</th>
-                <th className="table-th-right">Products</th>
-                <th>Actions</th>
+                {COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={6} />
+                <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={4} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={COLUMNS.length} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
                   {search ? "No brands match your search." : "No brands yet. Add one above."}
                 </td></tr>
               ) : visible.map((b, i) => (
                 <tr key={b.id}>
-                  <td data-mobile-hide style={{ color: "var(--c-text-4)", fontSize: "0.8125rem" }}>{i + 1}</td>
-                  <td data-mobile-full style={{ fontWeight: 500, color: "var(--c-text)" }}>{b.name}</td>
-                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{b.createdBy ?? "—"}</td>
-                  <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                  <Cell col={COLUMNS[0]} style={{ color: "var(--c-text-4)", fontSize: "0.8125rem" }}>{i + 1}</Cell>
+                  <Cell col={COLUMNS[1]} style={{ fontWeight: 500, color: "var(--c-text)" }}>{b.name}</Cell>
+                  <Cell col={COLUMNS[2]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{b.createdBy ?? "—"}</Cell>
+                  <Cell col={COLUMNS[3]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
                     {b.createdAt ? new Date(b.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—"}
-                  </td>
-                  <td data-label="Products" className="table-td-right">
+                  </Cell>
+                  <Cell col={COLUMNS[4]}>
                     <span style={{
                       display: "inline-block", padding: "0.125rem 0.5rem", borderRadius: "9999px",
                       fontSize: "0.75rem", fontWeight: 500,
@@ -182,8 +187,8 @@ export default function BrandsPage() {
                     }}>
                       {b._count.products} {b._count.products === 1 ? "product" : "products"}
                     </span>
-                  </td>
-                  <td data-mobile-full>
+                  </Cell>
+                  <Cell col={COLUMNS[5]}>
                     <div className="table-actions">
                       <Button
                         variant="dangerOutline"
@@ -193,7 +198,7 @@ export default function BrandsPage() {
                         Delete
                       </Button>
                     </div>
-                  </td>
+                  </Cell>
                 </tr>
               ))}
             </tbody>

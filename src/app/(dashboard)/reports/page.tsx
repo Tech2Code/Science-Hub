@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
+import { Cell, type Column } from "@/components/ui/Table";
 
 interface OutstandingItem {
   id: string;
@@ -29,6 +30,26 @@ interface LowStockItem {
   minStock: number;
   brand?: { name: string };
 }
+
+const OUT_COLUMNS: Column[] = [
+  { label: "Invoice No.",   mobile: "label" },
+  { label: "Customer",      mobile: "label" },
+  { label: "Invoice Date",  mobile: "label" },
+  { label: "Due Date",      mobile: "label" },
+  { label: "Total",         cls: "table-th-right", mobile: "label" },
+  { label: "Paid",          cls: "table-th-right", mobile: "label" },
+  { label: "Balance",       cls: "table-th-right", mobile: "full+label" },
+  { label: "Status",        mobile: "full+label" },
+];
+
+const STOCK_COLUMNS: Column[] = [
+  { label: "Product",       mobile: "full+label" },
+  { label: "Brand",         mobile: "label" },
+  { label: "SKU",           mobile: "label" },
+  { label: "Current Stock", cls: "table-th-right", mobile: "label" },
+  { label: "Min Stock",     cls: "table-th-right", mobile: "label" },
+  { label: "Deficit",       cls: "table-th-right", mobile: "full+label" },
+];
 
 export default function ReportsPage() {
   const { data: outstandingData, loading: loadingOutstanding } = useFetch<OutstandingItem[]>("/api/reports?type=outstanding");
@@ -85,40 +106,33 @@ export default function ReportsPage() {
           <table className="table-base">
             <thead>
               <tr>
-                <th>Invoice No.</th>
-                <th>Customer</th>
-                <th>Invoice Date</th>
-                <th>Due Date</th>
-                <th className="table-th-right">Total</th>
-                <th className="table-th-right">Paid</th>
-                <th className="table-th-right">Balance</th>
-                <th>Status</th>
+                {OUT_COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {loadingOutstanding ? (
-                <TableSkeleton cols={8} />
+                <TableSkeleton cols={OUT_COLUMNS.length} />
               ) : outstanding.length === 0 ? (
-                <tr><td colSpan={8} className="table-empty-cell">
+                <tr><td colSpan={OUT_COLUMNS.length} className="table-empty-cell">
                   No outstanding payments. All invoices are settled.
                 </td></tr>
               ) : visibleOut.map((inv) => {
                 const isOverdue = inv.dueDate && new Date(inv.dueDate) < new Date() && inv.status !== "paid";
                 return (
                   <tr key={inv.id} style={isOverdue ? { background: "var(--c-red-bg)" } : undefined}>
-                    <td data-label="Invoice">
+                    <Cell col={OUT_COLUMNS[0]}>
                       <Link href={`/invoices/${inv.id}`} className="table-link">
                         {inv.invoiceNumber}
                       </Link>
-                    </td>
-                    <td data-label="Customer" style={{ color: "var(--c-text-2)" }}>{inv.customer.name}</td>
-                    <td data-mobile-hide style={{ color: "var(--c-text-3)" }}>
+                    </Cell>
+                    <Cell col={OUT_COLUMNS[1]} style={{ color: "var(--c-text-2)" }}>{inv.customer.name}</Cell>
+                    <Cell col={OUT_COLUMNS[2]} style={{ color: "var(--c-text-3)" }}>
                       <div>{new Date(inv.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
                       <div className="date-sub">
                         {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                       </div>
-                    </td>
-                    <td data-label="Due Date">
+                    </Cell>
+                    <Cell col={OUT_COLUMNS[3]}>
                       {inv.dueDate ? (
                         <span style={{ color: isOverdue ? "var(--c-red)" : "var(--c-text-3)", fontWeight: isOverdue ? 500 : undefined }}>
                           {new Date(inv.dueDate).toLocaleDateString("en-IN")}
@@ -127,13 +141,13 @@ export default function ReportsPage() {
                       ) : (
                         <span style={{ color: "var(--c-text-4)" }}>—</span>
                       )}
-                    </td>
-                    <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-text-2)" }}>₹{inv.total.toLocaleString("en-IN")}</td>
-                    <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN")}</td>
-                    <td data-label="Balance" className="table-td-right" style={{ fontWeight: 500, color: "var(--c-text)" }}>
+                    </Cell>
+                    <Cell col={OUT_COLUMNS[4]} style={{ color: "var(--c-text-2)" }}>₹{inv.total.toLocaleString("en-IN")}</Cell>
+                    <Cell col={OUT_COLUMNS[5]} style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN")}</Cell>
+                    <Cell col={OUT_COLUMNS[6]} style={{ fontWeight: 500, color: "var(--c-text)" }}>
                       ₹{(inv.total - inv.paidAmount).toLocaleString("en-IN")}
-                    </td>
-                    <td data-label="Status" data-mobile-full><StatusBadge status={inv.status} /></td>
+                    </Cell>
+                    <Cell col={OUT_COLUMNS[7]}><StatusBadge status={inv.status} /></Cell>
                   </tr>
                 );
               })}
@@ -166,19 +180,14 @@ export default function ReportsPage() {
           <table className="table-base">
             <thead>
               <tr>
-                <th>Product</th>
-                <th>Brand</th>
-                <th>SKU</th>
-                <th className="table-th-right">Current Stock</th>
-                <th className="table-th-right">Min Stock</th>
-                <th className="table-th-right">Deficit</th>
+                {STOCK_COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {loadingStock ? (
-                <TableSkeleton cols={6} />
+                <TableSkeleton cols={STOCK_COLUMNS.length} />
               ) : lowStock.length === 0 ? (
-                <tr><td colSpan={6} className="table-empty-cell">
+                <tr><td colSpan={STOCK_COLUMNS.length} className="table-empty-cell">
                   All products are adequately stocked.
                 </td></tr>
               ) : lowStock.map((p) => {
@@ -186,7 +195,7 @@ export default function ReportsPage() {
                 const critical = p.stock === 0;
                 return (
                   <tr key={p.id} style={critical ? { background: "var(--c-red-bg)" } : undefined}>
-                    <td data-mobile-full style={{ fontWeight: 500, color: "var(--c-text)" }}>
+                    <Cell col={STOCK_COLUMNS[0]} style={{ fontWeight: 500, color: "var(--c-text)" }}>
                       <Link href={`/products/edit/${p.id}`}
                         style={{ color: "inherit", textDecoration: "none" }}
                         onMouseEnter={(e) => (e.currentTarget.style.color = "var(--c-blue)")}
@@ -203,18 +212,18 @@ export default function ReportsPage() {
                           Out of stock
                         </span>
                       )}
-                    </td>
-                    <td data-label="Brand" style={{ color: "var(--c-text-3)" }}>{p.brand?.name || "—"}</td>
-                    <td data-mobile-hide style={{ color: "var(--c-text-4)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{p.sku || "—"}</td>
-                    <td data-label="Stock" className="table-td-right">
+                    </Cell>
+                    <Cell col={STOCK_COLUMNS[1]} style={{ color: "var(--c-text-3)" }}>{p.brand?.name || "—"}</Cell>
+                    <Cell col={STOCK_COLUMNS[2]} style={{ color: "var(--c-text-4)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{p.sku || "—"}</Cell>
+                    <Cell col={STOCK_COLUMNS[3]}>
                       <span style={{ fontWeight: 600, color: critical ? "var(--c-red)" : "var(--c-amber)" }}>
                         {p.stock} {p.unit}
                       </span>
-                    </td>
-                    <td data-label="Min" className="table-td-right" style={{ color: "var(--c-text-3)" }}>{p.minStock} {p.unit}</td>
-                    <td data-label="Deficit" className="table-td-right" style={{ fontWeight: 500, color: "var(--c-red)" }}>
+                    </Cell>
+                    <Cell col={STOCK_COLUMNS[4]} style={{ color: "var(--c-text-3)" }}>{p.minStock} {p.unit}</Cell>
+                    <Cell col={STOCK_COLUMNS[5]} style={{ fontWeight: 500, color: "var(--c-red)" }}>
                       {deficit > 0 ? `−${deficit} ${p.unit}` : "—"}
-                    </td>
+                    </Cell>
                   </tr>
                 );
               })}

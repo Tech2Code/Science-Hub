@@ -8,6 +8,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { Cell, type Column } from "@/components/ui/Table";
 
 interface Product {
   id: string;
@@ -24,6 +25,20 @@ interface Product {
   _count?: { invoiceItems: number };
   createdBy?: string | null;
 }
+
+const COLUMNS: Column[] = [
+  { label: "Name",       mobile: "full+label" },
+  { label: "Brand",      mobile: "label" },
+  { label: "Category",   mobile: "label" },
+  { label: "Unit",       mobile: "label" },
+  { label: "Price",      cls: "table-th-right", mobile: "label" },
+  { label: "GST %",      cls: "table-th-right", mobile: "full+label" },
+  { label: "Stock",      cls: "table-th-right", mobile: "full+label" },
+  { label: "Created By", mobile: "label" },
+  { label: "Created At", mobile: "label" },
+  { label: "Invoices",   cls: "table-th-right", mobile: "full+label" },
+  { label: "Actions",    mobile: "full+label" },
+];
 
 export default function ProductsPage() {
   const { data, loading, mutate } = useFetch<Product[]>("/api/products");
@@ -113,40 +128,30 @@ export default function ProductsPage() {
           <table className="table-base">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Brand</th>
-                <th>Category</th>
-                <th>Unit</th>
-                <th className="table-th-right">Price</th>
-                <th className="table-th-right">GST %</th>
-                <th className="table-th-right">Stock</th>
-                <th>Created By</th>
-                <th>Created At</th>
-                <th className="table-th-right">Invoices</th>
-                <th>Actions</th>
+                {COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={11} />
+                <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={9} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={COLUMNS.length} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
                   {search ? "No products match your search." : "No products yet. Add one to get started."}
                 </td></tr>
               ) : visible.map((p) => {
                 const isLow = p.stock <= p.minStock;
                 return (
                   <tr key={p.id}>
-                    <td data-mobile-full>
+                    <Cell col={COLUMNS[0]}>
                       <div style={{ fontWeight: 500, color: "var(--c-text)" }}>{p.name}</div>
                       {p.sku && <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)", fontFamily: "var(--font-mono)" }}>{p.sku}</div>}
-                    </td>
-                    <td data-label="Brand" style={{ color: "var(--c-text-3)" }}>{p.brand?.name ?? "—"}</td>
-                    <td data-mobile-hide style={{ color: "var(--c-text-3)" }}>{p.category?.name ?? "—"}</td>
-                    <td data-mobile-hide style={{ color: "var(--c-text-3)" }}>{p.unit}</td>
-                    <td data-label="Price" className="table-td-right" style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{p.price.toLocaleString("en-IN")}</td>
-                    <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-text-3)" }}>{p.gstRate}%</td>
-                    <td data-label="Stock" data-mobile-full className="table-td-right">
+                    </Cell>
+                    <Cell col={COLUMNS[1]} style={{ color: "var(--c-text-3)" }}>{p.brand?.name ?? "—"}</Cell>
+                    <Cell col={COLUMNS[2]} style={{ color: "var(--c-text-3)" }}>{p.category?.name ?? "—"}</Cell>
+                    <Cell col={COLUMNS[3]} style={{ color: "var(--c-text-3)" }}>{p.unit}</Cell>
+                    <Cell col={COLUMNS[4]} style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{p.price.toLocaleString("en-IN")}</Cell>
+                    <Cell col={COLUMNS[5]} style={{ color: "var(--c-text-3)" }}>{p.gstRate}%</Cell>
+                    <Cell col={COLUMNS[6]}>
                       <span style={{
                         display: "inline-block", padding: "0.125rem 0.5rem", borderRadius: "9999px",
                         fontSize: "0.75rem", fontWeight: 500, whiteSpace: "nowrap",
@@ -156,12 +161,12 @@ export default function ProductsPage() {
                       }}>
                         {p.stock} {p.unit}{isLow && " ⚠"}
                       </span>
-                    </td>
-                    <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{p.createdBy ?? "—"}</td>
-                    <td data-mobile-hide style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                    </Cell>
+                    <Cell col={COLUMNS[7]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{p.createdBy ?? "—"}</Cell>
+                    <Cell col={COLUMNS[8]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
                       {p.createdAt ? new Date(p.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—"}
-                    </td>
-                    <td data-label="Invoices" className="table-td-right">
+                    </Cell>
+                    <Cell col={COLUMNS[9]}>
                       {(() => {
                         const count = p._count?.invoiceItems ?? 0;
                         return count > 0 ? (
@@ -175,19 +180,13 @@ export default function ProductsPage() {
                           <span style={{ color: "var(--c-text-4)", fontSize: "0.8rem" }}>—</span>
                         );
                       })()}
-                    </td>
-                    <td data-mobile-full>
+                    </Cell>
+                    <Cell col={COLUMNS[10]}>
                       <div className="table-actions">
                         <Button variant="editOutline" size="sm" href={`/products/edit/${p.id}`}>Edit</Button>
-                        <Button
-                          variant="dangerOutline"
-                          size="sm"
-                          onClick={() => handleDelete(p.id, p.name)}
-                        >
-                          Delete
-                        </Button>
+                        <Button variant="dangerOutline" size="sm" onClick={() => handleDelete(p.id, p.name)}>Delete</Button>
                       </div>
-                    </td>
+                    </Cell>
                   </tr>
                 );
               })}

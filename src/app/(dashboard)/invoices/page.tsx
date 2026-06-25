@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
+import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
@@ -24,6 +25,18 @@ interface Invoice {
 
 type StatusFilter = "All" | "unpaid" | "partial" | "paid";
 const STATUS_TABS: StatusFilter[] = ["All", "unpaid", "partial", "paid"];
+
+const COLUMNS: Column[] = [
+  { label: "Invoice No.", mobile: "full+label" },
+  { label: "Date",        mobile: "label" },
+  { label: "Customer",    mobile: "label" },
+  { label: "Created By",  mobile: "label" },
+  { label: "Total",       cls: "table-th-right", mobile: "label" },
+  { label: "Paid",        cls: "table-th-right", mobile: "label" },
+  { label: "Balance",     cls: "table-th-right", mobile: "label" },
+  { label: "Status",      mobile: "full+label" },
+  { label: "Actions",     mobile: "full+label" },
+];
 
 export default function InvoicesPage() {
   const [filter, setFilter] = useState<StatusFilter>("All");
@@ -134,44 +147,36 @@ export default function InvoicesPage() {
           <table className="table-base">
             <thead>
               <tr>
-                <th>Invoice No.</th>
-                <th>Date</th>
-                <th>Customer</th>
-                <th>Created By</th>
-                <th className="table-th-right">Total</th>
-                <th className="table-th-right">Paid</th>
-                <th className="table-th-right">Balance</th>
-                <th>Status</th>
-                <th>Actions</th>
+                {COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={9} />
+                <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={9} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={COLUMNS.length} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
                   {search.trim() ? `No invoices match "${search}".` : "No invoices found."}
                 </td></tr>
               ) : visible.map((inv) => (
                 <tr key={inv.id}>
-                  <td data-mobile-full>
+                  <Cell col={COLUMNS[0]}>
                     <a href={`/invoices/${inv.id}`} style={{ fontWeight: 500, color: "var(--c-blue)", textDecoration: "none" }}>
                       {inv.invoiceNumber}
                     </a>
-                  </td>
-                  <td data-mobile-hide style={{ color: "var(--c-text-3)" }}>
+                  </Cell>
+                  <Cell col={COLUMNS[1]} style={{ color: "var(--c-text-3)" }}>
                     <div>{new Date(inv.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
                     <div className="date-sub" style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: 2 }}>
                       {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                     </div>
-                  </td>
-                  <td data-label="Customer" style={{ color: "var(--c-text-2)" }}>{inv.customer?.name}</td>
-                  <td data-label="Created By" style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{inv.createdBy?.name ?? "—"}</td>
-                  <td data-label="Total" className="table-td-right" style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td data-label="Balance" className="table-td-right" style={{ color: "var(--c-text)" }}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td data-label="Status"><StatusBadge status={inv.status} /></td>
-                  <td data-mobile-full>
+                  </Cell>
+                  <Cell col={COLUMNS[2]} style={{ color: "var(--c-text-2)" }}>{inv.customer?.name}</Cell>
+                  <Cell col={COLUMNS[3]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{inv.createdBy?.name ?? "—"}</Cell>
+                  <Cell col={COLUMNS[4]} style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
+                  <Cell col={COLUMNS[5]} style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
+                  <Cell col={COLUMNS[6]} style={{ color: "var(--c-text)" }}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
+                  <Cell col={COLUMNS[7]}><StatusBadge status={inv.status} /></Cell>
+                  <Cell col={COLUMNS[8]}>
                     <div className="table-actions" style={{ flexWrap: "wrap" }}>
                       <Button variant="viewOutline" size="sm" href={`/invoices/${inv.id}`}>View</Button>
                       <Button variant="editOutline" size="sm" href={`/invoices/edit/${inv.id}`}>Edit</Button>
@@ -288,7 +293,7 @@ export default function InvoicesPage() {
                       }}>PDF</Button>
                       <Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(inv)}>Delete</Button>
                     </div>
-                  </td>
+                  </Cell>
                 </tr>
               ))}
             </tbody>

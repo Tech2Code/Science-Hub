@@ -143,7 +143,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <div className={styles.loadingScreen}>
         <div className={styles.loadingInner}>
-          <Image src="/logo.png" alt="Science Hub" width={40} height={40} className={styles.loadingIcon} />
+          <Image src="/logo.png" alt="Science Hub" width={40} height={40} loading="eager" className={styles.loadingIcon} />
           <span className={styles.loadingText}>Loading…</span>
         </div>
       </div>
@@ -175,7 +175,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar */}
       <aside className={[styles.sidebar, sidebarOpen ? styles.sidebarOpen : styles.sidebarClosed].join(" ")}>
         <div className={styles.sidebarLogo}>
-          <Image src="/logo.png" alt="Science Hub" width={36} height={36} className={styles.logoIcon} />
+          <Image src="/logo.png" alt="Science Hub" width={36} height={36} loading="eager" className={styles.logoIcon} />
           <div className={styles.logoText}>
             <div className={styles.logoName}>Science Hub</div>
             <div className={styles.logoSub}>Billing &amp; Inventory</div>

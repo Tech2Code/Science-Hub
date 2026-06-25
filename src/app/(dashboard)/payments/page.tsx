@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
+import { Cell, type Column } from "@/components/ui/Table";
 
 interface Payment {
   id: string;
@@ -30,6 +31,15 @@ const METHOD_COLORS: Record<string, { bg: string; color: string; border: string 
   Card:   { bg: "var(--c-bg-sub)",    color: "var(--c-text-2)",      border: "var(--c-border)"       },
   Other:  { bg: "var(--c-bg-sub)",    color: "var(--c-text-3)",      border: "var(--c-border)"       },
 };
+
+const COLUMNS: Column[] = [
+  { label: "Date",      mobile: "label" },
+  { label: "Customer",  mobile: "label" },
+  { label: "Invoice",   mobile: "label" },
+  { label: "Method",    mobile: "label" },
+  { label: "Reference", mobile: "full+label" },
+  { label: "Amount",    cls: "table-th-right", mobile: "full+label" },
+];
 
 export default function PaymentsPage() {
   const { data, loading } = useFetch<Payment[]>("/api/payments");
@@ -80,39 +90,34 @@ export default function PaymentsPage() {
           <table className="table-base">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Customer</th>
-                <th>Invoice</th>
-                <th>Method</th>
-                <th>Reference</th>
-                <th className="table-th-right">Amount</th>
+                {COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={6} />
+                <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={COLUMNS.length} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
                   {search ? "No payments match your search." : "No payments recorded yet."}
                 </td></tr>
               ) : visible.map((p) => {
                 const mc = METHOD_COLORS[p.method] ?? METHOD_COLORS.Other;
                 return (
                   <tr key={p.id}>
-                    <td data-label="Date" style={{ color: "var(--c-text-3)" }}>
+                    <Cell col={COLUMNS[0]} style={{ color: "var(--c-text-3)" }}>
                       <div>{new Date(p.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
                       <div className="date-sub" style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: 2 }}>
                         {new Date(p.date).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                       </div>
-                    </td>
-                    <td data-label="Customer" style={{ fontWeight: 500, color: "var(--c-text)" }}>{p.invoice.customer.name}</td>
-                    <td data-label="Invoice">
+                    </Cell>
+                    <Cell col={COLUMNS[1]} style={{ fontWeight: 500, color: "var(--c-text)" }}>{p.invoice.customer.name}</Cell>
+                    <Cell col={COLUMNS[2]}>
                       <Link href={`/invoices/${p.invoiceId}`}
                         style={{ fontWeight: 500, color: "var(--c-blue)", textDecoration: "none" }}>
                         {p.invoice.invoiceNumber}
                       </Link>
-                    </td>
-                    <td data-label="Method">
+                    </Cell>
+                    <Cell col={COLUMNS[3]}>
                       <span style={{
                         display: "inline-block", padding: "0.125rem 0.5rem", borderRadius: "9999px",
                         fontSize: "0.75rem", fontWeight: 500,
@@ -120,13 +125,13 @@ export default function PaymentsPage() {
                       }}>
                         {p.method}
                       </span>
-                    </td>
-                    <td data-mobile-hide style={{ color: "var(--c-text-4)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
+                    </Cell>
+                    <Cell col={COLUMNS[4]} style={{ color: "var(--c-text-4)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
                       {p.reference || "—"}
-                    </td>
-                    <td data-label="Amount" data-mobile-full className="table-td-right" style={{ fontWeight: 600, color: "var(--c-green)" }}>
+                    </Cell>
+                    <Cell col={COLUMNS[5]} style={{ fontWeight: 600, color: "var(--c-green)" }}>
                       ₹{p.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                    </td>
+                    </Cell>
                   </tr>
                 );
               })}
