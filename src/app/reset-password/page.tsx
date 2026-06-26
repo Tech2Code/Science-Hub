@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import styles from "../login/login.module.css";
+import { rules, validate } from "@/lib/validation";
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -24,8 +25,9 @@ function ResetPasswordForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (password !== confirm) { setError("Passwords do not match."); return; }
-    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    const pwErr   = validate(password, rules.required("Password is required."), rules.minLength(6, "Password must be at least 6 characters."));
+    const confErr = validate(confirm,  rules.required("Please confirm your password."), rules.passwordMatch(password));
+    if (pwErr || confErr) { setError(pwErr ?? confErr ?? ""); return; }
     setLoading(true);
     try {
       const res = await fetch("/api/auth/reset-password", {

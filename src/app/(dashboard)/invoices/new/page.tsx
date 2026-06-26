@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import styles from "./new.module.css";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { rules, validateForm, hasErrors } from "@/lib/validation";
 
 interface Customer { id: string; name: string; city: string; state: string; gstin: string; }
 interface Product { id: string; name: string; unit: string; price: number; gstRate: number; stock: number; }
@@ -25,9 +26,11 @@ export default function NewInvoicePage() {
   const [sellerState, setSellerState] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [customerMode, setCustomerMode] = useState<"existing" | "custom">("existing");
   const [customerId, setCustomerId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [customCustomer, setCustomCustomer] = useState({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
   const [isInterState, setIsInterState] = useState(false);
   const [items, setItems] = useState<LineItem[]>([]);
   const [productSearch, setProductSearch] = useState("");
@@ -35,6 +38,7 @@ export default function NewInvoicePage() {
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [error, setError] = useState("");
+  const [customErrors, setCustomErrors] = useState<Partial<Record<keyof typeof customCustomer, string>>>({});
   const [saving, setSaving] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
@@ -86,17 +90,31 @@ export default function NewInvoicePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!customerId) { setError("Select a customer."); return; }
+    if (customerMode === "existing" && !customerId) { setError("Select a customer."); return; }
+    if (customerMode === "custom") {
+      const errs = validateForm(customCustomer, {
+        name:    [rules.required("Customer name is required.")],
+        phone:   [rules.required("Phone number is required."), rules.phone10()],
+        email:   [rules.email()],
+        pincode: [rules.pincode()],
+        gstin:   [rules.gstin()],
+      });
+      if (hasErrors(errs)) { setCustomErrors(errs); return; }
+      setCustomErrors({});
+    }
     if (items.length === 0) { setError("Add at least one item."); return; }
     setError(""); setSaving(true);
+    const body: Record<string, unknown> = {
+      isInterState,
+      items: items.map((i) => ({ productId: i.productId, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit })),
+      notes, dueDate: dueDate || undefined,
+    };
+    if (customerMode === "existing") body.customerId = customerId;
+    else body.customCustomer = customCustomer;
     const res = await fetch("/api/invoices", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        customerId, isInterState,
-        items: items.map((i) => ({ productId: i.productId, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit })),
-        notes, dueDate: dueDate || undefined,
-      }),
+      body: JSON.stringify(body),
     });
     setSaving(false);
     if (res.ok) {
@@ -123,6 +141,17 @@ export default function NewInvoicePage() {
     width: "100%", padding: "0.625rem 0.875rem", borderRadius: "0.5rem",
     border: "1px solid var(--c-border)", background: "var(--c-bg-input)",
     color: "var(--c-text)", fontSize: "0.875rem", outline: "none", boxSizing: "border-box",
+  };
+  const errInput = (field: keyof typeof customCustomer): React.CSSProperties =>
+    customErrors[field] ? { ...inputStyle, borderColor: "var(--c-red)", boxShadow: "0 0 0 3px var(--c-red-bg)" } : inputStyle;
+  const errMsg = (field: keyof typeof customCustomer) => customErrors[field] ? (
+    <p style={{ marginTop: "0.25rem", fontSize: "0.72rem", color: "var(--c-red)", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4.75v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.75" r=".875" fill="currentColor"/></svg>
+      {customErrors[field]}
+    </p>
+  ) : null;
+  const clearErr = (field: keyof typeof customCustomer) => {
+    if (customErrors[field]) setCustomErrors((p) => ({ ...p, [field]: undefined }));
   };
 
   return (
@@ -153,49 +182,126 @@ export default function NewInvoicePage() {
           <div className={styles.leftCol}>
             {/* Customer selector */}
             <div className="card" style={{ padding: "1.25rem" }}>
-              <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", marginBottom: "0.75rem" }}>Bill To</h2>
-              <div style={{ position: "relative" }}>
-                <input
-                  type="text"
-                  placeholder="Search customer…"
-                  value={customerSearch}
-                  onChange={(e) => { setCustomerSearch(e.target.value); setCustomerId(""); setShowCustomerDropdown(true); }}
-                  onFocus={() => setShowCustomerDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
-                  style={inputStyle}
-                />
-                {showCustomerDropdown && (
-                  <div style={dropdownStyle} onMouseDown={(e) => e.preventDefault()}>
-                    {filteredCustomers.length > 0 ? filteredCustomers.map((c) => (
-                      <button key={c.id} type="button" onClick={() => handleCustomerSelect(c)} style={dropdownBtnStyle}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--c-bg-sub)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                        <div style={{ fontWeight: 500, color: "var(--c-text)" }}>{c.name}</div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)" }}>{c.city}{c.gstin ? ` · ${c.gstin}` : ""}</div>
-                      </button>
-                    )) : (
-                      <div style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", color: "var(--c-text-3)" }}>
-                        No customer found.{" "}
-                        <Link href="/customers/new" style={{ color: "var(--c-blue)", fontWeight: 500 }}>
-                          Add new customer →
-                        </Link>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
+                <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)" }}>Bill To</h2>
+                {/* Mode toggle */}
+                <div style={{ display: "flex", background: "var(--c-bg-sub)", borderRadius: "0.5rem", padding: "0.2rem", gap: "0.2rem" }}>
+                  {(["existing", "custom"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => { setCustomerMode(mode); setCustomerId(""); setCustomerSearch(""); setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" }); }}
+                      style={{
+                        padding: "0.25rem 0.75rem", borderRadius: "0.375rem", border: "none", cursor: "pointer",
+                        fontSize: "0.75rem", fontWeight: 600, transition: "all 0.15s",
+                        background: customerMode === mode ? "var(--c-bg-card)" : "transparent",
+                        color: customerMode === mode ? "var(--c-text)" : "var(--c-text-4)",
+                        boxShadow: customerMode === mode ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                      }}
+                    >
+                      {mode === "existing" ? "Search" : "Custom"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {customerMode === "existing" ? (
+                <>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type="text"
+                      placeholder="Search customer…"
+                      value={customerSearch}
+                      onChange={(e) => { setCustomerSearch(e.target.value); setCustomerId(""); setShowCustomerDropdown(true); }}
+                      onFocus={() => setShowCustomerDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                      style={inputStyle}
+                    />
+                    {showCustomerDropdown && (
+                      <div style={dropdownStyle} onMouseDown={(e) => e.preventDefault()}>
+                        {filteredCustomers.length > 0 ? filteredCustomers.map((c) => (
+                          <button key={c.id} type="button" onClick={() => handleCustomerSelect(c)} style={dropdownBtnStyle}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--c-bg-sub)")}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+                            <div style={{ fontWeight: 500, color: "var(--c-text)" }}>{c.name}</div>
+                            <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)" }}>{c.city}{c.gstin ? ` · ${c.gstin}` : ""}</div>
+                          </button>
+                        )) : (
+                          <div style={{ padding: "0.75rem 1rem", fontSize: "0.875rem", color: "var(--c-text-3)" }}>
+                            No customer found.{" "}
+                            <Link href="/customers/new" style={{ color: "var(--c-blue)", fontWeight: 500 }}>Add new →</Link>
+                          </div>
+                        )}
                       </div>
                     )}
+                    {customerSearch && !customerId && (
+                      <p style={{ marginTop: "0.375rem", fontSize: "0.75rem", color: "var(--c-amber-text)" }}>
+                        ⚠ Please select a customer from the dropdown
+                      </p>
+                    )}
                   </div>
-                )}
-                {customerSearch && !customerId && (
-                  <p style={{ marginTop: "0.375rem", fontSize: "0.75rem", color: "var(--c-amber-text)" }}>
-                    ⚠ Please select a customer from the dropdown
+                  {selectedCustomer && (
+                    <div style={{ marginTop: "0.75rem", padding: "0.75rem 1rem", background: "var(--c-blue-bg)", borderRadius: "0.625rem", border: "1px solid var(--c-blue-border)" }}>
+                      <div style={{ fontWeight: 500, color: "var(--c-blue-text)" }}>{selectedCustomer.name}</div>
+                      <div style={{ fontSize: "0.75rem", color: "var(--c-blue)", marginTop: "0.125rem" }}>
+                        {[selectedCustomer.city, selectedCustomer.state].filter(Boolean).join(", ")}
+                        {selectedCustomer.gstin && ` · GSTIN: ${selectedCustomer.gstin}`}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                  <div>
+                    <input
+                      type="text" placeholder="Customer name *"
+                      value={customCustomer.name}
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, name: e.target.value })); clearErr("name"); }}
+                      style={errInput("name")}
+                    />
+                    {errMsg("name")}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.625rem" }}>
+                    <div>
+                      <input type="tel" placeholder="Phone *" value={customCustomer.phone}
+                        onChange={(e) => { setCustomCustomer((p) => ({ ...p, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })); clearErr("phone"); }}
+                        style={errInput("phone")} />
+                      {errMsg("phone")}
+                    </div>
+                    <div>
+                      <input type="email" placeholder="Email" value={customCustomer.email}
+                        onChange={(e) => { setCustomCustomer((p) => ({ ...p, email: e.target.value })); clearErr("email"); }}
+                        style={errInput("email")} />
+                      {errMsg("email")}
+                    </div>
+                  </div>
+                  <input type="text" placeholder="Address" value={customCustomer.address}
+                    onChange={(e) => setCustomCustomer((p) => ({ ...p, address: e.target.value }))} style={inputStyle} />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.625rem" }}>
+                    <input type="text" placeholder="City" value={customCustomer.city}
+                      onChange={(e) => setCustomCustomer((p) => ({ ...p, city: e.target.value }))} style={inputStyle} />
+                    <input type="text" placeholder="State" value={customCustomer.state}
+                      onChange={(e) => {
+                        const state = e.target.value;
+                        setCustomCustomer((p) => ({ ...p, state }));
+                        setIsInterState(!!state && state !== sellerState);
+                      }} style={inputStyle} />
+                    <div>
+                      <input type="text" placeholder="Pincode" value={customCustomer.pincode}
+                        onChange={(e) => { setCustomCustomer((p) => ({ ...p, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })); clearErr("pincode"); }}
+                        style={errInput("pincode")} />
+                      {errMsg("pincode")}
+                    </div>
+                  </div>
+                  <div>
+                    <input type="text" placeholder="GSTIN" value={customCustomer.gstin}
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, gstin: e.target.value })); clearErr("gstin"); }}
+                      style={{ ...errInput("gstin"), fontFamily: "var(--font-mono)", textTransform: "uppercase" }} />
+                    {errMsg("gstin")}
+                  </div>
+                  <p style={{ fontSize: "0.7rem", color: "var(--c-text-4)" }}>
+                    This customer will be saved automatically for future use.
                   </p>
-                )}
-              </div>
-              {selectedCustomer && (
-                <div style={{ marginTop: "0.75rem", padding: "0.75rem 1rem", background: "var(--c-blue-bg)", borderRadius: "0.625rem", border: "1px solid var(--c-blue-border)" }}>
-                  <div style={{ fontWeight: 500, color: "var(--c-blue-text)" }}>{selectedCustomer.name}</div>
-                  <div style={{ fontSize: "0.75rem", color: "var(--c-blue)", marginTop: "0.125rem" }}>
-                    {[selectedCustomer.city, selectedCustomer.state].filter(Boolean).join(", ")}
-                    {selectedCustomer.gstin && ` · GSTIN: ${selectedCustomer.gstin}`}
-                  </div>
                 </div>
               )}
             </div>
@@ -391,9 +497,11 @@ export default function NewInvoicePage() {
                   <span>₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
-              {(!customerId || items.length === 0) && (
+              {((customerMode === "existing" ? !customerId : (!customCustomer.name.trim() || !customCustomer.phone.trim())) || items.length === 0) && (
                 <div style={{ marginTop: "0.75rem", display: "flex", flexDirection: "column", gap: "0.25rem", fontSize: "0.75rem" }}>
-                  {!customerId && <p style={{ color: "var(--c-amber-text)" }}>• Select a customer from dropdown</p>}
+                  {customerMode === "existing" && !customerId && <p style={{ color: "var(--c-amber-text)" }}>• Select a customer from dropdown</p>}
+                  {customerMode === "custom" && !customCustomer.name.trim() && <p style={{ color: "var(--c-amber-text)" }}>• Enter customer name</p>}
+                  {customerMode === "custom" && customCustomer.name.trim() && !customCustomer.phone.trim() && <p style={{ color: "var(--c-amber-text)" }}>• Enter customer phone number</p>}
                   {items.length === 0 && <p style={{ color: "var(--c-amber-text)" }}>• Add at least one item</p>}
                 </div>
               )}
@@ -402,21 +510,21 @@ export default function NewInvoicePage() {
                   type="submit"
                   variant="primary"
                   size="full"
-                  disabled={saving || items.length === 0 || !customerId}
+                  disabled={saving || items.length === 0 || (customerMode === "existing" ? !customerId : (!customCustomer.name.trim() || !customCustomer.phone.trim()))}
                 >
-                  Create Invoice
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Create Invoice
                 </Button>
                 <Button
                   type="button"
                   variant="secondary"
                   size="full"
                   onClick={() => {
-                    const isDirty = !!customerId || items.length > 0 || !!notes.trim();
+                    const isDirty = !!customerId || !!customCustomer.name.trim() || items.length > 0 || !!notes.trim();
                     if (isDirty) setShowCancelConfirm(true);
                     else router.push("/invoices");
                   }}
                 >
-                  Cancel
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel
                 </Button>
               </div>
             </div>

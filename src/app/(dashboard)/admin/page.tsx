@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { rules, validate } from "@/lib/validation";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
@@ -210,7 +211,11 @@ export default function AdminPage() {
   useEffect(() => { if (isAdmin) loadLogs(1, logsFilter); }, [isAdmin, logsFilter, loadLogs]);
 
   async function saveProfile(e: React.FormEvent) {
-    e.preventDefault(); setProfileSaving(true); setProfileMsg(null);
+    e.preventDefault();
+    const nameErr  = validate(profileForm.name,  rules.required("Name is required."));
+    const emailErr = validate(profileForm.email, rules.required("Email is required."), rules.email());
+    if (nameErr || emailErr) { setProfileMsg({ type: "err", text: nameErr ?? emailErr ?? "" }); return; }
+    setProfileSaving(true); setProfileMsg(null);
     const res = await fetch("/api/admin/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(profileForm) });
     const data = await res.json(); setProfileSaving(false);
     if (!res.ok) { setProfileMsg({ type: "err", text: data.error }); return; }
@@ -221,8 +226,10 @@ export default function AdminPage() {
 
   async function savePassword(e: React.FormEvent) {
     e.preventDefault();
-    if (pwForm.next !== pwForm.confirm) { setPwMsg({ type: "err", text: "Passwords do not match." }); return; }
-    if (pwForm.next.length < 6) { setPwMsg({ type: "err", text: "Password must be at least 6 characters." }); return; }
+    const curErr  = validate(pwForm.current, rules.required("Current password is required."));
+    const nextErr = validate(pwForm.next,    rules.required("New password is required."), rules.minLength(6, "Password must be at least 6 characters."));
+    const confErr = validate(pwForm.confirm, rules.required("Please confirm your new password."), rules.passwordMatch(pwForm.next));
+    if (curErr || nextErr || confErr) { setPwMsg({ type: "err", text: curErr ?? nextErr ?? confErr ?? "" }); return; }
     setPwSaving(true); setPwMsg(null);
     const res = await fetch("/api/admin/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword: pwForm.current, newPassword: pwForm.next }) });
     const data = await res.json(); setPwSaving(false);
@@ -233,8 +240,11 @@ export default function AdminPage() {
 
   async function addUser(e: React.FormEvent) {
     e.preventDefault();
-    if (addForm.password !== addForm.confirmPassword) { setAddMsg({ type: "err", text: "Passwords do not match." }); return; }
-    if (addForm.password.length < 6) { setAddMsg({ type: "err", text: "Password must be at least 6 characters." }); return; }
+    const nameErr  = validate(addForm.name,            rules.required("Name is required."));
+    const emailErr = validate(addForm.email,           rules.required("Email is required."), rules.email());
+    const pwErr    = validate(addForm.password,        rules.required("Password is required."), rules.minLength(6, "Password must be at least 6 characters."));
+    const confErr  = validate(addForm.confirmPassword, rules.required("Please confirm the password."), rules.passwordMatch(addForm.password));
+    if (nameErr || emailErr || pwErr || confErr) { setAddMsg({ type: "err", text: nameErr ?? emailErr ?? pwErr ?? confErr ?? "" }); return; }
     setAddSaving(true); setAddMsg(null);
     const res = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(addForm) });
     const data = await res.json(); setAddSaving(false);
@@ -246,7 +256,10 @@ export default function AdminPage() {
   async function saveEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!editUser) return;
-    if (editForm.newPassword && editForm.newPassword.length < 6) { setEditMsg({ type: "err", text: "New password must be at least 6 characters." }); return; }
+    const nameErr  = validate(editForm.name,        rules.required("Name is required."));
+    const emailErr = validate(editForm.email,       rules.required("Email is required."), rules.email());
+    const pwErr    = editForm.newPassword ? validate(editForm.newPassword, rules.minLength(6, "New password must be at least 6 characters.")) : null;
+    if (nameErr || emailErr || pwErr) { setEditMsg({ type: "err", text: nameErr ?? emailErr ?? pwErr ?? "" }); return; }
     setEditSaving(true); setEditMsg(null);
     const body: Record<string, string> = { name: editForm.name, email: editForm.email, role: editForm.role };
     if (editForm.newPassword) body.newPassword = editForm.newPassword;

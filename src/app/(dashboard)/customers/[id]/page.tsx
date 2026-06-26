@@ -20,6 +20,16 @@ interface Customer {
   gstin: string; invoices: Invoice[];
 }
 
+function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
+  return (
+    <div style={{
+      width: w, height: h, borderRadius: r,
+      background: "var(--c-border)",
+      animation: "skPulse 1.4s ease-in-out infinite",
+    }} />
+  );
+}
+
 export default function CustomerViewPage() {
   const { id } = useParams<{ id: string }>();
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -33,8 +43,45 @@ export default function CustomerViewPage() {
   }, [id]);
 
   if (loading) return (
-    <div className="page-stack">
+    <div className="page-stack" style={{ maxWidth: "56rem" }}>
+      <style>{`@keyframes skPulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
+      {/* Breadcrumb */}
+      <Sk w={160} h={13} />
+
+      {/* Header card */}
+      <div className="card" style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <Sk w={48} h={48} r={9999} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <Sk w={160} h={20} />
+              <Sk w={220} h={13} />
+              <Sk w={120} h={20} r={6} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <Sk w={72} h={32} r={8} />
+            <Sk w={110} h={32} r={8} />
+          </div>
+        </div>
+      </div>
+
+      {/* Stats grid */}
+      <div className={styles.statsGrid}>
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="card" style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: 8 }}>
+            <Sk w={80} h={11} />
+            <Sk w={120} h={22} />
+            <Sk w={60} h={11} />
+          </div>
+        ))}
+      </div>
+
+      {/* Invoice history table */}
       <div className="card">
+        <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--c-border)" }}>
+          <Sk w={120} h={14} />
+        </div>
         <div className="table-wrap">
           <table className="table-base"><tbody><TableSkeleton cols={6} rows={4} /></tbody></table>
         </div>
@@ -72,8 +119,8 @@ export default function CustomerViewPage() {
             </div>
           </div>
           <div style={{ display: "flex", gap: "0.5rem" }}>
-            <Button variant="secondary" href={`/customers/edit/${id}`}>Edit</Button>
-            <Button variant="primary" href={`/invoices/new?customerId=${id}`}>+ New Invoice</Button>
+            <Button variant="secondary" href={`/customers/edit/${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</Button>
+            <Button variant="primary" href={`/invoices/new?customerId=${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>
           </div>
         </div>
         {customer.address && (

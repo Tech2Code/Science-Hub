@@ -8,6 +8,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Sk } from "@/components/ui/Skeleton";
 import { fetchCached, bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { rules, validate } from "@/lib/validation";
 import styles from "./edit.module.css";
 
 
@@ -95,6 +96,11 @@ export default function EditInvoicePage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (items.length === 0) { setError("Add at least one item."); return; }
+    for (const item of items) {
+      const qtyErr   = validate(String(item.qty),   rules.positiveNumber("Item quantity must be greater than 0."));
+      const priceErr = validate(String(item.price), rules.nonNegativeNumber("Item price cannot be negative."));
+      if (qtyErr || priceErr) { setError(qtyErr ?? priceErr ?? ""); return; }
+    }
     setError(""); setSaving(true);
     const res = await fetch(`/api/invoices/${id}`, {
       method: "PUT",
@@ -365,10 +371,10 @@ export default function EditInvoicePage() {
                   size="full"
                   disabled={saving || items.length === 0}
                 >
-                  Update Invoice
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Invoice
                 </Button>
                 <Button variant="secondary" href={`/invoices/${id}`} size="full">
-                  Cancel
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel
                 </Button>
               </div>
             </div>

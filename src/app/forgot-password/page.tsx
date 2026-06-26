@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import styles from "../login/login.module.css";
+import { rules, validate } from "@/lib/validation";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -12,16 +13,14 @@ export default function ForgotPasswordPage() {
   const [emailError, setEmailError] = useState("");
 
   function handleEmailBlur() {
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setEmailError("Please enter a valid email address.");
-    } else {
-      setEmailError("");
-    }
+    const err = validate(email, rules.required("Email is required."), rules.email());
+    setEmailError(err ?? "");
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (emailError || !email) return;
+    const err = validate(email, rules.required("Email is required."), rules.email());
+    if (err) { setEmailError(err); return; }
     setError("");
     setLoading(true);
     try {

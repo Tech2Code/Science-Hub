@@ -65,8 +65,40 @@
   color: var(--c-text-4);
   margin-top: 0.25rem;
 }
+
+/* ── Error state — auto-applied via [data-error] on the field wrapper ── */
+[data-error] .input,
+[data-error] .textarea,
+[data-error] .select {
+  border-color: var(--c-red-border, #fca5a5);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.09);
+}
+[data-error] .input:focus,
+[data-error] .textarea:focus,
+[data-error] .select:focus {
+  border-color: var(--c-red, #dc2626);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
+}
+
+@keyframes errIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .errorMsg {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
   font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
   color: var(--c-red-text, #dc2626);
-  margin-top: 0.25rem;
+  margin-top: 0.375rem;
+  animation: errIn 0.15s ease-out;
+}
+.errorIcon {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  opacity: 0.9;
 }

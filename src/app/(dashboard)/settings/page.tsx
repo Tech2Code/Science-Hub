@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, FormField } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
+import { rules, validate } from "@/lib/validation";
 
 interface BusinessSettings {
   name: string; tagline: string; email: string; phone: string;
@@ -107,10 +108,14 @@ export default function SettingsPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) {
-      toast({ type: "error", title: "Name required", message: "Business name cannot be empty." });
-      return;
-    }
+    const nameErr  = validate(form.name,  rules.required("Business name cannot be empty."));
+    const emailErr = validate(form.email, rules.email());
+    const pinErr   = validate(form.pincode, rules.pincode());
+    const gstErr   = validate(form.gstin, rules.maxLength(15), rules.gstin());
+    if (nameErr)  { toast({ type: "error", title: "Name required",    message: nameErr });  return; }
+    if (emailErr) { toast({ type: "error", title: "Invalid email",    message: emailErr }); return; }
+    if (pinErr)   { toast({ type: "error", title: "Invalid pincode",  message: pinErr });   return; }
+    if (gstErr)   { toast({ type: "error", title: "Invalid GSTIN",    message: gstErr });   return; }
     if (!hasChanges) { setEditing(false); return; }
     setSaving(true);
     try {
@@ -146,10 +151,8 @@ export default function SettingsPage() {
 
   async function handleSaveEmail(e: React.FormEvent) {
     e.preventDefault();
-    if (!emailForm.gmailUser.trim()) {
-      toast({ type: "error", title: "Gmail required", message: "Enter a Gmail address." });
-      return;
-    }
+    const gmailErr = validate(emailForm.gmailUser, rules.required("Enter a Gmail address."), rules.email("Enter a valid Gmail address."));
+    if (gmailErr) { toast({ type: "error", title: "Gmail required", message: gmailErr }); return; }
     if (!saved.gmailAppPassword && !emailForm.gmailAppPassword) {
       toast({ type: "error", title: "App Password required", message: "No existing password — enter one to enable email." });
       return;

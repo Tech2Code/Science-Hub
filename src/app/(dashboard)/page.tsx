@@ -36,7 +36,10 @@ const cards = [
 function useCountUp(target: number, duration = 800) {
   const [value, setValue] = useState(0);
   useEffect(() => {
-    if (target === 0) { setValue(0); return; }
+    if (target === 0) {
+      const t = setTimeout(() => setValue(0), 0);
+      return () => clearTimeout(t);
+    }
     let start = 0;
     const step = target / (duration / 16);
     const timer = setInterval(() => {
@@ -66,9 +69,7 @@ export default function DashboardPage() {
           <h1 className="page-title">Dashboard</h1>
           <p className="page-sub">{month} overview</p>
         </div>
-        <Button variant="primary" href="/invoices/new">
-          <span style={{ fontSize: "1rem" }}>＋</span> New Invoice
-        </Button>
+        <Button variant="primary" href="/invoices/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>
       </div>
 
       {/* Stat cards */}

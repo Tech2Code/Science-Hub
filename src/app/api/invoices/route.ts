@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -35,13 +36,36 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { customerId, items, notes, dueDate, isInterState } = body;
+    const { items, notes, dueDate, isInterState, customCustomer } = body;
+    let { customerId } = body;
 
-    if (!customerId || !items || items.length === 0) {
-      return NextResponse.json(
-        { error: "customerId and items are required" },
-        { status: 400 }
-      );
+    if (!items || items.length === 0) {
+      return NextResponse.json({ error: "At least one item is required" }, { status: 400 });
+    }
+
+    // If no existing customer selected, create one from the custom details
+    if (!customerId) {
+      if (!customCustomer?.name?.trim()) {
+        return NextResponse.json({ error: "Customer name is required" }, { status: 400 });
+      }
+      if (!customCustomer?.phone?.trim()) {
+        return NextResponse.json({ error: "Customer phone number is required" }, { status: 400 });
+      }
+      const newCustomer = await prisma.customer.create({
+        data: {
+          name: customCustomer.name.trim(),
+          phone:   customCustomer.phone?.trim()   || null,
+          email:   customCustomer.email?.trim()   || null,
+          address: customCustomer.address?.trim() || null,
+          city:    customCustomer.city?.trim()    || null,
+          state:   customCustomer.state?.trim()   || null,
+          pincode: customCustomer.pincode?.trim() || null,
+          gstin:   customCustomer.gstin?.trim()   || null,
+        },
+      });
+      customerId = newCustomer.id;
+      await logActivity(user.id, "add_customer", `Added customer "${newCustomer.name}" (via invoice) | Phone: ${newCustomer.phone || "—"} | City: ${newCustomer.city || "—"}`, newCustomer.id, "customer");
+      revalidateTag("customers", { expire: 0 });
     }
 
     // Generate invoice number: SH-{YYYY}-{0001}

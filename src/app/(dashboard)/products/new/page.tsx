@@ -8,6 +8,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { rules, validate, type FormErrors } from "@/lib/validation";
 
 const UNITS = ["Nos", "Kg", "Ltr", "Box", "Pack", "Set", "Mtr", "Pcs"];
 const GST_RATES = [0, 5, 12, 18, 28];
@@ -25,6 +26,7 @@ export default function NewProductPage() {
     price: "", gstRate: "18", stock: "0", minStock: "5",
     brandId: "", categoryId: "",
   });
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; price?: string }>({});
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -34,16 +36,17 @@ export default function NewProductPage() {
   }, []);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+    if (name === "name" || name === "price") setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) { setError("Product name is required."); return; }
-    if (!form.price || isNaN(Number(form.price)) || Number(form.price) <= 0) {
-      setError("Enter a valid price."); return;
-    }
-    setError(""); setSaving(true);
+    const nameErr  = validate(form.name,  rules.required("Product name is required."));
+    const priceErr = validate(form.price, rules.required("Price is required."), rules.positiveNumber("Price must be greater than 0."));
+    if (nameErr || priceErr) { setFieldErrors({ name: nameErr ?? undefined, price: priceErr ?? undefined }); return; }
+    setFieldErrors({}); setError(""); setSaving(true);
     const res = await fetch("/api/products", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -81,8 +84,8 @@ export default function NewProductPage() {
 
       <form onSubmit={handleSubmit} className="form-card">
         <div className="form-grid-2">
-          <FormField label="Product Name" required>
-            <Input name="name" required value={form.name} onChange={handleChange} placeholder="e.g. Beaker 250ml Borosilicate" />
+          <FormField label="Product Name" required error={fieldErrors.name}>
+            <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. Beaker 250ml Borosilicate" />
           </FormField>
           <FormField label="SKU / Item Code">
             <Input name="sku" value={form.sku} onChange={handleChange} placeholder="e.g. BKR-250-BOR" mono />
@@ -99,8 +102,8 @@ export default function NewProductPage() {
               {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
             </Select>
           </FormField>
-          <FormField label="Price (₹)" required>
-            <Input name="price" type="number" required min="0" step="0.01" value={form.price} onChange={handleChange} placeholder="0.00" />
+          <FormField label="Price (₹)" required error={fieldErrors.price}>
+            <Input name="price" type="number" min="0" step="0.01" value={form.price} onChange={handleChange} placeholder="0.00" />
           </FormField>
           <FormField label="GST Rate">
             <Select name="gstRate" value={form.gstRate} onChange={handleChange}>
@@ -134,10 +137,8 @@ export default function NewProductPage() {
         </div>
 
         <div className="form-actions">
-          <Button type="submit" variant="primary" disabled={saving}>
-            Save Product
-          </Button>
-          <Button variant="secondary" href="/products">Cancel</Button>
+          <Button type="submit" variant="primary" disabled={saving}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Save Product</Button>
+          <Button variant="secondary" href="/products"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
         </div>
       </form>
     </div>

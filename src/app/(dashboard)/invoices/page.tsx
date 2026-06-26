@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
+import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
+import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
@@ -44,9 +46,17 @@ export default function InvoicesPage() {
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [pdfLoading, setPdfLoading] = useState<string | null>(null);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [pdfPreviewInvoice, setPdfPreviewInvoice] = useState<{ number: string; customer: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
   const [deleting, setDeleting] = useState(false);
   const toast = useToast();
+
+  function closePdfPreview() {
+    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+    setPdfPreviewUrl(null);
+    setPdfPreviewInvoice(null);
+  }
 
   const apiUrl = filter === "All" ? "/api/invoices" : `/api/invoices?status=${filter}`;
   const { data, loading, mutate } = useFetch<Invoice[]>(apiUrl);
@@ -63,13 +73,10 @@ export default function InvoicesPage() {
       })
     : invoices;
 
-  useEffect(() => { setPage(1); }, [filter, search]);
-  useEffect(() => {
-    const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-    if (page > maxPage) setPage(maxPage);
-  }, [filtered.length, page]);
+  const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const clampedPage = Math.min(page, maxPage);
 
-  const { visible } = usePagination(filtered, page, showAll);
+  const { visible } = usePagination(filtered, clampedPage, showAll);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -103,6 +110,17 @@ export default function InvoicesPage() {
       onCancel={() => { if (!deleting) setDeleteTarget(null); }}
     />
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
+
+    {pdfPreviewUrl && pdfPreviewInvoice && (
+      <PdfPreviewModal
+        url={pdfPreviewUrl}
+        fileName={pdfPreviewInvoice.number}
+        title={pdfPreviewInvoice.number}
+        subtitle={pdfPreviewInvoice.customer}
+        onClose={closePdfPreview}
+      />
+    )}
+
     <div className="page-stack">
       <div className="page-header">
         <div>
@@ -111,7 +129,7 @@ export default function InvoicesPage() {
             {loading ? "Loading…" : search.trim() ? `${filtered.length} of ${invoices.length} invoices` : `${invoices.length} invoices`}
           </p>
         </div>
-        <Button variant="primary" href="/invoices/new">+ New Invoice</Button>
+        <Button variant="primary" href="/invoices/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>
       </div>
 
       {/* Status filter tabs */}
@@ -120,7 +138,7 @@ export default function InvoicesPage() {
           {STATUS_TABS.map((tab) => (
             <button
               key={tab}
-              onClick={() => setFilter(tab)}
+              onClick={() => { setFilter(tab); setPage(1); }}
               className={["filter-tab", filter === tab ? "filter-tab-active" : ""].join(" ")}
             >
               {tab}
@@ -135,7 +153,7 @@ export default function InvoicesPage() {
             type="search"
             placeholder="Search by invoice no., customer or staff name…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="search-input"
             style={{ flex: 1 }}
           />
@@ -178,8 +196,7 @@ export default function InvoicesPage() {
                   <Cell col={COLUMNS[7]}><StatusBadge status={inv.status} /></Cell>
                   <Cell col={COLUMNS[8]}>
                     <div className="table-actions" style={{ flexWrap: "wrap" }}>
-                      <Button variant="viewOutline" size="sm" href={`/invoices/${inv.id}`}>View</Button>
-                      <Button variant="editOutline" size="sm" href={`/invoices/edit/${inv.id}`}>Edit</Button>
+                        {/* 1. View → opens PDF preview modal */}
                       <Button variant="viewOutline" size="sm" onClick={async () => {
                         if (pdfLoading) return;
                         setPdfLoading(inv.id);
@@ -188,7 +205,6 @@ export default function InvoicesPage() {
                         const cleanup = () => { try { document.body.removeChild(iframe); } catch {} setPdfLoading(null); };
                         const safetyTimer = setTimeout(cleanup, 45000);
                         iframe.onload = async () => {
-                          // Poll until invoice-print-area has rendered content
                           const el = await new Promise<HTMLElement | null>(resolve => {
                             let tries = 0;
                             const check = () => {
@@ -202,96 +218,72 @@ export default function InvoicesPage() {
                           if (!el) { clearTimeout(safetyTimer); cleanup(); return; }
                           await new Promise(r => setTimeout(r, 400));
                           try {
-                            const html2canvas = (await import("html2canvas")).default;
-                            const { jsPDF } = await import("jspdf");
-                            const A4_PX = 794;
-                            const SCALE = 2;
-
-                            // Measure row boundaries at A4 width before capture
-                            const prevW = el.style.width, prevMin = el.style.minWidth, prevMax = el.style.maxWidth;
-                            el.style.width = `${A4_PX}px`;
-                            el.style.minWidth = `${A4_PX}px`;
-                            el.style.maxWidth = `${A4_PX}px`;
-                            el.getBoundingClientRect();
-                            const elTop = el.getBoundingClientRect().top;
-                            const rowSplitPoints = Array.from(el.querySelectorAll("tbody tr, tfoot tr")).map(
-                              (row) => Math.round(((row as HTMLElement).getBoundingClientRect().bottom - elTop) * SCALE)
-                            );
-                            const colHdrRow = el.querySelector("#invoice-col-header") as HTMLElement | null;
-                            const colHdrTop = colHdrRow ? Math.round((colHdrRow.getBoundingClientRect().top - elTop) * SCALE) : 0;
-                            const colHdrH   = colHdrRow ? Math.round(colHdrRow.getBoundingClientRect().height * SCALE) : 0;
-                            el.style.width = prevW; el.style.minWidth = prevMin; el.style.maxWidth = prevMax;
-
-                            const canvas = await html2canvas(el, {
-                              scale: SCALE, useCORS: true, backgroundColor: "#fff",
-                              width: A4_PX, windowWidth: A4_PX,
-                              onclone: (clonedDoc) => {
-                                clonedDoc.documentElement.classList.remove("dark");
-                                const printEl = clonedDoc.getElementById("invoice-print-area");
-                                if (printEl) {
-                                  printEl.style.width = `${A4_PX}px`;
-                                  printEl.style.minWidth = `${A4_PX}px`;
-                                  printEl.style.maxWidth = `${A4_PX}px`;
-                                }
-                              },
-                            });
-                            const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-                            const pageW = pdf.internal.pageSize.getWidth();
-                            const pageH = pdf.internal.pageSize.getHeight();
-                            const M = 5;
-                            const contentW = pageW - M * 2;
-                            const contentH = pageH - M * 2;
-                            const mmPerPx = contentW / canvas.width;
-                            const pageHeightPx = Math.floor(contentH / mmPerPx);
-
-                            const cropPage = (s: number, e: number, prependHeader: boolean) => {
-                              const rowH = e - s;
-                              const extraH = prependHeader ? colHdrH : 0;
-                              const pc = document.createElement("canvas");
-                              pc.width = canvas.width; pc.height = extraH + rowH;
-                              const ctx = pc.getContext("2d")!;
-                              ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, extraH + rowH);
-                              if (prependHeader) {
-                                ctx.drawImage(canvas, 0, colHdrTop, canvas.width, colHdrH, 0, 0, canvas.width, colHdrH);
-                              }
-                              ctx.drawImage(canvas, 0, s, canvas.width, rowH, 0, extraH, canvas.width, rowH);
-                              return pc.toDataURL("image/jpeg", 0.95);
-                            };
-
-                            const contentPageHeightPx = pageHeightPx - colHdrH;
-
-                            if (canvas.height <= pageHeightPx) {
-                              pdf.addImage(cropPage(0, canvas.height, false), "JPEG", M, M, contentW, canvas.height * mmPerPx);
+                            const blob = await generateInvoicePdfBlob(el);
+                            if (blob) {
+                              const url = URL.createObjectURL(blob);
+                              setPdfPreviewUrl(url);
+                              setPdfPreviewInvoice({ number: inv.invoiceNumber, customer: inv.customer?.name ?? "" });
                             } else {
-                              let start = 0, pageNum = 0;
-                              while (start < canvas.height) {
-                                const available = pageNum === 0 ? pageHeightPx : contentPageHeightPx;
-                                const idealEnd = Math.min(start + available, canvas.height);
-                                let splitAt = idealEnd;
-                                if (idealEnd < canvas.height) {
-                                  const safe = rowSplitPoints.filter(b => b > start && b <= idealEnd);
-                                  if (safe.length > 0) splitAt = safe[safe.length - 1];
-                                }
-                                const ph = pageNum > 0;
-                                const totalH = (splitAt - start) + (ph ? colHdrH : 0);
-                                if (pageNum > 0) pdf.addPage();
-                                pdf.addImage(cropPage(start, splitAt, ph), "JPEG", M, M, contentW, totalH * mmPerPx);
-                                start = splitAt; pageNum++;
-                              }
+                              toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
                             }
-
-                            const url = URL.createObjectURL(pdf.output("blob"));
-                            const a = document.createElement("a");
-                            a.href = url; a.download = `${inv.invoiceNumber}.pdf`;
-                            document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                            setTimeout(() => URL.revokeObjectURL(url), 2000);
-                          } catch {}
+                          } catch {
+                            toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
+                          }
                           clearTimeout(safetyTimer); cleanup();
                         };
                         document.body.appendChild(iframe);
                         iframe.src = `/invoices/${inv.id}`;
-                      }}>PDF</Button>
-                      <Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(inv)}>Delete</Button>
+                      }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        View
+                      </Button>
+                      {/* 2. PDF → direct download (secondary = filled bg, distinct from viewOutline) */}
+                      <Button variant="secondary" size="sm" title="Download PDF" onClick={async () => {
+                        if (pdfLoading) return;
+                        setPdfLoading(inv.id);
+                        const iframe = document.createElement("iframe");
+                        Object.assign(iframe.style, { position: "fixed", width: "850px", height: "1200px", top: "-9999px", left: "-9999px", border: "none", opacity: "0", pointerEvents: "none" });
+                        const cleanup = () => { try { document.body.removeChild(iframe); } catch {} setPdfLoading(null); };
+                        const safetyTimer = setTimeout(cleanup, 45000);
+                        iframe.onload = async () => {
+                          const el = await new Promise<HTMLElement | null>(resolve => {
+                            let tries = 0;
+                            const check = () => {
+                              const area = iframe.contentDocument?.getElementById("invoice-print-area");
+                              if (area?.querySelector("tbody tr")) { resolve(area); return; }
+                              if (++tries > 40) { resolve(null); return; }
+                              setTimeout(check, 250);
+                            };
+                            setTimeout(check, 250);
+                          });
+                          if (!el) { clearTimeout(safetyTimer); cleanup(); return; }
+                          await new Promise(r => setTimeout(r, 400));
+                          try {
+                            const blob = await generateInvoicePdfBlob(el);
+                            if (blob) {
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url; a.download = `${inv.invoiceNumber}.pdf`;
+                              document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                              setTimeout(() => URL.revokeObjectURL(url), 5000);
+                            } else {
+                              toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
+                            }
+                          } catch {
+                            toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
+                          }
+                          clearTimeout(safetyTimer); cleanup();
+                        };
+                        document.body.appendChild(iframe);
+                        iframe.src = `/invoices/${inv.id}`;
+                      }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        PDF
+                      </Button>
+                      {/* 3. Edit */}
+                      <Button variant="editOutline" size="sm" href={`/invoices/edit/${inv.id}`}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</Button>
+                      {/* 4. Delete */}
+                      <Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(inv)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete</Button>
                     </div>
                   </Cell>
                 </tr>
@@ -302,7 +294,7 @@ export default function InvoicesPage() {
         {!loading && filtered.length > 0 && (
           <Pagination
             total={filtered.length}
-            page={page}
+            page={clampedPage}
             showAll={showAll}
             onPage={setPage}
             label="invoices"

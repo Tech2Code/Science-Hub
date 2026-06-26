@@ -8,9 +8,11 @@ import { fetchCached, bustCache } from "@/lib/useCache";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
+import { rules, validate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import Image from "next/image";
+import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 
 interface InvoiceItem {
   id: string; name: string; unit: string;
@@ -178,8 +180,9 @@ export default function InvoiceDetailPage() {
 
   async function handleAddPayment(e: React.FormEvent) {
     e.preventDefault();
+    const amtErr = validate(paymentForm.amount, rules.required("Amount is required."), rules.positiveNumber("Enter a valid amount greater than 0."));
+    if (amtErr) { setPaymentError(amtErr); return; }
     const amt = parseFloat(paymentForm.amount);
-    if (isNaN(amt) || amt <= 0) { setPaymentError("Enter a valid amount."); return; }
     if (amt > balance) { setPaymentError(`Amount cannot exceed balance due (₹${fmt(balance)}).`); return; }
     setPaymentError(""); setAddingPayment(true);
     const res = await fetch(`/api/invoices/${id}/payment`, {
@@ -203,98 +206,7 @@ export default function InvoiceDetailPage() {
   async function generatePdfBlob(): Promise<Blob | null> {
     const el = document.getElementById("invoice-print-area");
     if (!el) return null;
-    try {
-      const html2canvas = (await import("html2canvas")).default;
-      const { jsPDF } = await import("jspdf");
-      const A4_PX = 794;
-      const SCALE = 2;
-
-      // Temporarily resize to A4 width to measure exact row boundary positions
-      const prevW = el.style.width, prevMin = el.style.minWidth, prevMax = el.style.maxWidth;
-      el.style.width = `${A4_PX}px`;
-      el.style.minWidth = `${A4_PX}px`;
-      el.style.maxWidth = `${A4_PX}px`;
-      el.getBoundingClientRect(); // force reflow
-      const elRect = el.getBoundingClientRect();
-      const elTop = elRect.top;
-      // Collect bottom edge of every row (tbody + tfoot) in canvas pixels
-      const rowSplitPoints = Array.from(el.querySelectorAll("tbody tr, tfoot tr")).map(
-        (row) => Math.round(((row as HTMLElement).getBoundingClientRect().bottom - elTop) * SCALE)
-      );
-      // Measure the column header row to repeat it on subsequent pages
-      const colHdrRow = el.querySelector("#invoice-col-header") as HTMLElement | null;
-      const colHdrTop = colHdrRow ? Math.round((colHdrRow.getBoundingClientRect().top - elTop) * SCALE) : 0;
-      const colHdrH   = colHdrRow ? Math.round(colHdrRow.getBoundingClientRect().height * SCALE) : 0;
-      el.style.width = prevW;
-      el.style.minWidth = prevMin;
-      el.style.maxWidth = prevMax;
-
-      const canvas = await html2canvas(el, {
-        scale: SCALE, useCORS: true, backgroundColor: "#fff",
-        width: A4_PX, windowWidth: A4_PX,
-        onclone: (clonedDoc) => {
-          clonedDoc.documentElement.classList.remove("dark");
-          const printEl = clonedDoc.getElementById("invoice-print-area");
-          if (printEl) {
-            printEl.style.width = `${A4_PX}px`;
-            printEl.style.minWidth = `${A4_PX}px`;
-            printEl.style.maxWidth = `${A4_PX}px`;
-          }
-        },
-      });
-
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const M = 5; // 5mm margin all sides
-      const contentW = pageW - M * 2;
-      const contentH = pageH - M * 2;
-      const mmPerPx = contentW / canvas.width;
-      const pageHeightPx = Math.floor(contentH / mmPerPx);
-
-      const cropPage = (startPx: number, endPx: number, prependHeader: boolean) => {
-        const rowH = endPx - startPx;
-        const extraH = prependHeader ? colHdrH : 0;
-        const pc = document.createElement("canvas");
-        pc.width = canvas.width;
-        pc.height = extraH + rowH;
-        const ctx = pc.getContext("2d")!;
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(0, 0, canvas.width, extraH + rowH);
-        if (prependHeader) {
-          ctx.drawImage(canvas, 0, colHdrTop, canvas.width, colHdrH, 0, 0, canvas.width, colHdrH);
-        }
-        ctx.drawImage(canvas, 0, startPx, canvas.width, rowH, 0, extraH, canvas.width, rowH);
-        return pc.toDataURL("image/jpeg", 0.95);
-      };
-
-      // Pages 2+ have less usable height because the header is prepended
-      const contentPageHeightPx = pageHeightPx - colHdrH;
-
-      if (canvas.height <= pageHeightPx) {
-        pdf.addImage(cropPage(0, canvas.height, false), "JPEG", M, M, contentW, canvas.height * mmPerPx);
-      } else {
-        let start = 0;
-        let pageNum = 0;
-        while (start < canvas.height) {
-          const available = pageNum === 0 ? pageHeightPx : contentPageHeightPx;
-          const idealEnd = Math.min(start + available, canvas.height);
-          let splitAt = idealEnd;
-          if (idealEnd < canvas.height) {
-            const safe = rowSplitPoints.filter(b => b > start && b <= idealEnd);
-            if (safe.length > 0) splitAt = safe[safe.length - 1];
-          }
-          const prependHeader = pageNum > 0;
-          const totalH = (splitAt - start) + (prependHeader ? colHdrH : 0);
-          if (pageNum > 0) pdf.addPage();
-          pdf.addImage(cropPage(start, splitAt, prependHeader), "JPEG", M, M, contentW, totalH * mmPerPx);
-          start = splitAt;
-          pageNum++;
-        }
-      }
-
-      return pdf.output("blob");
-    } catch { return null; }
+    return generateInvoicePdfBlob(el);
   }
 
   async function handleDownload() {
@@ -443,6 +355,7 @@ export default function InvoiceDetailPage() {
       />
       {shareLoading && <OverlayLoader text="Preparing PDF…" />}
       {addingPayment && <OverlayLoader text="Saving payment…" />}
+
       <style>{`
         #invoice-print-area {
           --inv-bg:#fff;--inv-bg2:#f8fafc;--inv-bg3:#f1f5f9;--inv-bg4:#e2e8f0;
@@ -456,7 +369,7 @@ export default function InvoiceDetailPage() {
           --inv-tx:#f1f5f9;--inv-tx2:#cbd5e1;--inv-tx3:#94a3b8;
           --inv-brand:#93c5fd;--inv-green:#34d399;--inv-blue:#60a5fa;--inv-red:#f87171;
         }
-        @page { size: A4 portrait; margin: 5mm; }
+        @page { size: A4 portrait; margin: 3px; }
         @media print {
           *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
           html,body{background:#fff!important;color:#0f172a!important}
@@ -464,10 +377,10 @@ export default function InvoiceDetailPage() {
           #invoice-print-area,#invoice-print-area *{visibility:visible!important}
           #invoice-print-area{
             position:absolute!important;top:0!important;left:0!important;
-            width:100%!important;height:auto!important;padding:4px!important;
+            width:100%!important;height:auto!important;padding:3px!important;
             box-shadow:none!important;border-radius:0!important;
             --inv-bg:#fff!important;--inv-bg2:#f8fafc!important;--inv-bg3:#f1f5f9!important;--inv-bg4:#e2e8f0!important;
-            --inv-bd:#475569!important;--inv-bd2:#94a3b8!important;
+            --inv-bd:#64748b!important;--inv-bd2:#94a3b8!important;
             --inv-tx:#0f172a!important;--inv-tx2:#334155!important;--inv-tx3:#64748b!important;
             --inv-brand:#1e3a8a!important;--inv-green:#059669!important;--inv-blue:#2563eb!important;--inv-red:#dc2626!important;
           }
@@ -486,7 +399,7 @@ export default function InvoiceDetailPage() {
           <Breadcrumb items={[{ label: "Invoices", href: "/invoices" }, { label: invoice.invoiceNumber }]} />
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
             <StatusBadge status={invoice.status} />
-            <Button variant="editOutline" size="sm" href={`/invoices/edit/${id}`}>Edit Invoice</Button>
+            <Button variant="editOutline" size="sm" href={`/invoices/edit/${id}`}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit Invoice</Button>
             {balance > 0 && (
               <Button
                 variant="greenPrimary"
@@ -497,16 +410,20 @@ export default function InvoiceDetailPage() {
                   setShowPaymentForm(true);
                 }}
               >
-                + Record Payment
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                Record Payment
               </Button>
             )}
             <Button variant="secondary" size="sm" onClick={handleDownload}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Download PDF
             </Button>
             <Button variant="secondary" size="sm" onClick={handlePrint}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
               Print
             </Button>
             <Button variant="dangerOutline" size="sm" disabled={deleting} onClick={() => setDeleteConfirm(true)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
               Delete
             </Button>
             {/* Share PDF button */}
@@ -579,61 +496,66 @@ export default function InvoiceDetailPage() {
           <div className="card no-print" style={{ padding: "1.25rem" }}>
             <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text)", marginBottom: "0.75rem" }}>Record Payment</h3>
             {paymentError && <div className="error-banner" style={{ marginBottom: "0.75rem" }}>{paymentError}</div>}
-            <form onSubmit={handleAddPayment} style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
-              <FormField label="Amount (₹)">
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    value={paymentForm.amount}
-                    onChange={(e) => { setPaymentError(""); setPaymentForm((p) => ({ ...p, amount: e.target.value })); }}
-                    placeholder={`e.g. ${balance.toFixed(2)}`}
+            <form onSubmit={handleAddPayment}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
+                <FormField label="Amount (₹)">
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={paymentForm.amount}
+                      onChange={(e) => { setPaymentError(""); setPaymentForm((p) => ({ ...p, amount: e.target.value })); }}
+                      placeholder={`e.g. ${balance.toFixed(2)}`}
+                      sz="sm"
+                      style={{ width: "9rem" }}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPaymentForm((p) => ({ ...p, amount: balance.toFixed(2) }))}
+                      style={{
+                        fontSize: "0.7rem", fontWeight: 600, padding: "0.2rem 0.5rem",
+                        borderRadius: "0.375rem", border: "1px solid var(--c-green-border)",
+                        background: "var(--c-green-bg)", color: "var(--c-green-text)",
+                        cursor: "pointer", whiteSpace: "nowrap",
+                      }}
+                    >
+                      Full ₹{fmt(balance)}
+                    </button>
+                  </div>
+                </FormField>
+                <FormField label="Method">
+                  <Select
+                    value={paymentForm.method}
+                    onChange={(e) => setPaymentForm((p) => ({ ...p, method: e.target.value }))}
                     sz="sm"
-                    style={{ width: "9rem" }}
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setPaymentForm((p) => ({ ...p, amount: balance.toFixed(2) }))}
-                    style={{
-                      fontSize: "0.7rem", fontWeight: 600, padding: "0.2rem 0.5rem",
-                      borderRadius: "0.375rem", border: "1px solid var(--c-green-border)",
-                      background: "var(--c-green-bg)", color: "var(--c-green-text)",
-                      cursor: "pointer", whiteSpace: "nowrap",
-                    }}
                   >
-                    Full ₹{fmt(balance)}
-                  </button>
+                    {PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
+                  </Select>
+                </FormField>
+                <div style={{ flex: 1, minWidth: "8rem" }}>
+                  <FormField label="Reference / UTR">
+                    <Input
+                      type="text"
+                      value={paymentForm.reference}
+                      onChange={(e) => setPaymentForm((p) => ({ ...p, reference: e.target.value }))}
+                      placeholder="Optional"
+                      sz="sm"
+                      style={{ width: "100%" }}
+                    />
+                  </FormField>
                 </div>
-                <p style={{ fontSize: "0.7rem", color: "var(--c-text-4)", marginTop: "0.2rem" }}>
-                  Balance due: ₹{fmt(balance)}
-                </p>
-              </FormField>
-              <FormField label="Method">
-                <Select
-                  value={paymentForm.method}
-                  onChange={(e) => setPaymentForm((p) => ({ ...p, method: e.target.value }))}
-                  sz="sm"
-                >
-                  {PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
-                </Select>
-              </FormField>
-              <FormField label="Reference / UTR">
-                <Input
-                  type="text"
-                  value={paymentForm.reference}
-                  onChange={(e) => setPaymentForm((p) => ({ ...p, reference: e.target.value }))}
-                  placeholder="Optional"
-                  sz="sm"
-                  style={{ width: "10rem" }}
-                />
-              </FormField>
-              <div style={{ display: "flex", gap: "0.5rem", paddingBottom: "0.125rem" }}>
-                <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment}>
-                  Save Payment
-                </Button>
-                <Button type="button" variant="secondary" size="sm" onClick={() => setShowPaymentForm(false)}>Cancel</Button>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    Save Payment
+                  </Button>
+                  <Button type="button" variant="secondary" size="sm" onClick={() => setShowPaymentForm(false)}>Cancel</Button>
+                </div>
               </div>
+              <p style={{ marginTop: "0.375rem", fontSize: "0.7rem", color: "var(--c-text-4)" }}>
+                Balance due: ₹{fmt(balance)}
+              </p>
             </form>
           </div>
         )}

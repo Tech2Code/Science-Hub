@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import styles from "../login/login.module.css";
+import { rules, validate } from "@/lib/validation";
 
 interface Result {
   name: string;
@@ -20,6 +21,8 @@ export default function FindEmailPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const nameErr = validate(name, rules.required("Please enter your name."), rules.minLength(2, "Name must be at least 2 characters."));
+    if (nameErr) { setError(nameErr); return; }
     setError("");
     setResults(null);
     setLoading(true);
