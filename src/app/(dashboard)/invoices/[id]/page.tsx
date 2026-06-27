@@ -15,7 +15,7 @@ import Image from "next/image";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 
 interface InvoiceItem {
-  id: string; name: string; unit: string;
+  id: string; productId: string; name: string; unit: string;
   quantity: number; price: number; gstRate: number; gstAmount: number; total: number;
 }
 interface Payment {
