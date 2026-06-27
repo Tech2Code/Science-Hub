@@ -27,6 +27,7 @@ export default function EditCustomerPage() {
   const [form, setForm] = useState({
     name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "",
   });
+  const [initialForm, setInitialForm] = useState<typeof form | null>(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<FormErrors<typeof form>>({});
   const [error, setError] = useState("");
@@ -37,9 +38,11 @@ export default function EditCustomerPage() {
     fetch(`/api/customers/${id}`)
       .then((r) => r.json())
       .then((d) => {
-        setForm({ name: d.name ?? "", phone: d.phone ?? "", email: d.email ?? "",
+        const loaded = { name: d.name ?? "", phone: d.phone ?? "", email: d.email ?? "",
           address: d.address ?? "", city: d.city ?? "", state: d.state ?? "",
-          pincode: d.pincode ?? "", gstin: d.gstin ?? "" });
+          pincode: d.pincode ?? "", gstin: d.gstin ?? "" };
+        setForm(loaded);
+        setInitialForm(loaded);
         setLoading(false);
       })
       .catch(() => { setError("Failed to load customer."); setLoading(false); });

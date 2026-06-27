@@ -196,9 +196,14 @@ export default function InvoicesPage() {
                   <Cell col={COLUMNS[7]}><StatusBadge status={inv.status} /></Cell>
                   <Cell col={COLUMNS[8]}>
                     <div className="table-actions" style={{ flexWrap: "wrap" }}>
-                        {/* 1. View → opens PDF preview modal */}
+                        {/* 1. View → opens PDF preview modal (desktop) or invoice page (mobile) */}
                       <Button variant="viewOutline" size="sm" onClick={async () => {
                         if (pdfLoading) return;
+                        // On mobile, iframe PDF generation fails — navigate to invoice page instead
+                        if (window.innerWidth < 768) {
+                          window.location.href = `/invoices/${inv.id}`;
+                          return;
+                        }
                         setPdfLoading(inv.id);
                         const iframe = document.createElement("iframe");
                         Object.assign(iframe.style, { position: "fixed", width: "850px", height: "1200px", top: "-9999px", left: "-9999px", border: "none", opacity: "0", pointerEvents: "none" });
@@ -237,9 +242,14 @@ export default function InvoicesPage() {
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         View
                       </Button>
-                      {/* 2. PDF → direct download (secondary = filled bg, distinct from viewOutline) */}
+                      {/* 2. PDF → direct download (desktop) or invoice page (mobile) */}
                       <Button variant="secondary" size="sm" title="Download PDF" onClick={async () => {
                         if (pdfLoading) return;
+                        // On mobile, navigate to invoice page which has working download
+                        if (window.innerWidth < 768) {
+                          window.location.href = `/invoices/${inv.id}`;
+                          return;
+                        }
                         setPdfLoading(inv.id);
                         const iframe = document.createElement("iframe");
                         Object.assign(iframe.style, { position: "fixed", width: "850px", height: "1200px", top: "-9999px", left: "-9999px", border: "none", opacity: "0", pointerEvents: "none" });
