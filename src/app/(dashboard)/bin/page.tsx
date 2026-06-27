@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { OverlayLoader } from "@/components/ui/Spinner";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useFetch } from "@/lib/useCache";
@@ -59,13 +58,12 @@ const BIN_COLUMNS: Column[] = [
 ];
 
 function TypeSection({
-  type, items, onRestore, onDeleteForever, restoring,
+  type, items, onRestore, onDeleteForever,
 }: {
   type: BinType;
   items: BinItem[];
   onRestore: (item: BinItem) => void;
   onDeleteForever: (item: BinItem) => void;
-  restoring: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const m = TYPE_META[type];
@@ -108,7 +106,15 @@ function TypeSection({
 
       {open && (
         <div className="table-wrap">
-          <table className="table-base">
+          <table className="table-base" style={{ tableLayout: "fixed", width: "100%" }}>
+            <colgroup>
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "28%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "22%" }} />
+            </colgroup>
             <thead>
               <tr>
                 {BIN_COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
@@ -120,7 +126,7 @@ function TypeSection({
                   <Cell col={BIN_COLUMNS[0]} style={{ fontWeight: 500, color: "var(--c-text)" }}>
                     {item.name}
                   </Cell>
-                  <Cell col={BIN_COLUMNS[1]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                  <Cell col={BIN_COLUMNS[1]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem", wordBreak: "break-word" }}>
                     {item.meta || <span style={{ color: "var(--c-text-4)" }}>—</span>}
                   </Cell>
                   <Cell col={BIN_COLUMNS[2]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
@@ -136,8 +142,8 @@ function TypeSection({
                   </Cell>
                   <Cell col={BIN_COLUMNS[5]}>
                     <div className="table-actions">
-                      <Button variant="editOutline" size="sm" disabled={restoring} onClick={() => onRestore(item)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>Restore</Button>
-                      <Button variant="dangerOutline" size="sm" disabled={restoring} onClick={() => onDeleteForever(item)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>Delete Forever</Button>
+                      <Button variant="editOutline" size="sm" onClick={() => onRestore(item)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>Restore</Button>
+                      <Button variant="dangerOutline" size="sm" onClick={() => onDeleteForever(item)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>Delete Forever</Button>
                     </div>
                   </Cell>
                 </tr>
@@ -155,33 +161,45 @@ export default function BinPage() {
   const items = data ?? [];
   const toast = useToast();
 
-  const [restoring, setRestoring] = useState(false);
   const [confirmState, setConfirmState] = useState<{
-    title: string; message: string; onConfirm: () => void;
+    title: string; message: string; confirmLabel: string; variant: "default" | "danger"; onConfirm: () => void;
   } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
-  async function handleRestore(item: BinItem) {
-    setRestoring(true);
-    try {
-      const res = await fetch(`/api/bin/${item.type}/${item.id}`, { method: "POST" });
-      const d = await res.json().catch(() => ({}));
-      if (res.ok) {
-        toast({ type: "success", title: "Restored", message: `"${item.name}" restored successfully.` });
-      } else {
-        toast({ type: "error", title: "Restore failed", message: d.error ?? "Could not restore item." });
-      }
-    } catch {
-      toast({ type: "error", title: "Restore failed", message: "Network error." });
-    }
-    setRestoring(false);
-    mutate();
+  function handleRestore(item: BinItem) {
+    setConfirmState({
+      title: "Restore Item",
+      message: `Restore "${item.name}"? It will be moved back to its original section.`,
+      confirmLabel: "Restore",
+      variant: "default",
+      onConfirm: async () => {
+        setConfirmLoading(true);
+        try {
+          const res = await fetch(`/api/bin/${item.type}/${item.id}`, { method: "POST" });
+          const d = await res.json().catch(() => ({}));
+          setConfirmLoading(false);
+          setConfirmState(null);
+          if (res.ok) {
+            mutate();
+            toast({ type: "success", title: "Restored", message: `"${item.name}" restored successfully.` });
+          } else {
+            toast({ type: "error", title: "Restore failed", message: d.error ?? "Could not restore item." });
+          }
+        } catch {
+          setConfirmLoading(false);
+          setConfirmState(null);
+          toast({ type: "error", title: "Restore failed", message: "Network error." });
+        }
+      },
+    });
   }
 
   function handleDeleteForever(item: BinItem) {
     setConfirmState({
       title: "Delete Forever",
       message: `Permanently delete "${item.name}"? This cannot be undone.`,
+      confirmLabel: "Delete Forever",
+      variant: "danger",
       onConfirm: async () => {
         setConfirmLoading(true);
         try {
@@ -213,14 +231,13 @@ export default function BinPage() {
 
   return (
     <>
-    {restoring && <OverlayLoader text="Restoring…" />}
     <div className="page-stack">
       <ConfirmDialog
         open={!!confirmState}
         title={confirmState?.title ?? ""}
         message={confirmState?.message ?? ""}
-        confirmLabel="Delete Forever"
-        variant="danger"
+        confirmLabel={confirmState?.confirmLabel ?? "Confirm"}
+        variant={confirmState?.variant ?? "default"}
         loading={confirmLoading}
         onConfirm={confirmState?.onConfirm ?? (() => {})}
         onCancel={() => { if (!confirmLoading) setConfirmState(null); }}
@@ -265,7 +282,6 @@ export default function BinPage() {
             items={grouped[type]}
             onRestore={handleRestore}
             onDeleteForever={handleDeleteForever}
-            restoring={restoring}
           />
         ))
       )}

@@ -26,7 +26,7 @@ interface ReturnRecord {
   items: { id: string; name: string; quantity: number; price: number; total: number; productId: string | null }[];
 }
 interface ReturnFormItem {
-  productId: string; name: string; price: number; selected: boolean; qty: number; maxQty: number;
+  productId: string; name: string; price: number; selected: boolean; qty: number; maxQty: number; qtyText: string;
 }
 interface Invoice {
   id: string; invoiceNumber: string; date: string; dueDate?: string; createdAt: string;
@@ -62,67 +62,104 @@ function InvoiceSkeleton() {
     <>
       <style>{`@keyframes skPulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
       <div className="page-stack">
-        {/* toolbar */}
+
+        {/* Toolbar — breadcrumb + 7 action buttons */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:"0.75rem" }}>
-          <Sk w={180} h={14} />
-          <div style={{ display:"flex", gap:"0.5rem" }}>
-            <Sk w={80} h={32} r={8} />
-            <Sk w={100} h={32} r={8} />
+          <div style={{ display:"flex", alignItems:"center", gap:"0.5rem" }}>
+            <Sk w={70} h={13} r={4} />
+            <Sk w={8} h={13} r={2} />
+            <Sk w={110} h={13} r={4} />
+          </div>
+          <div style={{ display:"flex", gap:"0.375rem", flexWrap:"wrap" }}>
+            <Sk w={28} h={28} r={6} />
+            <Sk w={100} h={28} r={6} />
+            <Sk w={118} h={28} r={6} />
+            <Sk w={105} h={28} r={6} />
+            <Sk w={95} h={28} r={6} />
+            <Sk w={62} h={28} r={6} />
+            <Sk w={85} h={28} r={6} />
+            <Sk w={90} h={28} r={6} />
           </div>
         </div>
 
-        {/* header card */}
-        <div className="card" style={{ padding:"1.25rem", display:"flex", flexWrap:"wrap", gap:"1rem", justifyContent:"space-between", alignItems:"center" }}>
-          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-            <Sk w={160} h={22} />
-            <Sk w={100} h={14} />
-          </div>
-          <div style={{ display:"flex", gap:"0.5rem" }}>
-            <Sk w={90} h={32} r={8} />
-            <Sk w={110} h={32} r={8} />
-          </div>
-        </div>
+        {/* Invoice print area */}
+        <div className="card" style={{ overflow:"hidden" }}>
+          {/* TAX INVOICE header bar */}
+          <Sk w="100%" h={40} r={0} />
 
-        {/* invoice body card */}
-        <div className="card" style={{ padding:"1.25rem" }}>
-          {/* meta rows */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.75rem", marginBottom:"1.25rem" }}>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                <Sk w={80} h={11} />
-                <Sk w="70%" h={15} />
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:0 }}>
+            {/* Left: company info */}
+            <div style={{ padding:"14px 16px", borderRight:"1px solid var(--c-border)", display:"flex", flexDirection:"column", gap:8 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <Sk w={36} h={36} r={4} />
+                <Sk w={130} h={16} r={4} />
               </div>
-            ))}
+              <Sk w="80%" h={11} r={3} />
+              <Sk w="65%" h={11} r={3} />
+              <Sk w="50%" h={11} r={3} />
+            </div>
+            {/* Right: invoice meta rows */}
+            <div style={{ display:"flex", flexDirection:"column" }}>
+              {["Invoice No.", "Date", "Created By", "Supply Type"].map(label => (
+                <div key={label} style={{ display:"grid", gridTemplateColumns:"1fr 1fr", borderBottom:"1px solid var(--c-border)", padding:"9px 14px", gap:8 }}>
+                  <Sk w="70%" h={11} r={3} />
+                  <Sk w="85%" h={11} r={3} />
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* table header */}
-          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr", gap:"0.5rem", marginBottom:"0.5rem" }}>
-            {["Item", "Qty", "Rate", "GST", "Total"].map(col => (
-              <Sk key={col} w="80%" h={11} />
-            ))}
+          {/* Bill To section */}
+          <div style={{ borderTop:"1px solid var(--c-border)", padding:"10px 14px", display:"flex", flexDirection:"column", gap:6 }}>
+            <Sk w={60} h={10} r={3} />
+            <Sk w={180} h={14} r={3} />
+            <Sk w={220} h={11} r={3} />
+            <div style={{ display:"flex", gap:16 }}>
+              <Sk w={100} h={11} r={3} />
+              <Sk w={160} h={11} r={3} />
+            </div>
           </div>
 
-          {/* table rows */}
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr", gap:"0.5rem", marginBottom:"0.5rem" }}>
-              <Sk w="90%" h={14} />
-              <Sk w="60%" h={14} />
-              <Sk w="70%" h={14} />
-              <Sk w="50%" h={14} />
-              <Sk w="80%" h={14} />
+          {/* Items table header */}
+          <div style={{ borderTop:"1px solid var(--c-border)", display:"grid", gridTemplateColumns:"3% 25% 6% 6% 10% 10% 6% 10% 10% 11%", gap:0, padding:"8px 8px", background:"var(--c-bg-sub)" }}>
+            {Array.from({ length: 10 }).map((_, i) => <Sk key={i} w="75%" h={10} r={3} />)}
+          </div>
+
+          {/* Item rows */}
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} style={{ borderTop:"1px solid var(--c-border)", display:"grid", gridTemplateColumns:"3% 25% 6% 6% 10% 10% 6% 10% 10% 11%", gap:0, padding:"8px 8px" }}>
+              <Sk w="60%" h={12} r={3} />
+              <Sk w="85%" h={12} r={3} />
+              <Sk w="70%" h={12} r={3} />
+              <Sk w="70%" h={12} r={3} />
+              <Sk w="80%" h={12} r={3} />
+              <Sk w="80%" h={12} r={3} />
+              <Sk w="60%" h={12} r={3} />
+              <Sk w="75%" h={12} r={3} />
+              <Sk w="75%" h={12} r={3} />
+              <Sk w="85%" h={12} r={3} />
             </div>
           ))}
 
-          {/* totals */}
-          <div style={{ marginTop:"1rem", display:"flex", flexDirection:"column", alignItems:"flex-end", gap:8 }}>
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} style={{ display:"flex", gap:"1rem" }}>
-                <Sk w={100} h={14} />
-                <Sk w={80} h={14} />
-              </div>
-            ))}
+          {/* Totals rows */}
+          <div style={{ borderTop:"1px solid var(--c-border)", display:"grid", gridTemplateColumns:"1fr 1fr", gap:0 }}>
+            <div style={{ borderRight:"1px solid var(--c-border)", padding:"14px 16px" }}>
+              <Sk w="60%" h={11} r={3} />
+            </div>
+            <div style={{ display:"flex", flexDirection:"column" }}>
+              {["Subtotal", "CGST", "SGST", "Grand Total", "Paid", "Balance Due"].map(label => (
+                <div key={label} style={{ display:"grid", gridTemplateColumns:"1fr 1fr", borderBottom:"1px solid var(--c-border)", padding:"8px 14px", gap:8 }}>
+                  <Sk w="60%" h={11} r={3} />
+                  <Sk w="70%" h={11} r={3} />
+                </div>
+              ))}
+            </div>
           </div>
+
+          {/* Footer bar */}
+          <Sk w="100%" h={34} r={0} />
         </div>
+
       </div>
     </>
   );
@@ -144,11 +181,13 @@ export default function InvoiceDetailPage() {
   const [shareDropStyle, setShareDropStyle] = useState<React.CSSProperties>({});
   const shareContainerRef = useRef<HTMLDivElement>(null);
   const [showPaymentInPdf, setShowPaymentInPdf] = useState(false);
+  const [showReturnInPdf, setShowReturnInPdf] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
   const [showReturnForm, setShowReturnForm] = useState(false);
   const [returnItems, setReturnItems] = useState<ReturnFormItem[]>([]);
+  const returnQtyRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [returnNotes, setReturnNotes] = useState("");
   const [returnDate, setReturnDate] = useState("");
   const [addingReturn, setAddingReturn] = useState(false);
@@ -251,6 +290,7 @@ export default function InvoiceDetailPage() {
       selected: false,
       qty: 1,
       maxQty: item.quantity - (alreadyReturned[item.productId] ?? 0),
+      qtyText: "1",
     })).filter(ri => ri.maxQty > 0));
     setReturnNotes("");
     setReturnDate(new Date().toISOString().split("T")[0]);
@@ -281,6 +321,7 @@ export default function InvoiceDetailPage() {
         const created = await res.json();
         setReturns(prev => [created, ...prev]);
         setShowReturnForm(false);
+        bustCache(`/api/invoices/${id}`);
         bustCache("/api/products");
         toast({ type: "success", title: "Return recorded", message: `${selected.length} item(s) returned.` });
       } else {
@@ -508,10 +549,12 @@ export default function InvoiceDetailPage() {
                 Record Payment
               </Button>
             )}
-            <Button variant="secondary" size="sm" onClick={openReturnForm}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
-              Record Return
-            </Button>
+            <span title={invoice.paidAmount <= 0 ? "No payment received yet — pay first to enable returns" : undefined} style={{ display: "inline-flex" }}>
+              <Button variant="secondary" size="sm" disabled={invoice.paidAmount <= 0} onClick={openReturnForm}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                Record Return
+              </Button>
+            </span>
             <Button variant="secondary" size="sm" onClick={handleDownload}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Download PDF
@@ -692,7 +735,7 @@ export default function InvoiceDetailPage() {
                 <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.5rem" }}>Select Items to Return</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   {returnItems.map((ri, idx) => (
-                    <div key={ri.productId} style={{
+                    <div key={idx} style={{
                       display: "flex", alignItems: "center", gap: "0.75rem",
                       padding: "0.5rem 0.75rem", borderRadius: "0.375rem",
                       background: ri.selected ? "var(--c-blue-bg)" : "var(--c-bg-sub)",
@@ -701,19 +744,37 @@ export default function InvoiceDetailPage() {
                       <input
                         type="checkbox"
                         checked={ri.selected}
-                        onChange={e => setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, selected: e.target.checked } : r))}
+                        onChange={e => {
+                          const checked = e.target.checked;
+                          setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, selected: checked } : r));
+                          if (checked) setTimeout(() => returnQtyRefs.current[idx]?.focus(), 0);
+                        }}
                         style={{ width: "1rem", height: "1rem", cursor: "pointer", accentColor: "var(--c-blue)" }}
                       />
                       <span style={{ flex: 1, fontSize: "0.875rem", color: "var(--c-text)" }}>{ri.name}</span>
                       <span style={{ fontSize: "0.75rem", color: "var(--c-text-4)" }}>max {ri.maxQty}</span>
                       <Input
+                        ref={el => { returnQtyRefs.current[idx] = el; }}
                         type="number"
                         sz="sm"
-                        value={ri.qty}
-                        min={1}
-                        max={ri.maxQty}
+                        value={ri.qtyText}
+                        placeholder={String(ri.qty)}
                         disabled={!ri.selected}
-                        onChange={e => setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qty: Math.min(ri.maxQty, Math.max(1, Number(e.target.value))) } : r))}
+                        onFocus={() => {
+                          setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: "" } : r));
+                        }}
+                        onChange={e => {
+                          const raw = e.target.value.replace(/\D/g, "");
+                          if (raw === "") { setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: "" } : r)); return; }
+                          const clamped = String(Math.min(ri.maxQty, parseInt(raw, 10)));
+                          if (clamped === ri.qtyText) { e.target.value = clamped; return; }
+                          setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: clamped } : r));
+                        }}
+                        onBlur={() => {
+                          const num = parseInt(ri.qtyText, 10);
+                          const clamped = isNaN(num) || num < 1 ? 1 : Math.min(ri.maxQty, num);
+                          setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qty: clamped, qtyText: String(clamped) } : r));
+                        }}
                         style={{ width: "5rem" }}
                       />
                     </div>
@@ -954,6 +1015,47 @@ export default function InvoiceDetailPage() {
                 );
               })()}
 
+              {showReturnInPdf && returns.length > 0 && (() => {
+                const allCols = invoice.isInterState ? 9 : 10;
+                const bd: React.CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 10px", fontSize: 11 };
+                return (
+                  <tbody>
+                    <tr>
+                      <td colSpan={allCols} style={{ ...bd, padding: "7px 14px", background: "var(--inv-bg3)", color: "var(--inv-tx)", fontWeight: 700, fontSize: 12 }}>
+                        Return History
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date</td>
+                      <td colSpan={4} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Item</td>
+                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Qty × Rate</td>
+                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
+                    </tr>
+                    {returns.map((ret) =>
+                      ret.items.map((ri, riIdx) => (
+                        <tr key={`${ret.id}-${ri.id}`}>
+                          {riIdx === 0 && (
+                            <td colSpan={2} rowSpan={ret.items.length} style={{ ...bd, color: "var(--inv-tx2)", verticalAlign: "top" }}>
+                              {new Date(ret.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                              {ret.notes ? <div style={{ fontSize: 10, color: "var(--inv-tx3)", marginTop: 2 }}>{ret.notes}</div> : null}
+                            </td>
+                          )}
+                          <td colSpan={4} style={{ ...bd, color: "var(--inv-tx2)" }}>{ri.name}</td>
+                          <td colSpan={2} style={{ ...bd, color: "var(--inv-tx3)" }}>{ri.quantity} × ₹{fmt(ri.price)}</td>
+                          <td colSpan={2} style={{ ...bd, textAlign: "right", color: "var(--inv-red)", fontWeight: 600 }}>−{fmt(ri.total)}</td>
+                        </tr>
+                      ))
+                    )}
+                    <tr>
+                      <td colSpan={allCols - 2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Total Returned</td>
+                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-red)", fontWeight: 700, textAlign: "right" }}>
+                        −{fmt(returns.reduce((s, r) => s + r.items.reduce((ss, ri) => ss + ri.total, 0), 0))}
+                      </td>
+                    </tr>
+                  </tbody>
+                );
+              })()}
+
               <tfoot>
                 <tr>
                   <td colSpan={invoice.isInterState ? 9 : 10}
@@ -979,6 +1081,8 @@ export default function InvoiceDetailPage() {
             Other:   { bg:"var(--c-bg-sub)",      color:"var(--c-text-3)",      border:"var(--c-border)" },
           };
           const paidTotal = invoice.payments.reduce((s, p) => s + p.amount, 0);
+          const totalReturned = returns.reduce((s, r) => s + r.items.reduce((ss, ri) => ss + ri.total, 0), 0);
+          const netPaid = paidTotal - totalReturned;
           const paidPct = Math.min(100, (paidTotal / invoice.total) * 100);
 
           return (
@@ -1026,6 +1130,13 @@ export default function InvoiceDetailPage() {
                     <div>
                       <div style={{ fontSize:"0.6875rem", color:"var(--c-text-4)", fontWeight:500, marginBottom:"0.1rem" }}>Total Paid</div>
                       <div style={{ fontSize:"1rem", fontWeight:700, color:"var(--c-green)", lineHeight:1 }}>₹{fmt(paidTotal)}</div>
+                      {totalReturned > 0 && (
+                        <div style={{ fontSize:"0.6875rem", color:"var(--c-text-4)", marginTop:"0.2rem" }}>
+                          <span style={{ color:"var(--c-orange)" }}>− ₹{fmt(totalReturned)}</span>
+                          <span style={{ color:"var(--c-text-3)", fontWeight:600 }}> = ₹{fmt(netPaid)}</span>
+                          <span style={{ color:"var(--c-text-4)" }}> net</span>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <div style={{ fontSize:"0.6875rem", color:"var(--c-text-4)", fontWeight:500, marginBottom:"0.1rem" }}>Balance</div>
@@ -1098,13 +1209,41 @@ export default function InvoiceDetailPage() {
           const totalReturned = returns.reduce((s, r) => s + r.items.reduce((ss, ri) => ss + ri.total, 0), 0);
           return (
             <div className="card no-print" style={{ overflow: "hidden" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0.875rem 1.25rem", borderBottom:"1px solid var(--c-border)" }}>
+              <div style={{ padding:"0.875rem 1.25rem", borderBottom:"1px solid var(--c-border)", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"1rem", flexWrap:"wrap" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:"0.625rem" }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
                   <span style={{ fontWeight:600, fontSize:"0.875rem", color:"var(--c-text)" }}>Return History</span>
                   <span style={{ fontSize:"0.75rem", background:"var(--c-bg-sub)", border:"1px solid var(--c-border)", borderRadius:"9999px", padding:"0.1rem 0.5rem", color:"var(--c-text-3)" }}>{returns.length}</span>
                 </div>
-                <div style={{ fontSize:"0.875rem", fontWeight:700, color:"var(--c-orange)" }}>₹{fmt(totalReturned)} returned</div>
+                <div style={{ display:"flex", alignItems:"center", gap:"1rem", flexWrap:"wrap" }}>
+                  <button
+                    onClick={() => setShowReturnInPdf(v => !v)}
+                    title={showReturnInPdf ? "Remove from PDF/Print" : "Include in PDF/Print"}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: "0.375rem",
+                      padding: "0.35rem 0.75rem", borderRadius: "9999px",
+                      fontSize: "0.7rem", fontWeight: 600, cursor: "pointer",
+                      whiteSpace: "nowrap", flexShrink: 0,
+                      border: showReturnInPdf ? "1px solid var(--c-red-border)" : "1px solid var(--c-orange-border, #fed7aa)",
+                      background: showReturnInPdf ? "var(--c-red-bg)" : "var(--c-orange-bg, #fff7ed)",
+                      color: showReturnInPdf ? "var(--c-red)" : "var(--c-orange)",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {showReturnInPdf ? (
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    ) : (
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                    )}
+                    {showReturnInPdf ? "Remove Return History from PDF" : "Add Return History to PDF"}
+                  </button>
+                  <div style={{ fontSize:"0.875rem", fontWeight:700, color:"var(--c-orange)" }}>₹{fmt(totalReturned)} returned</div>
+                </div>
               </div>
               <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
                 {returns.map((ret, ridx) => (
@@ -1122,9 +1261,13 @@ export default function InvoiceDetailPage() {
                     </div>
                     <div style={{ display:"flex", flexDirection:"column", gap:"0.25rem" }}>
                       {ret.items.map(ri => (
-                        <div key={ri.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", fontSize:"0.8125rem" }}>
-                          <span style={{ color:"var(--c-text-2)" }}>{ri.name} <span style={{ color:"var(--c-text-4)" }}>×{ri.quantity}</span></span>
-                          <span style={{ color:"var(--c-text-3)", fontFamily:"var(--font-mono)" }}>₹{fmt(ri.total)}</span>
+                        <div key={ri.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"0.5rem", fontSize:"0.8125rem" }}>
+                          <span style={{ color:"var(--c-text-2)" }}>
+                            {ri.name}
+                            <span style={{ color:"var(--c-text-4)" }}> ×{ri.quantity}</span>
+                            <span style={{ color:"var(--c-text-4)", fontSize:"0.75rem" }}> @ ₹{fmt(ri.price)}</span>
+                          </span>
+                          <span style={{ color:"var(--c-text-3)", fontFamily:"var(--font-mono)", whiteSpace:"nowrap" }}>₹{fmt(ri.total)}</span>
                         </div>
                       ))}
                     </div>

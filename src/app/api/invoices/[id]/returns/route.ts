@@ -54,6 +54,27 @@ export async function POST(
     });
     if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
+    if (invoice.paidAmount <= 0) {
+      return NextResponse.json({ error: "No payment received yet. Record a payment before processing a return." }, { status: 400 });
+    }
+
+    // Existing returns total
+    const existingReturns = await prisma.return.findMany({
+      where: { invoiceId: id },
+      include: { items: true },
+    });
+    const existingReturnTotal = existingReturns.reduce(
+      (s, r) => s + r.items.reduce((ss, ri) => ss + ri.total, 0), 0
+    );
+    const newReturnTotal = items.reduce((s, item) => s + item.quantity * item.price, 0);
+    const availableForReturn = invoice.paidAmount - existingReturnTotal;
+
+    if (newReturnTotal > availableForReturn + 0.01) {
+      return NextResponse.json({
+        error: `Return value (₹${newReturnTotal.toFixed(2)}) exceeds available paid amount (₹${availableForReturn.toFixed(2)} remaining after previous returns).`,
+      }, { status: 400 });
+    }
+
     const ret = await prisma.$transaction(async (tx) => {
       const created = await tx.return.create({
         data: {

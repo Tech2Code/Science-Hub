@@ -367,9 +367,6 @@ input, textarea, select {
   .table-base tbody td[data-mobile-full] { grid-column: 1 / -1; }
   .table-base tbody td[colspan] { grid-column: 1 / -1; }
   .table-base tbody td.table-td-right { text-align: left; }
-  /* Hide time sub-line in date cells — too noisy on mobile */
-  .table-base tbody .date-sub,
-  .table-base tbody td > div + div[style*="0.7rem"] { display: none; }
   /* On mobile, clip text to prevent overflow in card cells */
   .table-cell-clip { max-width: 100%; }
 }

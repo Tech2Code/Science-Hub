@@ -1,3 +1,4 @@
+import React from "react";
 import styles from "./Input.module.css";
 
 /* ── Input ─────────────────────────────────── */
@@ -5,11 +6,13 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   mono?: boolean;
   sz?: "sm" | "md";
 }
-export function Input({ mono, sz, className, ...props }: InputProps) {
-  const cls = [styles.input, mono && styles.mono, sz === "sm" && styles.sm, className]
-    .filter(Boolean).join(" ");
-  return <input className={cls} {...props} />;
-}
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  function Input({ mono, sz, className, ...props }, ref) {
+    const cls = [styles.input, mono && styles.mono, sz === "sm" && styles.sm, className]
+      .filter(Boolean).join(" ");
+    return <input ref={ref} className={cls} {...props} />;
+  }
+);
 
 /* ── Textarea ──────────────────────────────── */
 interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
