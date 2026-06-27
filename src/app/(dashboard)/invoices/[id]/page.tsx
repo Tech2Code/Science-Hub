@@ -47,6 +47,11 @@ interface BusinessSettings {
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
 const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
 
+// Use createdAt (always a full server timestamp) for display rather than date
+// (which is a user-picked date-only value stored as UTC midnight).
+function parseDate(d: string) {
+  return new Date(d);
+}
 function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
   return (
     <div style={{
@@ -223,7 +228,10 @@ export default function InvoiceDetailPage() {
   useEffect(() => {
     fetch(`/api/invoices/${id}/returns`)
       .then(r => r.json())
-      .then(data => setReturns(Array.isArray(data) ? data : []))
+      .then(data => {
+        if (!Array.isArray(data)) { setReturns([]); return; }
+        setReturns([...data].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      })
       .catch(() => {});
   }, [id]);
 
@@ -297,6 +305,13 @@ export default function InvoiceDetailPage() {
     setReturnError("");
     setShowReturnForm(true);
   }
+
+  useEffect(() => {
+    if (!showReturnForm || addingReturn) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowReturnForm(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [showReturnForm, addingReturn]);
 
   async function handleAddReturn(e: React.FormEvent) {
     e.preventDefault();
@@ -715,83 +730,112 @@ export default function InvoiceDetailPage() {
           </div>
         )}
 
-        {/* Return form */}
+        {/* Return form modal */}
         {showReturnForm && (
-          <div className="card no-print" style={{ padding: "1.25rem" }}>
-            <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text)", marginBottom: "0.75rem" }}>Record Return</h3>
-            {returnError && <div className="error-banner" style={{ marginBottom: "0.75rem" }}>{returnError}</div>}
-            <form onSubmit={handleAddReturn}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", marginBottom: "0.75rem" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.25rem" }}>Return Date</label>
-                  <Input type="date" sz="sm" value={returnDate} onChange={e => setReturnDate(e.target.value)} style={{ width: "10rem" }} />
+          <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }} className="no-print">
+            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)" }} onClick={() => { if (!addingReturn) setShowReturnForm(false); }} />
+            <div style={{
+              position: "relative", zIndex: 1,
+              background: "var(--c-bg-card)", borderRadius: "0.75rem",
+              boxShadow: "0 20px 60px -8px rgba(0,0,0,.35), 0 4px 16px -4px rgba(0,0,0,.2)",
+              border: "1px solid var(--c-border-md)",
+              width: "100%", maxWidth: "540px",
+              maxHeight: "90vh", overflow: "hidden",
+              display: "flex", flexDirection: "column",
+            }}>
+              {/* Modal header */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", borderBottom: "1px solid var(--c-border)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                  <h3 style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--c-text)", margin: 0 }}>Record Return</h3>
                 </div>
-                <div style={{ flex: 1, minWidth: "12rem" }}>
-                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.25rem" }}>Notes</label>
-                  <Input type="text" sz="sm" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Optional reason" style={{ width: "100%" }} />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => { if (!addingReturn) setShowReturnForm(false); }}
+                  disabled={addingReturn}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--c-text-4)", padding: "0.25rem", borderRadius: "0.25rem", display: "flex", alignItems: "center" }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
               </div>
-              <div style={{ marginBottom: "0.75rem" }}>
-                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.5rem" }}>Select Items to Return</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  {returnItems.map((ri, idx) => (
-                    <div key={idx} style={{
-                      display: "flex", alignItems: "center", gap: "0.75rem",
-                      padding: "0.5rem 0.75rem", borderRadius: "0.375rem",
-                      background: ri.selected ? "var(--c-blue-bg)" : "var(--c-bg-sub)",
-                      border: `1px solid ${ri.selected ? "var(--c-blue-border)" : "var(--c-border)"}`,
-                    }}>
-                      <input
-                        type="checkbox"
-                        checked={ri.selected}
-                        onChange={e => {
-                          const checked = e.target.checked;
-                          setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, selected: checked } : r));
-                          if (checked) setTimeout(() => returnQtyRefs.current[idx]?.focus(), 0);
-                        }}
-                        style={{ width: "1rem", height: "1rem", cursor: "pointer", accentColor: "var(--c-blue)" }}
-                      />
-                      <span style={{ flex: 1, fontSize: "0.875rem", color: "var(--c-text)" }}>{ri.name}</span>
-                      <span style={{ fontSize: "0.75rem", color: "var(--c-text-4)" }}>max {ri.maxQty}</span>
-                      <Input
-                        ref={el => { returnQtyRefs.current[idx] = el; }}
-                        type="number"
-                        sz="sm"
-                        value={ri.qtyText}
-                        placeholder={String(ri.qty)}
-                        disabled={!ri.selected}
-                        onFocus={() => {
-                          setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: "" } : r));
-                        }}
-                        onChange={e => {
-                          const raw = e.target.value.replace(/\D/g, "");
-                          if (raw === "") { setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: "" } : r)); return; }
-                          const clamped = String(Math.min(ri.maxQty, parseInt(raw, 10)));
-                          if (clamped === ri.qtyText) { e.target.value = clamped; return; }
-                          setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: clamped } : r));
-                        }}
-                        onBlur={() => {
-                          const num = parseInt(ri.qtyText, 10);
-                          const clamped = isNaN(num) || num < 1 ? 1 : Math.min(ri.maxQty, num);
-                          setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qty: clamped, qtyText: String(clamped) } : r));
-                        }}
-                        style={{ width: "5rem" }}
-                      />
+              {/* Modal body */}
+              <div style={{ overflowY: "auto", flex: 1 }}>
+                <form onSubmit={handleAddReturn}>
+                  <div style={{ padding: "1rem 1.25rem", display: "flex", flexWrap: "wrap", gap: "0.75rem", borderBottom: "1px solid var(--c-border)" }}>
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.25rem" }}>Return Date</label>
+                      <Input type="date" sz="sm" value={returnDate} onChange={e => setReturnDate(e.target.value)} style={{ width: "10rem" }} />
                     </div>
-                  ))}
-                  {returnItems.length === 0 && (
-                    <p style={{ fontSize: "0.875rem", color: "var(--c-text-4)" }}>All items from this invoice have already been returned.</p>
-                  )}
-                </div>
+                    <div style={{ flex: 1, minWidth: "12rem" }}>
+                      <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.25rem" }}>Notes</label>
+                      <Input type="text" sz="sm" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Optional reason" style={{ width: "100%" }} />
+                    </div>
+                  </div>
+                  <div style={{ padding: "1rem 1.25rem" }}>
+                    <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.5rem" }}>Select Items to Return</div>
+                    {returnError && <div className="error-banner" style={{ marginBottom: "0.75rem" }}>{returnError}</div>}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      {returnItems.map((ri, idx) => (
+                        <div key={idx} style={{
+                          display: "flex", alignItems: "center", gap: "0.75rem",
+                          padding: "0.5rem 0.75rem", borderRadius: "0.375rem",
+                          background: ri.selected ? "var(--c-blue-bg)" : "var(--c-bg-sub)",
+                          border: `1px solid ${ri.selected ? "var(--c-blue-border)" : "var(--c-border)"}`,
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={ri.selected}
+                            onChange={e => {
+                              const checked = e.target.checked;
+                              setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, selected: checked } : r));
+                              if (checked) setTimeout(() => returnQtyRefs.current[idx]?.focus(), 0);
+                            }}
+                            style={{ width: "1rem", height: "1rem", cursor: "pointer", accentColor: "var(--c-blue)" }}
+                          />
+                          <span style={{ flex: 1, fontSize: "0.875rem", color: "var(--c-text)" }}>{ri.name}</span>
+                          <span style={{ fontSize: "0.75rem", color: "var(--c-text-4)" }}>max {ri.maxQty}</span>
+                          <Input
+                            ref={el => { returnQtyRefs.current[idx] = el; }}
+                            type="number"
+                            sz="sm"
+                            value={ri.qtyText}
+                            placeholder={String(ri.qty)}
+                            disabled={!ri.selected}
+                            onFocus={() => {
+                              setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: "" } : r));
+                            }}
+                            onChange={e => {
+                              const raw = e.target.value.replace(/\D/g, "");
+                              if (raw === "") { setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: "" } : r)); return; }
+                              const clamped = String(Math.min(ri.maxQty, parseInt(raw, 10)));
+                              if (clamped === ri.qtyText) { e.target.value = clamped; return; }
+                              setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: clamped } : r));
+                            }}
+                            onBlur={() => {
+                              const num = parseInt(ri.qtyText, 10);
+                              const clamped = isNaN(num) || num < 1 ? 1 : Math.min(ri.maxQty, num);
+                              setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qty: clamped, qtyText: String(clamped) } : r));
+                            }}
+                            style={{ width: "5rem" }}
+                          />
+                        </div>
+                      ))}
+                      {returnItems.length === 0 && (
+                        <p style={{ fontSize: "0.875rem", color: "var(--c-text-4)" }}>All items from this invoice have already been returned.</p>
+                      )}
+                    </div>
+                  </div>
+                  {/* Modal footer */}
+                  <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", padding: "1rem 1.25rem", borderTop: "1px solid var(--c-border)", background: "var(--c-bg-sub)" }}>
+                    <Button type="submit" variant="primary" size="sm" disabled={addingReturn || returnItems.length === 0} loading={addingReturn}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                      Save Return
+                    </Button>
+                    <Button type="button" variant="secondary" size="sm" onClick={() => { if (!addingReturn) setShowReturnForm(false); }} disabled={addingReturn}>Cancel</Button>
+                  </div>
+                </form>
               </div>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <Button type="submit" variant="primary" size="sm" disabled={addingReturn || returnItems.length === 0}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                  Save Return
-                </Button>
-                <Button type="button" variant="secondary" size="sm" onClick={() => setShowReturnForm(false)}>Cancel</Button>
-              </div>
-            </form>
+            </div>
           </div>
         )}
 
@@ -996,7 +1040,7 @@ export default function InvoiceDetailPage() {
                       </td>
                     </tr>
                     <tr>
-                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date</td>
+                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date &amp; Time</td>
                       <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Method</td>
                       <td colSpan={refCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Reference / UTR</td>
                       <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
@@ -1004,7 +1048,7 @@ export default function InvoiceDetailPage() {
                     {sorted.map((p) => (
                       <tr key={p.id}>
                         <td colSpan={2} style={{ ...bd, color: "var(--inv-tx2)" }}>
-                          {new Date(p.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                          {new Date(p.date).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
                         </td>
                         <td colSpan={2} style={{ ...bd, color: "var(--inv-tx2)" }}>{p.method}</td>
                         <td colSpan={refCols} style={{ ...bd, color: "var(--inv-tx2)" }}>{p.reference || "—"}</td>
@@ -1026,7 +1070,7 @@ export default function InvoiceDetailPage() {
                       </td>
                     </tr>
                     <tr>
-                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date</td>
+                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date &amp; Time</td>
                       <td colSpan={4} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Item</td>
                       <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Qty × Rate</td>
                       <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
@@ -1036,7 +1080,7 @@ export default function InvoiceDetailPage() {
                         <tr key={`${ret.id}-${ri.id}`}>
                           {riIdx === 0 && (
                             <td colSpan={2} rowSpan={ret.items.length} style={{ ...bd, color: "var(--inv-tx2)", verticalAlign: "top" }}>
-                              {new Date(ret.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                              {parseDate(ret.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
                               {ret.notes ? <div style={{ fontSize: 10, color: "var(--inv-tx3)", marginTop: 2 }}>{ret.notes}</div> : null}
                             </td>
                           )}
@@ -1164,7 +1208,7 @@ export default function InvoiceDetailPage() {
                   <thead>
                     <tr>
                       <th>#</th>
-                      <th>Date</th>
+                      <th>Date &amp; Time</th>
                       <th>Method</th>
                       <th>Reference / UTR</th>
                       <th className="table-th-right">Amount</th>
@@ -1178,8 +1222,8 @@ export default function InvoiceDetailPage() {
                         return (
                           <tr key={p.id}>
                             <td style={{ color:"var(--c-text-4)", fontSize:"0.75rem", width:"2rem" }}>{idx + 1}</td>
-                            <td data-label="Date" style={{ whiteSpace:"nowrap", color:"var(--c-text-2)" }}>
-                              {new Date(p.date).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" })}
+                            <td data-label="Date & Time" style={{ whiteSpace:"nowrap", color:"var(--c-text-2)" }}>
+                              {new Date(p.date).toLocaleString("en-IN", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", hour12:true })}
                             </td>
                             <td data-label="Method">
                               <span style={{
@@ -1251,7 +1295,7 @@ export default function InvoiceDetailPage() {
                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"0.5rem" }}>
                       <div style={{ display:"flex", alignItems:"center", gap:"0.5rem" }}>
                         <span style={{ fontSize:"0.75rem", fontWeight:600, color:"var(--c-text-3)" }}>
-                          {new Date(ret.date).toLocaleString("en-IN", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", hour12:true })}
+                          {parseDate(ret.createdAt).toLocaleString("en-IN", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", hour12:true })}
                         </span>
                         {ret.notes && <span style={{ fontSize:"0.75rem", color:"var(--c-text-4)" }}>— {ret.notes}</span>}
                       </div>

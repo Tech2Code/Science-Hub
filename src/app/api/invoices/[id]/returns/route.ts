@@ -14,7 +14,7 @@ export async function GET(
     const returns = await prisma.return.findMany({
       where: { invoiceId: id },
       include: { items: true },
-      orderBy: { date: "desc" },
+      orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(returns);
   } catch (error) {
