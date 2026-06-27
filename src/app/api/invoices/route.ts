@@ -140,33 +140,50 @@ export async function POST(request: NextRequest) {
 
     const total = subtotal + cgst + sgst + igst;
 
-    const invoice = await prisma.invoice.create({
-      data: {
-        invoiceNumber,
-        customerId,
-        userId: user.id,
-        status: "unpaid",
-        subtotal,
-        cgst,
-        sgst,
-        igst,
-        total,
-        paidAmount: 0,
-        notes: notes || null,
-        dueDate: dueDate ? new Date(dueDate) : null,
-        isInterState: Boolean(isInterState),
-        items: {
-          create: invoiceItems,
+    const { invoice, stockWarnings } = await prisma.$transaction(async (tx) => {
+      const inv = await tx.invoice.create({
+        data: {
+          invoiceNumber,
+          customerId,
+          userId: user!.id,
+          status: "unpaid",
+          subtotal,
+          cgst,
+          sgst,
+          igst,
+          total,
+          paidAmount: 0,
+          notes: notes || null,
+          dueDate: dueDate ? new Date(dueDate) : null,
+          isInterState: Boolean(isInterState),
+          items: { create: invoiceItems },
         },
-      },
-      include: {
-        customer: true,
-        items: true,
-      },
+        include: { customer: true, items: true },
+      });
+
+      // Deduct stock for each item
+      const warnings: string[] = [];
+      for (const item of invoiceItems) {
+        await tx.product.updateMany({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.quantity } },
+        });
+        const prod = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: { name: true, stock: true },
+        });
+        if (prod && prod.stock < 0) {
+          warnings.push(`${prod.name} (stock: ${prod.stock})`);
+        }
+      }
+
+      return { invoice: inv, stockWarnings: warnings };
     });
 
     await logActivity(user.id, "create_invoice", `Created invoice ${invoiceNumber} for ${invoice.customer.name} | Total: ₹${invoice.total.toFixed(2)} | Items: ${invoiceItems.length} | Tax: ${isInterState ? "IGST" : "CGST+SGST"}`, invoice.id, "invoice");
-    return NextResponse.json(invoice, { status: 201 });
+    revalidateTag("products", { expire: 0 });
+    revalidateTag("reports", { expire: 0 });
+    return NextResponse.json({ ...invoice, stockWarnings }, { status: 201 });
   } catch (error) {
     console.error("POST /api/invoices error:", error);
     return NextResponse.json({ error: "Failed to create invoice" }, { status: 500 });

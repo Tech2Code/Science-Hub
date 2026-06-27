@@ -1,0 +1,106 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { logActivity } from "@/lib/activity";
+import { revalidateTag } from "next/cache";
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const returns = await prisma.return.findMany({
+      where: { invoiceId: id },
+      include: { items: true },
+      orderBy: { date: "desc" },
+    });
+    return NextResponse.json(returns);
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "Failed to fetch returns" }, { status: 500 });
+  }
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const session = await getServerSession(authOptions);
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const body = await request.json();
+    const { items, notes, date } = body as {
+      items: { productId: string; name: string; quantity: number; price: number }[];
+      notes?: string;
+      date?: string;
+    };
+
+    if (!items || items.length === 0) {
+      return NextResponse.json({ error: "At least one item is required" }, { status: 400 });
+    }
+    for (const item of items) {
+      if (!item.quantity || item.quantity <= 0) {
+        return NextResponse.json({ error: `Invalid quantity for ${item.name}` }, { status: 400 });
+      }
+    }
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+      include: { customer: true },
+    });
+    if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+
+    const ret = await prisma.$transaction(async (tx) => {
+      const created = await tx.return.create({
+        data: {
+          invoiceId: id,
+          date: date ? new Date(date) : new Date(),
+          notes: notes || null,
+          items: {
+            create: items.map(item => ({
+              productId: item.productId || null,
+              name: item.name,
+              quantity: item.quantity,
+              price: item.price,
+              total: item.quantity * item.price,
+            })),
+          },
+        },
+        include: { items: true },
+      });
+
+      // Restore stock for returned items
+      for (const item of items) {
+        if (item.productId) {
+          await tx.product.updateMany({
+            where: { id: item.productId },
+            data: { stock: { increment: item.quantity } },
+          });
+        }
+      }
+
+      return created;
+    });
+
+    revalidateTag("products", { expire: 0 });
+    revalidateTag("reports", { expire: 0 });
+
+    const itemSummary = items.map(i => `${i.name} ×${i.quantity}`).join(", ");
+    await logActivity(
+      session.user.id,
+      "create_return",
+      `Return recorded for invoice ${invoice.invoiceNumber} (${invoice.customer.name}) — ${itemSummary}`,
+      id,
+      "invoice"
+    );
+
+    return NextResponse.json(ret, { status: 201 });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "Failed to record return" }, { status: 500 });
+  }
+}

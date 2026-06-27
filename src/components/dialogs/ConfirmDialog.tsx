@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import { Button } from "../ui/Button";
 import styles from "./ConfirmDialog.module.css";
 
@@ -8,6 +8,7 @@ interface Props {
   open: boolean;
   title: string;
   message: string;
+  detail?: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: "danger" | "default";
@@ -20,6 +21,7 @@ export function ConfirmDialog({
   open,
   title,
   message,
+  detail,
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   variant = "default",
@@ -42,7 +44,8 @@ export function ConfirmDialog({
       <div className={styles.center}>
         <div className={styles.dialog}>
           <h2 className={styles.title}>{title}</h2>
-          <p className={styles.message}>{message}</p>
+          <p className={styles.message} style={{ whiteSpace: "pre-wrap" }}>{message}</p>
+          {detail && <div style={{ marginTop: "0.75rem" }}>{detail}</div>}
           <div className={styles.actions}>
             <Button variant="secondary" onClick={onCancel} disabled={loading}>
               {cancelLabel}

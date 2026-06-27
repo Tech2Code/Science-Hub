@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 
 interface PdfPreviewModalProps {
@@ -11,6 +12,14 @@ interface PdfPreviewModalProps {
 }
 
 export function PdfPreviewModal({ url, fileName, title, subtitle, onClose }: PdfPreviewModalProps) {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua) || window.innerWidth < 768;
+    setIsMobile(mobile);
+  }, []);
+
   function handleDownload() {
     const a = document.createElement("a");
     a.href = url;
@@ -18,6 +27,10 @@ export function PdfPreviewModal({ url, fileName, title, subtitle, onClose }: Pdf
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  }
+
+  function handleOpenInBrowser() {
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -125,12 +138,63 @@ export function PdfPreviewModal({ url, fileName, title, subtitle, onClose }: Pdf
           </div>
         </div>
 
-        {/* PDF iframe */}
-        <iframe
-          src={url}
-          style={{ flex: 1, border: "none", width: "100%", display: "block", background: "#525659" }}
-          title={`${title} PDF Preview`}
-        />
+        {/* PDF viewer */}
+        {isMobile ? (
+          <div style={{
+            flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            gap: "1.25rem", padding: "2rem", background: "#525659",
+          }}>
+            <div style={{
+              width: "3.5rem", height: "3.5rem", borderRadius: "1rem",
+              background: "rgba(255,255,255,0.12)", display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="9" y1="13" x2="15" y2="13"/>
+                <line x1="9" y1="17" x2="15" y2="17"/>
+              </svg>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontWeight: 700, fontSize: "1rem", color: "#fff", marginBottom: "0.375rem" }}>{title}</div>
+              <div style={{ fontSize: "0.8125rem", color: "rgba(255,255,255,0.6)" }}>
+                PDF preview is not supported on mobile browsers.
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem", width: "100%", maxWidth: "16rem" }}>
+              <Button variant="primary" size="md" onClick={handleDownload} style={{ justifyContent: "center" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Download PDF
+              </Button>
+              <button
+                onClick={handleOpenInBrowser}
+                style={{
+                  padding: "0.625rem 1.25rem", borderRadius: "var(--c-radius-sm)",
+                  border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)",
+                  color: "#fff", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "0.375rem",
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+                  <polyline points="15 3 21 3 21 9"/>
+                  <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+                Open in Browser
+              </button>
+            </div>
+          </div>
+        ) : (
+          <iframe
+            src={url}
+            style={{ flex: 1, border: "none", width: "100%", display: "block", background: "#525659" }}
+            title={`${title} PDF Preview`}
+          />
+        )}
       </div>
     </div>
   );

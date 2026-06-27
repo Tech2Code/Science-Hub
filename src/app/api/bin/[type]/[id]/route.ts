@@ -46,11 +46,26 @@ export async function POST(
     const name = await getItemName(binType, id);
 
     switch (binType) {
-      case "invoice":
-        await prisma.invoice.update({ where: { id }, data: { deletedAt: null } });
+      case "invoice": {
+        // Re-deduct stock when restoring from bin
+        const invItems = await prisma.invoiceItem.findMany({
+          where: { invoiceId: id },
+          select: { productId: true, quantity: true },
+        });
+        await prisma.$transaction([
+          prisma.invoice.update({ where: { id }, data: { deletedAt: null } }),
+          ...invItems.map(item =>
+            prisma.product.updateMany({
+              where: { id: item.productId },
+              data: { stock: { decrement: item.quantity } },
+            })
+          ),
+        ]);
         revalidateTag("invoices", { expire: 0 });
+        revalidateTag("products", { expire: 0 });
         revalidateTag("reports", { expire: 0 });
         break;
+      }
       case "customer":
         await prisma.customer.update({ where: { id }, data: { deletedAt: null } });
         revalidateTag("customers", { expire: 0 });

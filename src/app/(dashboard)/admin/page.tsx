@@ -36,6 +36,7 @@ const ACTION_META: Record<string, { label: string; color: string; bg: string; bo
   update_invoice:  { label: "Invoice Updated",   color: "var(--c-blue)",        bg: "var(--c-blue-bg)",   border: "var(--c-blue-border)"  },
   delete_invoice:  { label: "Invoice Deleted",   color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)"   },
   record_payment:  { label: "Payment Recorded",  color: "var(--c-green-text)",  bg: "var(--c-green-bg)",  border: "var(--c-green-border)" },
+  update_payment:  { label: "Payment Updated",   color: "var(--c-green-text)",  bg: "var(--c-green-bg)",  border: "var(--c-green-border)" },
   add_customer:    { label: "Customer Added",    color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
   update_customer: { label: "Customer Updated",  color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
   delete_customer: { label: "Customer Deleted",  color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)"   },
@@ -50,6 +51,7 @@ const ACTION_META: Record<string, { label: string; color: string; bg: string; bo
   delete_user:     { label: "User Deleted",      color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)"   },
   update_profile:  { label: "Profile Updated",   color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)"       },
   change_password: { label: "Password Changed",  color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
+  create_return:   { label: "Return Recorded",   color: "var(--c-orange)",      bg: "var(--c-orange-bg)", border: "var(--c-orange-border)" },
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -366,7 +368,10 @@ export default function AdminPage() {
         <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--c-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h2 style={{ fontWeight: 600, fontSize: "0.9375rem", color: "var(--c-text)" }}>My Profile</h2>
           {!editingProfile && !profileLoading && (
-            <Button variant="secondary" size="sm" onClick={() => { setEditingProfile(true); setChangingPw(false); setProfileMsg(null); }}>Edit Profile</Button>
+            <Button variant="secondary" size="sm" onClick={() => { setEditingProfile(true); setChangingPw(false); setProfileMsg(null); }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Edit Profile
+            </Button>
           )}
         </div>
         <div style={{ padding: "1.25rem" }}>
@@ -443,7 +448,12 @@ export default function AdminPage() {
               <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "var(--c-text)" }}>Password</div>
               <div style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", marginTop: "0.125rem" }}>Change your login password</div>
             </div>
-            {!changingPw && <Button variant="secondary" size="sm" onClick={() => { setChangingPw(true); setEditingProfile(false); setPwMsg(null); }}>Change Password</Button>}
+            {!changingPw && (
+              <Button variant="secondary" size="sm" onClick={() => { setChangingPw(true); setEditingProfile(false); setPwMsg(null); }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                Change Password
+              </Button>
+            )}
           </div>
           {changingPw && (
             <form onSubmit={savePassword} style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.875rem" }}>
@@ -469,7 +479,12 @@ export default function AdminPage() {
             <h2 style={{ fontWeight: 600, fontSize: "0.9375rem", color: "var(--c-text)" }}>User Management</h2>
             <p style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", marginTop: "0.125rem" }}>{users.length} user{users.length !== 1 ? "s" : ""} in the system</p>
           </div>
-          {!addOpen && <Button variant="primary" size="sm" onClick={() => { setAddOpen(true); setEditUser(null); setAddMsg(null); }}>+ Add User</Button>}
+          {!addOpen && (
+            <Button variant="primary" size="sm" onClick={() => { setAddOpen(true); setEditUser(null); setAddMsg(null); }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add User
+            </Button>
+          )}
         </div>
 
         {addOpen && (
@@ -583,8 +598,14 @@ export default function AdminPage() {
                         <span style={{ fontSize: "0.78rem", color: "var(--c-text-4)", fontStyle: "italic" }}>Use My Profile above</span>
                       ) : (
                         <div className="table-actions">
-                          <Button variant="editOutline" size="sm" onClick={() => { setEditUser(u); setEditForm({ name: u.name, email: u.email, role: u.role as Role, newPassword: "" }); setEditMsg(null); setAddOpen(false); }}>Edit</Button>
-                          <Button variant="dangerOutline" size="sm" onClick={() => setDeleteConfirm(u)}>Delete</Button>
+                          <Button variant="editOutline" size="sm" onClick={() => { setEditUser(u); setEditForm({ name: u.name, email: u.email, role: u.role as Role, newPassword: "" }); setEditMsg(null); setAddOpen(false); }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            Edit
+                          </Button>
+                          <Button variant="dangerOutline" size="sm" onClick={() => setDeleteConfirm(u)}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                            Delete
+                          </Button>
                         </div>
                       )}
                     </td>
@@ -603,7 +624,10 @@ export default function AdminPage() {
             <h2 style={{ fontWeight: 600, fontSize: "0.9375rem", color: "var(--c-text)" }}>Activity Log</h2>
             <p style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", marginTop: "0.125rem" }}>{logsTotal} total actions recorded</p>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => loadLogs(logsPage, logsFilter)}>↻ Refresh</Button>
+          <Button variant="secondary" size="sm" onClick={() => loadLogs(logsPage, logsFilter)}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+            Refresh
+          </Button>
         </div>
 
         {/* Filters */}
@@ -699,14 +723,16 @@ export default function AdminPage() {
                 disabled={logsLoading || logsPage <= 1}
                 onClick={() => loadLogs(logsPage - 1, logsFilter)}
               >
-                ← Prev
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+                Prev
               </Button>
               <Button
                 variant="secondary" size="sm"
                 disabled={logsLoading || logsPage >= logsTotalPages}
                 onClick={() => loadLogs(logsPage + 1, logsFilter)}
               >
-                Next →
+                Next
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
               </Button>
             </div>
           </div>

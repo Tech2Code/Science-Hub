@@ -3,10 +3,31 @@
  * Pass the #invoice-print-area HTMLElement (from any page or iframe).
  * Returns a Blob or null on failure.
  */
+async function fetchLogoDataUrl(): Promise<string | null> {
+  try {
+    const res = await fetch("/logo.png");
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function generateInvoicePdfBlob(el: HTMLElement): Promise<Blob | null> {
   try {
-    const html2canvas = (await import("html2canvas")).default;
-    const { jsPDF } = await import("jspdf");
+    const [html2canvasModule, jspdfModule, logoDataUrl] = await Promise.all([
+      import("html2canvas").then(m => m.default),
+      import("jspdf"),
+      fetchLogoDataUrl(),
+    ]);
+    const html2canvas = html2canvasModule;
+    const { jsPDF } = jspdfModule;
     const A4_PX = 794;
     const SCALE = 2;
 
@@ -49,6 +70,20 @@ export async function generateInvoicePdfBlob(el: HTMLElement): Promise<Blob | nu
         printEl.style.width = `${A4_PX}px`;
         printEl.style.minWidth = `${A4_PX}px`;
         printEl.style.maxWidth = `${A4_PX}px`;
+
+        // Replace Next.js optimized img src with a plain data URL so
+        // html2canvas can load it reliably on all devices (incl. mobile).
+        if (logoDataUrl) {
+          printEl.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
+            if (img.src.includes("logo") || img.getAttribute("alt")?.toLowerCase().includes("logo")) {
+              img.src = logoDataUrl;
+              img.style.width = "36px";
+              img.style.height = "36px";
+              img.style.objectFit = "contain";
+              img.style.flexShrink = "0";
+            }
+          });
+        }
 
         // Border color — matches the @media print override in the invoice detail page CSS
         const BD = "#64748b";

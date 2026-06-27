@@ -49,6 +49,12 @@
   --c-amber-border: #fcd34d;
   --c-amber-text:   #92400e;
 
+  /* Orange */
+  --c-orange:        #ea580c;
+  --c-orange-bg:     #fff7ed;
+  --c-orange-border: #fed7aa;
+  --c-orange-text:   #7c2d12;
+
   /* Sidebar / chrome */
   --c-sidebar:     #ffffff;
   --c-topbar:      #ffffff;
@@ -109,6 +115,11 @@
   --c-amber-bg:     rgba(251,191,36,0.1);
   --c-amber-border: rgba(251,191,36,0.35);
   --c-amber-text:   #fde68a;
+
+  --c-orange:        #fb923c;
+  --c-orange-bg:     rgba(251,146,60,0.12);
+  --c-orange-border: rgba(251,146,60,0.35);
+  --c-orange-text:   #fed7aa;
 
   --c-sidebar:     #0f172a;
   --c-topbar:      #0f172a;

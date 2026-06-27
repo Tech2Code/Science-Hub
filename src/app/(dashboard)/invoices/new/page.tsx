@@ -41,6 +41,8 @@ export default function NewInvoicePage() {
   const [customErrors, setCustomErrors] = useState<Partial<Record<keyof typeof customCustomer, string>>>({});
   const [saving, setSaving] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showStockDialog, setShowStockDialog] = useState(false);
+  const [stockOutItems, setStockOutItems] = useState<{ name: string; available: number; requested: number }[]>([]);
 
   useEffect(() => {
     fetch("/api/settings").then((r) => r.json()).then((s) => { setSellerState(s.state ?? ""); }).catch(() => {});
@@ -103,7 +105,25 @@ export default function NewInvoicePage() {
       setCustomErrors({});
     }
     if (items.length === 0) { setError("Add at least one item."); return; }
-    setError(""); setSaving(true);
+    setError("");
+
+    // Check stock before submitting
+    const outOfStock = items.flatMap(item => {
+      const product = products.find(p => p.id === item.productId);
+      if (!product || item.qty <= product.stock) return [];
+      return [{ name: item.productName, available: product.stock, requested: item.qty }];
+    });
+    if (outOfStock.length > 0) {
+      setStockOutItems(outOfStock);
+      setShowStockDialog(true);
+      return;
+    }
+    await doSubmit();
+  }
+
+  async function doSubmit() {
+    setShowStockDialog(false);
+    setSaving(true);
     const body: Record<string, unknown> = {
       isInterState,
       items: items.map((i) => ({ productId: i.productId, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit })),
@@ -122,7 +142,11 @@ export default function NewInvoicePage() {
       bustCache("/api/invoices");
       bustCache("/api/reports?type=summary");
       bustCache("/api/reports?type=outstanding");
+      bustCache("/api/products");
       toast({ type: "success", title: "Invoice created", message: "Invoice saved successfully." });
+      if (d.stockWarnings?.length > 0) {
+        toast({ type: "warning", title: "Stock went negative", message: d.stockWarnings.join(", ") });
+      }
       router.push(`/invoices/${d.id}`);
     }
     else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to create invoice."); }
@@ -174,6 +198,38 @@ export default function NewInvoicePage() {
         loading={false}
         onConfirm={() => router.push("/invoices")}
         onCancel={() => setShowCancelConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={showStockDialog}
+        title="Items out of stock"
+        message="The following items don't have enough stock. Do you still want to create the invoice?"
+        detail={
+          <div style={{ border: "1px solid var(--c-red-border)", borderRadius: "0.5rem", overflow: "hidden" }}>
+            <div style={{ background: "var(--c-red-bg)", padding: "0.5rem 0.875rem", display: "flex", alignItems: "center", gap: "0.375rem", borderBottom: "1px solid var(--c-red-border)" }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c-red)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--c-red)" }}>Insufficient stock</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {stockOutItems.map((item, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", padding: "0.5rem 0.875rem", borderBottom: i < stockOutItems.length - 1 ? "1px solid var(--c-red-border)" : "none", background: i % 2 === 0 ? "var(--c-red-bg)" : "transparent" }}>
+                  <span style={{ fontWeight: 600, color: "var(--c-red)", fontSize: "0.8125rem" }}>{item.name}</span>
+                  <span style={{ color: "var(--c-red)", whiteSpace: "nowrap", fontSize: "0.75rem", opacity: 0.85 }}>
+                    have <strong>{item.available}</strong> · need <strong>{item.requested}</strong>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        }
+        confirmLabel="Create Anyway"
+        cancelLabel="Go Back"
+        variant="danger"
+        loading={saving}
+        onConfirm={doSubmit}
+        onCancel={() => setShowStockDialog(false)}
       />
 
       <form onSubmit={handleSubmit}>

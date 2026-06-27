@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -20,6 +20,13 @@ interface InvoiceItem {
 }
 interface Payment {
   id: string; date: string; amount: number; method: string; reference: string;
+}
+interface ReturnRecord {
+  id: string; date: string; notes: string | null; createdAt: string;
+  items: { id: string; name: string; quantity: number; price: number; total: number; productId: string | null }[];
+}
+interface ReturnFormItem {
+  productId: string; name: string; price: number; selected: boolean; qty: number; maxQty: number;
 }
 interface Invoice {
   id: string; invoiceNumber: string; date: string; dueDate?: string; createdAt: string;
@@ -133,8 +140,19 @@ export default function InvoiceDetailPage() {
   const [paymentError, setPaymentError] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
+  const [shareLoadingText, setShareLoadingText] = useState("Preparing PDF…");
+  const [shareDropStyle, setShareDropStyle] = useState<React.CSSProperties>({});
+  const shareContainerRef = useRef<HTMLDivElement>(null);
+  const [showPaymentInPdf, setShowPaymentInPdf] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [returns, setReturns] = useState<ReturnRecord[]>([]);
+  const [showReturnForm, setShowReturnForm] = useState(false);
+  const [returnItems, setReturnItems] = useState<ReturnFormItem[]>([]);
+  const [returnNotes, setReturnNotes] = useState("");
+  const [returnDate, setReturnDate] = useState("");
+  const [addingReturn, setAddingReturn] = useState(false);
+  const [returnError, setReturnError] = useState("");
   const toast = useToast();
   const router = useRouter();
 
@@ -162,6 +180,21 @@ export default function InvoiceDetailPage() {
       setLoading(false);
     });
   }, [id]);
+
+  useEffect(() => {
+    fetch(`/api/invoices/${id}/returns`)
+      .then(r => r.json())
+      .then(data => setReturns(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [id]);
+
+  // Set page title to invoice number so browser Ctrl+P / Save as PDF uses the right filename
+  useEffect(() => {
+    if (!invoice) return;
+    const prev = document.title;
+    document.title = invoice.invoiceNumber;
+    return () => { document.title = prev; };
+  }, [invoice]);
 
   // Auto-trigger print/save-as-PDF when ?print=1 is in the URL
   useEffect(() => {
@@ -203,6 +236,63 @@ export default function InvoiceDetailPage() {
     }
   }
 
+  function openReturnForm() {
+    if (!invoice) return;
+    const alreadyReturned: Record<string, number> = {};
+    for (const ret of returns) {
+      for (const ri of ret.items) {
+        if (ri.productId) alreadyReturned[ri.productId] = (alreadyReturned[ri.productId] ?? 0) + ri.quantity;
+      }
+    }
+    setReturnItems(invoice.items.map(item => ({
+      productId: item.productId,
+      name: item.name,
+      price: item.price,
+      selected: false,
+      qty: 1,
+      maxQty: item.quantity - (alreadyReturned[item.productId] ?? 0),
+    })).filter(ri => ri.maxQty > 0));
+    setReturnNotes("");
+    setReturnDate(new Date().toISOString().split("T")[0]);
+    setReturnError("");
+    setShowReturnForm(true);
+  }
+
+  async function handleAddReturn(e: React.FormEvent) {
+    e.preventDefault();
+    const selected = returnItems.filter(ri => ri.selected && ri.qty > 0);
+    if (selected.length === 0) { setReturnError("Select at least one item to return."); return; }
+    for (const ri of selected) {
+      if (ri.qty > ri.maxQty) { setReturnError(`${ri.name}: quantity exceeds returnable amount (max ${ri.maxQty}).`); return; }
+    }
+    setReturnError("");
+    setAddingReturn(true);
+    try {
+      const res = await fetch(`/api/invoices/${id}/returns`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: selected.map(ri => ({ productId: ri.productId, name: ri.name, quantity: ri.qty, price: ri.price })),
+          notes: returnNotes || undefined,
+          date: returnDate || undefined,
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setReturns(prev => [created, ...prev]);
+        setShowReturnForm(false);
+        bustCache("/api/products");
+        toast({ type: "success", title: "Return recorded", message: `${selected.length} item(s) returned.` });
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setReturnError(d?.error ?? "Failed to record return.");
+      }
+    } catch {
+      setReturnError("Network error. Please try again.");
+    }
+    setAddingReturn(false);
+  }
+
   async function generatePdfBlob(): Promise<Blob | null> {
     const el = document.getElementById("invoice-print-area");
     if (!el) return null;
@@ -211,6 +301,7 @@ export default function InvoiceDetailPage() {
 
   async function handleDownload() {
     if (!invoice) return;
+    setShareLoadingText("Preparing PDF…");
     setShareLoading(true);
     await document.fonts.ready;
     const blob = await generatePdfBlob();
@@ -242,6 +333,7 @@ export default function InvoiceDetailPage() {
     const customer = invoice.customer.name;
 
     // Generate PDF for all channels
+    setShareLoadingText("Preparing PDF…");
     setShareLoading(true);
     await document.fonts.ready;
     const blob = await generatePdfBlob();
@@ -291,6 +383,7 @@ export default function InvoiceDetailPage() {
         toast({ type: "error", title: "No email on file", message: "This customer has no email address. Add one on the customer profile." });
         return;
       }
+      setShareLoadingText("Sending email…");
       setShareLoading(true);
       try {
         const formData = new FormData();
@@ -353,8 +446,9 @@ export default function InvoiceDetailPage() {
         onConfirm={handleDelete}
         onCancel={() => { if (!deleting) setDeleteConfirm(false); }}
       />
-      {shareLoading && <OverlayLoader text="Preparing PDF…" />}
+      {shareLoading && <OverlayLoader text={shareLoadingText} />}
       {addingPayment && <OverlayLoader text="Saving payment…" />}
+      {addingReturn && <OverlayLoader text="Saving return…" />}
 
       <style>{`
         #invoice-print-area {
@@ -414,6 +508,10 @@ export default function InvoiceDetailPage() {
                 Record Payment
               </Button>
             )}
+            <Button variant="secondary" size="sm" onClick={openReturnForm}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+              Record Return
+            </Button>
             <Button variant="secondary" size="sm" onClick={handleDownload}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Download PDF
@@ -427,8 +525,23 @@ export default function InvoiceDetailPage() {
               Delete
             </Button>
             {/* Share PDF button */}
-            <div style={{ position: "relative" }}>
-              <Button variant="secondary" size="sm" disabled={shareLoading} onClick={() => setShareOpen(o => !o)}>
+            <div style={{ position: "relative" }} ref={shareContainerRef}>
+              <Button variant="secondary" size="sm" disabled={shareLoading} onClick={() => {
+                setShareOpen(o => {
+                  const next = !o;
+                  if (next && shareContainerRef.current) {
+                    const rect = shareContainerRef.current.getBoundingClientRect();
+                    const dropW = 240;
+                    const viewW = window.innerWidth;
+                    let right = viewW - rect.right;
+                    // Ensure the dropdown's left edge stays ≥8px from viewport left
+                    if (viewW - right - dropW < 8) right = viewW - dropW - 8;
+                    right = Math.max(8, right);
+                    setShareDropStyle({ position: "fixed", top: rect.bottom + 8, right });
+                  }
+                  return next;
+                });
+              }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "0.375rem" }}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
                 Share PDF
               </Button>
@@ -436,8 +549,9 @@ export default function InvoiceDetailPage() {
                 <>
                   <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setShareOpen(false)} />
                   <div style={{
-                    position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 100,
+                    zIndex: 100,
                     background: "var(--c-bg-card)",
+                    ...shareDropStyle,
                     border: "1px solid var(--c-border-md)",
                     borderRadius: "0.5rem",
                     boxShadow: "0 8px 24px -4px rgba(0,0,0,.18), 0 2px 8px -2px rgba(0,0,0,.12)",
@@ -533,18 +647,16 @@ export default function InvoiceDetailPage() {
                     {PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
                   </Select>
                 </FormField>
-                <div style={{ flex: 1, minWidth: "8rem" }}>
-                  <FormField label="Reference / UTR">
-                    <Input
-                      type="text"
-                      value={paymentForm.reference}
-                      onChange={(e) => setPaymentForm((p) => ({ ...p, reference: e.target.value }))}
-                      placeholder="Optional"
-                      sz="sm"
-                      style={{ width: "100%" }}
-                    />
-                  </FormField>
-                </div>
+                <FormField label="Reference / UTR">
+                  <Input
+                    type="text"
+                    value={paymentForm.reference}
+                    onChange={(e) => setPaymentForm((p) => ({ ...p, reference: e.target.value }))}
+                    placeholder="Optional"
+                    sz="sm"
+                    style={{ width: "12rem" }}
+                  />
+                </FormField>
                 <div style={{ display: "flex", gap: "0.5rem" }}>
                   <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
@@ -556,6 +668,68 @@ export default function InvoiceDetailPage() {
               <p style={{ marginTop: "0.375rem", fontSize: "0.7rem", color: "var(--c-text-4)" }}>
                 Balance due: ₹{fmt(balance)}
               </p>
+            </form>
+          </div>
+        )}
+
+        {/* Return form */}
+        {showReturnForm && (
+          <div className="card no-print" style={{ padding: "1.25rem" }}>
+            <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text)", marginBottom: "0.75rem" }}>Record Return</h3>
+            {returnError && <div className="error-banner" style={{ marginBottom: "0.75rem" }}>{returnError}</div>}
+            <form onSubmit={handleAddReturn}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", marginBottom: "0.75rem" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.25rem" }}>Return Date</label>
+                  <Input type="date" sz="sm" value={returnDate} onChange={e => setReturnDate(e.target.value)} style={{ width: "10rem" }} />
+                </div>
+                <div style={{ flex: 1, minWidth: "12rem" }}>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.25rem" }}>Notes</label>
+                  <Input type="text" sz="sm" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Optional reason" style={{ width: "100%" }} />
+                </div>
+              </div>
+              <div style={{ marginBottom: "0.75rem" }}>
+                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.5rem" }}>Select Items to Return</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  {returnItems.map((ri, idx) => (
+                    <div key={ri.productId} style={{
+                      display: "flex", alignItems: "center", gap: "0.75rem",
+                      padding: "0.5rem 0.75rem", borderRadius: "0.375rem",
+                      background: ri.selected ? "var(--c-blue-bg)" : "var(--c-bg-sub)",
+                      border: `1px solid ${ri.selected ? "var(--c-blue-border)" : "var(--c-border)"}`,
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={ri.selected}
+                        onChange={e => setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, selected: e.target.checked } : r))}
+                        style={{ width: "1rem", height: "1rem", cursor: "pointer", accentColor: "var(--c-blue)" }}
+                      />
+                      <span style={{ flex: 1, fontSize: "0.875rem", color: "var(--c-text)" }}>{ri.name}</span>
+                      <span style={{ fontSize: "0.75rem", color: "var(--c-text-4)" }}>max {ri.maxQty}</span>
+                      <Input
+                        type="number"
+                        sz="sm"
+                        value={ri.qty}
+                        min={1}
+                        max={ri.maxQty}
+                        disabled={!ri.selected}
+                        onChange={e => setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qty: Math.min(ri.maxQty, Math.max(1, Number(e.target.value))) } : r))}
+                        style={{ width: "5rem" }}
+                      />
+                    </div>
+                  ))}
+                  {returnItems.length === 0 && (
+                    <p style={{ fontSize: "0.875rem", color: "var(--c-text-4)" }}>All items from this invoice have already been returned.</p>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <Button type="submit" variant="primary" size="sm" disabled={addingReturn || returnItems.length === 0}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                  Save Return
+                </Button>
+                <Button type="button" variant="secondary" size="sm" onClick={() => setShowReturnForm(false)}>Cancel</Button>
+              </div>
             </form>
           </div>
         )}
@@ -746,6 +920,40 @@ export default function InvoiceDetailPage() {
                 </tr>
 
               </tbody>
+
+              {/* PDF payment history — direct rows in main table to avoid double borders */}
+              {showPaymentInPdf && invoice.payments.length > 0 && (() => {
+                const sorted = [...invoice.payments].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                const allCols = invoice.isInterState ? 9 : 10;
+                const refCols = invoice.isInterState ? 3 : 4;
+                const bd: React.CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 10px", fontSize: 11 };
+                return (
+                  <tbody>
+                    <tr>
+                      <td colSpan={allCols} style={{ ...bd, padding: "7px 14px", background: "var(--inv-bg3)", color: "var(--inv-tx)", fontWeight: 700, fontSize: 12 }}>
+                        Payment History
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date</td>
+                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Method</td>
+                      <td colSpan={refCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Reference / UTR</td>
+                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
+                    </tr>
+                    {sorted.map((p) => (
+                      <tr key={p.id}>
+                        <td colSpan={2} style={{ ...bd, color: "var(--inv-tx2)" }}>
+                          {new Date(p.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        </td>
+                        <td colSpan={2} style={{ ...bd, color: "var(--inv-tx2)" }}>{p.method}</td>
+                        <td colSpan={refCols} style={{ ...bd, color: "var(--inv-tx2)" }}>{p.reference || "—"}</td>
+                        <td colSpan={2} style={{ ...bd, textAlign: "right", color: "var(--inv-green)", fontWeight: 600 }}>{fmt(p.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                );
+              })()}
+
               <tfoot>
                 <tr>
                   <td colSpan={invoice.isInterState ? 9 : 10}
@@ -756,38 +964,176 @@ export default function InvoiceDetailPage() {
               </tfoot>
             </table>
           </div>
+
         </div>
 
         {/* Payment history */}
-        {invoice.payments.length > 0 && (
-          <div className="card no-print">
-            <div style={{ padding:"1rem 1.25rem",borderBottom:"1px solid var(--c-border)" }}>
-              <h2 style={{ fontWeight:600,color:"var(--c-text)",fontSize:"0.875rem" }}>Payment History</h2>
-            </div>
-            <div className="table-wrap">
-              <table className="table-base">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Method</th>
-                    <th>Reference</th>
-                    <th className="table-th-right">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoice.payments.map((p) => (
-                    <tr key={p.id}>
-                      <td data-label="Date" style={{ color:"var(--c-text-3)" }}>{new Date(p.date).toLocaleDateString("en-IN")}</td>
-                      <td data-label="Method" style={{ color:"var(--c-text-3)" }}>{p.method}</td>
-                      <td data-mobile-hide style={{ color:"var(--c-text-4)",fontFamily:"var(--font-mono)",fontSize:"0.75rem" }}>{p.reference || "—"}</td>
-                      <td data-label="Amount" data-mobile-full className="table-td-right" style={{ fontWeight:500,color:"var(--c-green)" }}>₹{fmt(p.amount)}</td>
+        {invoice.payments.length > 0 && (() => {
+          const METHOD_STYLE: Record<string, { bg: string; color: string; border: string }> = {
+            Cash:    { bg:"var(--c-green-bg)",   color:"var(--c-green-text)",  border:"var(--c-green-border)" },
+            UPI:     { bg:"#f3e8ff",              color:"#7c3aed",              border:"#ddd6fe" },
+            NEFT:    { bg:"var(--c-blue-bg)",     color:"var(--c-blue)",        border:"var(--c-blue-border)" },
+            RTGS:    { bg:"var(--c-blue-bg)",     color:"var(--c-blue)",        border:"var(--c-blue-border)" },
+            Cheque:  { bg:"var(--c-amber-bg)",    color:"var(--c-amber)",       border:"var(--c-amber-border)" },
+            Card:    { bg:"#ede9fe",              color:"#5b21b6",              border:"#c4b5fd" },
+            Other:   { bg:"var(--c-bg-sub)",      color:"var(--c-text-3)",      border:"var(--c-border)" },
+          };
+          const paidTotal = invoice.payments.reduce((s, p) => s + p.amount, 0);
+          const paidPct = Math.min(100, (paidTotal / invoice.total) * 100);
+
+          return (
+            <div className="card no-print">
+              {/* Header */}
+              <div style={{ padding:"1rem 1.25rem", borderBottom:"1px solid var(--c-border)", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"1rem", flexWrap:"wrap" }}>
+                {/* Left: title + count */}
+                <div style={{ display:"flex", alignItems:"center", gap:"0.625rem" }}>
+                  <h2 style={{ fontWeight:600, color:"var(--c-text)", fontSize:"0.9375rem", margin:0 }}>Payment History</h2>
+                  <span style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"1.375rem", height:"1.375rem", borderRadius:"9999px", background:"var(--c-blue-bg)", color:"var(--c-blue)", fontSize:"0.7rem", fontWeight:700, border:"1px solid var(--c-blue-border)" }}>
+                    {invoice.payments.length}
+                  </span>
+                </div>
+                {/* Right: toggle + stats */}
+                <div style={{ display:"flex", alignItems:"center", gap:"1rem", flexWrap:"wrap" }}>
+                  {/* Show in PDF toggle */}
+                  <button
+                    onClick={() => setShowPaymentInPdf(v => !v)}
+                    title={showPaymentInPdf ? "Remove from PDF/Print" : "Include in PDF/Print"}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: "0.375rem",
+                      padding: "0.35rem 0.75rem", borderRadius: "9999px",
+                      fontSize: "0.7rem", fontWeight: 600, cursor: "pointer",
+                      whiteSpace: "nowrap", flexShrink: 0,
+                      border: showPaymentInPdf ? "1px solid var(--c-red-border)" : "1px solid var(--c-blue-border)",
+                      background: showPaymentInPdf ? "var(--c-red-bg)" : "var(--c-blue-bg)",
+                      color: showPaymentInPdf ? "var(--c-red)" : "var(--c-blue)",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {showPaymentInPdf ? (
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    ) : (
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                    )}
+                    {showPaymentInPdf ? "Remove Payment History from PDF" : "Add Payment History to PDF"}
+                  </button>
+                  {/* Stats group — separated visually */}
+                  <div style={{ display:"flex", alignItems:"center", gap:"1.25rem", borderLeft:"1px solid var(--c-border)", paddingLeft:"1rem" }}>
+                    <div>
+                      <div style={{ fontSize:"0.6875rem", color:"var(--c-text-4)", fontWeight:500, marginBottom:"0.1rem" }}>Total Paid</div>
+                      <div style={{ fontSize:"1rem", fontWeight:700, color:"var(--c-green)", lineHeight:1 }}>₹{fmt(paidTotal)}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize:"0.6875rem", color:"var(--c-text-4)", fontWeight:500, marginBottom:"0.1rem" }}>Balance</div>
+                      <div style={{ fontSize:"1rem", fontWeight:700, lineHeight:1, color: balance > 0 ? "var(--c-red)" : "var(--c-green)" }}>₹{fmt(balance)}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div style={{ padding:"0.5rem 1.25rem", borderBottom:"1px solid var(--c-border)", background:"var(--c-bg-sub)" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:"0.75rem" }}>
+                  <div style={{ flex:1, height:"5px", borderRadius:"9999px", background:"var(--c-border)", overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${paidPct}%`, borderRadius:"9999px", background: paidPct >= 100 ? "var(--c-green)" : "var(--c-blue)", transition:"width 0.4s ease" }} />
+                  </div>
+                  <span style={{ fontSize:"0.7rem", fontWeight:600, color: paidPct >= 100 ? "var(--c-green-text)" : "var(--c-text-3)", whiteSpace:"nowrap" }}>
+                    {paidPct.toFixed(0)}% paid
+                  </span>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="table-wrap">
+                <table className="table-base">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Date</th>
+                      <th>Method</th>
+                      <th>Reference / UTR</th>
+                      <th className="table-th-right">Amount</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {[...invoice.payments]
+                      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                      .map((p, idx) => {
+                        const ms = METHOD_STYLE[p.method] ?? METHOD_STYLE.Other;
+                        return (
+                          <tr key={p.id}>
+                            <td style={{ color:"var(--c-text-4)", fontSize:"0.75rem", width:"2rem" }}>{idx + 1}</td>
+                            <td data-label="Date" style={{ whiteSpace:"nowrap", color:"var(--c-text-2)" }}>
+                              {new Date(p.date).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" })}
+                            </td>
+                            <td data-label="Method">
+                              <span style={{
+                                display:"inline-block", padding:"0.15rem 0.5rem", borderRadius:"9999px",
+                                fontSize:"0.7rem", fontWeight:700, whiteSpace:"nowrap",
+                                background:ms.bg, color:ms.color, border:`1px solid ${ms.border}`,
+                              }}>{p.method}</span>
+                            </td>
+                            <td data-label="Reference" style={{ color:"var(--c-text-4)", fontFamily:"var(--font-mono)", fontSize:"0.75rem" }}>
+                              {p.reference || "—"}
+                            </td>
+                            <td data-label="Amount" className="table-td-right" style={{ fontWeight:600, color:"var(--c-green)", whiteSpace:"nowrap" }}>
+                              ₹{fmt(p.amount)}
+                            </td>
+                          </tr>
+                        );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
+
+        {/* Returns history */}
+        {returns.length > 0 && (() => {
+          const totalReturned = returns.reduce((s, r) => s + r.items.reduce((ss, ri) => ss + ri.total, 0), 0);
+          return (
+            <div className="card no-print" style={{ overflow: "hidden" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0.875rem 1.25rem", borderBottom:"1px solid var(--c-border)" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:"0.625rem" }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                  <span style={{ fontWeight:600, fontSize:"0.875rem", color:"var(--c-text)" }}>Return History</span>
+                  <span style={{ fontSize:"0.75rem", background:"var(--c-bg-sub)", border:"1px solid var(--c-border)", borderRadius:"9999px", padding:"0.1rem 0.5rem", color:"var(--c-text-3)" }}>{returns.length}</span>
+                </div>
+                <div style={{ fontSize:"0.875rem", fontWeight:700, color:"var(--c-orange)" }}>₹{fmt(totalReturned)} returned</div>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
+                {returns.map((ret, ridx) => (
+                  <div key={ret.id} style={{ padding:"0.875rem 1.25rem", borderBottom: ridx < returns.length - 1 ? "1px solid var(--c-border)" : "none" }}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"0.5rem" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:"0.5rem" }}>
+                        <span style={{ fontSize:"0.75rem", fontWeight:600, color:"var(--c-text-3)" }}>
+                          {new Date(ret.date).toLocaleString("en-IN", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", hour12:true })}
+                        </span>
+                        {ret.notes && <span style={{ fontSize:"0.75rem", color:"var(--c-text-4)" }}>— {ret.notes}</span>}
+                      </div>
+                      <span style={{ fontSize:"0.875rem", fontWeight:700, color:"var(--c-orange)" }}>
+                        ₹{fmt(ret.items.reduce((s, ri) => s + ri.total, 0))}
+                      </span>
+                    </div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:"0.25rem" }}>
+                      {ret.items.map(ri => (
+                        <div key={ri.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", fontSize:"0.8125rem" }}>
+                          <span style={{ color:"var(--c-text-2)" }}>{ri.name} <span style={{ color:"var(--c-text-4)" }}>×{ri.quantity}</span></span>
+                          <span style={{ color:"var(--c-text-3)", fontFamily:"var(--font-mono)" }}>₹{fmt(ri.total)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </>
   );

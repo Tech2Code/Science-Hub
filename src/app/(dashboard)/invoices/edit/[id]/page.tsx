@@ -9,6 +9,7 @@ import { Sk } from "@/components/ui/Skeleton";
 import { fetchCached, bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
+import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import styles from "./edit.module.css";
 
 
@@ -43,6 +44,8 @@ export default function EditInvoicePage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showStockDialog, setShowStockDialog] = useState(false);
+  const [stockOutItems, setStockOutItems] = useState<{ name: string; available: number; requested: number }[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -101,7 +104,31 @@ export default function EditInvoicePage() {
       const priceErr = validate(String(item.price), rules.nonNegativeNumber("Item price cannot be negative."));
       if (qtyErr || priceErr) { setError(qtyErr ?? priceErr ?? ""); return; }
     }
-    setError(""); setSaving(true);
+    setError("");
+
+    // Check stock: current product.stock already has this invoice's old qty deducted,
+    // so effective available = product.stock + original qty for that product.
+    const outOfStock = items.flatMap(item => {
+      const product = products.find(p => p.id === item.productId);
+      if (!product) return [];
+      const originalQty = invoice?.items.find(orig => orig.productId === item.productId)?.quantity ?? 0;
+      const effectiveStock = product.stock + originalQty;
+      if (item.qty > effectiveStock) {
+        return [{ name: item.productName, available: effectiveStock, requested: item.qty }];
+      }
+      return [];
+    });
+    if (outOfStock.length > 0) {
+      setStockOutItems(outOfStock);
+      setShowStockDialog(true);
+      return;
+    }
+    await doSubmit();
+  }
+
+  async function doSubmit() {
+    setShowStockDialog(false);
+    setSaving(true);
     const res = await fetch(`/api/invoices/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -113,7 +140,16 @@ export default function EditInvoicePage() {
       }),
     });
     setSaving(false);
-    if (res.ok) { bustCache(`/api/invoices/${id}`); toast({ type: "success", title: "Invoice updated", message: "Changes saved." }); router.push(`/invoices/${id}`); }
+    if (res.ok) {
+      const d = await res.json();
+      bustCache(`/api/invoices/${id}`);
+      bustCache("/api/products");
+      toast({ type: "success", title: "Invoice updated", message: "Changes saved." });
+      if (d.stockWarnings?.length > 0) {
+        toast({ type: "warning", title: "Stock went negative", message: d.stockWarnings.join(", ") });
+      }
+      router.push(`/invoices/${id}`);
+    }
     else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to update invoice."); }
   }
 
@@ -156,6 +192,39 @@ export default function EditInvoicePage() {
   return (
     <>
     {saving && <OverlayLoader text="Saving invoice…" />}
+
+    <ConfirmDialog
+      open={showStockDialog}
+      title="Items out of stock"
+      message="The following items don't have enough stock. Do you still want to update the invoice?"
+      detail={
+        <div style={{ border: "1px solid var(--c-red-border)", borderRadius: "0.5rem", overflow: "hidden" }}>
+          <div style={{ background: "var(--c-red-bg)", padding: "0.5rem 0.875rem", display: "flex", alignItems: "center", gap: "0.375rem", borderBottom: "1px solid var(--c-red-border)" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c-red)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--c-red)" }}>Insufficient stock</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {stockOutItems.map((item, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", padding: "0.5rem 0.875rem", borderBottom: i < stockOutItems.length - 1 ? "1px solid var(--c-red-border)" : "none", background: i % 2 === 0 ? "var(--c-red-bg)" : "transparent" }}>
+                <span style={{ fontWeight: 600, color: "var(--c-red)", fontSize: "0.8125rem" }}>{item.name}</span>
+                <span style={{ color: "var(--c-red)", whiteSpace: "nowrap", fontSize: "0.75rem", opacity: 0.85 }}>
+                  Have <strong>{item.available}</strong> · Need <strong>{item.requested}</strong>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      }
+      confirmLabel="Update Anyway"
+      cancelLabel="Go Back"
+      variant="danger"
+      loading={saving}
+      onConfirm={doSubmit}
+      onCancel={() => setShowStockDialog(false)}
+    />
+
     <div className="page-stack">
       <Breadcrumb items={[
         { label: "Invoices", href: "/invoices" },
