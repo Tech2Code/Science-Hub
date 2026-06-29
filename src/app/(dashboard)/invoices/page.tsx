@@ -188,7 +188,7 @@ export default function InvoicesPage() {
                       {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                     </div>
                   </Cell>
-                  <Cell col={COLUMNS[2]} style={{ color: "var(--c-text-2)" }}>{inv.customer?.name}</Cell>
+                  <Cell col={COLUMNS[2]} className="table-cell-clip" style={{ color: "var(--c-text-2)", maxWidth: "10rem" }}>{inv.customer?.name}</Cell>
                   <Cell col={COLUMNS[3]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{inv.createdBy?.name ?? "—"}</Cell>
                   <Cell col={COLUMNS[4]} style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
                   <Cell col={COLUMNS[5]} style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
