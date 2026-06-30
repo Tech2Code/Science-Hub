@@ -37,6 +37,7 @@ export default function EditInvoicePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isInterState, setIsInterState] = useState(false);
   const [items, setItems] = useState<LineItem[]>([]);
+  const [initialState, setInitialState] = useState<{ isInterState: boolean; items: LineItem[]; notes: string; dueDate: string } | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [notes, setNotes] = useState("");
@@ -56,17 +57,22 @@ export default function EditInvoicePage() {
       const products = prods as Product[];
       setInvoice(invoice);
       setProducts(products);
-      setIsInterState(invoice.isInterState ?? false);
-      setNotes(invoice.notes ?? "");
-      setDueDate(invoice.dueDate ? invoice.dueDate.split("T")[0] : "");
-      setItems(invoice.items.map((item: InvoiceData["items"][0]) => ({
+      const inter = invoice.isInterState ?? false;
+      const notesVal = invoice.notes ?? "";
+      const dueDateVal = invoice.dueDate ? invoice.dueDate.split("T")[0] : "";
+      const lineItems: LineItem[] = invoice.items.map((item: InvoiceData["items"][0]) => ({
         productId: item.productId,
         productName: item.name,
         unit: item.unit,
         qty: item.quantity,
         price: item.price,
         gstRate: item.gstRate,
-      })));
+      }));
+      setIsInterState(inter);
+      setNotes(notesVal);
+      setDueDate(dueDateVal);
+      setItems(lineItems);
+      setInitialState({ isInterState: inter, items: lineItems, notes: notesVal, dueDate: dueDateVal });
       setLoading(false);
     }).catch(() => { setError("Failed to load invoice."); setLoading(false); });
   }, [id]);
@@ -433,19 +439,32 @@ export default function EditInvoicePage() {
               {items.length === 0 && (
                 <p style={{ marginTop: "0.75rem", fontSize: "0.75rem", color: "var(--c-amber-text)" }}>• Add at least one item</p>
               )}
-              <div className="summary-actions">
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="full"
-                  disabled={saving || items.length === 0}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Invoice
-                </Button>
-                <Button variant="secondary" href={`/invoices/${id}`} size="full">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel
-                </Button>
-              </div>
+              {(() => {
+                const hasChanges = initialState === null || (
+                  isInterState !== initialState.isInterState ||
+                  notes !== initialState.notes ||
+                  dueDate !== initialState.dueDate ||
+                  JSON.stringify(items) !== JSON.stringify(initialState.items)
+                );
+                return (
+                  <div className="summary-actions">
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="full"
+                      disabled={saving || items.length === 0 || !hasChanges}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Invoice
+                    </Button>
+                    {!hasChanges && items.length > 0 && !saving && (
+                      <p style={{ fontSize: "0.75rem", color: "var(--c-text-4)", textAlign: "center", margin: 0 }}>No changes detected.</p>
+                    )}
+                    <Button variant="secondary" href={`/invoices/${id}`} size="full">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel
+                    </Button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

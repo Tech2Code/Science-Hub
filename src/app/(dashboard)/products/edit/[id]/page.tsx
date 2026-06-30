@@ -32,6 +32,7 @@ export default function EditProductPage() {
     price: "", gstRate: "18", stock: "0", minStock: "0",
     brandId: "", categoryId: "",
   });
+  const [initialForm, setInitialForm] = useState<FormData | null>(null);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,13 +48,15 @@ export default function EditProductPage() {
       fetch("/api/categories").then((r) => r.json()).catch(() => []),
     ])
       .then(([product, b, c]) => {
-        setForm({
+        const loaded: FormData = {
           name: product.name ?? "", sku: product.sku ?? "",
           description: product.description ?? "", unit: product.unit ?? "Nos",
           price: product.price?.toString() ?? "", gstRate: product.gstRate?.toString() ?? "18",
           stock: product.stock?.toString() ?? "0", minStock: product.minStock?.toString() ?? "0",
           brandId: product.brandId ?? "", categoryId: product.categoryId ?? "",
-        });
+        };
+        setForm(loaded);
+        setInitialForm(loaded);
         setBrands(b); setCategories(c); setLoading(false);
       })
       .catch(() => { setError("Failed to load product."); setLoading(false); });
@@ -182,7 +185,12 @@ export default function EditProductPage() {
         </div>
 
         <div className="form-actions">
-          <Button type="submit" variant="primary" disabled={saving}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Product</Button>
+          <Button type="submit" variant="primary" disabled={saving || (initialForm !== null && JSON.stringify(form) === JSON.stringify(initialForm))}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Product
+          </Button>
+          {initialForm !== null && JSON.stringify(form) === JSON.stringify(initialForm) && !saving && (
+            <span style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", alignSelf: "center" }}>No changes detected.</span>
+          )}
           <Button variant="secondary" href="/products"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
         </div>
       </form>
