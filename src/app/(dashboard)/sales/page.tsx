@@ -7,16 +7,16 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { useFetch } from "@/lib/useCache";
 
 interface MonthlyBar { month: string; total: number; }
-interface RecentBill { id: string; billNumber: string; billDate: string; vendorName: string; total: number; paidAmount: number; status: string; }
-interface TopVendor { id: string; name: string; totalBilled: number; totalPaid: number; }
-interface PurchaseDashboard {
-  spendThisMonth: number;
-  totalPaid: number;
-  payableBalance: number;
-  overdueBillsCount: number;
-  monthlySpend: MonthlyBar[];
-  recentBills: RecentBill[];
-  topVendors: TopVendor[];
+interface RecentInvoice { id: string; invoiceNumber: string; date: string; customerName: string; total: number; paidAmount: number; status: string; }
+interface TopCustomer { id: string; name: string; totalBilled: number; totalPaid: number; }
+interface SalesDashboard {
+  revenueThisMonth: number;
+  totalCollected: number;
+  outstandingBalance: number;
+  overdueCount: number;
+  monthlyRevenue: MonthlyBar[];
+  recentInvoices: RecentInvoice[];
+  topCustomers: TopCustomer[];
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -34,10 +34,11 @@ function BarChart({ data }: { data: MonthlyBar[] }) {
                 style={{
                   width: "100%",
                   height: `${Math.max(pct, 2)}%`,
-                  background: "linear-gradient(180deg, #f59e0b, #d97706)",
+                  background: "linear-gradient(180deg, #3b82f6, #2563eb)",
                   borderRadius: "3px 3px 0 0",
                   transition: "height 0.5s ease",
                   minHeight: 2,
+                  position: "relative",
                 }}
                 title={`${bar.month}: ${fmt(bar.total)}`}
               />
@@ -65,8 +66,8 @@ function KpiCard({ label, value, sub, color = "var(--c-text)", loading }: { labe
   );
 }
 
-export default function PurchaseDashboardPage() {
-  const { data, loading } = useFetch<PurchaseDashboard>("/api/reports?type=purchase-dashboard");
+export default function SalesDashboardPage() {
+  const { data, loading } = useFetch<SalesDashboard>("/api/reports?type=sales-dashboard");
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
@@ -78,47 +79,48 @@ export default function PurchaseDashboardPage() {
       <div className="page-stack">
         <div className="page-header">
           <div>
-            <h1 className="page-title">Purchase Overview</h1>
+            <h1 className="page-title">Sales Overview</h1>
             <p className="page-sub">{month}</p>
           </div>
           <div style={{ display: "flex", gap: "0.5rem" }}>
-            <Button variant="secondary" href="/purchases/vendors/new">+ Vendor</Button>
-            <Button variant="primary" href="/purchases/bills/new">+ Bill</Button>
+            <Button variant="secondary" href="/sales/customers/new">+ Customer</Button>
+            <Button variant="primary" href="/sales/invoices/new">+ Invoice</Button>
           </div>
         </div>
 
         {/* KPI row */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.875rem" }}>
-          <KpiCard label="Spend This Month" value={loading ? "—" : fmt(data?.spendThisMonth ?? 0)} sub="total billed" loading={loading} color="var(--c-amber)" />
-          <KpiCard label="Total Paid" value={loading ? "—" : fmt(data?.totalPaid ?? 0)} sub="all time" loading={loading} color="var(--c-green-text)" />
-          <KpiCard label="Payable Balance" value={loading ? "—" : fmt(data?.payableBalance ?? 0)} sub="pending payment" loading={loading} color="var(--c-amber)" />
-          <KpiCard label="Overdue Bills" value={loading ? "—" : String(data?.overdueBillsCount ?? 0)} sub="past due date" loading={loading} color={(data?.overdueBillsCount ?? 0) > 0 ? "var(--c-red)" : "var(--c-text-4)"} />
+          <KpiCard label="Revenue This Month" value={loading ? "—" : fmt(data?.revenueThisMonth ?? 0)} sub="total billed" loading={loading} color="var(--c-blue)" />
+          <KpiCard label="Total Collected" value={loading ? "—" : fmt(data?.totalCollected ?? 0)} sub="all time" loading={loading} color="var(--c-green-text)" />
+          <KpiCard label="Outstanding Balance" value={loading ? "—" : fmt(data?.outstandingBalance ?? 0)} sub="pending collection" loading={loading} color="var(--c-amber)" />
+          <KpiCard label="Overdue Invoices" value={loading ? "—" : String(data?.overdueCount ?? 0)} sub="past due date" loading={loading} color={(data?.overdueCount ?? 0) > 0 ? "var(--c-red)" : "var(--c-text-4)"} />
         </div>
 
         {/* Monthly bar chart */}
         {mounted && (
           <div className="card" style={{ padding: "1.25rem" }}>
-            <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", marginBottom: "1rem" }}>Monthly Spend (last 6 months)</h2>
-            {loading || !data?.monthlySpend?.length
+            <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", marginBottom: "1rem" }}>Monthly Revenue (last 6 months)</h2>
+            {loading || !data?.monthlyRevenue?.length
               ? <div style={{ height: 120, background: "var(--c-bg-sub)", borderRadius: 8, animation: "skPulse 1.4s ease-in-out infinite" }} />
-              : <BarChart data={data.monthlySpend} />
+              : <BarChart data={data.monthlyRevenue} />
             }
           </div>
         )}
 
-        {/* Recent bills + Top vendors */}
+        {/* Recent invoices + Top customers */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
+          {/* Recent Invoices */}
           <div className="card">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", borderBottom: "1px solid var(--c-border)" }}>
-              <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)" }}>Recent Bills</h2>
-              <Link href="/purchases/bills" style={{ fontSize: "0.75rem", color: "var(--c-blue)", textDecoration: "none" }}>View all →</Link>
+              <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)" }}>Recent Invoices</h2>
+              <Link href="/sales/invoices" style={{ fontSize: "0.75rem", color: "var(--c-blue)", textDecoration: "none" }}>View all →</Link>
             </div>
             <div style={{ overflowX: "auto" }}>
               <table className="table-base">
                 <thead>
                   <tr>
-                    <th>Bill</th>
-                    <th>Vendor</th>
+                    <th>Invoice</th>
+                    <th>Customer</th>
                     <th style={{ textAlign: "right" }}>Amount</th>
                     <th>Status</th>
                   </tr>
@@ -128,14 +130,14 @@ export default function PurchaseDashboardPage() {
                     [...Array(5)].map((_, i) => (
                       <tr key={i}><td colSpan={4}><div style={{ height: 16, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite", margin: "4px 0" }} /></td></tr>
                     ))
-                  ) : (data?.recentBills ?? []).length === 0 ? (
-                    <tr><td colSpan={4} style={{ textAlign: "center", padding: "2rem", color: "var(--c-text-4)" }}>No bills yet.</td></tr>
-                  ) : (data?.recentBills ?? []).map((b) => (
-                    <tr key={b.id}>
-                      <td><Link href={`/purchases/bills/${b.id}`} style={{ fontWeight: 500, color: "var(--c-blue)", textDecoration: "none" }}>{b.billNumber}</Link></td>
-                      <td style={{ color: "var(--c-text-3)", fontSize: "0.8125rem", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.vendorName}</td>
-                      <td style={{ textAlign: "right", fontWeight: 500 }}>₹{b.total.toLocaleString("en-IN")}</td>
-                      <td><StatusBadge status={b.status} /></td>
+                  ) : (data?.recentInvoices ?? []).length === 0 ? (
+                    <tr><td colSpan={4} style={{ textAlign: "center", padding: "2rem", color: "var(--c-text-4)" }}>No invoices yet.</td></tr>
+                  ) : (data?.recentInvoices ?? []).map((inv) => (
+                    <tr key={inv.id}>
+                      <td><Link href={`/sales/invoices/${inv.id}`} style={{ fontWeight: 500, color: "var(--c-blue)", textDecoration: "none" }}>{inv.invoiceNumber}</Link></td>
+                      <td style={{ color: "var(--c-text-3)", fontSize: "0.8125rem", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{inv.customerName}</td>
+                      <td style={{ textAlign: "right", fontWeight: 500 }}>₹{inv.total.toLocaleString("en-IN")}</td>
+                      <td><StatusBadge status={inv.status} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -143,17 +145,18 @@ export default function PurchaseDashboardPage() {
             </div>
           </div>
 
+          {/* Top Customers */}
           <div className="card">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", borderBottom: "1px solid var(--c-border)" }}>
-              <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)" }}>Top 5 Vendors</h2>
-              <Link href="/purchases/vendors" style={{ fontSize: "0.75rem", color: "var(--c-blue)", textDecoration: "none" }}>View all →</Link>
+              <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)" }}>Top 5 Customers</h2>
+              <Link href="/sales/customers" style={{ fontSize: "0.75rem", color: "var(--c-blue)", textDecoration: "none" }}>View all →</Link>
             </div>
             <div style={{ overflowX: "auto" }}>
               <table className="table-base">
                 <thead>
                   <tr>
-                    <th>Vendor</th>
-                    <th style={{ textAlign: "right" }}>Total</th>
+                    <th>Customer</th>
+                    <th style={{ textAlign: "right" }}>Billed</th>
                     <th style={{ textAlign: "right" }}>Balance</th>
                   </tr>
                 </thead>
@@ -162,14 +165,14 @@ export default function PurchaseDashboardPage() {
                     [...Array(5)].map((_, i) => (
                       <tr key={i}><td colSpan={3}><div style={{ height: 16, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite", margin: "4px 0" }} /></td></tr>
                     ))
-                  ) : (data?.topVendors ?? []).length === 0 ? (
-                    <tr><td colSpan={3} style={{ textAlign: "center", padding: "2rem", color: "var(--c-text-4)" }}>No vendors yet.</td></tr>
-                  ) : (data?.topVendors ?? []).map((v) => (
-                    <tr key={v.id}>
-                      <td style={{ fontWeight: 500, color: "var(--c-text)" }}>{v.name}</td>
-                      <td style={{ textAlign: "right", fontWeight: 500 }}>₹{v.totalBilled.toLocaleString("en-IN")}</td>
-                      <td style={{ textAlign: "right", color: (v.totalBilled - v.totalPaid) > 0 ? "var(--c-amber)" : "var(--c-green-text)" }}>
-                        ₹{(v.totalBilled - v.totalPaid).toLocaleString("en-IN")}
+                  ) : (data?.topCustomers ?? []).length === 0 ? (
+                    <tr><td colSpan={3} style={{ textAlign: "center", padding: "2rem", color: "var(--c-text-4)" }}>No customers yet.</td></tr>
+                  ) : (data?.topCustomers ?? []).map((c) => (
+                    <tr key={c.id}>
+                      <td><Link href={`/sales/customers/${c.id}`} style={{ fontWeight: 500, color: "var(--c-text)", textDecoration: "none" }}>{c.name}</Link></td>
+                      <td style={{ textAlign: "right", fontWeight: 500 }}>₹{c.totalBilled.toLocaleString("en-IN")}</td>
+                      <td style={{ textAlign: "right", color: (c.totalBilled - c.totalPaid) > 0 ? "var(--c-amber)" : "var(--c-green-text)" }}>
+                        ₹{(c.totalBilled - c.totalPaid).toLocaleString("en-IN")}
                       </td>
                     </tr>
                   ))}
@@ -183,10 +186,10 @@ export default function PurchaseDashboardPage() {
         <div className="card" style={{ padding: "1.25rem" }}>
           <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", marginBottom: "0.875rem" }}>Quick Actions</h2>
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-            <Button variant="primary" href="/purchases/bills/new">+ New Bill</Button>
-            <Button variant="secondary" href="/purchases/vendors/new">+ New Vendor</Button>
-            <Button variant="secondary" href="/purchases/bills">All Bills</Button>
-            <Button variant="secondary" href="/reports/purchases">Purchase Reports</Button>
+            <Button variant="primary" href="/sales/invoices/new">+ New Invoice</Button>
+            <Button variant="secondary" href="/sales/customers/new">+ New Customer</Button>
+            <Button variant="secondary" href="/sales/invoices">All Invoices</Button>
+            <Button variant="secondary" href="/reports/sales">Sales Reports</Button>
           </div>
         </div>
       </div>

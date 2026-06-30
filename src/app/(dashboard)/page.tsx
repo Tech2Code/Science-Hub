@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -7,168 +7,167 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { useFetch } from "@/lib/useCache";
 import styles from "./page.module.css";
 
-interface Summary {
-  invoicesThisMonth: number;
-  revenueThisMonth: number;
-  outstandingAmount: number;
+interface RecentInvoice { id: string; invoiceNumber: string; date: string; customerName: string; total: number; paidAmount: number; status: string; }
+interface RecentBill { id: string; billNumber: string; billDate: string; vendorName: string; total: number; paidAmount: number; status: string; }
+interface CombinedDashboard {
+  sales: {
+    revenueThisMonth: number;
+    outstandingAmount: number;
+    overdueInvoices: number;
+    collectedToday: number;
+    recentInvoices: RecentInvoice[];
+  };
+  purchases: {
+    spendThisMonth: number;
+    payableBalance: number;
+    overdueBills: number;
+    paidToday: number;
+    recentBills: RecentBill[];
+  };
   lowStockCount: number;
-  recentInvoices: RecentInvoice[];
-}
-interface RecentInvoice {
-  id: string;
-  invoiceNumber: string;
-  date: string;
-  createdAt: string;
-  customerName: string;
-  total: number;
-  paidAmount: number;
-  balance: number;
-  status: string;
 }
 
-const cards = [
-  { key: "invoicesThisMonth", label: "Invoices This Month", icon: "◫", gradient: "linear-gradient(135deg,#3b82f6,#2563eb)", glow: "#3b82f6", format: (v: number) => String(v), sub: "invoices created", href: "/invoices" },
-  { key: "revenueThisMonth",  label: "Revenue This Month",  icon: "◎", gradient: "linear-gradient(135deg,#14b8a6,#10b981)", glow: "#14b8a6", format: (v: number) => `₹${v.toLocaleString("en-IN")}`, sub: "total billed", href: "/invoices" },
-  { key: "outstandingAmount", label: "Outstanding",         icon: "◑", gradient: "linear-gradient(135deg,#f59e0b,#f97316)", glow: "#f59e0b", format: (v: number) => `₹${v.toLocaleString("en-IN")}`, sub: "pending collection", href: "/reports" },
-  { key: "lowStockCount",     label: "Low Stock Alerts",    icon: "⬖", gradient: "linear-gradient(135deg,#ef4444,#e11d48)", glow: "#ef4444", format: (v: number) => String(v), sub: "products need restock", href: "/reports" },
-];
+const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-function useCountUp(target: number, duration = 800) {
-  const [value, setValue] = useState(0);
-  useEffect(() => {
-    if (target === 0) {
-      const t = setTimeout(() => setValue(0), 0);
-      return () => clearTimeout(t);
-    }
-    let start = 0;
-    const step = target / (duration / 16);
-    const timer = setInterval(() => {
-      start += step;
-      if (start >= target) { setValue(target); clearInterval(timer); }
-      else setValue(Math.floor(start));
-    }, 16);
-    return () => clearInterval(timer);
-  }, [target, duration]);
-  return value;
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", color: "var(--c-text-4)", textTransform: "uppercase", paddingBottom: "0.25rem", borderBottom: "1px solid var(--c-border)", marginTop: "0.25rem" }}>
+      {children}
+    </div>
+  );
+}
+
+function KpiCard({ label, value, color = "var(--c-text)", loading }: { label: string; value: string; color?: string; loading?: boolean }) {
+  return (
+    <div className="card" style={{ padding: "1rem 1.125rem" }}>
+      <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.3rem" }}>{label}</div>
+      {loading
+        ? <div style={{ height: 24, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
+        : <div style={{ fontSize: "1.25rem", fontWeight: 700, color }}>{value}</div>
+      }
+    </div>
+  );
 }
 
 export default function DashboardPage() {
-  const { data, loading } = useFetch<Summary>("/api/reports?type=summary");
-
-  const inv   = useCountUp(data?.invoicesThisMonth ?? 0);
-  const rev   = useCountUp(data?.revenueThisMonth ?? 0);
-  const out   = useCountUp(data?.outstandingAmount ?? 0);
-  const stock = useCountUp(data?.lowStockCount ?? 0);
-  const animated = [inv, rev, out, stock];
+  const { data, loading } = useFetch<CombinedDashboard>("/api/reports?type=combined-dashboard");
   const month = new Date().toLocaleString("en-IN", { month: "long", year: "numeric" });
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return null;
 
   return (
-    <div className="page-stack">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Dashboard</h1>
-          <p className="page-sub">{month} overview</p>
-        </div>
-        <Button variant="primary" href="/invoices/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>
-      </div>
-
-      {/* Stat cards */}
-      <div className={styles.statsGrid}>
-        {cards.map((card, i) => (
-          <Link key={card.key} href={card.href} className={`${styles.statCard} animate-card animate-card-${i + 1}`}>
-            <div className={styles.statBlob} style={{ background: card.glow }} />
-            <div className={styles.statIconWrap} style={{ background: card.gradient }}>
-              {card.icon}
-            </div>
-            {loading
-              ? <div className={styles.statSkeleton} />
-              : <div className={`${styles.statValue} animate-count`}>{card.format(animated[i])}</div>
-            }
-            <div className={styles.statLabel}>{card.label}</div>
-            <div className={styles.statSub}>{card.sub}</div>
-          </Link>
-        ))}
-      </div>
-
-      {/* Quick actions */}
-      <div className={styles.quickGrid}>
-        {[
-          { href: "/invoices/new",  label: "New Invoice",   icon: "◫" },
-          { href: "/customers/new", label: "Add Customer",  icon: "◈" },
-          { href: "/products/new",  label: "Add Product",   icon: "⬖" },
-          { href: "/reports",       label: "View Reports",  icon: "◑" },
-        ].map((action) => (
-          <Link key={action.href} href={action.href} className={styles.quickBtn}>
-            <span className={styles.quickIcon}>{action.icon}</span>
-            {action.label}
-          </Link>
-        ))}
-      </div>
-
-      {/* Recent invoices */}
-      <div className={styles.recentCard}>
-        <div className={styles.recentHeader}>
+    <>
+      <style>{`@keyframes skPulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
+      <div className="page-stack">
+        <div className="page-header">
           <div>
-            <h2 className={styles.recentTitle}>Recent Invoices</h2>
-            <p className={styles.recentSub}>Latest 5 transactions</p>
+            <h1 className="page-title">Dashboard</h1>
+            <p className="page-sub">{month} overview</p>
           </div>
-          <Link href="/invoices" className={styles.viewAllLink}>
-            View all →
-          </Link>
+          <Button variant="primary" href="/sales/invoices/new">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Invoice
+          </Button>
         </div>
 
-        {loading ? (
-          <div className={styles.skeletonRows}>
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className={styles.skeletonRow} style={{ '--shimmer-delay': `${i * 80}ms` } as React.CSSProperties} />
-            ))}
+        <SectionLabel>Sales</SectionLabel>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
+          <KpiCard label="Revenue This Month" value={loading ? "—" : fmt(data?.sales.revenueThisMonth ?? 0)} color="var(--c-blue)" loading={loading} />
+          <KpiCard label="Outstanding" value={loading ? "—" : fmt(data?.sales.outstandingAmount ?? 0)} color="var(--c-amber)" loading={loading} />
+          <KpiCard label="Overdue Invoices" value={loading ? "—" : String(data?.sales.overdueInvoices ?? 0)} color={(data?.sales.overdueInvoices ?? 0) > 0 ? "var(--c-red)" : "var(--c-text-4)"} loading={loading} />
+          <KpiCard label="Collected Today" value={loading ? "—" : fmt(data?.sales.collectedToday ?? 0)} color="var(--c-green-text)" loading={loading} />
+        </div>
+
+        <SectionLabel>Purchases</SectionLabel>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
+          <KpiCard label="Spend This Month" value={loading ? "—" : fmt(data?.purchases.spendThisMonth ?? 0)} color="var(--c-amber)" loading={loading} />
+          <KpiCard label="Payable Balance" value={loading ? "—" : fmt(data?.purchases.payableBalance ?? 0)} color="var(--c-amber)" loading={loading} />
+          <KpiCard label="Overdue Bills" value={loading ? "—" : String(data?.purchases.overdueBills ?? 0)} color={(data?.purchases.overdueBills ?? 0) > 0 ? "var(--c-red)" : "var(--c-text-4)"} loading={loading} />
+          <KpiCard label="Paid Today" value={loading ? "—" : fmt(data?.purchases.paidToday ?? 0)} color="var(--c-green-text)" loading={loading} />
+        </div>
+
+        {/* Recent invoices & bills */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
+          <div className="card">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", borderBottom: "1px solid var(--c-border)" }}>
+              <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)" }}>Recent Invoices</h2>
+              <Link href="/sales/invoices" style={{ fontSize: "0.75rem", color: "var(--c-blue)", textDecoration: "none" }}>View all →</Link>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table className="table-base">
+                <thead><tr><th>Invoice</th><th>Customer</th><th style={{ textAlign: "right" }}>Total</th><th>Status</th></tr></thead>
+                <tbody>
+                  {loading ? [...Array(5)].map((_, i) => (
+                    <tr key={i}><td colSpan={4}><div style={{ height: 16, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite", margin: "4px 0" }} /></td></tr>
+                  )) : (data?.sales.recentInvoices ?? []).length === 0 ? (
+                    <tr><td colSpan={4} className="table-empty-cell">No invoices yet. <Link href="/sales/invoices/new" style={{ color: "var(--c-blue)" }}>Create one →</Link></td></tr>
+                  ) : (data?.sales.recentInvoices ?? []).map((inv) => (
+                    <tr key={inv.id}>
+                      <td><Link href={`/sales/invoices/${inv.id}`} style={{ fontWeight: 500, color: "var(--c-blue)", textDecoration: "none" }}>{inv.invoiceNumber}</Link></td>
+                      <td style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{inv.customerName}</td>
+                      <td style={{ textAlign: "right", fontWeight: 500 }}>₹{inv.total.toLocaleString("en-IN")}</td>
+                      <td><StatusBadge status={inv.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        ) : (data?.recentInvoices ?? []).length === 0 ? (
-          <div className={styles.empty}>
-            <span className={styles.emptyIcon}>◫</span>
-            <p className={styles.emptyText}>No invoices yet</p>
-            <Link href="/invoices/new" className={styles.emptyLink}>
-              Create your first invoice →
-            </Link>
+
+          <div className="card">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", borderBottom: "1px solid var(--c-border)" }}>
+              <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)" }}>Recent Purchase Bills</h2>
+              <Link href="/purchases/bills" style={{ fontSize: "0.75rem", color: "var(--c-blue)", textDecoration: "none" }}>View all →</Link>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table className="table-base">
+                <thead><tr><th>Bill</th><th>Vendor</th><th style={{ textAlign: "right" }}>Total</th><th>Status</th></tr></thead>
+                <tbody>
+                  {loading ? [...Array(5)].map((_, i) => (
+                    <tr key={i}><td colSpan={4}><div style={{ height: 16, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite", margin: "4px 0" }} /></td></tr>
+                  )) : (data?.purchases.recentBills ?? []).length === 0 ? (
+                    <tr><td colSpan={4} className="table-empty-cell">No bills yet. <Link href="/purchases/bills/new" style={{ color: "var(--c-blue)" }}>Create one →</Link></td></tr>
+                  ) : (data?.purchases.recentBills ?? []).map((b) => (
+                    <tr key={b.id}>
+                      <td><Link href={`/purchases/bills/${b.id}`} style={{ fontWeight: 500, color: "var(--c-blue)", textDecoration: "none" }}>{b.billNumber}</Link></td>
+                      <td style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{b.vendorName}</td>
+                      <td style={{ textAlign: "right", fontWeight: 500 }}>₹{b.total.toLocaleString("en-IN")}</td>
+                      <td><StatusBadge status={b.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        ) : (
-          <div className="table-wrap">
-            <table className="table-base">
-              <thead>
-                <tr>
-                  <th>Invoice</th>
-                  <th>Date</th>
-                  <th>Customer</th>
-                  <th className="table-th-right">Total</th>
-                  <th className="table-th-right">Balance</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.recentInvoices ?? []).map((inv) => (
-                  <tr key={inv.id}>
-                    <td data-mobile-full>
-                      <Link href={`/invoices/${inv.id}`} className={styles.invNum}>
-                        {inv.invoiceNumber}
-                      </Link>
-                    </td>
-                    <td data-mobile-hide className={styles.invDate}>
-                      <div>{new Date(inv.date).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" })}</div>
-                      <div className="date-sub" style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: 2 }}>
-                        {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
-                      </div>
-                    </td>
-                    <td data-label="Customer" className={styles.invCust}>{inv.customerName}</td>
-                    <td data-label="Total" className={`table-td-right ${styles.invAmt}`}>₹{inv.total.toLocaleString("en-IN")}</td>
-                    <td data-label="Balance" className={`table-td-right ${styles.invBal}`}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN")}</td>
-                    <td data-label="Status"><StatusBadge status={inv.status} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        </div>
+
+        {/* Low stock + Quick actions */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
+          <div className="card" style={{ padding: "1.125rem 1.25rem" }}>
+            <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.5rem" }}>Low Stock Alert</div>
+            <div style={{ fontSize: "2rem", fontWeight: 700, color: (data?.lowStockCount ?? 0) > 0 ? "var(--c-red)" : "var(--c-text-4)" }}>
+              {loading ? "—" : data?.lowStockCount ?? 0}
+            </div>
+            <div style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", marginTop: "0.25rem" }}>
+              {(data?.lowStockCount ?? 0) > 0
+                ? <Link href="/products" style={{ color: "var(--c-red)" }}>Products need restocking →</Link>
+                : "All products adequately stocked"
+              }
+            </div>
           </div>
-        )}
+
+          <div className="card" style={{ padding: "1.125rem 1.25rem" }}>
+            <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.75rem" }}>Quick Actions</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+              <Button variant="primary" href="/sales/invoices/new" size="sm">+ Invoice</Button>
+              <Button variant="secondary" href="/sales/customers/new" size="sm">+ Customer</Button>
+              <Button variant="secondary" href="/purchases/bills/new" size="sm">+ Bill</Button>
+              <Button variant="secondary" href="/purchases/vendors/new" size="sm">+ Vendor</Button>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

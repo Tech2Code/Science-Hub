@@ -513,8 +513,23 @@ input, textarea, select {
   letter-spacing: 0.05em;
   margin-bottom: 0.25rem;
 }
+.stat-banner-blue {
+  background: var(--c-blue-bg);
+  border: 1px solid var(--c-blue-border);
+}
+.stat-banner-green {
+  background: var(--c-green-bg);
+  border: 1px solid var(--c-green-border);
+}
+.stat-banner-purple {
+  background: color-mix(in srgb, var(--c-bg-sub) 60%, #8b5cf620);
+  border: 1px solid color-mix(in srgb, var(--c-border) 70%, #8b5cf630);
+}
 .stat-banner-amber .stat-banner-label { color: var(--c-amber); }
 .stat-banner-red   .stat-banner-label { color: var(--c-red); }
+.stat-banner-blue  .stat-banner-label { color: var(--c-blue); }
+.stat-banner-green .stat-banner-label { color: var(--c-green-text); }
+.stat-banner-purple .stat-banner-label { color: #8b5cf6; }
 .stat-banner-value {
   font-size: 1.875rem;
   font-weight: 700;

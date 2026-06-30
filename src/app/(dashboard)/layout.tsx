@@ -16,6 +16,16 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
       <rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
     </svg>
   ),
+  salesDashboard: ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+    </svg>
+  ),
+  purchaseDashboard: ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+  ),
   customers: ({ className }) => (
     <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-1a4 4 0 00-5.196-3.796M17 20H7m10 0v-1c0-1.007-.272-1.95-.75-2.75M7 20H2v-1a4 4 0 015.196-3.796M7 20v-1c0-1.007.272-1.95.75-2.75m8.5 0a4 4 0 10-8 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -36,9 +46,19 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
     </svg>
   ),
-  reports: ({ className }) => (
+  paymentsMade: ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+  ),
+  reportsSales: ({ className }) => (
     <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    </svg>
+  ),
+  reportsPurchases: ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
     </svg>
   ),
   admin: ({ className }) => (
@@ -74,19 +94,58 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
   ),
 };
 
-const navItems = [
-  { href: "/",          label: "Dashboard", iconKey: "dashboard", adminOnly: false },
-  { href: "/customers", label: "Customers", iconKey: "customers", adminOnly: false },
-  { href: "/products",  label: "Products",  iconKey: "products",  adminOnly: false },
-  { href: "/brands",    label: "Brands",    iconKey: "brands",    adminOnly: false },
-  { href: "/invoices",  label: "Invoices",  iconKey: "invoices",  adminOnly: false },
-  { href: "/payments",  label: "Payments",  iconKey: "payments",  adminOnly: false },
-  { href: "/vendors",   label: "Vendors",   iconKey: "vendors",   adminOnly: false },
-  { href: "/purchases", label: "Purchases", iconKey: "purchases", adminOnly: false },
-  { href: "/reports",   label: "Reports",   iconKey: "reports",   adminOnly: false },
-  { href: "/admin",     label: "Admin",     iconKey: "admin",     adminOnly: true  },
-  { href: "/settings",  label: "Settings",  iconKey: "settings",  adminOnly: true  },
+interface NavItem { href: string; label: string; iconKey: string; adminOnly: boolean; }
+interface NavGroup { label: string | null; items: NavItem[]; }
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: null,
+    items: [
+      { href: "/",     label: "Dashboard", iconKey: "dashboard", adminOnly: false },
+    ],
+  },
+  {
+    label: "SALES",
+    items: [
+      { href: "/sales",           label: "Sales Overview",    iconKey: "salesDashboard", adminOnly: false },
+      { href: "/sales/customers", label: "Customers",         iconKey: "customers",      adminOnly: false },
+      { href: "/sales/invoices",  label: "Invoices",          iconKey: "invoices",       adminOnly: false },
+      { href: "/sales/payments",  label: "Payments Received", iconKey: "payments",       adminOnly: false },
+    ],
+  },
+  {
+    label: "PURCHASES",
+    items: [
+      { href: "/purchases",          label: "Purchase Overview", iconKey: "purchaseDashboard", adminOnly: false },
+      { href: "/purchases/vendors",  label: "Vendors",           iconKey: "vendors",            adminOnly: false },
+      { href: "/purchases/bills",    label: "Purchase Bills",    iconKey: "purchases",          adminOnly: false },
+      { href: "/purchases/payments", label: "Payments Made",     iconKey: "paymentsMade",       adminOnly: false },
+    ],
+  },
+  {
+    label: "CATALOG",
+    items: [
+      { href: "/products", label: "Products", iconKey: "products", adminOnly: false },
+      { href: "/brands",   label: "Brands",   iconKey: "brands",   adminOnly: false },
+    ],
+  },
+  {
+    label: "REPORTS",
+    items: [
+      { href: "/reports/sales",     label: "Sales Reports",    iconKey: "reportsSales",     adminOnly: false },
+      { href: "/reports/purchases", label: "Purchase Reports", iconKey: "reportsPurchases", adminOnly: false },
+    ],
+  },
+  {
+    label: "SYSTEM",
+    items: [
+      { href: "/admin",    label: "Admin",    iconKey: "admin",    adminOnly: true },
+      { href: "/settings", label: "Settings", iconKey: "settings", adminOnly: true },
+    ],
+  },
 ];
+
+const allNavItems = NAV_GROUPS.flatMap((g) => g.items);
 
 function isMobile() {
   return typeof window !== "undefined" && window.innerWidth < 768;
@@ -130,7 +189,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [loggingOut, setLoggingOut] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
 
-  // Set initial state based on viewport after mount
   useEffect(() => {
     const check = () => {
       const mob = window.innerWidth < 768;
@@ -163,9 +221,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
   if (status === "unauthenticated") return null;
 
-  const currentNav = navItems.find((n) =>
-    n.href === "/" ? pathname === "/" : pathname.startsWith(n.href)
+  const currentNav = allNavItems.find((n) =>
+    n.href === "/" ? pathname === "/" : pathname === n.href || pathname.startsWith(n.href + "/")
   );
+
+  const sectionLabelStyle: React.CSSProperties = {
+    fontSize: "0.65rem",
+    fontWeight: 700,
+    letterSpacing: "0.1em",
+    color: "var(--c-text-4)",
+    textTransform: "uppercase",
+    padding: "0.875rem 1rem 0.25rem",
+    borderTop: "1px solid rgba(255,255,255,0.06)",
+    marginTop: "0.25rem",
+    display: "block",
+  };
 
   return (
     <div className={styles.shell}>
@@ -179,12 +249,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         onConfirm={async () => { setLoggingOut(true); await signOut({ callbackUrl: "/login" }); }}
         onCancel={() => { if (!loggingOut) setConfirmSignOut(false); }}
       />
-      {/* Mobile backdrop */}
       {mobile && sidebarOpen && (
         <div className={styles.backdrop} onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar */}
       <aside className={[styles.sidebar, sidebarOpen ? styles.sidebarOpen : styles.sidebarClosed].join(" ")}>
         <div className={styles.sidebarLogo}>
           <Image src="/logo.png" alt="Science Hub" width={36} height={36} loading="eager" className={styles.logoIcon} />
@@ -195,23 +263,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <nav className={styles.nav}>
-          {navItems.filter(item => !item.adminOnly || session?.user?.role === "admin").map((item) => {
-            const isActive = item.href === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.href);
-            const Icon = NavIcons[item.iconKey];
+          {NAV_GROUPS.map((group) => {
+            const visibleItems = group.items.filter(
+              (item) => !item.adminOnly || session?.user?.role === "admin"
+            );
+            if (visibleItems.length === 0) return null;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                title={!sidebarOpen && !mobile ? item.label : undefined}
-                onClick={handleNavClick}
-                className={[styles.navLink, isActive ? styles.navLinkActive : ""].join(" ")}
-              >
-                <Icon className={styles.navIcon} />
-                <span className={styles.navLabel}>{item.label}</span>
-                {isActive && <span className={styles.navDot} />}
-              </Link>
+              <div key={group.label ?? "__top"}>
+                {group.label && sidebarOpen && (
+                  <span style={sectionLabelStyle}>{group.label}</span>
+                )}
+                {visibleItems.map((item) => {
+                  const isActive =
+                    item.href === "/"
+                      ? pathname === "/"
+                      : pathname === item.href || pathname.startsWith(item.href + "/");
+                  const Icon = NavIcons[item.iconKey];
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={!sidebarOpen && !mobile ? item.label : undefined}
+                      onClick={handleNavClick}
+                      className={[styles.navLink, isActive ? styles.navLinkActive : ""].join(" ")}
+                    >
+                      <Icon className={styles.navIcon} />
+                      <span className={styles.navLabel}>{item.label}</span>
+                      {isActive && <span className={styles.navDot} />}
+                    </Link>
+                  );
+                })}
+              </div>
             );
           })}
         </nav>
@@ -262,7 +344,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      {/* Main */}
       <div className={styles.main}>
         <header className={styles.topbar}>
           <div className={styles.topbarLeft}>
@@ -271,7 +352,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               title={sidebarOpen ? "Close menu" : "Open menu"}
               className={styles.collapseBtn}
             >
-              {/* Hamburger on mobile, chevron on desktop */}
               {mobile ? (
                 <svg style={{ width:"1.125rem", height:"1.125rem" }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   {sidebarOpen
