@@ -199,8 +199,9 @@ export default function InvoicesPage() {
                         {/* 1. View → opens PDF preview modal (desktop) or invoice page (mobile) */}
                       <Button variant="viewOutline" size="sm" onClick={async () => {
                         if (pdfLoading) return;
-                        // On mobile, iframe PDF generation fails — navigate to invoice page instead
-                        if (window.innerWidth < 768) {
+                        // On mobile/touch devices, iframe PDF generation is unreliable — navigate to invoice page instead
+                        const isMobile = window.innerWidth < 1024 && (('ontouchstart' in window) || navigator.maxTouchPoints > 0);
+                        if (isMobile) {
                           window.location.href = `/invoices/${inv.id}`;
                           return;
                         }
@@ -222,17 +223,19 @@ export default function InvoicesPage() {
                           });
                           if (!el) { clearTimeout(safetyTimer); cleanup(); return; }
                           await new Promise(r => setTimeout(r, 400));
+                          let previewSet = false;
                           try {
                             const blob = await generateInvoicePdfBlob(el);
                             if (blob) {
                               const url = URL.createObjectURL(blob);
+                              previewSet = true;
                               setPdfPreviewUrl(url);
                               setPdfPreviewInvoice({ number: inv.invoiceNumber, customer: inv.customer?.name ?? "" });
                             } else {
                               toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
                             }
                           } catch {
-                            toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
+                            if (!previewSet) toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
                           }
                           clearTimeout(safetyTimer); cleanup();
                         };
@@ -245,8 +248,9 @@ export default function InvoicesPage() {
                       {/* 2. PDF → direct download (desktop) or invoice page (mobile) */}
                       <Button variant="secondary" size="sm" title="Download PDF" onClick={async () => {
                         if (pdfLoading) return;
-                        // On mobile, navigate to invoice page which has working download
-                        if (window.innerWidth < 768) {
+                        // On mobile/touch devices, navigate to invoice page which has working download
+                        const isMobile = window.innerWidth < 1024 && (('ontouchstart' in window) || navigator.maxTouchPoints > 0);
+                        if (isMobile) {
                           window.location.href = `/invoices/${inv.id}`;
                           return;
                         }
@@ -268,19 +272,23 @@ export default function InvoicesPage() {
                           });
                           if (!el) { clearTimeout(safetyTimer); cleanup(); return; }
                           await new Promise(r => setTimeout(r, 400));
+                          let downloadStarted = false;
                           try {
                             const blob = await generateInvoicePdfBlob(el);
                             if (blob) {
                               const url = URL.createObjectURL(blob);
                               const a = document.createElement("a");
                               a.href = url; a.download = `${inv.invoiceNumber}.pdf`;
-                              document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                              document.body.appendChild(a);
+                              downloadStarted = true;
+                              a.click();
+                              document.body.removeChild(a);
                               setTimeout(() => URL.revokeObjectURL(url), 5000);
                             } else {
                               toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
                             }
                           } catch {
-                            toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
+                            if (!downloadStarted) toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
                           }
                           clearTimeout(safetyTimer); cleanup();
                         };

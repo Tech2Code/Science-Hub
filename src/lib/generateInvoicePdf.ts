@@ -77,10 +77,23 @@ export async function generateInvoicePdfBlob(el: HTMLElement): Promise<Blob | nu
           printEl.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
             if (img.src.includes("logo") || img.getAttribute("alt")?.toLowerCase().includes("logo")) {
               img.src = logoDataUrl;
-              img.style.width = "36px";
-              img.style.height = "36px";
+              // Use natural image dimensions capped to the logo's container rather
+              // than a hardcoded pixel size, so the logo is never clipped on any
+              // screen size or PDF scale factor.
+              img.style.width = "auto";
+              img.style.height = "auto";
+              img.style.maxWidth = "56px";
+              img.style.maxHeight = "56px";
               img.style.objectFit = "contain";
+              img.style.objectPosition = "left center";
+              img.style.display = "block";
               img.style.flexShrink = "0";
+              // Ensure the parent container doesn't clip the image
+              const parent = img.parentElement;
+              if (parent) {
+                parent.style.overflow = "visible";
+                parent.style.flexShrink = "0";
+              }
             }
           });
         }
