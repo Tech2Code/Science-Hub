@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -51,6 +51,8 @@ function calcItem(item: LineItem) {
 interface ExtractedBill {
   vendorName?: string | null;
   vendorGstin?: string | null;
+  vendorPhone?: string | null;
+  vendorAddress?: string | null;
   billNumber?: string | null;
   billDate?: string | null;
   dueDate?: string | null;
@@ -78,6 +80,20 @@ export default function NewPurchaseBillPage() {
   const [scanResult, setScanResult] = useState<ExtractedBill | null>(null);
   const [scanError,  setScanError]  = useState("");
 
+  // Inline vendor creation state (shown when scan finds vendor not in DB)
+  const [showVendorCreate, setShowVendorCreate] = useState(false);
+  const [ivName,    setIvName]    = useState("");
+  const [ivCompany, setIvCompany] = useState("");
+  const [ivGstin,   setIvGstin]   = useState("");
+  const [ivPhone,   setIvPhone]   = useState("");
+  const [ivEmail,   setIvEmail]   = useState("");
+  const [ivAddress, setIvAddress] = useState("");
+  const [ivSaving,  setIvSaving]  = useState(false);
+  const [ivError,   setIvError]   = useState("");
+
+  // Catalog save state: set of item indices currently being saved
+  const [catalogSaving, setCatalogSaving] = useState<Set<number>>(new Set());
+
   const [vendorId,  setVendorId]  = useState("");
   const [billDate,  setBillDate]  = useState(() => new Date().toISOString().slice(0, 10));
   const [dueDate,   setDueDate]   = useState("");
@@ -87,11 +103,11 @@ export default function NewPurchaseBillPage() {
   const [items,     setItems]     = useState<LineItem[]>([{ ...BLANK_ITEM }]);
 
   // Optional: record payment immediately
-  const [addPayment,    setAddPayment]    = useState(false);
-  const [payAmount,     setPayAmount]     = useState("");
-  const [payMethod,     setPayMethod]     = useState("Cash");
-  const [payReference,  setPayReference]  = useState("");
-  const [payDate,       setPayDate]       = useState(() => new Date().toISOString().slice(0, 10));
+  const [addPayment,   setAddPayment]   = useState(false);
+  const [payAmount,    setPayAmount]    = useState("");
+  const [payMethod,    setPayMethod]    = useState("Cash");
+  const [payReference, setPayReference] = useState("");
+  const [payDate,      setPayDate]      = useState(() => new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
     fetch("/api/vendors").then(r => r.json()).then(setVendors).catch(() => {});
@@ -100,6 +116,7 @@ export default function NewPurchaseBillPage() {
 
   async function handleScanFile(file: File) {
     setScanning(true); setScanError(""); setScanResult(null);
+    setShowVendorCreate(false);
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -110,38 +127,42 @@ export default function NewPurchaseBillPage() {
       const ext: ExtractedBill = data;
       setScanResult(ext);
 
-      // Auto-fill: vendor — try to match by name (case-insensitive)
+      // Vendor — fuzzy match existing, else open inline create form
       if (ext.vendorName) {
         const match = vendors.find(v =>
           v.name.toLowerCase().includes(ext.vendorName!.toLowerCase()) ||
           ext.vendorName!.toLowerCase().includes(v.name.toLowerCase())
         );
-        if (match) setVendorId(match.id);
+        if (match) {
+          setVendorId(match.id);
+        } else {
+          // Pre-fill inline create form with extracted data
+          setIvName(ext.vendorName ?? "");
+          setIvGstin(ext.vendorGstin ?? "");
+          setIvPhone(ext.vendorPhone ?? "");
+          setIvAddress(ext.vendorAddress ?? "");
+          setIvCompany(""); setIvEmail("");
+          setIvError("");
+          setShowVendorCreate(true);
+        }
       }
 
-      // Dates
       if (ext.billDate) setBillDate(ext.billDate);
       if (ext.dueDate)  setDueDate(ext.dueDate);
-
-      // Category
       if (ext.category && CATEGORIES.includes(ext.category)) setCategory(ext.category);
 
-      // Notes — include bill number if extracted
       const noteParts: string[] = [];
       if (ext.billNumber) noteParts.push(`Ref: ${ext.billNumber}`);
       if (ext.notes)      noteParts.push(ext.notes);
       if (noteParts.length) setNotes(noteParts.join(" | "));
 
-      // Discount
       if (ext.discount && ext.discount > 0) setDiscount(String(ext.discount));
 
-      // Line items
       if (ext.items && ext.items.length > 0) {
         const mapped: LineItem[] = ext.items.map(i => {
-          const validUnit  = UNITS.includes(i.unit) ? i.unit : "Pcs";
-          const validGst   = GST_RATES.includes(String(i.gstRate)) ? String(i.gstRate) : "18";
-          // Try to match to existing product
-          const prodMatch  = products.find(p => p.name.toLowerCase().includes(i.name.toLowerCase()));
+          const validUnit = UNITS.includes(i.unit) ? i.unit : "Pcs";
+          const validGst  = GST_RATES.includes(String(i.gstRate)) ? String(i.gstRate) : "18";
+          const prodMatch = products.find(p => p.name.toLowerCase().includes(i.name.toLowerCase()));
           return {
             productId:     prodMatch?.id ?? "",
             name:          i.name,
@@ -154,16 +175,84 @@ export default function NewPurchaseBillPage() {
         setItems(mapped);
       }
 
-      toast({ type: "success", title: "Bill scanned!", message: "Details filled below — review before saving." });
+      toast({ type: "success", title: "Bill scanned!", message: "Review details below before saving." });
     } catch {
       setScanError("Network error during extraction. Please try again.");
     }
     setScanning(false);
   }
 
-  const subtotal = items.reduce((s, i) => s + calcItem(i).subtotal, 0);
-  const taxTotal = items.reduce((s, i) => s + calcItem(i).gstAmount, 0);
-  const disc     = toNum(discount);
+  async function handleCreateInlineVendor() {
+    if (!ivName.trim()) { setIvError("Vendor name is required."); return; }
+    setIvSaving(true); setIvError("");
+    try {
+      const res = await fetch("/api/vendors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name:    ivName.trim(),
+          company: ivCompany.trim() || null,
+          gstin:   ivGstin.trim() || null,
+          phone:   ivPhone.trim() || null,
+          email:   ivEmail.trim() || null,
+          address: ivAddress.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setVendors(prev => [...prev, data]);
+        setVendorId(data.id);
+        setShowVendorCreate(false);
+        bustCache("/api/vendors");
+        toast({ type: "success", title: "Vendor created", message: `${data.name} added and selected.` });
+      } else {
+        setIvError(data.error ?? "Failed to create vendor.");
+      }
+    } catch {
+      setIvError("Network error — please try again.");
+    }
+    setIvSaving(false);
+  }
+
+  async function handleAddToCatalog(idx: number) {
+    const item = items[idx];
+    if (!item.name.trim()) return;
+    setCatalogSaving(prev => new Set(prev).add(idx));
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name:     item.name.trim(),
+          unit:     item.unit,
+          price:    toNum(item.purchasePrice),
+          gstRate:  toNum(item.gstRate),
+          stock:    0,
+          minStock: 0,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setProducts(prev => [...prev, data]);
+        setItems(prev => {
+          const next = [...prev];
+          next[idx] = { ...next[idx], productId: data.id };
+          return next;
+        });
+        bustCache("/api/products");
+        toast({ type: "success", title: "Saved to catalog", message: `${data.name} added as a product.` });
+      } else {
+        toast({ type: "error", title: "Failed", message: data.error ?? "Could not save to catalog." });
+      }
+    } catch {
+      toast({ type: "error", title: "Error", message: "Network error — please try again." });
+    }
+    setCatalogSaving(prev => { const s = new Set(prev); s.delete(idx); return s; });
+  }
+
+  const subtotal   = items.reduce((s, i) => s + calcItem(i).subtotal, 0);
+  const taxTotal   = items.reduce((s, i) => s + calcItem(i).gstAmount, 0);
+  const disc       = toNum(discount);
   const grandTotal = subtotal + taxTotal - disc;
 
   const handleItemChange = useCallback((idx: number, field: keyof LineItem, value: string) => {
@@ -197,13 +286,18 @@ export default function NewPurchaseBillPage() {
   function addItem() { setItems(prev => [...prev, { ...BLANK_ITEM }]); }
   function removeItem(idx: number) { setItems(prev => prev.filter((_, i) => i !== idx)); }
 
+  // Items from scan that are not linked to any product
+  const unmatchedItems = items
+    .map((item, idx) => ({ item, idx }))
+    .filter(({ item }) => item.productId === "" && item.name.trim() !== "");
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!vendorId)                  { setError("Please select a vendor."); return; }
-    if (items.length === 0)         { setError("Add at least one item."); return; }
-    if (items.some(i => !i.name.trim())) { setError("All items must have a name."); return; }
-    if (items.some(i => toNum(i.quantity) <= 0))  { setError("All quantities must be greater than 0."); return; }
-    if (items.some(i => toNum(i.purchasePrice) < 0)) { setError("Item prices cannot be negative."); return; }
+    if (!vendorId)                                     { setError("Please select a vendor."); return; }
+    if (items.length === 0)                            { setError("Add at least one item."); return; }
+    if (items.some(i => !i.name.trim()))               { setError("All items must have a name."); return; }
+    if (items.some(i => toNum(i.quantity) <= 0))       { setError("All quantities must be greater than 0."); return; }
+    if (items.some(i => toNum(i.purchasePrice) < 0))   { setError("Item prices cannot be negative."); return; }
 
     const billItems = items.map(i => ({
       productId:     i.productId || null,
@@ -219,14 +313,14 @@ export default function NewPurchaseBillPage() {
     const payload: Record<string, unknown> = {
       vendorId,
       billDate,
-      dueDate: dueDate || null,
+      dueDate:  dueDate || null,
       category: category || null,
       discount: disc,
       subtotal,
       taxAmount: taxTotal,
-      total: grandTotal,
-      notes: notes.trim() || null,
-      items: billItems,
+      total:     grandTotal,
+      notes:     notes.trim() || null,
+      items:     billItems,
     };
 
     if (addPayment && toNum(payAmount) > 0) {
@@ -263,6 +357,7 @@ export default function NewPurchaseBillPage() {
     <>
     <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     {saving && <OverlayLoader text="Creating bill…" />}
+    {ivSaving && <OverlayLoader text="Creating vendor…" />}
     <div className="page-stack" style={{ maxWidth: "54rem" }}>
       <Breadcrumb items={[{ label: "Purchases", href: "/purchases/bills" }, { label: "New Purchase Bill" }]} />
       <h1 className="page-title">New Purchase Bill</h1>
@@ -280,7 +375,7 @@ export default function NewPurchaseBillPage() {
               Auto-fill from Bill Photo / PDF
             </div>
             <p style={{ fontSize: "0.8rem", color: "var(--c-text-4)", marginTop: "0.25rem" }}>
-              Upload a photo or PDF of the vendor&apos;s bill — AI will extract and fill the details automatically.
+              Upload a photo or PDF — AI extracts details. If vendor or items are missing, add them inline below.
             </p>
           </div>
           <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
@@ -291,11 +386,7 @@ export default function NewPurchaseBillPage() {
               style={{ display: "none" }}
               onChange={e => { const f = e.target.files?.[0]; if (f) handleScanFile(f); e.target.value = ""; }}
             />
-            <Button
-              variant="secondary"
-              disabled={scanning}
-              onClick={() => fileInputRef.current?.click()}
-            >
+            <Button variant="secondary" disabled={scanning} onClick={() => fileInputRef.current?.click()}>
               {scanning ? (
                 <span style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
                   <svg style={{ animation: "spin 0.8s linear infinite", width: 14, height: 14 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" d="M12 2a10 10 0 0 1 10 10"/></svg>
@@ -321,7 +412,7 @@ export default function NewPurchaseBillPage() {
           <div style={{ marginTop: "0.875rem", padding: "0.875rem 1rem", borderRadius: "0.625rem", background: "var(--c-bg-sub)", border: "1px solid var(--c-border)" }}>
             <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--c-green-text)", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              Extracted from bill — review below before saving
+              Extracted from bill — review and fill any missing details below
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem" }}>
               {scanResult.vendorName  && <Pill label="Vendor"   value={scanResult.vendorName} />}
@@ -331,12 +422,6 @@ export default function NewPurchaseBillPage() {
               {scanResult.total != null && <Pill label="Total"  value={`₹${scanResult.total}`} />}
               {scanResult.items       && <Pill label="Items"    value={String(scanResult.items.length)} />}
             </div>
-            {scanResult.vendorName && !vendors.find(v => v.name.toLowerCase().includes((scanResult.vendorName ?? "").toLowerCase())) && (
-              <div style={{ marginTop: "0.625rem", fontSize: "0.75rem", color: "var(--c-amber)" }}>
-                ⚠ Vendor &quot;{scanResult.vendorName}&quot; not found in your list — please select manually or{" "}
-                <a href="/purchases/vendors/new" target="_blank" rel="noreferrer" style={{ color: "var(--c-blue)", textDecoration: "underline" }}>add the vendor</a>.
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -346,14 +431,24 @@ export default function NewPurchaseBillPage() {
         {/* Bill Details */}
         <div className="form-card">
           <h2 className="form-section-title">Bill Details</h2>
+
           <div className="form-grid-2">
             <FormField label="Vendor" required>
-              <Select value={vendorId} onChange={e => setVendorId(e.target.value)}>
+              <Select value={vendorId} onChange={e => { setVendorId(e.target.value); if (e.target.value) setShowVendorCreate(false); }}>
                 <option value="">Select a vendor…</option>
                 {vendors.map(v => (
                   <option key={v.id} value={v.id}>{v.name}{v.company ? ` — ${v.company}` : ""}</option>
                 ))}
               </Select>
+              {!vendorId && !showVendorCreate && (
+                <button
+                  type="button"
+                  onClick={() => { setIvName(""); setIvCompany(""); setIvGstin(""); setIvPhone(""); setIvEmail(""); setIvAddress(""); setIvError(""); setShowVendorCreate(true); }}
+                  style={{ marginTop: "0.4rem", background: "none", border: "none", padding: 0, fontSize: "0.78rem", color: "var(--c-blue)", cursor: "pointer", textAlign: "left", textDecoration: "underline" }}
+                >
+                  + Add new vendor manually
+                </button>
+              )}
             </FormField>
             <FormField label="Category">
               <Select value={category} onChange={e => setCategory(e.target.value)}>
@@ -362,6 +457,58 @@ export default function NewPurchaseBillPage() {
               </Select>
             </FormField>
           </div>
+
+          {/* ── Inline Vendor Create ── */}
+          {showVendorCreate && (
+            <div style={{ marginTop: "0.25rem", padding: "1.125rem 1.25rem", borderRadius: "0.625rem", border: "1px solid var(--c-amber)", background: "rgba(245,158,11,0.05)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.875rem" }}>
+                <div style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--c-amber)", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  Vendor not found — fill details to create
+                </div>
+                <button type="button" onClick={() => setShowVendorCreate(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--c-text-4)", padding: "0.125rem" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+
+              {ivError && <div style={{ marginBottom: "0.75rem", padding: "0.5rem 0.75rem", borderRadius: "0.375rem", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", fontSize: "0.8rem", color: "var(--c-red)" }}>{ivError}</div>}
+
+              <div className="form-grid-2">
+                <FormField label="Vendor Name" required>
+                  <Input value={ivName} onChange={e => setIvName(e.target.value)} placeholder="e.g. Sharma Chemicals" />
+                </FormField>
+                <FormField label="Company / Trade Name">
+                  <Input value={ivCompany} onChange={e => setIvCompany(e.target.value)} placeholder="Optional" />
+                </FormField>
+              </div>
+              <div className="form-grid-2">
+                <FormField label="GSTIN">
+                  <Input value={ivGstin} onChange={e => setIvGstin(e.target.value)} placeholder="22AAAAA0000A1Z5" />
+                </FormField>
+                <FormField label="Phone">
+                  <Input value={ivPhone} onChange={e => setIvPhone(e.target.value)} placeholder="10-digit mobile" />
+                </FormField>
+              </div>
+              <div className="form-grid-2">
+                <FormField label="Email">
+                  <Input type="email" value={ivEmail} onChange={e => setIvEmail(e.target.value)} placeholder="vendor@example.com" />
+                </FormField>
+                <FormField label="Address">
+                  <Input value={ivAddress} onChange={e => setIvAddress(e.target.value)} placeholder="Street / locality" />
+                </FormField>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.625rem", marginTop: "0.25rem" }}>
+                <Button type="button" variant="primary" disabled={ivSaving} onClick={handleCreateInlineVendor}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Create &amp; Use This Vendor
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setShowVendorCreate(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
 
           <div className="form-grid-2">
             <FormField label="Bill Date" required>
@@ -388,7 +535,7 @@ export default function NewPurchaseBillPage() {
           </div>
 
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "600px" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "620px" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--c-border)" }}>
                   {["Product (optional)", "Item Name", "Unit", "Qty", "Rate (₹)", "GST %", "Amount", ""].map(h => (
@@ -444,6 +591,49 @@ export default function NewPurchaseBillPage() {
               </tbody>
             </table>
           </div>
+
+          {/* ── Unmatched items — offer to save to product catalog ── */}
+          {unmatchedItems.length > 0 && (
+            <div style={{ marginTop: "1rem", padding: "0.875rem 1rem", borderRadius: "0.625rem", border: "1px solid var(--c-border)", background: "var(--c-bg-sub)" }}>
+              <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--c-text-3)", marginBottom: "0.625rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c-amber)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                {unmatchedItems.length} item{unmatchedItems.length > 1 ? "s" : ""} not linked to your product catalog — save them?
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                {unmatchedItems.map(({ item, idx }) => (
+                  <div key={idx} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", padding: "0.5rem 0.75rem", borderRadius: "0.5rem", background: "var(--c-bg)", border: "1px solid var(--c-border)" }}>
+                    <div>
+                      <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--c-text-2)" }}>{item.name}</div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--c-text-4)" }}>
+                        {item.unit} · ₹{fmt(toNum(item.purchasePrice))} · GST {item.gstRate}%
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={catalogSaving.has(idx)}
+                      onClick={() => handleAddToCatalog(idx)}
+                      style={{
+                        flexShrink: 0,
+                        display: "flex", alignItems: "center", gap: "0.35rem",
+                        padding: "0.35rem 0.75rem", borderRadius: "0.5rem",
+                        border: "1px solid var(--c-blue)", background: "rgba(59,130,246,0.08)",
+                        color: "var(--c-blue)", fontSize: "0.75rem", fontWeight: 600,
+                        cursor: catalogSaving.has(idx) ? "wait" : "pointer",
+                        opacity: catalogSaving.has(idx) ? 0.6 : 1,
+                      }}
+                    >
+                      {catalogSaving.has(idx) ? (
+                        <svg style={{ animation: "spin 0.8s linear infinite", width: 12, height: 12 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" d="M12 2a10 10 0 0 1 10 10"/></svg>
+                      ) : (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      )}
+                      Save to catalog
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Totals */}
           <div style={{ borderTop: "1px solid var(--c-border)", marginTop: "1rem", paddingTop: "1rem" }}>
