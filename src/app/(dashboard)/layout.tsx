@@ -146,6 +146,7 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 const allNavItems = NAV_GROUPS.flatMap((g) => g.items);
+const BIN_NAV = { href: "/bin", label: "Recycle Bin", iconKey: "bin", adminOnly: false };
 
 function isMobile() {
   return typeof window !== "undefined" && window.innerWidth < 768;
@@ -221,7 +222,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
   if (status === "unauthenticated") return null;
 
-  const currentNav = allNavItems.find((n) =>
+  const currentNav = [...allNavItems, BIN_NAV].find((n) =>
     n.href === "/" ? pathname === "/" : pathname === n.href || pathname.startsWith(n.href + "/")
   );
 
