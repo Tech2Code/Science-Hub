@@ -67,20 +67,28 @@ export default function DashboardPage() {
           </Button>
         </div>
 
-        <SectionLabel>Sales</SectionLabel>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
-          <KpiCard label="Revenue This Month" value={loading ? "—" : fmt(data?.sales.revenueThisMonth ?? 0)} color="var(--c-blue)" loading={loading} />
-          <KpiCard label="Outstanding" value={loading ? "—" : fmt(data?.sales.outstandingAmount ?? 0)} color="var(--c-amber)" loading={loading} />
-          <KpiCard label="Overdue Invoices" value={loading ? "—" : String(data?.sales.overdueInvoices ?? 0)} color={(data?.sales.overdueInvoices ?? 0) > 0 ? "var(--c-red)" : "var(--c-text-4)"} loading={loading} />
-          <KpiCard label="Collected Today" value={loading ? "—" : fmt(data?.sales.collectedToday ?? 0)} color="var(--c-green-text)" loading={loading} />
-        </div>
-
-        <SectionLabel>Purchases</SectionLabel>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
-          <KpiCard label="Spend This Month" value={loading ? "—" : fmt(data?.purchases.spendThisMonth ?? 0)} color="var(--c-amber)" loading={loading} />
-          <KpiCard label="Payable Balance" value={loading ? "—" : fmt(data?.purchases.payableBalance ?? 0)} color="var(--c-amber)" loading={loading} />
-          <KpiCard label="Overdue Bills" value={loading ? "—" : String(data?.purchases.overdueBills ?? 0)} color={(data?.purchases.overdueBills ?? 0) > 0 ? "var(--c-red)" : "var(--c-text-4)"} loading={loading} />
-          <KpiCard label="Paid Today" value={loading ? "—" : fmt(data?.purchases.paidToday ?? 0)} color="var(--c-green-text)" loading={loading} />
+        {/* Sales & Purchases side-by-side */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem" }}>
+          {/* SALES half */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            <SectionLabel>Sales</SectionLabel>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+              <KpiCard label="Revenue This Month" value={loading ? "—" : fmt(data?.sales.revenueThisMonth ?? 0)} color="var(--c-blue)" loading={loading} />
+              <KpiCard label="Outstanding" value={loading ? "—" : fmt(data?.sales.outstandingAmount ?? 0)} color="var(--c-amber)" loading={loading} />
+              <KpiCard label="Overdue Invoices" value={loading ? "—" : String(data?.sales.overdueInvoices ?? 0)} color={(data?.sales.overdueInvoices ?? 0) > 0 ? "var(--c-red)" : "var(--c-text-4)"} loading={loading} />
+              <KpiCard label="Collected Today" value={loading ? "—" : fmt(data?.sales.collectedToday ?? 0)} color="var(--c-green-text)" loading={loading} />
+            </div>
+          </div>
+          {/* PURCHASES half */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            <SectionLabel>Purchases</SectionLabel>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+              <KpiCard label="Spend This Month" value={loading ? "—" : fmt(data?.purchases.spendThisMonth ?? 0)} color="var(--c-amber)" loading={loading} />
+              <KpiCard label="Payable Balance" value={loading ? "—" : fmt(data?.purchases.payableBalance ?? 0)} color="var(--c-amber)" loading={loading} />
+              <KpiCard label="Overdue Bills" value={loading ? "—" : String(data?.purchases.overdueBills ?? 0)} color={(data?.purchases.overdueBills ?? 0) > 0 ? "var(--c-red)" : "var(--c-text-4)"} loading={loading} />
+              <KpiCard label="Paid Today" value={loading ? "—" : fmt(data?.purchases.paidToday ?? 0)} color="var(--c-green-text)" loading={loading} />
+            </div>
+          </div>
         </div>
 
         {/* Recent invoices & bills */}

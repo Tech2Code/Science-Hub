@@ -8,6 +8,9 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+
+type StrForm = { name: string; company: string; gstin: string; phone: string; email: string; };
 
 export default function EditVendorPage() {
   const router = useRouter();
@@ -17,6 +20,7 @@ export default function EditVendorPage() {
     name: "", company: "", gstin: "", phone: "", email: "", address: "", notes: "", isActive: true,
   });
   const [initialForm, setInitialForm] = useState<typeof form | null>(null);
+  const [errors, setErrors] = useState<FormErrors<StrForm>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -40,11 +44,20 @@ export default function EditVendorPage() {
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
     const { name, value, type } = e.target;
     setForm(prev => ({ ...prev, [name]: type === "checkbox" ? (e.target as HTMLInputElement).checked : value }));
+    setErrors(prev => ({ ...prev, [name]: undefined }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) { setError("Vendor name is required."); return; }
+    const strForm: StrForm = { name: form.name, company: form.company, gstin: form.gstin, phone: form.phone, email: form.email };
+    const newErrors = validateForm(strForm, {
+      name:  [rules.required("Vendor name is required.")],
+      phone: [rules.phone10()],
+      email: [rules.email()],
+      gstin: [rules.maxLength(15), rules.gstin()],
+    });
+    if (hasErrors(newErrors)) { setErrors(newErrors); return; }
+    setErrors({});
     setSaving(true); setError("");
     const res = await fetch(`/api/vendors/${id}`, {
       method: "PUT",
@@ -77,7 +90,7 @@ export default function EditVendorPage() {
 
       <form onSubmit={handleSubmit} className="form-card">
         <div className="form-grid-2">
-          <FormField label="Vendor Name" required>
+          <FormField label="Vendor Name" required error={errors.name as string}>
             <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. Lab Supplies Co." />
           </FormField>
           <FormField label="Company / Trade Name">
@@ -86,15 +99,15 @@ export default function EditVendorPage() {
         </div>
 
         <div className="form-grid-2">
-          <FormField label="Phone">
+          <FormField label="Phone" error={errors.phone as string}>
             <Input name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="10-digit mobile" />
           </FormField>
-          <FormField label="Email">
+          <FormField label="Email" error={errors.email as string}>
             <Input name="email" type="email" value={form.email} onChange={handleChange} placeholder="vendor@example.com" />
           </FormField>
         </div>
 
-        <FormField label="GSTIN">
+        <FormField label="GSTIN" hint="Leave blank if unregistered." error={errors.gstin as string}>
           <Input name="gstin" value={form.gstin} onChange={handleChange} placeholder="15-character GST number" maxLength={15} mono />
         </FormField>
 

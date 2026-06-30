@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -142,10 +143,10 @@ export default function PurchaseBillDetailPage() {
       onCancel={() => { if (!cancelling) setConfirmCancel(false); }}
     />
 
-    <div className="page-stack">
+    <div className="page-stack" style={{ maxWidth: "56rem" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem" }}>
         <div>
-          <Breadcrumb items={[{ label: "Purchases", href: "/purchases/bills" }, { label: bill.billNumber }]} />
+          <Breadcrumb items={[{ label: "Purchase Bills", href: "/purchases/bills" }, { label: bill.billNumber }]} />
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", marginTop: "0.375rem" }}>
             <h1 className="page-title" style={{ margin: 0 }}>{bill.billNumber}</h1>
             <StatusBadge status={bill.status} />
@@ -153,6 +154,10 @@ export default function PurchaseBillDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <Button variant="secondary" size="sm" href={`/purchases/bills/${bill.id}/edit`}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit
+          </Button>
           {bill.status !== "paid" && bill.status !== "cancelled" && (
             <Button variant="primary" size="sm" onClick={() => { setShowPayForm(v => !v); }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -206,7 +211,7 @@ export default function PurchaseBillDetailPage() {
         {/* Vendor info */}
         <div className="card">
           <h3 className="card-section-label">Vendor</h3>
-          <div style={{ fontWeight: 600, fontSize: "1rem", color: "var(--c-text)", marginBottom: "0.25rem" }}>{bill.vendor.name}</div>
+          <Link href={`/purchases/vendors/${bill.vendor.id}`} style={{ fontWeight: 600, fontSize: "1rem", color: "var(--c-blue)", textDecoration: "none", marginBottom: "0.25rem", display: "block" }}>{bill.vendor.name}</Link>
           {bill.vendor.company && <div style={{ fontSize: "0.8rem", color: "var(--c-text-3)" }}>{bill.vendor.company}</div>}
           {bill.vendor.gstin && <div style={{ fontSize: "0.8rem", color: "var(--c-text-4)", fontFamily: "var(--font-mono)", marginTop: "0.25rem" }}>GSTIN: {bill.vendor.gstin}</div>}
           {bill.vendor.phone && <div style={{ fontSize: "0.8rem", color: "var(--c-text-3)", marginTop: "0.25rem" }}>📞 {bill.vendor.phone}</div>}
@@ -340,7 +345,7 @@ export default function PurchaseBillDetailPage() {
       </div>
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-        <Button variant="secondary" href="/purchases/bills">← Back to Purchases</Button>
+        <Button variant="secondary" href="/purchases/bills">← Back to Bills</Button>
       </div>
     </div>
     </>

@@ -85,6 +85,18 @@ export default function SalesDashboardPage() {
           </div>
         </div>
 
+        {/* Quick actions — on top */}
+        <div className="card" style={{ padding: "1.125rem 1.25rem" }}>
+          <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", marginBottom: "0.75rem" }}>Quick Actions</h2>
+          <div style={{ display: "flex", gap: "0.625rem", flexWrap: "wrap" }}>
+            <Button variant="primary" href="/sales/invoices/new">+ New Invoice</Button>
+            <Button variant="secondary" href="/sales/customers/new">+ New Customer</Button>
+            <Button variant="secondary" href="/sales/invoices">All Invoices</Button>
+            <Button variant="secondary" href="/sales/customers">All Customers</Button>
+            <Button variant="secondary" href="/reports/sales">Sales Reports</Button>
+          </div>
+        </div>
+
         {/* KPI row */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.875rem" }}>
           <KpiCard label="Revenue This Month" value={loading ? "—" : fmt(data?.revenueThisMonth ?? 0)} sub="total billed" loading={loading} color="var(--c-blue)" />
@@ -177,16 +189,6 @@ export default function SalesDashboardPage() {
           </div>
         </div>
 
-        {/* Quick actions */}
-        <div className="card" style={{ padding: "1.25rem" }}>
-          <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", marginBottom: "0.875rem" }}>Quick Actions</h2>
-          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-            <Button variant="primary" href="/sales/invoices/new">+ New Invoice</Button>
-            <Button variant="secondary" href="/sales/customers/new">+ New Customer</Button>
-            <Button variant="secondary" href="/sales/invoices">All Invoices</Button>
-            <Button variant="secondary" href="/reports/sales">Sales Reports</Button>
-          </div>
-        </div>
       </div>
     </>
   );

@@ -147,6 +147,8 @@ const NAV_GROUPS: NavGroup[] = [
 
 const allNavItems = NAV_GROUPS.flatMap((g) => g.items);
 const BIN_NAV = { href: "/bin", label: "Recycle Bin", iconKey: "bin", adminOnly: false };
+// These overview pages must only highlight when exactly on that path, not on sub-pages.
+const EXACT_MATCH_HREFS = new Set(["/", "/sales", "/purchases"]);
 
 function isMobile() {
   return typeof window !== "undefined" && window.innerWidth < 768;
@@ -275,10 +277,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <span style={sectionLabelStyle}>{group.label}</span>
                 )}
                 {visibleItems.map((item) => {
-                  const isActive =
-                    item.href === "/"
-                      ? pathname === "/"
-                      : pathname === item.href || pathname.startsWith(item.href + "/");
+                  const isActive = EXACT_MATCH_HREFS.has(item.href)
+                    ? pathname === item.href
+                    : pathname === item.href || pathname.startsWith(item.href + "/");
                   const Icon = NavIcons[item.iconKey];
                   return (
                     <Link
