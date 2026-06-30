@@ -460,52 +460,64 @@ export default function NewPurchaseBillPage() {
 
           {/* ── Inline Vendor Create ── */}
           {showVendorCreate && (
-            <div style={{ marginTop: "0.25rem", padding: "1.125rem 1.25rem", borderRadius: "0.625rem", border: "1px solid var(--c-amber)", background: "rgba(245,158,11,0.05)" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.875rem" }}>
-                <div style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--c-amber)", display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                  Vendor not found — fill details to create
+            <div style={{ marginTop: "0.5rem", borderRadius: "0.75rem", border: "1px solid var(--c-amber)", overflow: "hidden" }}>
+              {/* Header */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1rem", background: "rgba(245,158,11,0.08)", borderBottom: "1px solid rgba(245,158,11,0.2)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <div style={{ width: "1.75rem", height: "1.75rem", borderRadius: "50%", background: "rgba(245,158,11,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c-amber)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--c-amber)" }}>New Vendor</div>
+                    <div style={{ fontSize: "0.72rem", color: "var(--c-text-4)", lineHeight: 1.3 }}>Not in your list — fill details and create</div>
+                  </div>
                 </div>
-                <button type="button" onClick={() => setShowVendorCreate(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--c-text-4)", padding: "0.125rem" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <button type="button" onClick={() => setShowVendorCreate(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--c-text-4)", padding: "0.25rem", borderRadius: "0.375rem", lineHeight: 0 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </div>
 
-              {ivError && <div style={{ marginBottom: "0.75rem", padding: "0.5rem 0.75rem", borderRadius: "0.375rem", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", fontSize: "0.8rem", color: "var(--c-red)" }}>{ivError}</div>}
+              {/* Body */}
+              <div style={{ padding: "1rem 1rem 0.75rem" }}>
+                {ivError && (
+                  <div style={{ marginBottom: "0.75rem", padding: "0.5rem 0.75rem", borderRadius: "0.375rem", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", fontSize: "0.8rem", color: "var(--c-red)" }}>
+                    {ivError}
+                  </div>
+                )}
 
-              <div className="form-grid-2">
-                <FormField label="Vendor Name" required>
-                  <Input value={ivName} onChange={e => setIvName(e.target.value)} placeholder="e.g. Sharma Chemicals" />
-                </FormField>
-                <FormField label="Company / Trade Name">
-                  <Input value={ivCompany} onChange={e => setIvCompany(e.target.value)} placeholder="Optional" />
-                </FormField>
-              </div>
-              <div className="form-grid-2">
-                <FormField label="GSTIN">
-                  <Input value={ivGstin} onChange={e => setIvGstin(e.target.value)} placeholder="22AAAAA0000A1Z5" />
-                </FormField>
-                <FormField label="Phone">
-                  <Input value={ivPhone} onChange={e => setIvPhone(e.target.value)} placeholder="10-digit mobile" />
-                </FormField>
-              </div>
-              <div className="form-grid-2">
-                <FormField label="Email">
-                  <Input type="email" value={ivEmail} onChange={e => setIvEmail(e.target.value)} placeholder="vendor@example.com" />
-                </FormField>
-                <FormField label="Address">
-                  <Input value={ivAddress} onChange={e => setIvAddress(e.target.value)} placeholder="Street / locality" />
-                </FormField>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem 1rem" }}>
+                  <FormField label="Vendor Name" required>
+                    <Input value={ivName} onChange={e => setIvName(e.target.value)} placeholder="e.g. Sharma Chemicals" />
+                  </FormField>
+                  <FormField label="Company / Trade Name">
+                    <Input value={ivCompany} onChange={e => setIvCompany(e.target.value)} placeholder="Optional" />
+                  </FormField>
+                  <FormField label="GSTIN">
+                    <Input value={ivGstin} onChange={e => setIvGstin(e.target.value)} placeholder="22AAAAA0000A1Z5" />
+                  </FormField>
+                  <FormField label="Phone">
+                    <Input value={ivPhone} onChange={e => setIvPhone(e.target.value)} placeholder="10-digit mobile" />
+                  </FormField>
+                  <FormField label="Email">
+                    <Input type="email" value={ivEmail} onChange={e => setIvEmail(e.target.value)} placeholder="vendor@example.com" />
+                  </FormField>
+                  <FormField label="Address">
+                    <Input value={ivAddress} onChange={e => setIvAddress(e.target.value)} placeholder="Street / locality" />
+                  </FormField>
+                </div>
               </div>
 
-              <div style={{ display: "flex", gap: "0.625rem", marginTop: "0.25rem" }}>
+              {/* Footer */}
+              <div style={{ display: "flex", gap: "0.625rem", padding: "0.75rem 1rem", background: "var(--c-bg-sub)", borderTop: "1px solid var(--c-border)" }}>
                 <Button type="button" variant="primary" disabled={ivSaving} onClick={handleCreateInlineVendor}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  Create &amp; Use This Vendor
+                  {ivSaving ? "Creating…" : (
+                    <span style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      Create &amp; Use This Vendor
+                    </span>
+                  )}
                 </Button>
-                <Button type="button" variant="secondary" onClick={() => setShowVendorCreate(false)}>
-                  Cancel
-                </Button>
+                <Button type="button" variant="secondary" onClick={() => setShowVendorCreate(false)}>Dismiss</Button>
               </div>
             </div>
           )}
