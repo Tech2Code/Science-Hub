@@ -246,7 +246,7 @@ export default function SettingsPage() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1.25rem" }}>
                 <InfoRow label="Business Name" value={saved.name} />
                 <InfoRow label="Tagline" value={saved.tagline} />
-                <InfoRow label="Business Contact Email (printed on invoices)" value={saved.email} />
+                <InfoRow label="Business Email (on invoices)" value={saved.email} />
                 <InfoRow label="Phone" value={saved.phone} />
                 <InfoRow label="GSTIN" value={saved.gstin} mono />
               </div>
@@ -339,7 +339,7 @@ export default function SettingsPage() {
                       >
                         myaccount.google.com/apppasswords
                       </a>
-                      {" "}— select "Mail" and copy the 16-character code.
+                      {" "}— select Mail and copy the 16-character code.
                     </p>
                   </div>
 
@@ -415,7 +415,7 @@ export default function SettingsPage() {
                 <FormField label="Tagline">
                   <Input value={form.tagline} onChange={setField("tagline")} placeholder="e.g. Industrial & Laboratory Solutions" />
                 </FormField>
-                <FormField label="Business Contact Email (printed on invoices)">
+                <FormField label="Business Email (on invoices)">
                   <Input type="email" value={form.email} onChange={setField("email")} placeholder="e.g. info@sciencehub.com" />
                 </FormField>
                 <FormField label="Phone">
