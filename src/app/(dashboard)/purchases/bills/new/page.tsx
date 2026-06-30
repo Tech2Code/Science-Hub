@@ -73,7 +73,6 @@ export default function NewPurchaseBillPage() {
   const [vendors,  setVendors]  = useState<Vendor[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [saving,   setSaving]   = useState(false);
-  const [error,    setError]    = useState("");
 
   // AI Scan state
   const [scanning,   setScanning]   = useState(false);
@@ -291,13 +290,17 @@ export default function NewPurchaseBillPage() {
     .map((item, idx) => ({ item, idx }))
     .filter(({ item }) => item.productId === "" && item.name.trim() !== "");
 
+  function validationToast(message: string) {
+    toast({ type: "error", title: "Check form", message });
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!vendorId)                                     { setError("Please select a vendor."); return; }
-    if (items.length === 0)                            { setError("Add at least one item."); return; }
-    if (items.some(i => !i.name.trim()))               { setError("All items must have a name."); return; }
-    if (items.some(i => toNum(i.quantity) <= 0))       { setError("All quantities must be greater than 0."); return; }
-    if (items.some(i => toNum(i.purchasePrice) < 0))   { setError("Item prices cannot be negative."); return; }
+    if (!vendorId)                                   { validationToast("Please select a vendor."); return; }
+    if (items.length === 0)                          { validationToast("Add at least one item."); return; }
+    if (items.some(i => !i.name.trim()))             { validationToast("All items must have a name."); return; }
+    if (items.some(i => toNum(i.quantity) <= 0))     { validationToast("All quantities must be greater than 0."); return; }
+    if (items.some(i => toNum(i.purchasePrice) < 0)) { validationToast("Item prices cannot be negative."); return; }
 
     const billItems = items.map(i => ({
       productId:     i.productId || null,
@@ -332,7 +335,7 @@ export default function NewPurchaseBillPage() {
       };
     }
 
-    setSaving(true); setError("");
+    setSaving(true);
     try {
       const res = await fetch("/api/purchase-bills", {
         method: "POST",
@@ -345,10 +348,10 @@ export default function NewPurchaseBillPage() {
         toast({ type: "success", title: "Bill created", message: `${data.billNumber} saved.` });
         router.push(`/purchases/bills/${data.id}`);
       } else {
-        setError(data.error ?? "Failed to create purchase bill.");
+        toast({ type: "error", title: "Failed to save", message: data.error ?? "Failed to create purchase bill." });
       }
     } catch {
-      setError("Network error — please try again.");
+      toast({ type: "error", title: "Network error", message: "Please try again." });
     }
     setSaving(false);
   }
@@ -361,8 +364,6 @@ export default function NewPurchaseBillPage() {
     <div className="page-stack" style={{ maxWidth: "54rem" }}>
       <Breadcrumb items={[{ label: "Purchases", href: "/purchases/bills" }, { label: "New Purchase Bill" }]} />
       <h1 className="page-title">New Purchase Bill</h1>
-
-      {error && <div className="error-banner">{error}</div>}
 
       {/* ── AI Bill Scanner ── */}
       <div className="card" style={{ padding: "1.25rem", borderLeft: "3px solid var(--c-blue)" }}>

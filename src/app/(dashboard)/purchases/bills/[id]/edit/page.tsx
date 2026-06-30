@@ -63,9 +63,9 @@ export default function EditPurchaseBillPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!vendorId) { setError("Please select a vendor."); return; }
-    if (!billDate) { setError("Bill date is required."); return; }
-    setSaving(true); setError("");
+    if (!vendorId) { toast({ type: "error", title: "Check form", message: "Please select a vendor." }); return; }
+    if (!billDate) { toast({ type: "error", title: "Check form", message: "Bill date is required." }); return; }
+    setSaving(true);
     try {
       const res = await fetch(`/api/purchase-bills/${id}`, {
         method: "PUT",
@@ -87,10 +87,10 @@ export default function EditPurchaseBillPage() {
         toast({ type: "success", title: "Bill updated", message: "Changes saved successfully." });
         router.push(`/purchases/bills/${id}`);
       } else {
-        setError(data.error ?? "Failed to update bill.");
+        toast({ type: "error", title: "Failed to save", message: data.error ?? "Failed to update bill." });
       }
     } catch {
-      setError("Network error — please try again.");
+      toast({ type: "error", title: "Network error", message: "Please try again." });
     }
     setSaving(false);
   }
@@ -112,8 +112,6 @@ export default function EditPurchaseBillPage() {
         <h1 className="page-title">Edit Purchase Bill</h1>
         <p className="page-sub">{bill?.billNumber} — changes saved immediately</p>
       </div>
-
-      {error && <div className="error-banner">{error}</div>}
 
       <form onSubmit={handleSubmit} className="form-stack">
 
