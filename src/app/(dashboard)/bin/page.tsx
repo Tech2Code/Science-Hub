@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
@@ -161,6 +161,7 @@ export default function BinPage() {
   const items = data ?? [];
   const toast = useToast();
 
+  const [search, setSearch] = useState("");
   const [confirmState, setConfirmState] = useState<{
     title: string; message: string; confirmLabel: string; variant: "default" | "danger"; onConfirm: () => void;
   } | null>(null);
@@ -222,12 +223,27 @@ export default function BinPage() {
     });
   }
 
+  const filteredItems = useMemo(() => {
+    if (!search.trim()) return items;
+    const q = search.toLowerCase().trim();
+    return items.filter(item => {
+      return (
+        item.name.toLowerCase().includes(q) ||
+        item.meta.toLowerCase().includes(q) ||
+        item.type.toLowerCase().includes(q) ||
+        (item.deletedBy ?? "").toLowerCase().includes(q) ||
+        new Date(item.deletedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toLowerCase().includes(q)
+      );
+    });
+  }, [items, search]);
+
   const grouped = TYPE_ORDER.reduce((acc, t) => {
-    acc[t] = items.filter(i => i.type === t);
+    acc[t] = filteredItems.filter(i => i.type === t);
     return acc;
   }, {} as Record<BinType, BinItem[]>);
 
   const totalCount = items.length;
+  const filteredCount = filteredItems.length;
 
   return (
     <>
@@ -251,10 +267,25 @@ export default function BinPage() {
               ? "Loading…"
               : totalCount === 0
               ? "Bin is empty"
+              : search.trim()
+              ? `${filteredCount} of ${totalCount} items`
               : `${totalCount} item${totalCount !== 1 ? "s" : ""} — auto-purged after 30 days`}
           </p>
         </div>
       </div>
+
+      {!loading && totalCount > 0 && (
+        <div className="card" style={{ padding: "0.75rem 1rem" }}>
+          <input
+            type="search"
+            placeholder="Search by name, invoice no., customer, phone, amount, deleted by, date…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="search-input"
+            style={{ width: "100%" }}
+          />
+        </div>
+      )}
 
       {loading ? (
         <div className="card">
@@ -273,6 +304,10 @@ export default function BinPage() {
             <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
           Bin is empty — nothing has been deleted recently.
+        </div>
+      ) : search.trim() && filteredCount === 0 ? (
+        <div className="card" style={{ padding: "3rem", textAlign: "center", color: "var(--c-text-4)" }}>
+          No items match &ldquo;{search}&rdquo;.
         </div>
       ) : (
         TYPE_ORDER.map(type => (
