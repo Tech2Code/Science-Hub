@@ -26,7 +26,6 @@ export default function NewCustomerPage() {
     name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "",
   });
   const [errors, setErrors] = useState<FormErrors<typeof form>>({});
-  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
@@ -49,7 +48,6 @@ export default function NewCustomerPage() {
     });
     if (hasErrors(newErrors)) { setErrors(newErrors); return; }
     setErrors({});
-    setError("");
     setSaving(true);
     const res = await fetch("/api/customers", {
       method: "POST",
@@ -63,7 +61,7 @@ export default function NewCustomerPage() {
       router.push("/sales/customers");
     } else {
       const d = await res.json().catch(() => ({}));
-      setError(d?.error ?? "Failed to create customer.");
+      toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to create customer." });
     }
   }
 
@@ -77,8 +75,6 @@ export default function NewCustomerPage() {
         <h1 className="page-title">New Customer</h1>
         <p className="page-sub">Add a new customer to your directory</p>
       </div>
-
-      {error && <div className="error-banner">{error}</div>}
 
       <form onSubmit={handleSubmit} className="form-card">
         <FormField label="Customer Name" required error={errors.name as string}>

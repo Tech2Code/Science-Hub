@@ -68,7 +68,6 @@ export default function PurchaseBillDetailPage() {
   const [payMethod,   setPayMethod]     = useState("Cash");
   const [payRef,      setPayRef]        = useState("");
   const [payDate,     setPayDate]       = useState(() => new Date().toISOString().slice(0, 10));
-  const [payError,    setPayError]      = useState("");
   const [submitting,  setSubmitting]    = useState(false);
 
   const [updatingStatus, setUpdatingStatus] = useState(false);
@@ -90,9 +89,9 @@ export default function PurchaseBillDetailPage() {
     if (!bill) return;
     const amount  = parseFloat(payAmount);
     const balance = bill.total - bill.paidAmount;
-    if (!payAmount || isNaN(amount) || amount <= 0) { setPayError("Enter a valid amount."); return; }
-    if (amount > balance + 0.01) { setPayError(`Amount exceeds outstanding balance of ₹${fmt(balance)}.`); return; }
-    setSubmitting(true); setPayError("");
+    if (!payAmount || isNaN(amount) || amount <= 0) { toast({ type: "error", title: "Check form", message: "Enter a valid amount." }); return; }
+    if (amount > balance + 0.01) { toast({ type: "error", title: "Check form", message: `Amount exceeds outstanding balance of ₹${fmt(balance)}.` }); return; }
+    setSubmitting(true);
     try {
       const res = await fetch(`/api/purchase-bills/${id}/payment`, {
         method: "POST",
@@ -107,10 +106,10 @@ export default function PurchaseBillDetailPage() {
         setPayAmount(""); setPayRef("");
         load();
       } else {
-        setPayError(data.error ?? "Failed to record payment.");
+        toast({ type: "error", title: "Failed", message: data.error ?? "Failed to record payment." });
       }
     } catch {
-      setPayError("Network error — please try again.");
+      toast({ type: "error", title: "Network error", message: "Please try again." });
     }
     setSubmitting(false);
   }
@@ -276,7 +275,6 @@ export default function PurchaseBillDetailPage() {
               </span>
             </h3>
           </div>
-          {payError && <div className="error-banner" style={{ marginBottom: "0.75rem" }}>{payError}</div>}
           <form onSubmit={handlePayment}>
             <div className="form-grid-2" style={{ marginBottom: "0.75rem" }}>
               <FormField label="Amount (₹)" required>
@@ -321,7 +319,7 @@ export default function PurchaseBillDetailPage() {
             </div>
             <div className="form-actions">
               <Button type="submit" variant="primary" disabled={submitting}>Save Payment</Button>
-              <Button type="button" variant="secondary" onClick={() => { setShowPayForm(false); setPayError(""); }}>Cancel</Button>
+              <Button type="button" variant="secondary" onClick={() => { setShowPayForm(false); }}>Cancel</Button>
             </div>
           </form>
         </div>

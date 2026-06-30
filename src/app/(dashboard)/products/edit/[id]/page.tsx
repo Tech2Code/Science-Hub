@@ -37,7 +37,6 @@ export default function EditProductPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [fieldErrors, setFieldErrors] = useState<{ name?: string; price?: string }>({});
-  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -59,7 +58,7 @@ export default function EditProductPage() {
         setInitialForm(loaded);
         setBrands(b); setCategories(c); setLoading(false);
       })
-      .catch(() => { setError("Failed to load product."); setLoading(false); });
+      .catch(() => { setLoading(false); });
   }, [id]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
@@ -87,7 +86,7 @@ export default function EditProductPage() {
       bustCache("/api/reports?type=stock");
       toast({ type: "success", title: "Product updated", message: "Changes saved." });
       router.push("/products");
-    } else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to update product."); }
+    } else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to update product." }); }
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -95,7 +94,7 @@ export default function EditProductPage() {
     const nameErr  = validate(form.name,  rules.required("Product name is required."));
     const priceErr = validate(form.price, rules.required("Price is required."), rules.positiveNumber("Price must be greater than 0."));
     if (nameErr || priceErr) { setFieldErrors({ name: nameErr ?? undefined, price: priceErr ?? undefined }); return; }
-    setFieldErrors({}); setError(""); setConfirmOpen(true);
+    setFieldErrors({}); setConfirmOpen(true);
   }
 
   if (loading) return <div className="loading-center">Loading product…</div>;
@@ -127,8 +126,6 @@ export default function EditProductPage() {
           </code>
         </div>
       </div>
-
-      {error && <div className="error-banner">{error}</div>}
 
       <form onSubmit={handleSubmit} className="form-card">
         <div className="form-grid-2">

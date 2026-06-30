@@ -27,7 +27,6 @@ export default function NewProductPage() {
     brandId: "", categoryId: "",
   });
   const [fieldErrors, setFieldErrors] = useState<{ name?: string; price?: string }>({});
-  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -46,7 +45,7 @@ export default function NewProductPage() {
     const nameErr  = validate(form.name,  rules.required("Product name is required."));
     const priceErr = validate(form.price, rules.required("Price is required."), rules.positiveNumber("Price must be greater than 0."));
     if (nameErr || priceErr) { setFieldErrors({ name: nameErr ?? undefined, price: priceErr ?? undefined }); return; }
-    setFieldErrors({}); setError(""); setSaving(true);
+    setFieldErrors({}); setSaving(true);
     const res = await fetch("/api/products", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -68,7 +67,7 @@ export default function NewProductPage() {
       toast({ type: "success", title: "Product created", message: "New product added to catalog." });
       router.push("/products");
     }
-    else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to save product."); }
+    else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to save product." }); }
   }
 
   return (
@@ -80,8 +79,6 @@ export default function NewProductPage() {
         <h1 className="page-title">Add Product</h1>
         <p className="page-sub">Add a product or item to your catalog</p>
       </div>
-      {error && <div className="error-banner">{error}</div>}
-
       <form onSubmit={handleSubmit} className="form-card">
         <div className="form-grid-2">
           <FormField label="Product Name" required error={fieldErrors.name}>

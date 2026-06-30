@@ -179,7 +179,6 @@ export default function InvoiceDetailPage() {
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentForm, setPaymentForm] = useState({ amount: "", method: "Cash", reference: "" });
   const [addingPayment, setAddingPayment] = useState(false);
-  const [paymentError, setPaymentError] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareLoadingText, setShareLoadingText] = useState("Preparing PDF…");
@@ -196,7 +195,6 @@ export default function InvoiceDetailPage() {
   const [returnNotes, setReturnNotes] = useState("");
   const [returnDate, setReturnDate] = useState("");
   const [addingReturn, setAddingReturn] = useState(false);
-  const [returnError, setReturnError] = useState("");
   const toast = useToast();
   const router = useRouter();
 
@@ -261,10 +259,10 @@ export default function InvoiceDetailPage() {
   async function handleAddPayment(e: React.FormEvent) {
     e.preventDefault();
     const amtErr = validate(paymentForm.amount, rules.required("Amount is required."), rules.positiveNumber("Enter a valid amount greater than 0."));
-    if (amtErr) { setPaymentError(amtErr); return; }
+    if (amtErr) { toast({ type: "error", title: "Check form", message: amtErr }); return; }
     const amt = parseFloat(paymentForm.amount);
-    if (amt > balance) { setPaymentError(`Amount cannot exceed balance due (₹${fmt(balance)}).`); return; }
-    setPaymentError(""); setAddingPayment(true);
+    if (amt > balance) { toast({ type: "error", title: "Check form", message: `Amount cannot exceed balance due (₹${fmt(balance)}).` }); return; }
+    setAddingPayment(true);
     const res = await fetch(`/api/invoices/${id}/payment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -279,7 +277,7 @@ export default function InvoiceDetailPage() {
       toast({ type: "success", title: "Payment recorded", message: `₹${parseFloat(paymentForm.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })} via ${paymentForm.method}` });
     } else {
       const d = await res.json().catch(() => ({}));
-      setPaymentError(d?.error ?? "Failed to record payment.");
+      toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to record payment." });
     }
   }
 
@@ -302,7 +300,6 @@ export default function InvoiceDetailPage() {
     })).filter(ri => ri.maxQty > 0));
     setReturnNotes("");
     setReturnDate(new Date().toISOString().split("T")[0]);
-    setReturnError("");
     setShowReturnForm(true);
   }
 
@@ -316,11 +313,10 @@ export default function InvoiceDetailPage() {
   async function handleAddReturn(e: React.FormEvent) {
     e.preventDefault();
     const selected = returnItems.filter(ri => ri.selected && ri.qty > 0);
-    if (selected.length === 0) { setReturnError("Select at least one item to return."); return; }
+    if (selected.length === 0) { toast({ type: "error", title: "Check form", message: "Select at least one item to return." }); return; }
     for (const ri of selected) {
-      if (ri.qty > ri.maxQty) { setReturnError(`${ri.name}: quantity exceeds returnable amount (max ${ri.maxQty}).`); return; }
+      if (ri.qty > ri.maxQty) { toast({ type: "error", title: "Check form", message: `${ri.name}: quantity exceeds returnable amount (max ${ri.maxQty}).` }); return; }
     }
-    setReturnError("");
     setAddingReturn(true);
     try {
       const res = await fetch(`/api/invoices/${id}/returns`, {
@@ -341,10 +337,10 @@ export default function InvoiceDetailPage() {
         toast({ type: "success", title: "Return recorded", message: `${selected.length} item(s) returned.` });
       } else {
         const d = await res.json().catch(() => ({}));
-        setReturnError(d?.error ?? "Failed to record return.");
+        toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to record return." });
       }
     } catch {
-      setReturnError("Network error. Please try again.");
+      toast({ type: "error", title: "Network error", message: "Please try again." });
     }
     setAddingReturn(false);
   }
@@ -556,7 +552,6 @@ export default function InvoiceDetailPage() {
                 size="sm"
                 onClick={() => {
                   setPaymentForm({ amount: "", method: "Cash", reference: "" });
-                  setPaymentError("");
                   setShowPaymentForm(true);
                 }}
               >
@@ -667,7 +662,6 @@ export default function InvoiceDetailPage() {
         {showPaymentForm && (
           <div className="card no-print" style={{ padding: "1.25rem" }}>
             <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text)", marginBottom: "0.75rem" }}>Record Payment</h3>
-            {paymentError && <div className="error-banner" style={{ marginBottom: "0.75rem" }}>{paymentError}</div>}
             <form onSubmit={handleAddPayment}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
                 <FormField label="Amount (₹)">
@@ -676,7 +670,7 @@ export default function InvoiceDetailPage() {
                       type="text"
                       inputMode="decimal"
                       value={paymentForm.amount}
-                      onChange={(e) => { setPaymentError(""); setPaymentForm((p) => ({ ...p, amount: e.target.value })); }}
+                      onChange={(e) => { setPaymentForm((p) => ({ ...p, amount: e.target.value })); }}
                       placeholder={`e.g. ${balance.toFixed(2)}`}
                       sz="sm"
                       style={{ width: "9rem" }}
@@ -720,7 +714,7 @@ export default function InvoiceDetailPage() {
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
                     Save Payment
                   </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => setShowPaymentForm(false)}>Cancel</Button>
+                  <Button type="button" variant="secondary" size="sm" onClick={() => { setShowPaymentForm(false); }}>Cancel</Button>
                 </div>
               </div>
               <p style={{ marginTop: "0.375rem", fontSize: "0.7rem", color: "var(--c-text-4)" }}>
@@ -773,7 +767,6 @@ export default function InvoiceDetailPage() {
                   </div>
                   <div style={{ padding: "1rem 1.25rem" }}>
                     <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.5rem" }}>Select Items to Return</div>
-                    {returnError && <div className="error-banner" style={{ marginBottom: "0.75rem" }}>{returnError}</div>}
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                       {returnItems.map((ri, idx) => (
                         <div key={idx} style={{

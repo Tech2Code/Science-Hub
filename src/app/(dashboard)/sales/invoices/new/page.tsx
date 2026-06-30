@@ -37,7 +37,6 @@ export default function NewInvoicePage() {
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [error, setError] = useState("");
   const [customErrors, setCustomErrors] = useState<Partial<Record<keyof typeof customCustomer, string>>>({});
   const [saving, setSaving] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -92,7 +91,7 @@ export default function NewInvoicePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (customerMode === "existing" && !customerId) { setError("Select a customer."); return; }
+    if (customerMode === "existing" && !customerId) { toast({ type: "error", title: "Check form", message: "Select a customer." }); return; }
     if (customerMode === "custom") {
       const errs = validateForm(customCustomer, {
         name:    [rules.required("Customer name is required.")],
@@ -104,8 +103,7 @@ export default function NewInvoicePage() {
       if (hasErrors(errs)) { setCustomErrors(errs); return; }
       setCustomErrors({});
     }
-    if (items.length === 0) { setError("Add at least one item."); return; }
-    setError("");
+    if (items.length === 0) { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
 
     // Check stock before submitting
     const outOfStock = items.flatMap(item => {
@@ -149,7 +147,7 @@ export default function NewInvoicePage() {
       }
       router.push(`/sales/invoices/${d.id}`);
     }
-    else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to create invoice."); }
+    else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to create invoice." }); }
   }
 
   const dropdownStyle: React.CSSProperties = {
@@ -187,8 +185,6 @@ export default function NewInvoicePage() {
         <h1 className="page-title">Create Invoice</h1>
         <p className="page-sub">Generate a GST-compliant invoice</p>
       </div>
-      {error && <div className="error-banner">{error}</div>}
-
       <ConfirmDialog
         open={showCancelConfirm}
         title="Discard this invoice?"

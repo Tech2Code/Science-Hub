@@ -23,7 +23,6 @@ export default function EditVendorPage() {
   const [errors, setErrors] = useState<FormErrors<StrForm>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     fetch(`/api/vendors/${id}`)
@@ -38,7 +37,7 @@ export default function EditVendorPage() {
         setInitialForm(loaded);
         setLoading(false);
       })
-      .catch(() => { setError("Failed to load vendor."); setLoading(false); });
+      .catch(() => { setLoading(false); });
   }, [id]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
@@ -58,7 +57,7 @@ export default function EditVendorPage() {
     });
     if (hasErrors(newErrors)) { setErrors(newErrors); return; }
     setErrors({});
-    setSaving(true); setError("");
+    setSaving(true);
     const res = await fetch(`/api/vendors/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -71,7 +70,7 @@ export default function EditVendorPage() {
       router.push("/purchases/vendors");
     } else {
       const d = await res.json().catch(() => ({}));
-      setError(d.error ?? "Failed to update vendor.");
+      toast({ type: "error", title: "Failed", message: d.error ?? "Failed to update vendor." });
     }
   }
 
@@ -85,8 +84,6 @@ export default function EditVendorPage() {
     <div className="page-stack" style={{ maxWidth: "42rem" }}>
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "Edit Vendor" }]} />
       <h1 className="page-title">Edit Vendor</h1>
-
-      {error && <div className="error-banner">{error}</div>}
 
       <form onSubmit={handleSubmit} className="form-card">
         <div className="form-grid-2">

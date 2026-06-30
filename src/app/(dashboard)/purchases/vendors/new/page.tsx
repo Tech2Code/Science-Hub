@@ -20,7 +20,6 @@ export default function NewVendorPage() {
   });
   const [errors, setErrors] = useState<FormErrors<StrForm>>({});
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
     const { name, value, type } = e.target;
@@ -39,7 +38,7 @@ export default function NewVendorPage() {
     });
     if (hasErrors(newErrors)) { setErrors(newErrors); return; }
     setErrors({});
-    setSaving(true); setError("");
+    setSaving(true);
     const res = await fetch("/api/vendors", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -52,7 +51,7 @@ export default function NewVendorPage() {
       router.push("/purchases/vendors");
     } else {
       const d = await res.json().catch(() => ({}));
-      setError(d.error ?? "Failed to create vendor.");
+      toast({ type: "error", title: "Failed", message: d.error ?? "Failed to create vendor." });
     }
   }
 
@@ -62,8 +61,6 @@ export default function NewVendorPage() {
     <div className="page-stack" style={{ maxWidth: "42rem" }}>
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "New Vendor" }]} />
       <h1 className="page-title">New Vendor</h1>
-
-      {error && <div className="error-banner">{error}</div>}
 
       <form onSubmit={handleSubmit} className="form-card">
         <div className="form-grid-2">

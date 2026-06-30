@@ -30,7 +30,6 @@ export default function EditCustomerPage() {
   const [initialForm, setInitialForm] = useState<typeof form | null>(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<FormErrors<typeof form>>({});
-  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -45,7 +44,7 @@ export default function EditCustomerPage() {
         setInitialForm(loaded);
         setLoading(false);
       })
-      .catch(() => { setError("Failed to load customer."); setLoading(false); });
+      .catch(() => { setLoading(false); });
   }, [id]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
@@ -72,7 +71,7 @@ export default function EditCustomerPage() {
       toast({ type: "success", title: "Customer updated", message: "Changes saved." });
       router.push("/sales/customers");
     }
-    else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to update customer."); }
+    else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to update customer." }); }
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -85,7 +84,7 @@ export default function EditCustomerPage() {
       gstin:   [rules.maxLength(15), rules.gstin()],
     });
     if (hasErrors(newErrors)) { setErrors(newErrors); return; }
-    setErrors({}); setError(""); setConfirmOpen(true);
+    setErrors({}); setConfirmOpen(true);
   }
 
   if (loading) return <div className="loading-center">Loading customer…</div>;
@@ -117,8 +116,6 @@ export default function EditCustomerPage() {
           </code>
         </div>
       </div>
-
-      {error && <div className="error-banner">{error}</div>}
 
       <form onSubmit={handleSubmit} className="form-card">
         <FormField label="Customer Name" required error={errors.name as string}>

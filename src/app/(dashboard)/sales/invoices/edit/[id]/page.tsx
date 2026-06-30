@@ -104,13 +104,12 @@ export default function EditInvoicePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (items.length === 0) { setError("Add at least one item."); return; }
+    if (items.length === 0) { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
     for (const item of items) {
       const qtyErr   = validate(String(item.qty),   rules.positiveNumber("Item quantity must be greater than 0."));
       const priceErr = validate(String(item.price), rules.nonNegativeNumber("Item price cannot be negative."));
-      if (qtyErr || priceErr) { setError(qtyErr ?? priceErr ?? ""); return; }
+      if (qtyErr || priceErr) { toast({ type: "error", title: "Check form", message: qtyErr ?? priceErr ?? "" }); return; }
     }
-    setError("");
 
     // Check stock: current product.stock already has this invoice's old qty deducted,
     // so effective available = product.stock + original qty for that product.
@@ -156,7 +155,7 @@ export default function EditInvoicePage() {
       }
       router.push(`/sales/invoices/${id}`);
     }
-    else { const d = await res.json().catch(() => ({})); setError(d?.error ?? "Failed to update invoice."); }
+    else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to update invoice." }); }
   }
 
   if (loading) return (
@@ -241,8 +240,6 @@ export default function EditInvoicePage() {
         <h1 className="page-title">Edit Invoice — {invoice.invoiceNumber}</h1>
         <p className="page-sub">Editing is allowed only while the invoice is unpaid or partially paid.</p>
       </div>
-      {error && <div className="error-banner">{error}</div>}
-
       <form onSubmit={handleSubmit}>
         <div className={styles.layout}>
           {/* Left column */}
