@@ -13,9 +13,10 @@ interface PasswordInputProps {
   minLength?: number;
   autoComplete?: string;
   className?: string;
+  style?: React.CSSProperties;
 }
 
-export function PasswordInput({ className, ...props }: PasswordInputProps) {
+export function PasswordInput({ className, style, ...props }: PasswordInputProps) {
   const [show, setShow] = useState(false);
 
   return (
@@ -24,6 +25,7 @@ export function PasswordInput({ className, ...props }: PasswordInputProps) {
         {...props}
         type={show ? "text" : "password"}
         className={[styles.input, className].filter(Boolean).join(" ")}
+        style={style}
       />
       <button
         type="button"

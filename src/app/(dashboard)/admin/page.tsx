@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { rules, validate } from "@/lib/validation";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
@@ -51,7 +52,14 @@ const ACTION_META: Record<string, { label: string; color: string; bg: string; bo
   delete_user:     { label: "User Deleted",      color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)"   },
   update_profile:  { label: "Profile Updated",   color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)"       },
   change_password: { label: "Password Changed",  color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
-  create_return:   { label: "Return Recorded",   color: "var(--c-orange)",      bg: "var(--c-orange-bg)", border: "var(--c-orange-border)" },
+  create_return:          { label: "Return Recorded",        color: "var(--c-orange)",      bg: "var(--c-orange-bg)", border: "var(--c-orange-border)" },
+  add_vendor:             { label: "Vendor Added",           color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)" },
+  update_vendor:          { label: "Vendor Updated",         color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)" },
+  delete_vendor:          { label: "Vendor Deleted",         color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
+  create_purchase_bill:   { label: "Purchase Bill Created",  color: "var(--c-blue)",        bg: "var(--c-blue-bg)",   border: "var(--c-blue-border)" },
+  update_purchase_bill:   { label: "Purchase Bill Updated",  color: "var(--c-blue)",        bg: "var(--c-blue-bg)",   border: "var(--c-blue-border)" },
+  delete_purchase_bill:   { label: "Purchase Bill Deleted",  color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
+  record_purchase_payment:{ label: "Purchase Payment",       color: "var(--c-green-text)",  bg: "var(--c-green-bg)",  border: "var(--c-green-border)" },
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -177,6 +185,10 @@ export default function AdminPage() {
   const [addForm, setAddForm] = useState({ name: "", email: "", password: "", confirmPassword: "", role: "staff" as Role });
   const [addSaving, setAddSaving] = useState(false);
   const [addMsg, setAddMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  // Real-time field errors for add form
+  const [addFieldErrors, setAddFieldErrors] = useState<{ email?: string; confirmPassword?: string; password?: string }>({});
+  const [emailCheckLoading, setEmailCheckLoading] = useState(false);
+  const emailCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState({ name: "", email: "", role: "staff" as Role, newPassword: "" });
   const [editSaving, setEditSaving] = useState(false);
@@ -238,6 +250,41 @@ export default function AdminPage() {
     if (!res.ok) { setPwMsg({ type: "err", text: data.error }); return; }
     setPwForm({ current: "", next: "", confirm: "" }); setChangingPw(false); setPwMsg(null);
     toast({ type: "success", title: "Password changed", message: "Your new password is active." });
+  }
+
+  function handleAddFormChange(field: keyof typeof addForm, value: string) {
+    const updated = { ...addForm, [field]: value };
+    setAddForm(prev => ({ ...prev, [field]: value }));
+    // Real-time confirm password check
+    if (field === "confirmPassword" || field === "password") {
+      const pw = field === "password" ? value : addForm.password;
+      const conf = field === "confirmPassword" ? value : addForm.confirmPassword;
+      if (conf && pw !== conf) {
+        setAddFieldErrors(prev => ({ ...prev, confirmPassword: "Passwords do not match." }));
+      } else {
+        setAddFieldErrors(prev => ({ ...prev, confirmPassword: undefined }));
+      }
+      if (field === "password" && value && value.length < 6) {
+        setAddFieldErrors(prev => ({ ...prev, password: "Password must be at least 6 characters." }));
+      } else if (field === "password") {
+        setAddFieldErrors(prev => ({ ...prev, password: undefined }));
+      }
+    }
+    // Debounced email uniqueness check
+    if (field === "email") {
+      setAddFieldErrors(prev => ({ ...prev, email: undefined }));
+      if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current);
+      if (!value.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return;
+      setEmailCheckLoading(true);
+      emailCheckTimer.current = setTimeout(async () => {
+        const match = users.find(u => u.email.toLowerCase() === value.trim().toLowerCase());
+        setEmailCheckLoading(false);
+        if (match) {
+          setAddFieldErrors(prev => ({ ...prev, email: "Email already exists." }));
+        }
+      }, 400);
+    }
+    void updated;
   }
 
   async function addUser(e: React.FormEvent) {
@@ -492,10 +539,29 @@ export default function AdminPage() {
             <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "var(--c-text)", marginBottom: "0.875rem" }}>New User</div>
             <form onSubmit={addUser} style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
               <div className="admin-fg4">
-                <Field label="Full Name"><input className="admin-inp" style={inp} value={addForm.name} onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))} required placeholder="Jane Smith" /></Field>
-                <Field label="Email"><input className="admin-inp" style={inp} type="email" value={addForm.email} onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))} required placeholder="jane@example.com" /></Field>
-                <Field label="Password"><input className="admin-inp" style={inp} type="password" value={addForm.password} onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))} required placeholder="min. 6 characters" /></Field>
-                <Field label="Re-enter Password"><input className="admin-inp" style={inp} type="password" value={addForm.confirmPassword} onChange={e => setAddForm(p => ({ ...p, confirmPassword: e.target.value }))} required placeholder="repeat password" /></Field>
+                <Field label="Full Name">
+                  <input className="admin-inp" style={inp} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} required placeholder="Jane Smith" />
+                </Field>
+                <Field label="Email">
+                  <div style={{ position: "relative" }}>
+                    <input className="admin-inp" style={{ ...inp, borderColor: addFieldErrors.email ? "var(--c-red)" : undefined }} type="email" value={addForm.email} onChange={e => handleAddFormChange("email", e.target.value)} required placeholder="jane@example.com" />
+                    {emailCheckLoading && <span style={{ position: "absolute", right: "0.625rem", top: "50%", transform: "translateY(-50%)", fontSize: "0.7rem", color: "var(--c-text-4)" }}>checking…</span>}
+                  </div>
+                  {addFieldErrors.email && <span style={{ fontSize: "0.75rem", color: "var(--c-red)", marginTop: "0.125rem", display: "block" }}>{addFieldErrors.email}</span>}
+                </Field>
+                <Field label="Password">
+                  <PasswordInput style={inp as React.CSSProperties} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} required placeholder="min. 6 characters" />
+                  {addFieldErrors.password && <span style={{ fontSize: "0.75rem", color: "var(--c-red)", marginTop: "0.125rem", display: "block" }}>{addFieldErrors.password}</span>}
+                </Field>
+                <Field label="Re-enter Password">
+                  <PasswordInput style={inp as React.CSSProperties} value={addForm.confirmPassword} onChange={e => handleAddFormChange("confirmPassword", e.target.value)} required placeholder="repeat password" />
+                  {addFieldErrors.confirmPassword && (
+                    <span style={{ fontSize: "0.75rem", color: "var(--c-red)", marginTop: "0.125rem", display: "block" }}>{addFieldErrors.confirmPassword}</span>
+                  )}
+                  {!addFieldErrors.confirmPassword && addForm.confirmPassword && addForm.password === addForm.confirmPassword && (
+                    <span style={{ fontSize: "0.75rem", color: "var(--c-green-text)", marginTop: "0.125rem", display: "block" }}>✓ Passwords match</span>
+                  )}
+                </Field>
                 <Field label="Role">
                   <select className="admin-inp" style={{ ...inp, cursor: "pointer" }} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>
                     <option value="staff">Staff</option>
@@ -505,8 +571,8 @@ export default function AdminPage() {
               </div>
               {addMsg && <Msg m={addMsg} />}
               <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); }}>Cancel</Button>
-                <Button type="submit" variant="primary" size="sm" disabled={addSaving}>Create User</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}>Cancel</Button>
+                <Button type="submit" variant="primary" size="sm" disabled={addSaving || !!addFieldErrors.email || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
               </div>
             </form>
           </div>
