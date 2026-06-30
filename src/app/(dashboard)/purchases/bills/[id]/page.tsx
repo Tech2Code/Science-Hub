@@ -280,9 +280,30 @@ export default function PurchaseBillDetailPage() {
           <form onSubmit={handlePayment}>
             <div className="form-grid-2" style={{ marginBottom: "0.75rem" }}>
               <FormField label="Amount (₹)" required>
-                <Input type="number" min="0.01" step="0.01" max={balance}
-                  value={payAmount} onChange={e => setPayAmount(e.target.value)}
-                  placeholder={`Max ₹${fmt(balance)}`} autoFocus />
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                  <Input type="number" min="0.01" step="0.01" max={balance}
+                    value={payAmount} onChange={e => setPayAmount(e.target.value)}
+                    placeholder={`Max ₹${fmt(balance)}`} autoFocus style={{ flex: 1 }} />
+                  <button
+                    type="button"
+                    onClick={() => setPayAmount(balance.toFixed(2))}
+                    title="Fill full outstanding balance"
+                    style={{
+                      flexShrink: 0, padding: "0 0.75rem", height: "2.25rem",
+                      borderRadius: "0.5rem", border: "1px solid var(--c-amber)",
+                      background: "rgba(245,158,11,0.1)", color: "var(--c-amber)",
+                      fontSize: "0.75rem", fontWeight: 700, cursor: "pointer",
+                      whiteSpace: "nowrap", transition: "background 0.15s",
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(245,158,11,0.2)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "rgba(245,158,11,0.1)")}
+                  >
+                    Pay Full
+                  </button>
+                </div>
+                <p style={{ fontSize: "0.72rem", color: "var(--c-text-4)", marginTop: "0.25rem" }}>
+                  Outstanding: <strong style={{ color: "var(--c-amber)" }}>₹{fmt(balance)}</strong>
+                </p>
               </FormField>
               <FormField label="Date">
                 <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
