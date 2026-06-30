@@ -1,11 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { useFetch } from "@/lib/useCache";
-import styles from "./page.module.css";
 
 interface RecentInvoice { id: string; invoiceNumber: string; date: string; customerName: string; total: number; paidAmount: number; status: string; }
 interface RecentBill { id: string; billNumber: string; billDate: string; vendorName: string; total: number; paidAmount: number; status: string; }
@@ -51,10 +49,6 @@ function KpiCard({ label, value, color = "var(--c-text)", loading }: { label: st
 
 export default function DashboardPage() {
   const { data, loading } = useFetch<CombinedDashboard>("/api/reports?type=combined-dashboard");
-  const month = new Date().toLocaleString("en-IN", { month: "long", year: "numeric" });
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-  if (!mounted) return null;
 
   return (
     <>
@@ -63,7 +57,9 @@ export default function DashboardPage() {
         <div className="page-header">
           <div>
             <h1 className="page-title">Dashboard</h1>
-            <p className="page-sub">{month} overview</p>
+            <p className="page-sub" suppressHydrationWarning>
+              {new Date().toLocaleString("en-IN", { month: "long", year: "numeric" })} overview
+            </p>
           </div>
           <Button variant="primary" href="/sales/invoices/new">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>

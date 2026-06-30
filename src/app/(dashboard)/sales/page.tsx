@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -68,10 +67,6 @@ function KpiCard({ label, value, sub, color = "var(--c-text)", loading }: { labe
 
 export default function SalesDashboardPage() {
   const { data, loading } = useFetch<SalesDashboard>("/api/reports?type=sales-dashboard");
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-
-  const month = new Date().toLocaleString("en-IN", { month: "long", year: "numeric" });
 
   return (
     <>
@@ -80,7 +75,9 @@ export default function SalesDashboardPage() {
         <div className="page-header">
           <div>
             <h1 className="page-title">Sales Overview</h1>
-            <p className="page-sub">{month}</p>
+            <p className="page-sub" suppressHydrationWarning>
+              {new Date().toLocaleString("en-IN", { month: "long", year: "numeric" })}
+            </p>
           </div>
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <Button variant="secondary" href="/sales/customers/new">+ Customer</Button>
@@ -97,15 +94,13 @@ export default function SalesDashboardPage() {
         </div>
 
         {/* Monthly bar chart */}
-        {mounted && (
-          <div className="card" style={{ padding: "1.25rem" }}>
-            <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", marginBottom: "1rem" }}>Monthly Revenue (last 6 months)</h2>
-            {loading || !data?.monthlyRevenue?.length
-              ? <div style={{ height: 120, background: "var(--c-bg-sub)", borderRadius: 8, animation: "skPulse 1.4s ease-in-out infinite" }} />
-              : <BarChart data={data.monthlyRevenue} />
-            }
-          </div>
-        )}
+        <div className="card" style={{ padding: "1.25rem" }}>
+          <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", marginBottom: "1rem" }}>Monthly Revenue (last 6 months)</h2>
+          {loading || !data?.monthlyRevenue?.length
+            ? <div style={{ height: 120, background: "var(--c-bg-sub)", borderRadius: 8, animation: "skPulse 1.4s ease-in-out infinite" }} />
+            : <BarChart data={data.monthlyRevenue} />
+          }
+        </div>
 
         {/* Recent invoices + Top customers */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
