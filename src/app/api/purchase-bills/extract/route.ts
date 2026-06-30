@@ -41,10 +41,10 @@ export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.GOOGLE_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: "AI extraction is not configured. Add ANTHROPIC_API_KEY to your environment variables." },
+        { error: "AI extraction is not configured. Add GOOGLE_API_KEY to your environment variables. Get a free key at aistudio.google.com." },
         { status: 503 }
       );
     }
@@ -67,45 +67,37 @@ export async function POST(req: NextRequest) {
 
     const bytes  = await file.arrayBuffer();
     const base64 = Buffer.from(bytes).toString("base64");
-    const isPdf  = file.type === "application/pdf";
 
-    const contentBlock = isPdf
-      ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }
-      : { type: "image",    source: { type: "base64", media_type: file.type as "image/jpeg" | "image/png" | "image/webp" | "image/gif", data: base64 } };
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inline_data: { mime_type: file.type, data: base64 } },
+              { text: EXTRACT_PROMPT },
+            ],
+          }],
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 2048,
+          },
+        }),
+      }
+    );
 
-    const headers: Record<string, string> = {
-      "x-api-key":          apiKey,
-      "anthropic-version":  "2023-06-01",
-      "content-type":       "application/json",
-    };
-    if (isPdf) headers["anthropic-beta"] = "pdfs-2024-09-25";
-
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method:  "POST",
-      headers,
-      body: JSON.stringify({
-        model:      "claude-haiku-4-5-20251001",
-        max_tokens: 2048,
-        messages: [{
-          role:    "user",
-          content: [contentBlock, { type: "text", text: EXTRACT_PROMPT }],
-        }],
-      }),
-    });
-
-    if (!anthropicRes.ok) {
-      const err = await anthropicRes.json().catch(() => ({}));
-      console.error("Anthropic API error:", err);
-      return NextResponse.json(
-        { error: err?.error?.message ?? "AI extraction service failed. Please try again." },
-        { status: 500 }
-      );
+    if (!geminiRes.ok) {
+      const err = await geminiRes.json().catch(() => ({}));
+      console.error("Gemini API error:", err);
+      const msg = err?.error?.message ?? "AI extraction service failed. Please try again.";
+      return NextResponse.json({ error: msg }, { status: 500 });
     }
 
-    const result = await anthropicRes.json();
-    const rawText: string = result.content?.[0]?.text ?? "";
+    const result  = await geminiRes.json();
+    const rawText: string = result.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
-    // Strip markdown fences if model adds them despite instructions
     const cleaned = rawText
       .replace(/^```(?:json)?\s*/i, "")
       .replace(/\s*```\s*$/, "")
@@ -115,7 +107,7 @@ export async function POST(req: NextRequest) {
     try {
       extracted = JSON.parse(cleaned);
     } catch {
-      console.error("Failed to parse AI response:", rawText);
+      console.error("Failed to parse Gemini response:", rawText);
       return NextResponse.json(
         { error: "Could not parse extracted data. Please fill the form manually.", raw: rawText },
         { status: 422 }
