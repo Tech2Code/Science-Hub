@@ -186,7 +186,7 @@ export default function AdminPage() {
   const [addSaving, setAddSaving] = useState(false);
   const [addMsg, setAddMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   // Real-time field errors for add form
-  const [addFieldErrors, setAddFieldErrors] = useState<{ email?: string; confirmPassword?: string; password?: string }>({});
+  const [addFieldErrors, setAddFieldErrors] = useState<{ name?: string; email?: string; confirmPassword?: string; password?: string }>({});
   const [emailCheckLoading, setEmailCheckLoading] = useState(false);
   const emailCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editUser, setEditUser] = useState<User | null>(null);
@@ -221,8 +221,10 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => { fetch("/api/admin/profile").then(r => r.json()).then(d => { setProfile(d); setProfileForm({ name: d.name, email: d.email }); }).finally(() => setProfileLoading(false)); }, []);
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => { if (!isAdmin) return; setUsersLoading(true); fetch("/api/admin/users").then(r => r.json()).then(setUsers).finally(() => setUsersLoading(false)); }, [isAdmin]);
   useEffect(() => { if (isAdmin) loadLogs(1, logsFilter); }, [isAdmin, logsFilter, loadLogs]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -255,6 +257,12 @@ export default function AdminPage() {
   function handleAddFormChange(field: keyof typeof addForm, value: string) {
     const updated = { ...addForm, [field]: value };
     setAddForm(prev => ({ ...prev, [field]: value }));
+    // Real-time name uniqueness check
+    if (field === "name") {
+      const trimmed = value.trim();
+      const match = trimmed ? users.find(u => u.name.trim().toLowerCase() === trimmed.toLowerCase()) : null;
+      setAddFieldErrors(prev => ({ ...prev, name: match ? `A user named "${match.name}" already exists.` : undefined }));
+    }
     // Real-time confirm password check
     if (field === "confirmPassword" || field === "password") {
       const pw = field === "password" ? value : addForm.password;
@@ -373,7 +381,7 @@ export default function AdminPage() {
       <style>{`
         @media (max-width: 900px) { .admin-two-col { flex-direction: column !important; } .admin-role-sidebar { width: 100% !important; position: static !important; flex-direction: row !important; } }
         @media (max-width: 540px) { .admin-role-sidebar { flex-direction: column !important; } }
-        .admin-fg4 { display: grid; grid-template-columns: 1fr 1fr 1fr 8rem; gap: 0.875rem; }
+        .admin-fg4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0.875rem; }
         .admin-fg3 { display: grid; grid-template-columns: 1fr 1fr 8rem; gap: 0.875rem; }
         .admin-fg3pw { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.875rem; }
         .admin-fg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -540,7 +548,8 @@ export default function AdminPage() {
             <form onSubmit={addUser} style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
               <div className="admin-fg4">
                 <Field label="Full Name">
-                  <input className="admin-inp" style={inp} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} required placeholder="Jane Smith" />
+                  <input className="admin-inp" style={{ ...inp, borderColor: addFieldErrors.name ? "var(--c-red)" : undefined }} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} required placeholder="Jane Smith" />
+                  {addFieldErrors.name && <span style={{ fontSize: "0.75rem", color: "var(--c-red)", marginTop: "0.125rem", display: "block" }}>{addFieldErrors.name}</span>}
                 </Field>
                 <Field label="Email">
                   <div style={{ position: "relative" }}>
@@ -572,7 +581,7 @@ export default function AdminPage() {
               {addMsg && <Msg m={addMsg} />}
               <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                 <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}>Cancel</Button>
-                <Button type="submit" variant="primary" size="sm" disabled={addSaving || !!addFieldErrors.email || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
+                <Button type="submit" variant="primary" size="sm" disabled={addSaving || !!addFieldErrors.name || !!addFieldErrors.email || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
               </div>
             </form>
           </div>

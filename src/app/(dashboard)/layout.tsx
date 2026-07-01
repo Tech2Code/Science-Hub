@@ -4,7 +4,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useTheme } from "@/lib/theme";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import styles from "./layout.module.css";
@@ -191,6 +191,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mobile, setMobile] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const check = () => {
@@ -211,6 +212,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const handleNavClick = useCallback(() => {
     if (isMobile()) setSidebarOpen(false);
   }, []);
+
+  // Scroll active sidebar item into view instantly when navigating directly to a page
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const active = nav.querySelector("[data-active]") as HTMLElement | null;
+    if (active) active.scrollIntoView({ behavior: "auto", block: "nearest" });
+  }, [pathname]);
 
   if (status === "loading") {
     return (
@@ -265,7 +274,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </div>
 
-        <nav className={styles.nav}>
+        <nav className={styles.nav} ref={navRef}>
           {NAV_GROUPS.map((group) => {
             const visibleItems = group.items.filter(
               (item) => !item.adminOnly || session?.user?.role === "admin"
@@ -288,6 +297,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       title={!sidebarOpen && !mobile ? item.label : undefined}
                       onClick={handleNavClick}
                       className={[styles.navLink, isActive ? styles.navLinkActive : ""].join(" ")}
+                      data-active={isActive ? "" : undefined}
                     >
                       <Icon className={styles.navIcon} />
                       <span className={styles.navLabel}>{item.label}</span>

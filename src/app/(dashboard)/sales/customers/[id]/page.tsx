@@ -102,7 +102,7 @@ export default function CustomerViewPage() {
       {/* Header */}
       <div className={`card ${styles.headerCard}`}>
         <div className={styles.headerTop}>
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <div style={{ display: "flex", gap: "1rem" }}>
             <div className={styles.avatar}>{customer.name[0]?.toUpperCase()}</div>
             <div>
               <h1 className="page-title">{customer.name}</h1>

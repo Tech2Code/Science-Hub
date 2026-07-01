@@ -200,7 +200,7 @@ export default function NewPurchaseBillPage() {
     if (items.length === 0)                          { validationToast("Add at least one item."); return; }
     if (items.some(i => !i.name.trim()))             { validationToast("All items must have a name."); return; }
     if (items.some(i => toNum(i.quantity) <= 0))     { validationToast("All quantities must be greater than 0."); return; }
-    if (items.some(i => toNum(i.purchasePrice) < 0)) { validationToast("Item prices cannot be negative."); return; }
+    if (items.some(i => !i.purchasePrice.trim() || toNum(i.purchasePrice) <= 0)) { validationToast("All item prices must be greater than 0."); return; }
 
     const billItems = items.map(i => ({
       productId:     i.productId || null,

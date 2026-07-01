@@ -63,41 +63,91 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── Quick Actions — prominent, on top ── */}
-        <div className="card" style={{ padding: "1.25rem 1.5rem" }}>
-          <div style={{ fontSize: "0.69rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--c-text-4)", marginBottom: "1rem" }}>Quick Actions</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.875rem" }}>
-            {/* SALES */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--c-blue)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
-                Sales
-              </div>
-              <Button variant="primary"   href="/sales/invoices/new"  size="sm">+ New Invoice</Button>
-              <Button variant="secondary" href="/sales/customers/new" size="sm">+ New Customer</Button>
-              <Button variant="secondary" href="/sales/invoices"      size="sm">All Invoices</Button>
-            </div>
-            {/* PURCHASES */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--c-amber)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-                Purchases
-              </div>
-              <Button variant="secondary" href="/purchases/bills/new"   size="sm" style={{ background: "rgba(245,158,11,0.1)", borderColor: "var(--c-amber)", color: "var(--c-amber)" }}>+ New Bill</Button>
-              <Button variant="secondary" href="/purchases/vendors/new" size="sm">+ New Vendor</Button>
-              <Button variant="secondary" href="/purchases/bills"       size="sm">All Bills</Button>
-            </div>
-            {/* CATALOG + LOW STOCK */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/></svg>
-                Catalog
-              </div>
-              <Button variant="secondary" href="/products/new" size="sm">+ New Product</Button>
-              <Button variant="secondary" href="/products"     size="sm">All Products</Button>
-              <Button variant="secondary" href="/reports/sales" size="sm">Reports</Button>
-            </div>
+        {/* ── Quick Actions ── */}
+        <div className="card" style={{ overflow: "hidden" }}>
+          <div style={{ padding: "0.875rem 1.25rem", borderBottom: "1px solid var(--c-border)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c-text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--c-text-2)" }}>Quick Actions</span>
           </div>
+
+          {/* SALES row */}
+          {[
+            {
+              key: "sales",
+              label: "Sales", color: "#2563eb", borderColor: "var(--c-blue)",
+              icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>,
+              actions: [
+                { label: "+ New Invoice",   href: "/sales/invoices/new",  primary: true  },
+                { label: "+ New Customer",  href: "/sales/customers/new", primary: false },
+                { label: "All Invoices",    href: "/sales/invoices",      primary: false },
+                { label: "All Customers",   href: "/sales/customers",     primary: false },
+              ],
+            },
+            {
+              key: "purchases",
+              label: "Purchases", color: "#d97706", borderColor: "var(--c-amber)",
+              icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
+              actions: [
+                { label: "+ New Bill",     href: "/purchases/bills/new",   primary: true  },
+                { label: "+ New Vendor",   href: "/purchases/vendors/new", primary: false },
+                { label: "All Bills",      href: "/purchases/bills",       primary: false },
+                { label: "All Vendors",    href: "/purchases/vendors",     primary: false },
+              ],
+            },
+            {
+              key: "catalog",
+              label: "Catalog", color: "#64748b", borderColor: "var(--c-border-md)",
+              icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/></svg>,
+              actions: [
+                { label: "+ New Product",  href: "/products/new",    primary: true  },
+                { label: "All Products",   href: "/products",        primary: false },
+                { label: "Sales Reports",  href: "/reports/sales",   primary: false },
+                { label: "Buy Reports",    href: "/reports/purchases",primary: false },
+              ],
+            },
+          ].map((section, sIdx) => (
+            <div key={section.key} style={{
+              display: "flex", alignItems: "center", gap: "1rem",
+              padding: "0.75rem 1.25rem",
+              borderBottom: sIdx < 2 ? "1px solid var(--c-border)" : "none",
+              flexWrap: "wrap",
+            }}>
+              {/* Section label — fixed width column */}
+              <div style={{
+                display: "flex", alignItems: "center", gap: "0.4rem",
+                color: section.color, minWidth: "80px", flexShrink: 0,
+              }}>
+                <span style={{ width: 3, height: 16, borderRadius: 9999, background: section.color, flexShrink: 0, display: "inline-block" }} />
+                {section.icon}
+                <span style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                  {section.label}
+                </span>
+              </div>
+              {/* Action chips */}
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", flex: 1 }}>
+                {section.actions.map(a => (
+                  <Link
+                    key={a.href} href={a.href}
+                    style={{
+                      display: "inline-flex", alignItems: "center",
+                      padding: "0.375rem 0.875rem",
+                      borderRadius: "9999px",
+                      fontSize: "0.8125rem", fontWeight: 500,
+                      textDecoration: "none", whiteSpace: "nowrap",
+                      border: `1px solid ${a.primary ? section.borderColor : "var(--c-border)"}`,
+                      background: a.primary ? section.color : "transparent",
+                      color: a.primary ? "#fff" : "var(--c-text-2)",
+                      transition: "opacity 0.15s, box-shadow 0.15s",
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = "0.82"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+                  >
+                    {a.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Sales & Purchases side-by-side */}

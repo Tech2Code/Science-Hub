@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -14,20 +15,46 @@ interface PurchaseDashboard {
   payableBalance: number;
   overdueBillsCount: number;
   monthlySpend: MonthlyBar[];
+  fyLabel?: string;
   recentBills: RecentBill[];
   topVendors: TopVendor[];
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+const shortFmt = (n: number) => {
+  if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
+  if (n >= 1000)   return `₹${(n / 1000).toFixed(1)}K`;
+  return `₹${n}`;
+};
 
 function BarChart({ data }: { data: MonthlyBar[] }) {
   const max = Math.max(...data.map((d) => d.total), 1);
+  const [hovered, setHovered] = useState<number | null>(null);
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: "0.5rem", height: "120px", padding: "0 0.25rem" }}>
-      {data.map((bar) => {
+    <div style={{ display: "flex", alignItems: "flex-end", gap: "0.5rem", height: "160px", padding: "0 0.25rem" }}>
+      {data.map((bar, idx) => {
         const pct = (bar.total / max) * 100;
+        const isHov = hovered === idx;
         return (
-          <div key={bar.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "0.25rem", height: "100%" }}>
+          <div
+            key={bar.month}
+            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "0.25rem", height: "100%", cursor: "default" }}
+            onMouseEnter={() => setHovered(idx)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            {/* Value label — always visible, full value on hover */}
+            <div style={{
+              height: "1.25rem",
+              display: "flex", alignItems: "flex-end", justifyContent: "center",
+              fontSize: isHov ? "0.72rem" : "0.6rem",
+              fontWeight: isHov ? 700 : 600,
+              color: isHov ? "#d97706" : "var(--c-text-3)",
+              whiteSpace: "nowrap",
+              transition: "color 0.1s, font-size 0.1s",
+            }}>
+              {isHov ? fmt(bar.total) : shortFmt(bar.total)}
+            </div>
+            {/* Bar */}
             <div style={{ flex: 1, display: "flex", alignItems: "flex-end", width: "100%" }}>
               <div
                 style={{
@@ -35,13 +62,19 @@ function BarChart({ data }: { data: MonthlyBar[] }) {
                   height: `${Math.max(pct, 2)}%`,
                   background: "linear-gradient(180deg, #f59e0b, #d97706)",
                   borderRadius: "3px 3px 0 0",
-                  transition: "height 0.5s ease",
+                  transition: "height 0.5s ease, opacity 0.15s",
                   minHeight: 2,
+                  opacity: hovered !== null && !isHov ? 0.35 : 1,
                 }}
-                title={`${bar.month}: ${fmt(bar.total)}`}
               />
             </div>
-            <div style={{ fontSize: "0.6rem", color: "var(--c-text-4)", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", maxWidth: "100%" }}>
+            <div style={{
+              fontSize: "0.6rem",
+              color: isHov ? "var(--c-text-2)" : "var(--c-text-4)",
+              textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", maxWidth: "100%",
+              fontWeight: isHov ? 600 : 400,
+              transition: "color 0.1s",
+            }}>
               {bar.month.split(" ")[0]}
             </div>
           </div>
@@ -106,7 +139,7 @@ export default function PurchaseDashboardPage() {
 
         {/* Monthly bar chart */}
         <div className="card" style={{ padding: "1.25rem" }}>
-          <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", marginBottom: "1rem" }}>Monthly Spend (last 6 months)</h2>
+          <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", marginBottom: "1rem" }}>Monthly Spend — {data?.fyLabel ?? "Current FY"}</h2>
           {loading || !data?.monthlySpend?.length
             ? <div style={{ height: 120, background: "var(--c-bg-sub)", borderRadius: 8, animation: "skPulse 1.4s ease-in-out infinite" }} />
             : <BarChart data={data.monthlySpend} />

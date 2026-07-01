@@ -10,6 +10,8 @@ import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 
+type StockFilter = "all" | "low" | "out";
+
 interface Product {
   id: string;
   name: string;
@@ -44,6 +46,7 @@ export default function ProductsPage() {
   const { data, loading, mutate } = useFetch<Product[]>("/api/products");
   const products = data ?? [];
   const [search, setSearch] = useState("");
+  const [stockFilter, setStockFilter] = useState<StockFilter>("all");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [confirmState, setConfirmState] = useState<{
@@ -72,12 +75,20 @@ export default function ProductsPage() {
     });
   }
 
-  const filtered = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.sku?.toLowerCase().includes(search.toLowerCase()) ||
-    p.brand?.name?.toLowerCase().includes(search.toLowerCase()) ||
-    p.category?.name?.toLowerCase().includes(search.toLowerCase())
-  );
+  const outOfStockCount = products.filter(p => p.stock === 0).length;
+  const lowStockCount   = products.filter(p => p.stock > 0 && p.stock <= p.minStock).length;
+
+  const filtered = products.filter((p) => {
+    const matchSearch =
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.sku?.toLowerCase().includes(search.toLowerCase()) ||
+      p.brand?.name?.toLowerCase().includes(search.toLowerCase()) ||
+      p.category?.name?.toLowerCase().includes(search.toLowerCase());
+    if (!matchSearch) return false;
+    if (stockFilter === "out") return p.stock === 0;
+    if (stockFilter === "low") return p.stock > 0 && p.stock <= p.minStock;
+    return true;
+  });
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -86,6 +97,7 @@ export default function ProductsPage() {
 
   const { visible } = usePagination(filtered, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
+  const handleStockFilter = (f: StockFilter) => { setStockFilter(f); setPage(1); };
 
   return (
     <div className="page-stack">
@@ -111,18 +123,48 @@ export default function ProductsPage() {
       <Breadcrumb items={[{ label: "Products" }]} />
 
       <div className="card">
-        <div className="card-toolbar">
+        <div className="card-toolbar" style={{ flexWrap: "wrap", rowGap: "0.625rem" }}>
           <input
             type="search"
             placeholder="Search by name, SKU, brand, or category…"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             className="search-input"
-            style={{ flex: 1 }}
+            style={{ flex: "1 1 200px", minWidth: 0 }}
           />
-          {!loading && (
-            <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+            {/* Stock filter tabs */}
+            <div className="filter-tabs">
+              {([
+                { key: "all", label: "All", count: products.length },
+                { key: "low", label: "Low Stock", count: lowStockCount, color: "var(--c-amber)" },
+                { key: "out", label: "Out of Stock", count: outOfStockCount, color: "var(--c-red)" },
+              ] as { key: StockFilter; label: string; count: number; color?: string }[]).map(tab => (
+                <button
+                  key={tab.key}
+                  className={["filter-tab", stockFilter === tab.key ? "filter-tab-active" : ""].join(" ")}
+                  onClick={() => handleStockFilter(tab.key)}
+                  style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span style={{
+                      fontSize: "0.7rem", fontWeight: 700, lineHeight: 1,
+                      padding: "0.1rem 0.375rem", borderRadius: "9999px",
+                      background: stockFilter === tab.key && tab.color ? `${tab.color}22` : "var(--c-border)",
+                      color: stockFilter === tab.key && tab.color ? tab.color : "var(--c-text-4)",
+                      transition: "all 0.15s",
+                    }}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {!loading && (
+              <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
+            )}
+          </div>
         </div>
         <div className="table-wrap">
           <table className="table-base">
@@ -136,7 +178,7 @@ export default function ProductsPage() {
                 <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
-                  {search ? "No products match your search." : "No products yet. Add one to get started."}
+                  {stockFilter === "out" ? "No out-of-stock products." : stockFilter === "low" ? "No low-stock products." : search ? "No products match your search." : "No products yet. Add one to get started."}
                 </td></tr>
               ) : visible.map((p) => {
                 const isLow = p.stock <= p.minStock;

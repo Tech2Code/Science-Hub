@@ -47,13 +47,18 @@ async function getSalesDashboard() {
     .sort((a, b) => b.totalBilled - a.totalBilled)
     .slice(0, 5);
 
-  // Last 6 months monthly revenue
+  // Financial year monthly revenue (Apr–Mar)
+  const fyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  const fyStart = new Date(fyYear, 3, 1);
+  const fyLabel = `FY ${fyYear}-${String(fyYear + 1).slice(2)}`;
   const monthlyRevenue: { month: string; total: number }[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(fyStart.getFullYear(), fyStart.getMonth() + i, 1);
     const label = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
+    if (d > now) { monthlyRevenue.push({ month: label, total: 0 }); continue; }
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
     const agg = await prisma.invoice.aggregate({
-      where: { deletedAt: null, date: { gte: d, lt: new Date(d.getFullYear(), d.getMonth() + 1, 1) } },
+      where: { deletedAt: null, date: { gte: d, lt: end } },
       _sum: { total: true },
     });
     monthlyRevenue.push({ month: label, total: agg._sum.total ?? 0 });
@@ -65,6 +70,7 @@ async function getSalesDashboard() {
     outstandingBalance,
     overdueCount,
     monthlyRevenue,
+    fyLabel,
     recentInvoices: recentInvoices.map((inv) => ({
       id: inv.id, invoiceNumber: inv.invoiceNumber, date: inv.date,
       customerName: inv.customer.name, total: inv.total, paidAmount: inv.paidAmount, status: inv.status,
@@ -116,12 +122,18 @@ async function getPurchaseDashboard() {
     .sort((a, b) => b.totalBilled - a.totalBilled)
     .slice(0, 5);
 
+  // Financial year monthly spend (Apr–Mar)
+  const fyYearP = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  const fyStartP = new Date(fyYearP, 3, 1);
+  const fyLabelP = `FY ${fyYearP}-${String(fyYearP + 1).slice(2)}`;
   const monthlySpend: { month: string; total: number }[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(fyStartP.getFullYear(), fyStartP.getMonth() + i, 1);
     const label = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
+    if (d > now) { monthlySpend.push({ month: label, total: 0 }); continue; }
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
     const agg = await prisma.purchaseBill.aggregate({
-      where: { deletedAt: null, billDate: { gte: d, lt: new Date(d.getFullYear(), d.getMonth() + 1, 1) } },
+      where: { deletedAt: null, billDate: { gte: d, lt: end } },
       _sum: { total: true },
     });
     monthlySpend.push({ month: label, total: agg._sum.total ?? 0 });
@@ -133,6 +145,7 @@ async function getPurchaseDashboard() {
     payableBalance,
     overdueBillsCount: overdueCount,
     monthlySpend,
+    fyLabel: fyLabelP,
     recentBills: recentBills.map((b) => ({
       id: b.id, billNumber: b.billNumber, billDate: b.billDate,
       vendorName: b.vendor.name, total: b.total, paidAmount: b.paidAmount, status: b.status,

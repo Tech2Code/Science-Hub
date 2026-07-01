@@ -11,7 +11,6 @@ import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
-import Image from "next/image";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 
 interface InvoiceItem {
@@ -837,39 +836,51 @@ export default function InvoiceDetailPage() {
           style={{ background: "var(--inv-bg)", color: "var(--inv-tx)", borderRadius: "0.75rem", boxShadow: "var(--c-shadow-sm)" }}>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              {/* ── Letterhead header ── */}
               <thead>
                 <tr>
                   <th colSpan={invoice.isInterState ? 9 : 10}
-                    style={{ background: "var(--inv-brand)", color: "var(--inv-bg)", textAlign: "center",
-                      padding: "10px 0", fontWeight: 700, letterSpacing: "0.15em", fontSize: 14,
-                      textTransform: "uppercase", border: "1px solid var(--inv-bd)" }}>
-                    TAX INVOICE
+                    style={{ border:"1px solid var(--inv-bd)", padding:"14px 20px",
+                      textAlign:"center", background:"var(--inv-bg)", fontWeight:"normal" }}>
+                    <div style={{ fontSize:10, textDecoration:"underline", letterSpacing:"0.2em",
+                      textTransform:"uppercase", color:"var(--inv-tx3)", marginBottom:5 }}>
+                      Tax Invoice
+                    </div>
+                    <div style={{ fontSize:20, fontWeight:800, letterSpacing:"0.04em",
+                      textTransform:"uppercase", color:"var(--inv-tx)", marginBottom:4, lineHeight:1.2 }}>
+                      {settings?.name}
+                    </div>
+                    {(settings?.address || settings?.city || settings?.state || settings?.pincode) && (
+                      <div style={{ fontSize:11, color:"var(--inv-tx2)", marginBottom:2 }}>
+                        {[settings?.address, settings?.city, settings?.state, settings?.pincode].filter(Boolean).join(", ")}
+                      </div>
+                    )}
+                    {settings?.tagline && (
+                      <div style={{ fontSize:11, color:"var(--inv-tx2)", marginBottom:2 }}>{settings.tagline}</div>
+                    )}
+                    {(settings?.phone || settings?.email) && (
+                      <div style={{ fontSize:11, color:"var(--inv-tx2)", display:"flex",
+                        justifyContent:"center", gap:24, flexWrap:"wrap", marginBottom:2 }}>
+                        {settings?.phone && <span>Tel. : {settings.phone}</span>}
+                        {settings?.email && <span>email : {settings.email}</span>}
+                      </div>
+                    )}
+                    {settings?.gstin && (
+                      <div style={{ fontSize:11, color:"var(--inv-tx2)", fontFamily:"monospace" }}>
+                        GSTIN : {settings.gstin}
+                      </div>
+                    )}
                   </th>
                 </tr>
               </thead>
+
               <tbody>
+                {/* ── Invoice meta ── */}
                 <tr>
-                  <td rowSpan={invoice.dueDate ? 5 : 4} colSpan={invoice.isInterState ? 4 : 5}
-                    style={{ border: "1px solid var(--inv-bd)", padding: "14px 16px", verticalAlign: "top" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                      <Image src="/logo.png" alt={settings?.name ?? "Logo"} width={36} height={36} style={{ width: 36, height: 36, objectFit: "contain", flexShrink: 0 }} />
-                      <strong style={{ fontSize: 15, color: "var(--inv-brand)" }}>{settings?.name}</strong>
-                    </div>
-                    <div style={{ color: "var(--inv-tx2)", lineHeight: 1.6 }}>
-                      {settings?.tagline && <div>{settings.tagline}</div>}
-                      {(settings?.address || settings?.city || settings?.state || settings?.pincode) && (
-                        <div>{[settings?.address, settings?.city, settings?.state, settings?.pincode].filter(Boolean).join(", ")}</div>
-                      )}
-                      {settings?.phone && <div>Ph: {settings.phone}</div>}
-                      {settings?.email && <div>{settings.email}</div>}
-                    </div>
-                  </td>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,whiteSpace:"nowrap",background:"var(--inv-bg2)",width:"14%" }}>Invoice No.</td>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,whiteSpace:"nowrap",background:"var(--inv-bg2)" }}>Invoice No.</td>
                   <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",fontWeight:700,color:"var(--inv-tx)" }}>{invoice.invoiceNumber}</td>
-                </tr>
-                <tr>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Invoice Created At (Date/Time)</td>
-                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,whiteSpace:"nowrap",background:"var(--inv-bg2)" }}>Invoice Date</td>
+                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
                     {new Date(invoice.createdAt).toLocaleString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:true})}
                   </td>
                 </tr>
@@ -878,42 +889,103 @@ export default function InvoiceDetailPage() {
                   <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
                     {invoice.createdBy?.name ?? "—"}
                   </td>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Supply Type</td>
+                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",
+                    color:invoice.isInterState ? "var(--inv-blue)" : "var(--inv-green)", fontWeight:600 }}>
+                    {invoice.isInterState ? "Inter-state (IGST)" : "Intra-state (CGST+SGST)"}
+                  </td>
                 </tr>
                 {invoice.dueDate && (
                   <tr>
                     <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Due Date</td>
-                    <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
+                    <td colSpan={invoice.isInterState ? 7 : 8} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
                       {new Date(invoice.dueDate).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
                     </td>
                   </tr>
                 )}
-                <tr>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Supply Type</td>
-                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",
-                    color: invoice.isInterState ? "var(--inv-blue)" : "var(--inv-green)", fontWeight:600 }}>
-                    {invoice.isInterState ? "Inter-state (IGST)" : "Intra-state (CGST+SGST)"}
-                  </td>
-                </tr>
 
-                {/* Bill To */}
+                {/* ── Buyer: Bill To / Ship To ── */}
                 <tr>
-                  <td colSpan={invoice.isInterState ? 9 : 10} style={{ border:"1px solid var(--inv-bd)",padding:0 }}>
-                    <div style={{ background:"var(--inv-bg3)",padding:"5px 14px",fontSize:11,fontWeight:700,
-                      textTransform:"uppercase",letterSpacing:"0.1em",color:"var(--inv-tx2)",borderBottom:"1px solid var(--inv-bd)" }}>
-                      Bill To
+                  <td colSpan={invoice.isInterState ? 4 : 5}
+                    style={{ border:"1px solid var(--inv-bd)", padding:0, verticalAlign:"top" }}>
+                    <div style={{ background:"var(--inv-bg3)", padding:"5px 14px", fontSize:11, fontWeight:700,
+                      color:"var(--inv-tx2)", borderBottom:"1px solid var(--inv-bd)" }}>
+                      Buyer (Bill to)
                     </div>
-                    <div style={{ padding:"10px 14px" }}>
-                      <div style={{ fontWeight:700,fontSize:13,color:"var(--inv-tx)",marginBottom:2 }}>{invoice.customer.name}</div>
-                      {invoice.customer.address && <div style={{ color:"var(--inv-tx2)" }}>{invoice.customer.address}</div>}
-                      <div style={{ color:"var(--inv-tx2)" }}>{[invoice.customer.city,invoice.customer.state,invoice.customer.pincode].filter(Boolean).join(", ")}</div>
-                      <div style={{ display:"flex",gap:16,marginTop:4,flexWrap:"wrap" }}>
-                        {invoice.customer.phone && <span style={{ color:"var(--inv-tx3)" }}>Ph: {invoice.customer.phone}</span>}
-                        {invoice.customer.email && <span style={{ color:"var(--inv-tx3)" }}>Email: {invoice.customer.email}</span>}
+                    <div style={{ padding:"10px 14px", lineHeight:1.75, fontSize:12 }}>
+                      <div style={{ fontWeight:700, fontSize:13, color:"var(--inv-tx)", marginBottom:2 }}>
+                        {invoice.customer.name}
+                      </div>
+                      {invoice.customer.address && (
+                        <div style={{ color:"var(--inv-tx2)" }}>{invoice.customer.address}</div>
+                      )}
+                      {(invoice.customer.city || invoice.customer.state) && (
+                        <div style={{ color:"var(--inv-tx2)" }}>
+                          {[invoice.customer.city, invoice.customer.state].filter(Boolean).join(", ")}
+                        </div>
+                      )}
+                      {invoice.customer.pincode && (
+                        <div style={{ color:"var(--inv-tx2)" }}>{invoice.customer.pincode}</div>
+                      )}
+                      {(invoice.customer.phone || invoice.customer.email) && (
+                        <div style={{ color:"var(--inv-tx3)", marginTop:2 }}>
+                          {[invoice.customer.phone && `Ph: ${invoice.customer.phone}`,
+                            invoice.customer.email && `Email: ${invoice.customer.email}`]
+                            .filter(Boolean).join("  |  ")}
+                        </div>
+                      )}
+                      <div style={{ marginTop:6, borderTop:"1px solid var(--inv-bd)", paddingTop:5 }}>
+                        {invoice.customer.state && (
+                          <div style={{ fontWeight:600, color:"var(--inv-tx)", fontSize:11 }}>
+                            Place of Supply : {invoice.customer.state}
+                          </div>
+                        )}
                         {invoice.customer.gstin && (
-                          <span style={{ fontFamily:"monospace",fontWeight:600,color:"var(--inv-tx2)",
-                            background:"var(--inv-bg3)",border:"1px solid var(--inv-bd2)",borderRadius:3,padding:"1px 6px" }}>
-                            GSTIN: {invoice.customer.gstin}
-                          </span>
+                          <div style={{ fontWeight:600, color:"var(--inv-tx)", fontSize:11 }}>
+                            GST Number : {invoice.customer.gstin}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td colSpan={5}
+                    style={{ border:"1px solid var(--inv-bd)", padding:0, verticalAlign:"top" }}>
+                    <div style={{ background:"var(--inv-bg3)", padding:"5px 14px", fontSize:11, fontWeight:700,
+                      color:"var(--inv-tx2)", borderBottom:"1px solid var(--inv-bd)" }}>
+                      Buyer (Ship to)
+                    </div>
+                    <div style={{ padding:"10px 14px", lineHeight:1.75, fontSize:12 }}>
+                      <div style={{ fontWeight:700, fontSize:13, color:"var(--inv-tx)", marginBottom:2 }}>
+                        {invoice.customer.name}
+                      </div>
+                      {invoice.customer.address && (
+                        <div style={{ color:"var(--inv-tx2)" }}>{invoice.customer.address}</div>
+                      )}
+                      {(invoice.customer.city || invoice.customer.state) && (
+                        <div style={{ color:"var(--inv-tx2)" }}>
+                          {[invoice.customer.city, invoice.customer.state].filter(Boolean).join(", ")}
+                        </div>
+                      )}
+                      {invoice.customer.pincode && (
+                        <div style={{ color:"var(--inv-tx2)" }}>{invoice.customer.pincode}</div>
+                      )}
+                      {(invoice.customer.phone || invoice.customer.email) && (
+                        <div style={{ color:"var(--inv-tx3)", marginTop:2 }}>
+                          {[invoice.customer.phone && `Ph: ${invoice.customer.phone}`,
+                            invoice.customer.email && `Email: ${invoice.customer.email}`]
+                            .filter(Boolean).join("  |  ")}
+                        </div>
+                      )}
+                      <div style={{ marginTop:6, borderTop:"1px solid var(--inv-bd)", paddingTop:5 }}>
+                        {invoice.customer.state && (
+                          <div style={{ fontWeight:600, color:"var(--inv-tx)", fontSize:11 }}>
+                            Place of Supply : {invoice.customer.state}
+                          </div>
+                        )}
+                        {invoice.customer.gstin && (
+                          <div style={{ fontWeight:600, color:"var(--inv-tx)", fontSize:11 }}>
+                            GST Number : {invoice.customer.gstin}
+                          </div>
                         )}
                       </div>
                     </div>
