@@ -1,0 +1,205 @@
+.pageStack { max-width: 56rem; }
+
+.errorCenter { color: var(--c-red); }
+
+.cardPad { padding: 1.5rem; }
+
+.cardPadSm { padding: 1rem; }
+
+.skeletonBlock {
+  border-radius: 6px;
+  background: var(--c-border);
+  animation: skPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.skRow { display: flex; align-items: center; gap: 1rem; }
+
+.skCol { display: flex; flex-direction: column; gap: 8px; }
+
+.skStatCard { padding: 1rem; display: flex; flex-direction: column; gap: 8px; }
+
+.skTableHead { padding: 1rem 1.25rem; border-bottom: 1px solid var(--c-border); }
+
+.headerTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.headerLeft { display: flex; align-items: center; gap: 1rem; }
+
+.avatarActive {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.125rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.avatarInactive {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.125rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.name {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--c-text);
+  margin: 0;
+}
+
+.statusBadge {
+  display: inline-flex;
+  padding: 0.1rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: 1px solid var(--c-border);
+}
+
+.statusBadgeActive {
+  background: var(--c-green-bg);
+  color: var(--c-green-text);
+  border-color: var(--c-green-border);
+}
+
+.statusBadgeInactive {
+  background: var(--c-bg-sub);
+  color: var(--c-text-4);
+  border-color: var(--c-border);
+}
+
+.company {
+  font-size: 0.8125rem;
+  color: var(--c-text-3);
+  margin-top: 0.125rem;
+}
+
+.contactRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.contactItem { font-size: 0.75rem; color: var(--c-text-3); }
+
+.gstinCode {
+  margin-top: 0.375rem;
+  display: inline-block;
+  font-size: 0.75rem;
+  background: var(--c-bg-sub);
+  color: var(--c-text-2);
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.375rem;
+  font-family: var(--font-mono);
+  border: 1px solid var(--c-border);
+}
+
+.headerActions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+
+.detailsBlock {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--c-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.detailLabel {
+  font-size: 0.72rem;
+  color: var(--c-text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.detailText {
+  font-size: 0.875rem;
+  color: var(--c-text-2);
+  margin: 0;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+@media (max-width: 640px) { .statsGrid { grid-template-columns: 1fr; } }
+
+.statLabel {
+  font-size: 0.72rem;
+  color: var(--c-text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.statValue {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.statSub {
+  font-size: 0.75rem;
+  color: var(--c-text-4);
+  margin-top: 0.125rem;
+}
+
+.sectionHeader { padding: 1rem 1.25rem; border-bottom: 1px solid var(--c-border); }
+
+.sectionTitle {
+  font-weight: 600;
+  color: var(--c-text);
+  font-size: 0.875rem;
+}
+
+.emptyCell {
+  text-align: center;
+  padding: 2.5rem;
+  color: var(--c-text-4);
+}
+
+.billLink {
+  font-weight: 500;
+  color: var(--c-blue);
+  text-decoration: none;
+}
+
+.dateCell { color: var(--c-text-3); }
+
+.totalCell { color: var(--c-text); }
+.paidCell { color: var(--c-green-text); }
+.balanceCell { font-weight: 500; color: var(--c-text); }

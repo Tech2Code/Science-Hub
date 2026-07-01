@@ -9,6 +9,7 @@ import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+import styles from "./customerNew.module.css";
 
 const INDIA_STATES = [
   "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat",
@@ -68,7 +69,7 @@ export default function NewCustomerPage() {
   return (
     <>
     {saving && <OverlayLoader text="Saving…" />}
-    <div className="page-stack" style={{ maxWidth: "42rem" }}>
+    <div className={`page-stack ${styles.pageStack}`}>
       <Breadcrumb items={[{ label: "Customers", href: "/customers" }, { label: "New Customer" }]} />
 
       <div>

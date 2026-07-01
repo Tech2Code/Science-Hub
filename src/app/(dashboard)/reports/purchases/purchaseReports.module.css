@@ -1,0 +1,154 @@
+@keyframes skPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}
+
+.tabsCard {
+  padding: 0;
+}
+
+.tabsRow {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--c-border);
+  padding: 0 1rem;
+}
+
+.tabBtn {
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--c-text-3);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.tabBtn.active {
+  font-weight: 600;
+  color: var(--c-blue);
+  border-bottom: 2px solid var(--c-blue);
+}
+
+.overdueRow {
+  background: var(--c-red-bg);
+}
+
+.textMuted2 {
+  color: var(--c-text-2);
+}
+
+.textMuted3 {
+  color: var(--c-text-3);
+}
+
+.textMuted4 {
+  color: var(--c-text-4);
+}
+
+.linkPlain {
+  color: inherit;
+  text-decoration: none;
+}
+
+.dueDate {
+  color: var(--due-color, var(--c-text-3));
+  font-weight: var(--due-weight, 400);
+}
+
+.agingLabel {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--aging-color, var(--c-text-3));
+}
+
+.paidAmount {
+  color: var(--c-green);
+}
+
+.balanceAmount {
+  font-weight: 500;
+  color: var(--c-amber);
+}
+
+.rowFontMedium {
+  font-weight: 500;
+}
+
+.paidGreen {
+  color: var(--c-green-text);
+}
+
+.payableCell {
+  color: var(--payable-color, var(--c-text-4));
+}
+
+.footerRow {
+  border-top: 2px solid var(--c-border);
+  background: var(--c-bg-sub);
+}
+
+.footerCell {
+  padding: 0.625rem 1rem;
+  font-weight: 700;
+}
+
+.footerCellRight {
+  padding: 0.625rem 1rem;
+  text-align: right;
+  font-weight: 600;
+}
+
+.footerCellRightBold {
+  padding: 0.625rem 1rem;
+  text-align: right;
+  font-weight: 700;
+}
+
+.footerCellGreen {
+  padding: 0.625rem 1rem;
+  text-align: right;
+  font-weight: 600;
+  color: var(--c-green-text);
+}
+
+.footerCellAmber {
+  padding: 0.625rem 1rem;
+  text-align: right;
+  font-weight: 600;
+  color: var(--c-amber);
+}
+
+.categorySpend {
+  font-weight: 600;
+}
+
+.pctCellWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.pctBarTrack {
+  width: 60px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--c-border);
+  overflow: hidden;
+}
+
+.pctBarFill {
+  height: 100%;
+  width: var(--bar-pct, 0%);
+  background: var(--c-amber);
+  border-radius: 3px;
+}
+
+.pctValue {
+  font-weight: 500;
+  min-width: 3.5rem;
+  text-align: right;
+}

@@ -1,0 +1,60 @@
+.searchInput {
+  flex: 1;
+}
+
+.emptyCell {
+  text-align: center;
+  padding: 3rem;
+  color: var(--c-text-4);
+}
+
+.nameCell {
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.companySub {
+  font-size: 0.78rem;
+  color: var(--c-text-4);
+}
+
+.gstinCell {
+  font-size: 0.8rem;
+  color: var(--c-text-3);
+  font-family: var(--font-mono);
+}
+
+.mutedCell {
+  color: var(--c-text-3);
+  font-size: 0.8125rem;
+}
+
+.emptyValue {
+  color: var(--c-text-4);
+}
+
+.countCell {
+  font-weight: 500;
+  text-align: right;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid var(--c-border);
+}
+
+.statusActive {
+  background: var(--c-green-bg);
+  color: var(--c-green-text);
+  border-color: var(--c-green-border, #bbf7d0);
+}
+
+.statusInactive {
+  background: var(--c-bg-sub);
+  color: var(--c-text-4);
+}

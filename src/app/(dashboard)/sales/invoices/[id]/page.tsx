@@ -12,6 +12,7 @@ import { rules, validate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
+import styles from "./invoiceDetail.module.css";
 
 interface InvoiceItem {
   id: string; productId: string; name: string; unit: string;
@@ -68,13 +69,13 @@ function InvoiceSkeleton() {
       <div className="page-stack">
 
         {/* Toolbar — breadcrumb + 7 action buttons */}
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:"0.75rem" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:"0.5rem" }}>
+        <div className={styles.skToolbarRow}>
+          <div className={styles.skFlexGap5}>
             <Sk w={70} h={13} r={4} />
             <Sk w={8} h={13} r={2} />
             <Sk w={110} h={13} r={4} />
           </div>
-          <div style={{ display:"flex", gap:"0.375rem", flexWrap:"wrap" }}>
+          <div className={styles.skActionsRow}>
             <Sk w={28} h={28} r={6} />
             <Sk w={100} h={28} r={6} />
             <Sk w={118} h={28} r={6} />
@@ -87,14 +88,14 @@ function InvoiceSkeleton() {
         </div>
 
         {/* Invoice print area */}
-        <div className="card" style={{ overflow:"hidden" }}>
+        <div className={`card ${styles.skCard}`}>
           {/* TAX INVOICE header bar */}
           <Sk w="100%" h={40} r={0} />
 
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:0 }}>
+          <div className={styles.skTwoCol}>
             {/* Left: company info */}
-            <div style={{ padding:"14px 16px", borderRight:"1px solid var(--c-border)", display:"flex", flexDirection:"column", gap:8 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div className={styles.skCompanyCol}>
+              <div className={styles.skFlexGap5}>
                 <Sk w={36} h={36} r={4} />
                 <Sk w={130} h={16} r={4} />
               </div>
@@ -103,9 +104,9 @@ function InvoiceSkeleton() {
               <Sk w="50%" h={11} r={3} />
             </div>
             {/* Right: invoice meta rows */}
-            <div style={{ display:"flex", flexDirection:"column" }}>
+            <div className={styles.skMetaCol}>
               {["Invoice No.", "Date", "Created By", "Supply Type"].map(label => (
-                <div key={label} style={{ display:"grid", gridTemplateColumns:"1fr 1fr", borderBottom:"1px solid var(--c-border)", padding:"9px 14px", gap:8 }}>
+                <div key={label} className={styles.skMetaRow}>
                   <Sk w="70%" h={11} r={3} />
                   <Sk w="85%" h={11} r={3} />
                 </div>
@@ -114,24 +115,24 @@ function InvoiceSkeleton() {
           </div>
 
           {/* Bill To section */}
-          <div style={{ borderTop:"1px solid var(--c-border)", padding:"10px 14px", display:"flex", flexDirection:"column", gap:6 }}>
+          <div className={styles.skBillTo}>
             <Sk w={60} h={10} r={3} />
             <Sk w={180} h={14} r={3} />
             <Sk w={220} h={11} r={3} />
-            <div style={{ display:"flex", gap:16 }}>
+            <div className={styles.skBillToRow}>
               <Sk w={100} h={11} r={3} />
               <Sk w={160} h={11} r={3} />
             </div>
           </div>
 
           {/* Items table header */}
-          <div style={{ borderTop:"1px solid var(--c-border)", display:"grid", gridTemplateColumns:"3% 25% 6% 6% 10% 10% 6% 10% 10% 11%", gap:0, padding:"8px 8px", background:"var(--c-bg-sub)" }}>
+          <div className={styles.skTableHeader}>
             {Array.from({ length: 10 }).map((_, i) => <Sk key={i} w="75%" h={10} r={3} />)}
           </div>
 
           {/* Item rows */}
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} style={{ borderTop:"1px solid var(--c-border)", display:"grid", gridTemplateColumns:"3% 25% 6% 6% 10% 10% 6% 10% 10% 11%", gap:0, padding:"8px 8px" }}>
+            <div key={i} className={styles.skTableRow}>
               <Sk w="60%" h={12} r={3} />
               <Sk w="85%" h={12} r={3} />
               <Sk w="70%" h={12} r={3} />
@@ -146,13 +147,13 @@ function InvoiceSkeleton() {
           ))}
 
           {/* Totals rows */}
-          <div style={{ borderTop:"1px solid var(--c-border)", display:"grid", gridTemplateColumns:"1fr 1fr", gap:0 }}>
-            <div style={{ borderRight:"1px solid var(--c-border)", padding:"14px 16px" }}>
+          <div className={styles.skTotalsRow}>
+            <div className={styles.skTotalsLeft}>
               <Sk w="60%" h={11} r={3} />
             </div>
-            <div style={{ display:"flex", flexDirection:"column" }}>
+            <div className={styles.skTotalsRight}>
               {["Subtotal", "CGST", "SGST", "Grand Total", "Paid", "Balance Due"].map(label => (
-                <div key={label} style={{ display:"grid", gridTemplateColumns:"1fr 1fr", borderBottom:"1px solid var(--c-border)", padding:"8px 14px", gap:8 }}>
+                <div key={label} className={styles.skTotalsLine}>
                   <Sk w="60%" h={11} r={3} />
                   <Sk w="70%" h={11} r={3} />
                 </div>
@@ -481,7 +482,7 @@ export default function InvoiceDetailPage() {
   }
 
   if (loading) return <InvoiceSkeleton />;
-  if (error || !invoice) return <div className="loading-center" style={{ color: "var(--c-red)" }}>{error || "Invoice not found."}</div>;
+  if (error || !invoice) return <div className={`loading-center ${styles.errorText}`}>{error || "Invoice not found."}</div>;
 
   const balance = invoice.total - invoice.paidAmount;
 
@@ -542,7 +543,7 @@ export default function InvoiceDetailPage() {
         {/* Toolbar */}
         <div className="page-header no-print">
           <Breadcrumb items={[{ label: "Invoices", href: "/sales/invoices" }, { label: invoice.invoiceNumber }]} />
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+          <div className={styles.toolbarActions}>
             <StatusBadge status={invoice.status} />
             <Button variant="editOutline" size="sm" href={`/sales/invoices/edit/${id}`}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit Invoice</Button>
             {balance > 0 && (
@@ -558,7 +559,7 @@ export default function InvoiceDetailPage() {
                 Record Payment
               </Button>
             )}
-            <span title={invoice.paidAmount <= 0 ? "No payment received yet — pay first to enable returns" : undefined} style={{ display: "inline-flex" }}>
+            <span title={invoice.paidAmount <= 0 ? "No payment received yet — pay first to enable returns" : undefined} className={styles.inlineFlex}>
               <Button variant="secondary" size="sm" disabled={invoice.paidAmount <= 0} onClick={openReturnForm}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
                 Record Return
@@ -577,7 +578,7 @@ export default function InvoiceDetailPage() {
               Delete
             </Button>
             {/* Share PDF button */}
-            <div style={{ position: "relative" }} ref={shareContainerRef}>
+            <div className={styles.shareWrap} ref={shareContainerRef}>
               <Button variant="secondary" size="sm" disabled={shareLoading} onClick={() => {
                 setShareOpen(o => {
                   const next = !o;
@@ -594,29 +595,14 @@ export default function InvoiceDetailPage() {
                   return next;
                 });
               }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "0.375rem" }}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.shareIconMargin}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
                 Share PDF
               </Button>
               {shareOpen && (
                 <>
-                  <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setShareOpen(false)} />
-                  <div style={{
-                    zIndex: 100,
-                    background: "var(--c-bg-card)",
-                    ...shareDropStyle,
-                    border: "1px solid var(--c-border-md)",
-                    borderRadius: "0.5rem",
-                    boxShadow: "0 8px 24px -4px rgba(0,0,0,.18), 0 2px 8px -2px rgba(0,0,0,.12)",
-                    minWidth: "15rem", overflow: "hidden",
-                    padding: "0.375rem 0",
-                  }}>
-                    <div style={{
-                      padding: "0.5rem 1rem 0.375rem",
-                      fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.06em",
-                      textTransform: "uppercase", color: "var(--c-text-4)",
-                      borderBottom: "1px solid var(--c-border)",
-                      marginBottom: "0.25rem",
-                    }}>Share PDF</div>
+                  <div className={styles.shareOverlay} onClick={() => setShareOpen(false)} />
+                  <div className={styles.shareMenu} style={shareDropStyle}>
+                    <div className={styles.shareMenuTitle}>Share PDF</div>
                     {([
                       typeof navigator !== "undefined" && "share" in navigator ? {
                         key: "native", label: "Share / Send File",
@@ -637,16 +623,9 @@ export default function InvoiceDetailPage() {
                       <button
                         key={opt!.key}
                         onClick={() => handleShare(opt!.key as "native" | "whatsapp" | "email" | "copy")}
-                        style={{
-                          display: "flex", alignItems: "center", gap: "0.75rem",
-                          width: "100%", padding: "0.625rem 1rem",
-                          background: "none", border: "none", cursor: "pointer",
-                          fontSize: "0.875rem", color: "var(--c-text)", textAlign: "left",
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = "var(--c-bg-sub)")}
-                        onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                        className={styles.shareMenuItem}
                       >
-                        <span style={{ color: opt!.color, flexShrink: 0, display: "flex" }}>{opt!.icon}</span>
+                        <span className={styles.shareMenuItemIcon} style={{ color: opt!.color }}>{opt!.icon}</span>
                         {opt!.label}
                       </button>
                     ))}
@@ -659,12 +638,12 @@ export default function InvoiceDetailPage() {
 
         {/* Payment form */}
         {showPaymentForm && (
-          <div className="card no-print" style={{ padding: "1.25rem" }}>
-            <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text)", marginBottom: "0.75rem" }}>Record Payment</h3>
+          <div className={`card no-print ${styles.paymentFormCard}`}>
+            <h3 className={styles.paymentFormTitle}>Record Payment</h3>
             <form onSubmit={handleAddPayment}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end" }}>
+              <div className={styles.paymentFormRow}>
                 <FormField label="Amount (₹)">
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <div className={styles.paymentAmountRow}>
                     <Input
                       type="text"
                       inputMode="decimal"
@@ -672,18 +651,13 @@ export default function InvoiceDetailPage() {
                       onChange={(e) => { setPaymentForm((p) => ({ ...p, amount: e.target.value })); }}
                       placeholder={`e.g. ${balance.toFixed(2)}`}
                       sz="sm"
-                      style={{ width: "9rem" }}
+                      className={styles.paymentAmountInput}
                       autoFocus
                     />
                     <button
                       type="button"
                       onClick={() => setPaymentForm((p) => ({ ...p, amount: balance.toFixed(2) }))}
-                      style={{
-                        fontSize: "0.7rem", fontWeight: 600, padding: "0.2rem 0.5rem",
-                        borderRadius: "0.375rem", border: "1px solid var(--c-green-border)",
-                        background: "var(--c-green-bg)", color: "var(--c-green-text)",
-                        cursor: "pointer", whiteSpace: "nowrap",
-                      }}
+                      className={styles.paymentFullBtn}
                     >
                       Full ₹{fmt(balance)}
                     </button>
@@ -705,10 +679,10 @@ export default function InvoiceDetailPage() {
                     onChange={(e) => setPaymentForm((p) => ({ ...p, reference: e.target.value }))}
                     placeholder="Optional"
                     sz="sm"
-                    style={{ width: "12rem" }}
+                    className={styles.paymentReferenceInput}
                   />
                 </FormField>
-                <div style={{ display: "flex", gap: "0.5rem" }}>
+                <div className={styles.paymentFormBtnRow}>
                   <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
                     Save Payment
@@ -716,7 +690,7 @@ export default function InvoiceDetailPage() {
                   <Button type="button" variant="secondary" size="sm" onClick={() => { setShowPaymentForm(false); }}>Cancel</Button>
                 </div>
               </div>
-              <p style={{ marginTop: "0.375rem", fontSize: "0.7rem", color: "var(--c-text-4)" }}>
+              <p className={styles.paymentBalanceHint}>
                 Balance due: ₹{fmt(balance)}
               </p>
             </form>
@@ -725,55 +699,42 @@ export default function InvoiceDetailPage() {
 
         {/* Return form modal */}
         {showReturnForm && (
-          <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }} className="no-print">
-            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)" }} onClick={() => { if (!addingReturn) setShowReturnForm(false); }} />
-            <div style={{
-              position: "relative", zIndex: 1,
-              background: "var(--c-bg-card)", borderRadius: "0.75rem",
-              boxShadow: "0 20px 60px -8px rgba(0,0,0,.35), 0 4px 16px -4px rgba(0,0,0,.2)",
-              border: "1px solid var(--c-border-md)",
-              width: "100%", maxWidth: "540px",
-              maxHeight: "90vh", overflow: "hidden",
-              display: "flex", flexDirection: "column",
-            }}>
+          <div className={`no-print ${styles.returnModalOverlayWrap}`}>
+            <div className={styles.returnModalBackdrop} onClick={() => { if (!addingReturn) setShowReturnForm(false); }} />
+            <div className={styles.returnModalBox}>
               {/* Modal header */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", borderBottom: "1px solid var(--c-border)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <div className={styles.returnModalHeader}>
+                <div className={styles.returnModalHeaderLeft}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
-                  <h3 style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--c-text)", margin: 0 }}>Record Return</h3>
+                  <h3 className={styles.returnModalTitle}>Record Return</h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => { if (!addingReturn) setShowReturnForm(false); }}
                   disabled={addingReturn}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--c-text-4)", padding: "0.25rem", borderRadius: "0.25rem", display: "flex", alignItems: "center" }}
+                  className={styles.returnModalCloseBtn}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </div>
               {/* Modal body */}
-              <div style={{ overflowY: "auto", flex: 1 }}>
+              <div className={styles.returnModalBody}>
                 <form onSubmit={handleAddReturn}>
-                  <div style={{ padding: "1rem 1.25rem", display: "flex", flexWrap: "wrap", gap: "0.75rem", borderBottom: "1px solid var(--c-border)" }}>
+                  <div className={styles.returnModalMetaRow}>
                     <div>
-                      <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.25rem" }}>Return Date</label>
-                      <Input type="date" sz="sm" value={returnDate} onChange={e => setReturnDate(e.target.value)} style={{ width: "10rem" }} />
+                      <label className={styles.returnModalFieldLabel}>Return Date</label>
+                      <Input type="date" sz="sm" value={returnDate} onChange={e => setReturnDate(e.target.value)} className={styles.returnDateInput} />
                     </div>
-                    <div style={{ flex: 1, minWidth: "12rem" }}>
-                      <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.25rem" }}>Notes</label>
-                      <Input type="text" sz="sm" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Optional reason" style={{ width: "100%" }} />
+                    <div className={styles.returnNotesField}>
+                      <label className={styles.returnModalFieldLabel}>Notes</label>
+                      <Input type="text" sz="sm" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Optional reason" className={styles.returnNotesInput} />
                     </div>
                   </div>
-                  <div style={{ padding: "1rem 1.25rem" }}>
-                    <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-3)", marginBottom: "0.5rem" }}>Select Items to Return</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <div className={styles.returnItemsSection}>
+                    <div className={styles.returnItemsLabel}>Select Items to Return</div>
+                    <div className={styles.returnItemsList}>
                       {returnItems.map((ri, idx) => (
-                        <div key={idx} style={{
-                          display: "flex", alignItems: "center", gap: "0.75rem",
-                          padding: "0.5rem 0.75rem", borderRadius: "0.375rem",
-                          background: ri.selected ? "var(--c-blue-bg)" : "var(--c-bg-sub)",
-                          border: `1px solid ${ri.selected ? "var(--c-blue-border)" : "var(--c-border)"}`,
-                        }}>
+                        <div key={idx} className={`${styles.returnItemRow} ${ri.selected ? styles.returnItemRowSelected : ""}`}>
                           <input
                             type="checkbox"
                             checked={ri.selected}
@@ -782,10 +743,10 @@ export default function InvoiceDetailPage() {
                               setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, selected: checked } : r));
                               if (checked) setTimeout(() => returnQtyRefs.current[idx]?.focus(), 0);
                             }}
-                            style={{ width: "1rem", height: "1rem", cursor: "pointer", accentColor: "var(--c-blue)" }}
+                            className={styles.returnItemCheckbox}
                           />
-                          <span style={{ flex: 1, fontSize: "0.875rem", color: "var(--c-text)" }}>{ri.name}</span>
-                          <span style={{ fontSize: "0.75rem", color: "var(--c-text-4)" }}>max {ri.maxQty}</span>
+                          <span className={styles.returnItemName}>{ri.name}</span>
+                          <span className={styles.returnItemMax}>max {ri.maxQty}</span>
                           <Input
                             ref={el => { returnQtyRefs.current[idx] = el; }}
                             type="number"
@@ -808,17 +769,17 @@ export default function InvoiceDetailPage() {
                               const clamped = isNaN(num) || num < 1 ? 1 : Math.min(ri.maxQty, num);
                               setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qty: clamped, qtyText: String(clamped) } : r));
                             }}
-                            style={{ width: "5rem" }}
+                            className={styles.returnItemQtyInput}
                           />
                         </div>
                       ))}
                       {returnItems.length === 0 && (
-                        <p style={{ fontSize: "0.875rem", color: "var(--c-text-4)" }}>All items from this invoice have already been returned.</p>
+                        <p className={styles.returnItemsEmpty}>All items from this invoice have already been returned.</p>
                       )}
                     </div>
                   </div>
                   {/* Modal footer */}
-                  <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", padding: "1rem 1.25rem", borderTop: "1px solid var(--c-border)", background: "var(--c-bg-sub)" }}>
+                  <div className={styles.returnModalFooter}>
                     <Button type="submit" variant="primary" size="sm" disabled={addingReturn || returnItems.length === 0} loading={addingReturn}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
                       Save Return
@@ -1197,30 +1158,21 @@ export default function InvoiceDetailPage() {
           return (
             <div className="card no-print">
               {/* Header */}
-              <div style={{ padding:"1rem 1.25rem", borderBottom:"1px solid var(--c-border)", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"1rem", flexWrap:"wrap" }}>
+              <div className={styles.historyHeader}>
                 {/* Left: title + count */}
-                <div style={{ display:"flex", alignItems:"center", gap:"0.625rem" }}>
-                  <h2 style={{ fontWeight:600, color:"var(--c-text)", fontSize:"0.9375rem", margin:0 }}>Payment History</h2>
-                  <span style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"1.375rem", height:"1.375rem", borderRadius:"9999px", background:"var(--c-blue-bg)", color:"var(--c-blue)", fontSize:"0.7rem", fontWeight:700, border:"1px solid var(--c-blue-border)" }}>
+                <div className={styles.historyHeaderLeft}>
+                  <h2 className={styles.historyTitle}>Payment History</h2>
+                  <span className={styles.historyCountBadge}>
                     {invoice.payments.length}
                   </span>
                 </div>
                 {/* Right: toggle + stats */}
-                <div style={{ display:"flex", alignItems:"center", gap:"1rem", flexWrap:"wrap" }}>
+                <div className={styles.historyHeaderRight}>
                   {/* Show in PDF toggle */}
                   <button
                     onClick={() => setShowPaymentInPdf(v => !v)}
                     title={showPaymentInPdf ? "Remove from PDF/Print" : "Include in PDF/Print"}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: "0.375rem",
-                      padding: "0.35rem 0.75rem", borderRadius: "9999px",
-                      fontSize: "0.7rem", fontWeight: 600, cursor: "pointer",
-                      whiteSpace: "nowrap", flexShrink: 0,
-                      border: showPaymentInPdf ? "1px solid var(--c-red-border)" : "1px solid var(--c-blue-border)",
-                      background: showPaymentInPdf ? "var(--c-red-bg)" : "var(--c-blue-bg)",
-                      color: showPaymentInPdf ? "var(--c-red)" : "var(--c-blue)",
-                      transition: "all 0.15s",
-                    }}
+                    className={`${styles.pdfToggleBtn} ${showPaymentInPdf ? styles.pdfToggleBtnActive : ""}`}
                   >
                     {showPaymentInPdf ? (
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1235,33 +1187,33 @@ export default function InvoiceDetailPage() {
                     {showPaymentInPdf ? "Remove Payment History from PDF" : "Add Payment History to PDF"}
                   </button>
                   {/* Stats group — separated visually */}
-                  <div style={{ display:"flex", alignItems:"center", gap:"1.25rem", borderLeft:"1px solid var(--c-border)", paddingLeft:"1rem" }}>
+                  <div className={styles.historyStatsGroup}>
                     <div>
-                      <div style={{ fontSize:"0.6875rem", color:"var(--c-text-4)", fontWeight:500, marginBottom:"0.1rem" }}>Total Paid</div>
-                      <div style={{ fontSize:"1rem", fontWeight:700, color:"var(--c-green)", lineHeight:1 }}>₹{fmt(paidTotal)}</div>
+                      <div className={styles.historyStatLabel}>Total Paid</div>
+                      <div className={`${styles.historyStatValue} ${styles.historyStatValueGreen}`}>₹{fmt(paidTotal)}</div>
                       {totalReturned > 0 && (
-                        <div style={{ fontSize:"0.6875rem", color:"var(--c-text-4)", marginTop:"0.2rem" }}>
-                          <span style={{ color:"var(--c-orange)" }}>− ₹{fmt(totalReturned)}</span>
-                          <span style={{ color:"var(--c-text-3)", fontWeight:600 }}> = ₹{fmt(netPaid)}</span>
-                          <span style={{ color:"var(--c-text-4)" }}> net</span>
+                        <div className={styles.historyNetLine}>
+                          <span className={styles.historyNetLineOrange}>− ₹{fmt(totalReturned)}</span>
+                          <span className={styles.historyNetLineNet}> = ₹{fmt(netPaid)}</span>
+                          <span> net</span>
                         </div>
                       )}
                     </div>
                     <div>
-                      <div style={{ fontSize:"0.6875rem", color:"var(--c-text-4)", fontWeight:500, marginBottom:"0.1rem" }}>Balance</div>
-                      <div style={{ fontSize:"1rem", fontWeight:700, lineHeight:1, color: balance > 0 ? "var(--c-red)" : "var(--c-green)" }}>₹{fmt(balance)}</div>
+                      <div className={styles.historyStatLabel}>Balance</div>
+                      <div className={styles.historyStatValue} style={{ color: balance > 0 ? "var(--c-red)" : "var(--c-green)" }}>₹{fmt(balance)}</div>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Progress bar */}
-              <div style={{ padding:"0.5rem 1.25rem", borderBottom:"1px solid var(--c-border)", background:"var(--c-bg-sub)" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:"0.75rem" }}>
-                  <div style={{ flex:1, height:"5px", borderRadius:"9999px", background:"var(--c-border)", overflow:"hidden" }}>
-                    <div style={{ height:"100%", width:`${paidPct}%`, borderRadius:"9999px", background: paidPct >= 100 ? "var(--c-green)" : "var(--c-blue)", transition:"width 0.4s ease" }} />
+              <div className={styles.progressRowWrap}>
+                <div className={styles.progressRow}>
+                  <div className={styles.progressTrack}>
+                    <div className={styles.progressFill} style={{ width: `${paidPct}%`, background: paidPct >= 100 ? "var(--c-green)" : "var(--c-blue)" }} />
                   </div>
-                  <span style={{ fontSize:"0.7rem", fontWeight:600, color: paidPct >= 100 ? "var(--c-green-text)" : "var(--c-text-3)", whiteSpace:"nowrap" }}>
+                  <span className={styles.progressLabel} style={{ color: paidPct >= 100 ? "var(--c-green-text)" : "var(--c-text-3)" }}>
                     {paidPct.toFixed(0)}% paid
                   </span>
                 </div>
@@ -1286,21 +1238,17 @@ export default function InvoiceDetailPage() {
                         const ms = METHOD_STYLE[p.method] ?? METHOD_STYLE.Other;
                         return (
                           <tr key={p.id}>
-                            <td style={{ color:"var(--c-text-4)", fontSize:"0.75rem", width:"2rem" }}>{idx + 1}</td>
-                            <td data-label="Date & Time" style={{ whiteSpace:"nowrap", color:"var(--c-text-2)" }}>
+                            <td className={styles.payIdxCell}>{idx + 1}</td>
+                            <td data-label="Date & Time" className={styles.payDateCell}>
                               {new Date(p.date).toLocaleString("en-IN", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", hour12:true })}
                             </td>
                             <td data-label="Method">
-                              <span style={{
-                                display:"inline-block", padding:"0.15rem 0.5rem", borderRadius:"9999px",
-                                fontSize:"0.7rem", fontWeight:700, whiteSpace:"nowrap",
-                                background:ms.bg, color:ms.color, border:`1px solid ${ms.border}`,
-                              }}>{p.method}</span>
+                              <span className={styles.methodBadge} style={{ background:ms.bg, color:ms.color, border:`1px solid ${ms.border}` }}>{p.method}</span>
                             </td>
-                            <td data-label="Reference" style={{ color:"var(--c-text-4)", fontFamily:"var(--font-mono)", fontSize:"0.75rem" }}>
+                            <td data-label="Reference" className={styles.payReferenceCell}>
                               {p.reference || "—"}
                             </td>
-                            <td data-label="Amount" className="table-td-right" style={{ fontWeight:600, color:"var(--c-green)", whiteSpace:"nowrap" }}>
+                            <td data-label="Amount" className={`table-td-right ${styles.payAmountCell}`}>
                               ₹{fmt(p.amount)}
                             </td>
                           </tr>
@@ -1317,27 +1265,18 @@ export default function InvoiceDetailPage() {
         {returns.length > 0 && (() => {
           const totalReturned = returns.reduce((s, r) => s + r.items.reduce((ss, ri) => ss + ri.total, 0), 0);
           return (
-            <div className="card no-print" style={{ overflow: "hidden" }}>
-              <div style={{ padding:"0.875rem 1.25rem", borderBottom:"1px solid var(--c-border)", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"1rem", flexWrap:"wrap" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:"0.625rem" }}>
+            <div className={`card no-print ${styles.returnsHistoryCard}`}>
+              <div className={styles.returnsHistoryHeader}>
+                <div className={styles.returnsHistoryHeaderLeft}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
-                  <span style={{ fontWeight:600, fontSize:"0.875rem", color:"var(--c-text)" }}>Return History</span>
-                  <span style={{ fontSize:"0.75rem", background:"var(--c-bg-sub)", border:"1px solid var(--c-border)", borderRadius:"9999px", padding:"0.1rem 0.5rem", color:"var(--c-text-3)" }}>{returns.length}</span>
+                  <span className={styles.returnsHistoryTitle}>Return History</span>
+                  <span className={styles.returnsCountBadge}>{returns.length}</span>
                 </div>
-                <div style={{ display:"flex", alignItems:"center", gap:"1rem", flexWrap:"wrap" }}>
+                <div className={styles.historyHeaderRight}>
                   <button
                     onClick={() => setShowReturnInPdf(v => !v)}
                     title={showReturnInPdf ? "Remove from PDF/Print" : "Include in PDF/Print"}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: "0.375rem",
-                      padding: "0.35rem 0.75rem", borderRadius: "9999px",
-                      fontSize: "0.7rem", fontWeight: 600, cursor: "pointer",
-                      whiteSpace: "nowrap", flexShrink: 0,
-                      border: showReturnInPdf ? "1px solid var(--c-red-border)" : "1px solid var(--c-orange-border, #fed7aa)",
-                      background: showReturnInPdf ? "var(--c-red-bg)" : "var(--c-orange-bg, #fff7ed)",
-                      color: showReturnInPdf ? "var(--c-red)" : "var(--c-orange)",
-                      transition: "all 0.15s",
-                    }}
+                    className={`${styles.pdfToggleBtn} ${showReturnInPdf ? styles.pdfToggleBtnActive : styles.pdfToggleBtnOrange}`}
                   >
                     {showReturnInPdf ? (
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1351,32 +1290,32 @@ export default function InvoiceDetailPage() {
                     )}
                     {showReturnInPdf ? "Remove Return History from PDF" : "Add Return History to PDF"}
                   </button>
-                  <div style={{ fontSize:"0.875rem", fontWeight:700, color:"var(--c-orange)" }}>₹{fmt(totalReturned)} returned</div>
+                  <div className={styles.returnsHistoryTotal}>₹{fmt(totalReturned)} returned</div>
                 </div>
               </div>
-              <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
+              <div className={styles.returnsList}>
                 {returns.map((ret, ridx) => (
-                  <div key={ret.id} style={{ padding:"0.875rem 1.25rem", borderBottom: ridx < returns.length - 1 ? "1px solid var(--c-border)" : "none" }}>
-                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"0.5rem" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:"0.5rem" }}>
-                        <span style={{ fontSize:"0.75rem", fontWeight:600, color:"var(--c-text-3)" }}>
+                  <div key={ret.id} className={ridx < returns.length - 1 ? styles.returnEntry : styles.returnEntryLast}>
+                    <div className={styles.returnEntryHead}>
+                      <div className={styles.returnEntryHeadLeft}>
+                        <span className={styles.returnEntryDate}>
                           {parseDate(ret.createdAt).toLocaleString("en-IN", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", hour12:true })}
                         </span>
-                        {ret.notes && <span style={{ fontSize:"0.75rem", color:"var(--c-text-4)" }}>— {ret.notes}</span>}
+                        {ret.notes && <span className={styles.returnEntryNotes}>— {ret.notes}</span>}
                       </div>
-                      <span style={{ fontSize:"0.875rem", fontWeight:700, color:"var(--c-orange)" }}>
+                      <span className={styles.returnEntryTotal}>
                         ₹{fmt(ret.items.reduce((s, ri) => s + ri.total, 0))}
                       </span>
                     </div>
-                    <div style={{ display:"flex", flexDirection:"column", gap:"0.25rem" }}>
+                    <div className={styles.returnItemsGroup}>
                       {ret.items.map(ri => (
-                        <div key={ri.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"0.5rem", fontSize:"0.8125rem" }}>
-                          <span style={{ color:"var(--c-text-2)" }}>
+                        <div key={ri.id} className={styles.returnLineItem}>
+                          <span className={styles.returnLineItemName}>
                             {ri.name}
-                            <span style={{ color:"var(--c-text-4)" }}> ×{ri.quantity}</span>
-                            <span style={{ color:"var(--c-text-4)", fontSize:"0.75rem" }}> @ ₹{fmt(ri.price)}</span>
+                            <span className={styles.returnLineItemQty}> ×{ri.quantity}</span>
+                            <span className={styles.returnLineItemPrice}> @ ₹{fmt(ri.price)}</span>
                           </span>
-                          <span style={{ color:"var(--c-text-3)", fontFamily:"var(--font-mono)", whiteSpace:"nowrap" }}>₹{fmt(ri.total)}</span>
+                          <span className={styles.returnLineItemTotal}>₹{fmt(ri.total)}</span>
                         </div>
                       ))}
                     </div>

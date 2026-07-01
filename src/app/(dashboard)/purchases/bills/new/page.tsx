@@ -8,6 +8,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import styles from "./billNew.module.css";
 
 interface Vendor { id: string; name: string; company: string | null; gstin: string | null; }
 interface Product { id: string; name: string; sku: string | null; unit: string; purchasePrice: number | null; gstRate: number; }
@@ -258,10 +259,9 @@ export default function NewPurchaseBillPage() {
 
   return (
     <>
-    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     {saving && <OverlayLoader text="Creating bill…" />}
     {ivSaving && <OverlayLoader text="Creating vendor…" />}
-    <div className="page-stack" style={{ maxWidth: "54rem" }}>
+    <div className={`page-stack ${styles.pageWrap}`}>
       <Breadcrumb items={[{ label: "Purchases", href: "/purchases/bills" }, { label: "New Purchase Bill" }]} />
       <h1 className="page-title">New Purchase Bill</h1>
 
@@ -283,7 +283,7 @@ export default function NewPurchaseBillPage() {
                 <button
                   type="button"
                   onClick={() => { setIvName(""); setIvCompany(""); setIvGstin(""); setIvPhone(""); setIvEmail(""); setIvAddress(""); setIvError(""); setShowVendorCreate(true); }}
-                  style={{ marginTop: "0.4rem", background: "none", border: "none", padding: 0, fontSize: "0.78rem", color: "var(--c-blue)", cursor: "pointer", textAlign: "left", textDecoration: "underline" }}
+                  className={styles.addVendorLink}
                 >
                   + Add new vendor manually
                 </button>
@@ -299,32 +299,32 @@ export default function NewPurchaseBillPage() {
 
           {/* ── Inline Vendor Create ── */}
           {showVendorCreate && (
-            <div style={{ marginTop: "0.5rem", borderRadius: "0.75rem", border: "1px solid var(--c-amber)", overflow: "hidden" }}>
+            <div className={styles.inlineVendorCard}>
               {/* Header */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1rem", background: "rgba(245,158,11,0.08)", borderBottom: "1px solid rgba(245,158,11,0.2)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <div style={{ width: "1.75rem", height: "1.75rem", borderRadius: "50%", background: "rgba(245,158,11,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <div className={styles.inlineVendorHeader}>
+                <div className={styles.inlineVendorHeaderLeft}>
+                  <div className={styles.inlineVendorIcon}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c-amber)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                   </div>
                   <div>
-                    <div style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--c-amber)" }}>New Vendor</div>
-                    <div style={{ fontSize: "0.72rem", color: "var(--c-text-4)", lineHeight: 1.3 }}>Not in your list — fill details and create</div>
+                    <div className={styles.inlineVendorTitle}>New Vendor</div>
+                    <div className={styles.inlineVendorSub}>Not in your list — fill details and create</div>
                   </div>
                 </div>
-                <button type="button" onClick={() => setShowVendorCreate(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--c-text-4)", padding: "0.25rem", borderRadius: "0.375rem", lineHeight: 0 }}>
+                <button type="button" onClick={() => setShowVendorCreate(false)} className={styles.inlineVendorCloseBtn}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </div>
 
               {/* Body */}
-              <div style={{ padding: "1rem 1rem 0.75rem" }}>
+              <div className={styles.inlineVendorBody}>
                 {ivError && (
-                  <div style={{ marginBottom: "0.75rem", padding: "0.5rem 0.75rem", borderRadius: "0.375rem", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", fontSize: "0.8rem", color: "var(--c-red)" }}>
+                  <div className={styles.inlineVendorError}>
                     {ivError}
                   </div>
                 )}
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem 1rem" }}>
+                <div className={styles.inlineVendorGrid}>
                   <FormField label="Vendor Name" required>
                     <Input value={ivName} onChange={e => setIvName(e.target.value)} placeholder="e.g. Sharma Chemicals" />
                   </FormField>
@@ -347,10 +347,10 @@ export default function NewPurchaseBillPage() {
               </div>
 
               {/* Footer */}
-              <div style={{ display: "flex", gap: "0.625rem", padding: "0.75rem 1rem", background: "var(--c-bg-sub)", borderTop: "1px solid var(--c-border)" }}>
+              <div className={styles.inlineVendorFooter}>
                 <Button type="button" variant="primary" disabled={ivSaving} onClick={handleCreateInlineVendor}>
                   {ivSaving ? "Creating…" : (
-                    <span style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    <span className={styles.inlineVendorSubmitLabel}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                       Create &amp; Use This Vendor
                     </span>
@@ -377,20 +377,20 @@ export default function NewPurchaseBillPage() {
 
         {/* Line Items */}
         <div className="form-card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
-            <h2 className="form-section-title" style={{ margin: 0 }}>Items</h2>
+          <div className={styles.sectionHeaderRow}>
+            <h2 className={`form-section-title ${styles.sectionTitleNoMargin}`}>Items</h2>
             <Button type="button" variant="secondary" size="sm" onClick={addItem}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Add Item
             </Button>
           </div>
 
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "620px" }}>
+          <div className={styles.itemsTableWrap}>
+            <table className={styles.itemsTable}>
               <thead>
-                <tr style={{ borderBottom: "1px solid var(--c-border)" }}>
+                <tr>
                   {["Product (optional)", "Item Name", "Unit", "Qty", "Rate (₹)", "GST %", "Amount", ""].map(h => (
-                    <th key={h} style={{ padding: "0.4rem 0.5rem", fontSize: "0.72rem", fontWeight: 600, color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: h === "Amount" ? "right" : "left", whiteSpace: "nowrap" }}>{h}</th>
+                    <th key={h} className={h === "Amount" ? styles.thRight : styles.th}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -398,40 +398,40 @@ export default function NewPurchaseBillPage() {
                 {items.map((item, idx) => {
                   const { total } = calcItem(item);
                   return (
-                    <tr key={idx} style={{ borderBottom: "1px solid var(--c-border-light, var(--c-border))" }}>
-                      <td style={{ padding: "0.4rem 0.5rem", minWidth: "150px" }}>
+                    <tr key={idx} className={styles.itemRow}>
+                      <td className={styles.tdSelect}>
                         <Select sz="sm" value={item.productId} onChange={e => handleProductSelect(idx, e.target.value)}>
                           <option value="">— Select —</option>
                           {products.map(p => <option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ""}</option>)}
                         </Select>
                       </td>
-                      <td style={{ padding: "0.4rem 0.5rem", minWidth: "150px" }}>
+                      <td className={styles.tdSelect}>
                         <Input sz="sm" value={item.name} onChange={e => handleItemChange(idx, "name", e.target.value)} placeholder="Item name" required />
                       </td>
-                      <td style={{ padding: "0.4rem 0.5rem", minWidth: "90px" }}>
+                      <td className={styles.tdUnit}>
                         <Select sz="sm" value={item.unit} onChange={e => handleItemChange(idx, "unit", e.target.value)}>
                           {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                         </Select>
                       </td>
-                      <td style={{ padding: "0.4rem 0.5rem", minWidth: "70px" }}>
-                        <Input sz="sm" type="number" min="0.01" step="0.01" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} style={{ textAlign: "right" }} />
+                      <td className={styles.tdQty}>
+                        <Input sz="sm" type="number" min="0.01" step="0.01" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} className={styles.numInputRight} />
                       </td>
-                      <td style={{ padding: "0.4rem 0.5rem", minWidth: "90px" }}>
-                        <Input sz="sm" type="number" min="0" step="0.01" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value)} placeholder="0.00" style={{ textAlign: "right" }} />
+                      <td className={styles.tdRate}>
+                        <Input sz="sm" type="number" min="0" step="0.01" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value)} placeholder="0.00" className={styles.numInputRight} />
                       </td>
-                      <td style={{ padding: "0.4rem 0.5rem", minWidth: "80px" }}>
+                      <td className={styles.tdGst}>
                         <Select sz="sm" value={item.gstRate} onChange={e => handleItemChange(idx, "gstRate", e.target.value)}>
                           {GST_RATES.map(r => <option key={r} value={r}>{r}%</option>)}
                         </Select>
                       </td>
-                      <td style={{ padding: "0.4rem 0.5rem", textAlign: "right", fontWeight: 500, whiteSpace: "nowrap" }}>₹{fmt(total)}</td>
-                      <td style={{ padding: "0.4rem 0.25rem" }}>
+                      <td className={styles.tdAmount}>₹{fmt(total)}</td>
+                      <td className={styles.tdAction}>
                         <button
                           type="button"
                           onClick={() => removeItem(idx)}
                           disabled={items.length <= 1}
                           title="Remove item"
-                          style={{ background: "none", border: "none", cursor: items.length <= 1 ? "not-allowed" : "pointer", color: "var(--c-red)", opacity: items.length <= 1 ? 0.3 : 1, padding: "0.25rem", borderRadius: "0.25rem" }}
+                          className={items.length <= 1 ? styles.removeItemBtnDisabled : styles.removeItemBtn}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                         </button>
@@ -445,17 +445,17 @@ export default function NewPurchaseBillPage() {
 
           {/* ── Unmatched items — offer to save to product catalog ── */}
           {unmatchedItems.length > 0 && (
-            <div style={{ marginTop: "1rem", padding: "0.875rem 1rem", borderRadius: "0.625rem", border: "1px solid var(--c-border)", background: "var(--c-bg-sub)" }}>
-              <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--c-text-3)", marginBottom: "0.625rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+            <div className={styles.unmatchedWrap}>
+              <div className={styles.unmatchedHeading}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c-amber)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 {unmatchedItems.length} item{unmatchedItems.length > 1 ? "s" : ""} not linked to your product catalog — save them?
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <div className={styles.unmatchedList}>
                 {unmatchedItems.map(({ item, idx }) => (
-                  <div key={idx} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", padding: "0.5rem 0.75rem", borderRadius: "0.5rem", background: "var(--c-bg)", border: "1px solid var(--c-border)" }}>
+                  <div key={idx} className={styles.unmatchedRow}>
                     <div>
-                      <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--c-text-2)" }}>{item.name}</div>
-                      <div style={{ fontSize: "0.72rem", color: "var(--c-text-4)" }}>
+                      <div className={styles.unmatchedName}>{item.name}</div>
+                      <div className={styles.unmatchedMeta}>
                         {item.unit} · ₹{fmt(toNum(item.purchasePrice))} · GST {item.gstRate}%
                       </div>
                     </div>
@@ -463,18 +463,10 @@ export default function NewPurchaseBillPage() {
                       type="button"
                       disabled={catalogSaving.has(idx)}
                       onClick={() => handleAddToCatalog(idx)}
-                      style={{
-                        flexShrink: 0,
-                        display: "flex", alignItems: "center", gap: "0.35rem",
-                        padding: "0.35rem 0.75rem", borderRadius: "0.5rem",
-                        border: "1px solid var(--c-blue)", background: "rgba(59,130,246,0.08)",
-                        color: "var(--c-blue)", fontSize: "0.75rem", fontWeight: 600,
-                        cursor: catalogSaving.has(idx) ? "wait" : "pointer",
-                        opacity: catalogSaving.has(idx) ? 0.6 : 1,
-                      }}
+                      className={catalogSaving.has(idx) ? styles.saveToCatalogBtnSaving : styles.saveToCatalogBtn}
                     >
                       {catalogSaving.has(idx) ? (
-                        <svg style={{ animation: "spin 0.8s linear infinite", width: 12, height: 12 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" d="M12 2a10 10 0 0 1 10 10"/></svg>
+                        <svg className={styles.spinIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" d="M12 2a10 10 0 0 1 10 10"/></svg>
                       ) : (
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                       )}
@@ -487,22 +479,22 @@ export default function NewPurchaseBillPage() {
           )}
 
           {/* Totals */}
-          <div style={{ borderTop: "1px solid var(--c-border)", marginTop: "1rem", paddingTop: "1rem" }}>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <div style={{ width: "min(320px, 100%)" }}>
+          <div className={styles.totalsWrap}>
+            <div className={styles.totalsAlignRight}>
+              <div className={styles.totalsBox}>
                 {[
                   { label: "Subtotal", value: `₹${fmt(subtotal)}` },
                   { label: "GST",      value: `₹${fmt(taxTotal)}` },
                 ].map(r => (
-                  <div key={r.label} style={{ display: "flex", justifyContent: "space-between", padding: "0.3rem 0", fontSize: "0.875rem", color: "var(--c-text-3)" }}>
+                  <div key={r.label} className={styles.totalsLine}>
                     <span>{r.label}</span><span>{r.value}</span>
                   </div>
                 ))}
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "0.3rem 0", fontSize: "0.875rem", color: "var(--c-text-3)", alignItems: "center", gap: "0.5rem" }}>
+                <div className={styles.totalsDiscountLine}>
                   <span>Discount (₹)</span>
-                  <Input sz="sm" type="number" min="0" step="0.01" value={discount} onChange={e => setDiscount(e.target.value)} style={{ width: "90px", textAlign: "right" }} />
+                  <Input sz="sm" type="number" min="0" step="0.01" value={discount} onChange={e => setDiscount(e.target.value)} className={styles.discountInput} />
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", fontSize: "1rem", fontWeight: 700, borderTop: "1px solid var(--c-border)", marginTop: "0.25rem" }}>
+                <div className={styles.totalsGrandLine}>
                   <span>Total</span><span>₹{fmt(grandTotal)}</span>
                 </div>
               </div>
@@ -512,13 +504,13 @@ export default function NewPurchaseBillPage() {
 
         {/* Optional Payment */}
         <div className="form-card">
-          <label style={{ display: "flex", alignItems: "center", gap: "0.625rem", cursor: "pointer", fontWeight: 600, fontSize: "0.9rem", color: "var(--c-text-2)" }}>
-            <input type="checkbox" checked={addPayment} onChange={e => setAddPayment(e.target.checked)} style={{ width: "1rem", height: "1rem", accentColor: "var(--c-blue)", cursor: "pointer" }} />
+          <label className={styles.paymentCheckboxLabel}>
+            <input type="checkbox" checked={addPayment} onChange={e => setAddPayment(e.target.checked)} className={styles.paymentCheckbox} />
             Record payment now
           </label>
 
           {addPayment && (
-            <div style={{ marginTop: "1rem", padding: "1rem", borderRadius: "0.625rem", border: "1px solid var(--c-border)", background: "var(--c-bg-sub)" }}>
+            <div className={styles.paymentDetailBox}>
               <div className="form-grid-2">
                 <FormField label="Amount (₹)">
                   <Input type="number" min="0" step="0.01" max={grandTotal} value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder={`Max ₹${fmt(grandTotal)}`} />

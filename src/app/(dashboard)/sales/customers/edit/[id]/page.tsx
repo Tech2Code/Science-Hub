@@ -10,6 +10,7 @@ import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+import styles from "./customerEdit.module.css";
 
 const INDIA_STATES = [
   "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat",
@@ -92,7 +93,7 @@ export default function EditCustomerPage() {
   return (
     <>
     {saving && <OverlayLoader text="Saving…" />}
-    <div className="page-stack" style={{ maxWidth: "42rem" }}>
+    <div className={`page-stack ${styles.pageStack}`}>
       <ConfirmDialog
         open={confirmOpen}
         title="Save Changes"
@@ -104,14 +105,14 @@ export default function EditCustomerPage() {
       />
       <Breadcrumb items={[{ label: "Customers", href: "/sales/customers" }, { label: "Edit Customer" }]} />
 
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem" }}>
+      <div className={styles.headerRow}>
         <div>
           <h1 className="page-title">Edit Customer</h1>
           <p className="page-sub">{form.name || "—"}</p>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.25rem" }}>
-          <span style={{ fontSize: "0.75rem", color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Customer ID</span>
-          <code style={{ fontSize: "0.75rem", background: "var(--c-bg-sub)", color: "var(--c-text-2)", padding: "0.25rem 0.625rem", borderRadius: "0.5rem", fontFamily: "var(--font-mono)", border: "1px solid var(--c-border)" }}>
+        <div className={styles.idCol}>
+          <span className={styles.idLabel}>Customer ID</span>
+          <code className={styles.idValue}>
             {id}
           </code>
         </div>
@@ -159,7 +160,7 @@ export default function EditCustomerPage() {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Customer
           </Button>
           {JSON.stringify(form) === JSON.stringify(initialForm) && !saving && (
-            <span style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", alignSelf: "center" }}>No changes detected.</span>
+            <span className={styles.noChanges}>No changes detected.</span>
           )}
           <Button variant="secondary" href="/sales/customers"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
         </div>

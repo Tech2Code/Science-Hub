@@ -1,0 +1,236 @@
+@keyframes skPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.skeleton {
+  width: var(--sk-w, 100%);
+  height: var(--sk-h, 16px);
+  border-radius: var(--sk-r, 6px);
+  background: var(--c-border);
+  animation: skPulse 1.4s ease-in-out infinite;
+}
+
+.infoRowStack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.infoRowLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--c-text-4);
+}
+
+.infoRowValue {
+  font-size: 0.875rem;
+  color: var(--c-text);
+}
+
+.infoRowValueEmpty {
+  color: var(--c-text-4);
+  font-style: italic;
+}
+
+.infoRowValueMono {
+  font-family: var(--font-mono);
+}
+
+.statusDot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--c-text-4);
+}
+
+.statusDotOk {
+  color: var(--c-success, #16a34a);
+}
+
+.statusDotIndicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-border);
+  flex-shrink: 0;
+}
+
+.statusDotIndicatorOk {
+  background: var(--c-success, #16a34a);
+}
+
+.cardPad {
+  padding: 1.5rem;
+}
+
+.skeletonCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.skeletonGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+}
+
+.skeletonFieldStack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sectionTitle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--c-text-3);
+  margin-bottom: 1.25rem;
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+}
+
+.fullAddressBlock {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--c-border);
+}
+
+.fullAddressText {
+  margin-top: 4px;
+  font-size: 0.875rem;
+  color: var(--c-text-2);
+}
+
+.emailCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.emailCardTitle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--c-text-3);
+  margin-bottom: 0.25rem;
+}
+
+.emailCardHint {
+  font-size: 0.75rem;
+  color: var(--c-text-4);
+  margin-bottom: 0.4rem;
+}
+
+.emptyEmailBox {
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  background: var(--c-surface-2, var(--c-border));
+  border: 1px dashed var(--c-border);
+}
+
+.emptyEmailTitle {
+  font-size: 0.85rem;
+  color: var(--c-text-3);
+  margin-bottom: 0.25rem;
+}
+
+.emptyEmailSub {
+  font-size: 0.8rem;
+  color: var(--c-text-4);
+}
+
+.appPasswordHintBox {
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface-2, transparent);
+  margin-bottom: 1rem;
+}
+
+.appPasswordHintText {
+  font-size: 0.8rem;
+  color: var(--c-text-4);
+  margin-bottom: 0.35rem;
+}
+
+.inlineLink {
+  color: var(--c-primary);
+  text-decoration: underline;
+}
+
+.emailFormGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.emailFormActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.clearGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.clearConfirmText {
+  font-size: 0.8rem;
+  color: var(--c-danger, #dc2626);
+  font-weight: 500;
+}
+
+.saveCancelGroup {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.cardSpaced {
+  padding: 1.5rem;
+  margin-top: 1rem;
+}
+
+.stateHint {
+  font-size: 0.75rem;
+  color: var(--c-text-4);
+  margin-bottom: 1rem;
+}
+
+.gstinInput {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+.formActionsRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}

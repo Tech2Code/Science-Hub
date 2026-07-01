@@ -54,27 +54,23 @@ export default function ForgotPasswordPage() {
         <div className={styles.card}>
           {sent ? (
             <>
-              <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
-                <div style={{
-                  width: 48, height: 48, borderRadius: "50%",
-                  background: "#dcfce7", display: "flex", alignItems: "center",
-                  justifyContent: "center", margin: "0 auto 1rem",
-                }}>
+              <div className={styles.successHead}>
+                <div className={styles.successIcon}>
                   <svg width="24" height="24" fill="none" stroke="#16a34a" strokeWidth={2.5} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                   </svg>
                 </div>
-                <h2 className={styles.cardTitle} style={{ marginBottom: "0.5rem" }}>Check your inbox</h2>
+                <h2 className={`${styles.cardTitle} ${styles.successTitle}`}>Check your inbox</h2>
               </div>
               <p className={styles.successText}>
                 If <strong>{email}</strong> is registered, a password reset link has been sent.
                 The link expires in <strong>1 hour</strong>.
               </p>
-              <p className={styles.successText} style={{ marginBottom: 0, fontSize: "0.8125rem", color: "#94a3b8" }}>
+              <p className={`${styles.successText} ${styles.successSubtext}`}>
                 Didn&apos;t receive it? Check your spam folder, or{" "}
                 <button
                   onClick={() => setSent(false)}
-                  style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", padding: 0, fontSize: "inherit", textDecoration: "underline" }}
+                  className={styles.linkBtn}
                 >
                   try again
                 </button>
@@ -100,10 +96,9 @@ export default function ForgotPasswordPage() {
                     onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError(""); }}
                     onBlur={handleEmailBlur}
                     placeholder="you@sciencehub.in"
-                    className={styles.input}
-                    style={emailError ? { borderColor: "var(--c-red, #dc2626)" } : {}}
+                    className={`${styles.input} ${emailError ? styles.inputError : ""}`}
                   />
-                  {emailError && <p style={{ fontSize: "0.8rem", color: "var(--c-red, #dc2626)", marginTop: "0.25rem" }}>{emailError}</p>}
+                  {emailError && <p className={styles.fieldError}>{emailError}</p>}
                 </div>
                 <button type="submit" className={styles.submitBtn} disabled={loading}>
                   {loading ? "Sending…" : "Send reset link"}

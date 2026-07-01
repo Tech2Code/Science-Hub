@@ -8,6 +8,7 @@ import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/component
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
+import styles from "./customersList.module.css";
 
 interface Customer {
   id: string;
@@ -108,8 +109,7 @@ export default function CustomersPage() {
             placeholder="Search by name, phone, email, GSTIN, or city…"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
-            className="search-input"
-            style={{ flex: 1 }}
+            className={`search-input ${styles.searchInput}`}
           />
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
@@ -126,25 +126,25 @@ export default function CustomersPage() {
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={COLUMNS.length} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
                   {search ? "No customers match your search." : "No customers yet. Add one to get started."}
                 </td></tr>
               ) : visible.map((c) => (
                 <tr key={c.id}>
-                  <Cell col={COLUMNS[0]} style={{ fontWeight: 500, color: "var(--c-text)" }}>{c.name}</Cell>
-                  <Cell col={COLUMNS[1]} style={{ color: "var(--c-text-3)" }}>
+                  <Cell col={COLUMNS[0]} className={styles.nameCell}>{c.name}</Cell>
+                  <Cell col={COLUMNS[1]} className={styles.mutedCell}>
                     <div>{c.phone || "—"}</div>
-                    {c.email && <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)", marginTop: 2 }}>{c.email}</div>}
+                    {c.email && <div className="date-sub">{c.email}</div>}
                   </Cell>
-                  <Cell col={COLUMNS[2]} style={{ color: "var(--c-text-3)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{c.gstin || "—"}</Cell>
-                  <Cell col={COLUMNS[3]} style={{ color: "var(--c-text-3)" }}>{c.city || "—"}</Cell>
-                  <Cell col={COLUMNS[4]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{c.createdBy ?? "—"}</Cell>
-                  <Cell col={COLUMNS[5]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                  <Cell col={COLUMNS[2]} className={styles.gstinCell}>{c.gstin || "—"}</Cell>
+                  <Cell col={COLUMNS[3]} className={styles.mutedCell}>{c.city || "—"}</Cell>
+                  <Cell col={COLUMNS[4]} className={styles.smallMutedCell}>{c.createdBy ?? "—"}</Cell>
+                  <Cell col={COLUMNS[5]} className={styles.smallMutedCell}>
                     {c.createdAt ? new Date(c.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—"}
                   </Cell>
-                  <Cell col={COLUMNS[6]} style={{ color: "var(--c-text-2)" }}>{c._count?.invoices ?? 0}</Cell>
+                  <Cell col={COLUMNS[6]} className={styles.countCell}>{c._count?.invoices ?? 0}</Cell>
                   <Cell col={COLUMNS[7]}>
-                    <div className="table-actions" style={{ flexWrap: "wrap" }}>
+                    <div className={`table-actions ${styles.actionsWrap}`}>
                       <Button variant="viewOutline" size="sm" href={`/sales/customers/${c.id}`}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View</Button>
                       <Button variant="editOutline" size="sm" href={`/sales/customers/edit/${c.id}`}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</Button>
                       <Button variant="dangerOutline" size="sm" onClick={() => handleDelete(c.id, c.name)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete</Button>

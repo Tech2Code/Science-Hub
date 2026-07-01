@@ -45,6 +45,11 @@
   color: var(--c-text-3);
   line-height: 1.6;
   margin-bottom: 0;
+  white-space: pre-wrap;
+}
+
+.detail {
+  margin-top: 0.75rem;
 }
 
 .actions {

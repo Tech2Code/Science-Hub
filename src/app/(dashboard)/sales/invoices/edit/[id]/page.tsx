@@ -162,10 +162,10 @@ export default function EditInvoicePage() {
     <div className="page-stack">
       <style>{`@keyframes skPulse{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
       <Sk w={220} h={14} />
-      <div className="card" style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+      <div className={`card ${styles.skCard}`}>
         <Sk w={160} h={13} />
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 40px", gap: "0.75rem", alignItems: "center" }}>
+          <div key={i} className={styles.skItemRow}>
             <Sk h={36} r={8} />
             <Sk h={36} r={8} />
             <Sk h={36} r={8} />
@@ -175,14 +175,14 @@ export default function EditInvoicePage() {
         ))}
         <Sk w={120} h={32} r={8} />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "1rem" }}>
-        <div className="card" style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      <div className={styles.skGrid}>
+        <div className={`card ${styles.skSummaryCard}`}>
           <Sk w={100} h={13} />
           <Sk h={80} r={8} />
         </div>
-        <div className="card" style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <div className={`card ${styles.skSummaryCard}`}>
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between" }}>
+            <div key={i} className={styles.skSummaryRow}>
               <Sk w="40%" h={13} />
               <Sk w="30%" h={13} />
             </div>
@@ -191,7 +191,7 @@ export default function EditInvoicePage() {
       </div>
     </div>
   );
-  if (error && !invoice) return <div className="loading-center" style={{ color: "var(--c-red)" }}>{error}</div>;
+  if (error && !invoice) return <div className={`loading-center ${styles.errorCenter}`}>{error}</div>;
   if (!invoice) return null;
 
   return (
@@ -203,18 +203,18 @@ export default function EditInvoicePage() {
       title="Items out of stock"
       message="The following items don't have enough stock. Do you still want to update the invoice?"
       detail={
-        <div style={{ border: "1px solid var(--c-red-border)", borderRadius: "0.5rem", overflow: "hidden" }}>
-          <div style={{ background: "var(--c-red-bg)", padding: "0.5rem 0.875rem", display: "flex", alignItems: "center", gap: "0.375rem", borderBottom: "1px solid var(--c-red-border)" }}>
+        <div className={styles.stockDialog}>
+          <div className={styles.stockDialogHeader}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c-red)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
-            <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--c-red)" }}>Insufficient stock</span>
+            <span className={styles.stockDialogHeaderText}>Insufficient stock</span>
           </div>
-          <div style={{ display: "flex", flexDirection: "column" }}>
+          <div className={styles.stockDialogBody}>
             {stockOutItems.map((item, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", padding: "0.5rem 0.875rem", borderBottom: i < stockOutItems.length - 1 ? "1px solid var(--c-red-border)" : "none", background: i % 2 === 0 ? "var(--c-red-bg)" : "transparent" }}>
-                <span style={{ fontWeight: 600, color: "var(--c-red)", fontSize: "0.8125rem" }}>{item.name}</span>
-                <span style={{ color: "var(--c-red)", whiteSpace: "nowrap", fontSize: "0.75rem", opacity: 0.85 }}>
+              <div key={i} className={`${styles.stockDialogRow} ${i % 2 === 0 ? styles.stockDialogRowAlt : ""}`}>
+                <span className={styles.stockDialogRowName}>{item.name}</span>
+                <span className={styles.stockDialogRowMeta}>
                   Have <strong>{item.available}</strong> · Need <strong>{item.requested}</strong>
                 </span>
               </div>
@@ -245,11 +245,11 @@ export default function EditInvoicePage() {
           {/* Left column */}
           <div className={styles.leftCol}>
             {/* Customer (read-only) */}
-            <div className="card" style={{ padding: "1.25rem" }}>
-              <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", marginBottom: "0.75rem" }}>Bill To</h2>
-              <div style={{ padding: "0.75rem 1rem", borderRadius: "0.625rem", background: "var(--c-bg-sub)", border: "1px solid var(--c-border)" }}>
-                <div style={{ fontWeight: 600, color: "var(--c-text)" }}>{invoice.customer.name}</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--c-text-3)", marginTop: "0.25rem" }}>
+            <div className={`card ${styles.sectionCard}`}>
+              <h2 className={styles.sectionTitle}>Bill To</h2>
+              <div className={styles.billToBox}>
+                <div className={styles.billToName}>{invoice.customer.name}</div>
+                <div className={styles.billToMeta}>
                   {[invoice.customer.city, invoice.customer.state].filter(Boolean).join(", ")}
                   {invoice.customer.gstin && ` · GSTIN: ${invoice.customer.gstin}`}
                 </div>
@@ -257,78 +257,52 @@ export default function EditInvoicePage() {
             </div>
 
             {/* Inter-state + due date */}
-            <div className="card" style={{ padding: "1.25rem" }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem", alignItems: "center" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "0.625rem", cursor: "pointer" }}>
+            <div className={`card ${styles.sectionCard}`}>
+              <div className={styles.optionsRow}>
+                <label className={styles.switchLabel}>
                   <div
                     role="switch"
                     aria-checked={isInterState}
                     onClick={() => setIsInterState((v) => !v)}
-                    style={{
-                      position: "relative", width: "2.5rem", height: "1.25rem", borderRadius: "9999px", cursor: "pointer",
-                      background: isInterState ? "var(--c-blue)" : "var(--c-border-md)", transition: "background 0.2s",
-                    }}
+                    className={`${styles.switchTrack} ${isInterState ? styles.switchTrackOn : ""}`}
                   >
-                    <span style={{
-                      position: "absolute", top: "0.125rem",
-                      left: isInterState ? "1.375rem" : "0.125rem",
-                      width: "1rem", height: "1rem", borderRadius: "9999px", background: "#fff",
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.2)", transition: "left 0.2s",
-                    }} />
+                    <span className={`${styles.switchThumb} ${isInterState ? styles.switchThumbOn : ""}`} />
                   </div>
-                  <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--c-text-2)" }}>Inter-state supply (IGST)</span>
+                  <span className={styles.switchText}>Inter-state supply (IGST)</span>
                 </label>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--c-text-2)" }}>Due date</label>
+                <div className={styles.dueDateGroup}>
+                  <label className={styles.dueDateLabel}>Due date</label>
                   <input
                     type="date"
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
-                    style={{
-                      padding: "0.375rem 0.75rem", borderRadius: "0.5rem",
-                      border: "1px solid var(--c-border)", background: "var(--c-bg-input)",
-                      color: "var(--c-text)", fontSize: "0.875rem", outline: "none",
-                    }}
+                    className={styles.dueDateInput}
                   />
                 </div>
               </div>
             </div>
 
             {/* Items */}
-            <div className="card" style={{ padding: "1.25rem" }}>
-              <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", marginBottom: "0.75rem" }}>Line Items</h2>
-              <div style={{ position: "relative", marginBottom: "1rem" }}>
+            <div className={`card ${styles.sectionCard}`}>
+              <h2 className={styles.sectionTitle}>Line Items</h2>
+              <div className={styles.productSearchWrap}>
                 <input
                   type="text"
                   placeholder="Search and add product…"
                   value={productSearch}
                   onChange={(e) => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
                   onFocus={() => setShowProductDropdown(true)}
-                  style={{
-                    width: "100%", padding: "0.625rem 0.875rem", borderRadius: "0.5rem",
-                    border: "1px solid var(--c-border)", background: "var(--c-bg-input)",
-                    color: "var(--c-text)", fontSize: "0.875rem", outline: "none", boxSizing: "border-box",
-                  }}
+                  className={styles.productSearchInput}
                 />
                 {showProductDropdown && productSearch && filteredProducts.length > 0 && (
-                  <div style={{
-                    position: "absolute", zIndex: 20, marginTop: "0.25rem", width: "100%",
-                    background: "var(--c-bg-card)", border: "1px solid var(--c-border)",
-                    borderRadius: "0.5rem", boxShadow: "var(--c-shadow-lg)", maxHeight: "13rem", overflowY: "auto",
-                  }}>
+                  <div className={styles.productDropdown}>
                     {filteredProducts.map((p) => (
                       <button
                         key={p.id} type="button" onClick={() => addProduct(p)}
-                        style={{
-                          width: "100%", textAlign: "left", padding: "0.625rem 1rem", background: "none",
-                          border: "none", borderBottom: "1px solid var(--c-border)", cursor: "pointer",
-                          fontSize: "0.875rem",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--c-bg-sub)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                        className={styles.productOption}
                       >
-                        <div style={{ fontWeight: 500, color: "var(--c-text)" }}>{p.name}</div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)" }}>{p.unit} · ₹{p.price} · GST {p.gstRate}% · Stock: {p.stock}</div>
+                        <div className={styles.productOptionName}>{p.name}</div>
+                        <div className={styles.productOptionMeta}>{p.unit} · ₹{p.price} · GST {p.gstRate}% · Stock: {p.stock}</div>
                       </button>
                     ))}
                   </div>
@@ -336,39 +310,37 @@ export default function EditInvoicePage() {
               </div>
 
               {items.length > 0 ? (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+                <div className={styles.tableScroll}>
+                  <table className={styles.itemsTable}>
                     <thead>
-                      <tr style={{ borderBottom: "1px solid var(--c-border)" }}>
+                      <tr>
                         {["Product", "Unit", "Qty", "Rate", "GST%", "Amount", ""].map((h, i) => (
-                          <th key={i} style={{ padding: "0.375rem 0.5rem", textAlign: i >= 2 && i < 6 ? "right" : "left", fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+                          <th key={i} className={`${styles.itemsTh} ${i >= 2 && i < 6 ? styles.itemsThRight : ""}`}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {items.map((item, idx) => (
-                        <tr key={idx} style={{ borderBottom: "1px solid var(--c-border)" }}>
-                          <td style={{ padding: "0.5rem", fontWeight: 500, color: "var(--c-text)" }}>{item.productName}</td>
-                          <td style={{ padding: "0.5rem", color: "var(--c-text-3)", fontSize: "0.75rem" }}>{item.unit}</td>
-                          <td style={{ padding: "0.5rem" }}>
+                        <tr key={idx}>
+                          <td className={styles.itemsTdName}>{item.productName}</td>
+                          <td className={styles.itemsTdUnit}>{item.unit}</td>
+                          <td className={styles.itemsTd}>
                             <input type="number" min="1" value={item.qty}
                               onChange={(e) => updateItem(idx, "qty", parseFloat(e.target.value) || 1)}
-                              style={{ width: "4rem", padding: "0.25rem 0.375rem", borderRadius: "0.375rem", border: "1px solid var(--c-border)", background: "var(--c-bg-input)", color: "var(--c-text)", fontSize: "0.75rem", textAlign: "right" }}
+                              className={styles.qtyInput}
                             />
                           </td>
-                          <td style={{ padding: "0.5rem" }}>
+                          <td className={styles.itemsTd}>
                             <input type="number" min="0" step="0.01" value={item.price}
                               onChange={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
-                              style={{ width: "5.5rem", padding: "0.25rem 0.375rem", borderRadius: "0.375rem", border: "1px solid var(--c-border)", background: "var(--c-bg-input)", color: "var(--c-text)", fontSize: "0.75rem", textAlign: "right" }}
+                              className={styles.priceInput}
                             />
                           </td>
-                          <td style={{ padding: "0.5rem", textAlign: "right", fontSize: "0.75rem", color: "var(--c-text-3)" }}>{item.gstRate}%</td>
-                          <td style={{ padding: "0.5rem", textAlign: "right", fontWeight: 500, fontSize: "0.75rem", color: "var(--c-text)" }}>₹{(item.qty * item.price).toLocaleString("en-IN")}</td>
-                          <td style={{ padding: "0.5rem" }}>
+                          <td className={styles.itemsTdRight}>{item.gstRate}%</td>
+                          <td className={styles.itemsTdAmount}>₹{(item.qty * item.price).toLocaleString("en-IN")}</td>
+                          <td className={styles.itemsTd}>
                             <button type="button" onClick={() => removeItem(idx)} aria-label="Remove"
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--c-text-4)", fontSize: "1rem", lineHeight: 1, padding: "0.125rem 0.375rem" }}
-                              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--c-red)")}
-                              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--c-text-4)")}
+                              className={styles.removeBtn}
                             >×</button>
                           </td>
                         </tr>
@@ -377,64 +349,60 @@ export default function EditInvoicePage() {
                   </table>
                 </div>
               ) : (
-                <div style={{ textAlign: "center", padding: "2rem", fontSize: "0.875rem", color: "var(--c-text-4)", border: "2px dashed var(--c-border)", borderRadius: "0.625rem" }}>
+                <div className={styles.emptyItems}>
                   Search for a product above to add items
                 </div>
               )}
             </div>
 
             {/* Notes */}
-            <div className="card" style={{ padding: "1.25rem" }}>
-              <label style={{ display: "block", fontSize: "0.875rem", fontWeight: 500, color: "var(--c-text-2)", marginBottom: "0.375rem" }}>Notes / Terms</label>
+            <div className={`card ${styles.sectionCard}`}>
+              <label className={styles.notesLabel}>Notes / Terms</label>
               <textarea
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Payment terms, delivery instructions…"
-                style={{
-                  width: "100%", padding: "0.625rem 0.875rem", borderRadius: "0.5rem",
-                  border: "1px solid var(--c-border)", background: "var(--c-bg-input)",
-                  color: "var(--c-text)", fontSize: "0.875rem", resize: "none", outline: "none", boxSizing: "border-box",
-                }}
+                className={styles.notesInput}
               />
             </div>
           </div>
 
           {/* Right — summary */}
           <div className={styles.rightCol}>
-            <div className="card" style={{ padding: "1.25rem", position: "sticky", top: "1rem" }}>
-              <h2 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", marginBottom: "1rem" }}>Invoice Summary</h2>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem", fontSize: "0.875rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", color: "var(--c-text-3)" }}>
+            <div className={`card ${styles.summaryCard}`}>
+              <h2 className={styles.summaryTitle}>Invoice Summary</h2>
+              <div className={styles.summaryList}>
+                <div className={styles.summaryRow}>
                   <span>Subtotal</span>
                   <span>₹{subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
                 </div>
                 {Object.entries(taxBreakdown).map(([rate, amt]) =>
                   isInterState ? (
-                    <div key={rate} style={{ display: "flex", justifyContent: "space-between", color: "var(--c-text-3)" }}>
+                    <div key={rate} className={styles.summaryRow}>
                       <span>IGST {rate}%</span>
                       <span>₹{amt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
                     </div>
                   ) : (
-                    <div key={rate} style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", color: "var(--c-text-3)" }}>
+                    <div key={rate} className={styles.summaryGstGroup}>
+                      <div className={styles.summaryRow}>
                         <span>CGST {Number(rate) / 2}%</span>
                         <span>₹{(amt / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
                       </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", color: "var(--c-text-3)" }}>
+                      <div className={styles.summaryRow}>
                         <span>SGST {Number(rate) / 2}%</span>
                         <span>₹{(amt / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
                       </div>
                     </div>
                   )
                 )}
-                <div style={{ borderTop: "1px solid var(--c-border)", paddingTop: "0.625rem", display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "1rem", color: "var(--c-text)" }}>
+                <div className={styles.summaryTotalRow}>
                   <span>Grand Total</span>
                   <span>₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
               {items.length === 0 && (
-                <p style={{ marginTop: "0.75rem", fontSize: "0.75rem", color: "var(--c-amber-text)" }}>• Add at least one item</p>
+                <p className={styles.summaryHint}>• Add at least one item</p>
               )}
               {(() => {
                 const hasChanges = initialState === null || (
@@ -454,7 +422,7 @@ export default function EditInvoicePage() {
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Invoice
                     </Button>
                     {!hasChanges && items.length > 0 && !saving && (
-                      <p style={{ fontSize: "0.75rem", color: "var(--c-text-4)", textAlign: "center", margin: 0 }}>No changes detected.</p>
+                      <p className={styles.noChangesHint}>No changes detected.</p>
                     )}
                     <Button variant="secondary" href={`/sales/invoices/${id}`} size="full">
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel

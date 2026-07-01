@@ -9,6 +9,7 @@ import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate, type FormErrors } from "@/lib/validation";
+import styles from "./productNew.module.css";
 
 const UNITS = ["Nos", "Kg", "Ltr", "Box", "Pack", "Set", "Mtr", "Pcs"];
 const GST_RATES = [0, 5, 12, 18, 28];
@@ -73,7 +74,7 @@ export default function NewProductPage() {
   return (
     <>
     {saving && <OverlayLoader text="Saving…" />}
-    <div className="page-stack" style={{ maxWidth: "42rem" }}>
+    <div className={`page-stack ${styles.pageStack}`}>
       <Breadcrumb items={[{ label: "Products", href: "/products" }, { label: "New Product" }]} />
       <div>
         <h1 className="page-title">Add Product</h1>

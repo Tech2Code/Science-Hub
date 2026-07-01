@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
+import styles from "./bin.module.css";
 
 type BinType = "invoice" | "customer" | "product" | "brand" | "category";
 
@@ -20,12 +21,12 @@ interface BinItem {
   deletedBy?: string;
 }
 
-const TYPE_META: Record<BinType, { plural: string; color: string; bg: string; border: string }> = {
-  invoice:  { plural: "Invoices",   color: "var(--c-blue)",       bg: "var(--c-blue-bg)",  border: "var(--c-blue-border, #bfdbfe)"  },
-  customer: { plural: "Customers",  color: "var(--c-green-text)", bg: "var(--c-green-bg)", border: "var(--c-green-border, #bbf7d0)" },
-  product:  { plural: "Products",   color: "#7c3aed",             bg: "#f3e8ff",           border: "#ddd6fe"                        },
-  brand:    { plural: "Brands",     color: "#c2410c",             bg: "#fff7ed",           border: "#fed7aa"                        },
-  category: { plural: "Categories", color: "#0f766e",             bg: "#f0fdfa",           border: "#99f6e4"                        },
+const TYPE_META: Record<BinType, { plural: string; pillCls: string }> = {
+  invoice:  { plural: "Invoices",   pillCls: styles.typePillInvoice },
+  customer: { plural: "Customers",  pillCls: styles.typePillCustomer },
+  product:  { plural: "Products",   pillCls: styles.typePillProduct },
+  brand:    { plural: "Brands",     pillCls: styles.typePillBrand },
+  category: { plural: "Categories", pillCls: styles.typePillCategory },
 };
 
 const TYPE_ORDER: BinType[] = ["invoice", "customer", "product", "brand", "category"];
@@ -33,16 +34,9 @@ const TYPE_ORDER: BinType[] = ["invoice", "customer", "product", "brand", "categ
 function DaysLeftPill({ daysLeft }: { daysLeft: number }) {
   const red    = daysLeft <= 7;
   const yellow = !red && daysLeft <= 14;
-  const color  = red ? "var(--c-red)"  : yellow ? "#b45309"  : "var(--c-green-text)";
-  const bg     = red ? "var(--c-red-bg)" : yellow ? "#fef9c3" : "var(--c-green-bg)";
-  const border = red ? "#fecaca"       : yellow ? "#fde68a"  : "var(--c-green-border, #bbf7d0)";
+  const toneCls = red ? styles.daysLeftRed : yellow ? styles.daysLeftYellow : styles.daysLeftGreen;
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center",
-      padding: "0.125rem 0.625rem", borderRadius: "9999px",
-      fontSize: "0.75rem", fontWeight: 600, whiteSpace: "nowrap",
-      background: bg, color, border: `1px solid ${border}`,
-    }}>
+    <span className={`${styles.daysLeftPill} ${toneCls}`}>
       {daysLeft === 0 ? "Expiring soon" : `${daysLeft}d left`}
     </span>
   );
@@ -70,35 +64,21 @@ function TypeSection({
   if (items.length === 0) return null;
 
   return (
-    <div className="card" style={{ overflow: "hidden" }}>
+    <div className={`card ${styles.sectionCard}`}>
       <button
         onClick={() => setOpen(o => !o)}
-        style={{
-          display: "flex", alignItems: "center", gap: "0.625rem",
-          width: "100%", padding: "0.875rem 1rem",
-          background: "none", border: "none",
-          borderBottom: open ? "1px solid var(--c-border)" : "none",
-          cursor: "pointer", textAlign: "left",
-        }}
+        className={`${styles.sectionToggle} ${open ? styles.sectionToggleOpen : ""}`}
       >
-        <span style={{
-          display: "inline-flex", alignItems: "center",
-          padding: "0.125rem 0.75rem", borderRadius: "9999px",
-          fontSize: "0.75rem", fontWeight: 600,
-          background: m.bg, color: m.color, border: `1px solid ${m.border}`,
-        }}>
+        <span className={`${styles.typePill} ${m.pillCls}`}>
           {m.plural}
         </span>
-        <span style={{ fontSize: "0.8125rem", color: "var(--c-text-3)", fontWeight: 500 }}>
+        <span className={styles.itemCount}>
           {items.length} item{items.length !== 1 ? "s" : ""}
         </span>
         <svg
           width="14" height="14" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          style={{
-            marginLeft: "auto", color: "var(--c-text-4)",
-            transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s",
-          }}
+          className={`${styles.chevron} ${open ? styles.chevronOpen : ""}`}
         >
           <polyline points="6 9 12 15 18 9" />
         </svg>
@@ -106,14 +86,14 @@ function TypeSection({
 
       {open && (
         <div className="table-wrap">
-          <table className="table-base" style={{ tableLayout: "fixed", width: "100%" }}>
+          <table className={`table-base ${styles.binTable}`}>
             <colgroup>
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "28%" }} />
-              <col style={{ width: "13%" }} />
-              <col style={{ width: "13%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "22%" }} />
+              <col className={styles.colName} />
+              <col className={styles.colDetails} />
+              <col className={styles.colDeletedOn} />
+              <col className={styles.colDeletedBy} />
+              <col className={styles.colExpires} />
+              <col className={styles.colActions} />
             </colgroup>
             <thead>
               <tr>
@@ -123,19 +103,19 @@ function TypeSection({
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
-                  <Cell col={BIN_COLUMNS[0]} style={{ fontWeight: 500, color: "var(--c-text)" }}>
+                  <Cell col={BIN_COLUMNS[0]} className={styles.nameCell}>
                     {item.name}
                   </Cell>
-                  <Cell col={BIN_COLUMNS[1]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem", wordBreak: "break-word" }}>
-                    {item.meta || <span style={{ color: "var(--c-text-4)" }}>—</span>}
+                  <Cell col={BIN_COLUMNS[1]} className={styles.detailsCell}>
+                    {item.meta || <span className={styles.emptyValue}>—</span>}
                   </Cell>
-                  <Cell col={BIN_COLUMNS[2]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                  <Cell col={BIN_COLUMNS[2]} className={styles.mutedCell}>
                     {new Date(item.deletedAt).toLocaleDateString("en-IN", {
                       day: "2-digit", month: "short", year: "numeric",
                     })}
                   </Cell>
-                  <Cell col={BIN_COLUMNS[3]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
-                    {item.deletedBy ?? <span style={{ color: "var(--c-text-4)" }}>—</span>}
+                  <Cell col={BIN_COLUMNS[3]} className={styles.mutedCell}>
+                    {item.deletedBy ?? <span className={styles.emptyValue}>—</span>}
                   </Cell>
                   <Cell col={BIN_COLUMNS[4]}>
                     <DaysLeftPill daysLeft={item.daysLeft} />
@@ -275,14 +255,13 @@ export default function BinPage() {
       </div>
 
       {!loading && totalCount > 0 && (
-        <div className="card" style={{ padding: "0.75rem 1rem" }}>
+        <div className={`card ${styles.searchCard}`}>
           <input
             type="search"
             placeholder="Search by name, invoice no., customer, phone, amount, deleted by, date…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="search-input"
-            style={{ width: "100%" }}
+            className={`search-input ${styles.searchInputFull}`}
           />
         </div>
       )}
@@ -297,16 +276,16 @@ export default function BinPage() {
           </div>
         </div>
       ) : totalCount === 0 ? (
-        <div className="card" style={{ padding: "3rem", textAlign: "center", color: "var(--c-text-4)" }}>
+        <div className={`card ${styles.emptyState}`}>
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-            style={{ margin: "0 auto 0.75rem", display: "block", opacity: 0.3 }}>
+            className={styles.emptyStateIcon}>
             <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
           Bin is empty — nothing has been deleted recently.
         </div>
       ) : search.trim() && filteredCount === 0 ? (
-        <div className="card" style={{ padding: "3rem", textAlign: "center", color: "var(--c-text-4)" }}>
+        <div className={`card ${styles.emptyState}`}>
           No items match &ldquo;{search}&rdquo;.
         </div>
       ) : (

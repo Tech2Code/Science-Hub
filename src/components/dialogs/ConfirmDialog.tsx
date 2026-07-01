@@ -44,8 +44,8 @@ export function ConfirmDialog({
       <div className={styles.center}>
         <div className={styles.dialog}>
           <h2 className={styles.title}>{title}</h2>
-          <p className={styles.message} style={{ whiteSpace: "pre-wrap" }}>{message}</p>
-          {detail && <div style={{ marginTop: "0.75rem" }}>{detail}</div>}
+          <p className={styles.message}>{message}</p>
+          {detail && <div className={styles.detail}>{detail}</div>}
           <div className={styles.actions}>
             <Button variant="secondary" onClick={onCancel} disabled={loading}>
               {cancelLabel}

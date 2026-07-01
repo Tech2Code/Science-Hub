@@ -1,0 +1,105 @@
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.875rem;
+}
+
+.statCard {
+  padding: 1rem 1.25rem;
+}
+
+.statLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--c-text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.statValue {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--stat-color, var(--c-text));
+  margin-top: 0.25rem;
+}
+
+.statTotal {
+  --stat-color: var(--c-text);
+}
+
+.statPaid {
+  --stat-color: var(--c-green-text);
+}
+
+.statPending {
+  --stat-color: var(--c-amber);
+}
+
+.statOverdue {
+  --stat-color: var(--c-text-4);
+}
+
+.statOverdueActive {
+  --stat-color: var(--c-red);
+}
+
+.searchInput {
+  flex: 1;
+}
+
+.emptyCell {
+  text-align: center;
+  padding: 3rem;
+  color: var(--c-text-4);
+}
+
+.billLink {
+  font-weight: 500;
+  color: var(--c-blue);
+  text-decoration: none;
+}
+
+.dateCell {
+  color: var(--c-text-3);
+  font-size: 0.8125rem;
+}
+
+.overdueSub {
+  font-size: 0.7rem;
+  color: var(--c-red);
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.vendorCell {
+  color: var(--c-text-2);
+  font-weight: 500;
+}
+
+.vendorCompany {
+  font-size: 0.75rem;
+  color: var(--c-text-4);
+}
+
+.categoryCell {
+  color: var(--c-text-3);
+  font-size: 0.8125rem;
+}
+
+.dash {
+  color: var(--c-text-4);
+}
+
+.totalCell {
+  font-weight: 500;
+  text-align: right;
+}
+
+.paidCell {
+  color: var(--c-green-text);
+  text-align: right;
+}
+
+.balanceCell {
+  text-align: right;
+}

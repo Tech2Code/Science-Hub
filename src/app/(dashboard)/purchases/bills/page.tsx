@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import styles from "./billsList.module.css";
 
 interface PurchaseBill {
   id: string;
@@ -124,16 +125,16 @@ export default function PurchasesPage() {
 
       {/* Dashboard cards */}
       {!loading && bills.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.875rem" }}>
+        <div className={styles.statsGrid}>
           {[
-            { label: "Total Purchase", value: `₹${fmt(totalPurchase)}`, color: "var(--c-text)" },
-            { label: "Paid",           value: `₹${fmt(totalPaid)}`,     color: "var(--c-green-text)" },
-            { label: "Pending",        value: `₹${fmt(totalPending)}`,  color: "var(--c-amber)" },
-            { label: "Overdue Bills",  value: String(overdue),          color: overdue > 0 ? "var(--c-red)" : "var(--c-text-4)" },
+            { label: "Total Purchase", value: `₹${fmt(totalPurchase)}`, cls: styles.statTotal },
+            { label: "Paid",           value: `₹${fmt(totalPaid)}`,     cls: styles.statPaid },
+            { label: "Pending",        value: `₹${fmt(totalPending)}`,  cls: styles.statPending },
+            { label: "Overdue Bills",  value: String(overdue),          cls: overdue > 0 ? styles.statOverdueActive : styles.statOverdue },
           ].map(card => (
-            <div key={card.label} className="card" style={{ padding: "1rem 1.25rem" }}>
-              <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{card.label}</div>
-              <div style={{ fontSize: "1.25rem", fontWeight: 700, color: card.color, marginTop: "0.25rem" }}>{card.value}</div>
+            <div key={card.label} className={`card ${styles.statCard}`}>
+              <div className={styles.statLabel}>{card.label}</div>
+              <div className={`${styles.statValue} ${card.cls}`}>{card.value}</div>
             </div>
           ))}
         </div>
@@ -161,8 +162,7 @@ export default function PurchasesPage() {
             placeholder="Search by bill no., vendor, category or staff…"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
-            className="search-input"
-            style={{ flex: 1 }}
+            className={`search-input ${styles.searchInput}`}
           />
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />
@@ -177,30 +177,30 @@ export default function PurchasesPage() {
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={COLUMNS.length} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search.trim() ? `No bills match "${search}".` : "No purchase bills yet."}
                 </td></tr>
               ) : visible.map(b => (
                 <tr key={b.id}>
                   <Cell col={COLUMNS[0]}>
-                    <a href={`/purchases/bills/${b.id}`} style={{ fontWeight: 500, color: "var(--c-blue)", textDecoration: "none" }}>{b.billNumber}</a>
+                    <a href={`/purchases/bills/${b.id}`} className={styles.billLink}>{b.billNumber}</a>
                   </Cell>
-                  <Cell col={COLUMNS[1]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                  <Cell col={COLUMNS[1]} className={styles.dateCell}>
                     {new Date(b.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                     {b.dueDate && new Date(b.dueDate) < new Date() && b.status !== "paid" && (
-                      <div style={{ fontSize: "0.7rem", color: "var(--c-red)", fontWeight: 600, marginTop: 2 }}>Overdue</div>
+                      <div className={styles.overdueSub}>Overdue</div>
                     )}
                   </Cell>
-                  <Cell col={COLUMNS[2]} style={{ color: "var(--c-text-2)", fontWeight: 500 }}>
+                  <Cell col={COLUMNS[2]} className={styles.vendorCell}>
                     {b.vendor.name}
-                    {b.vendor.company && <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)" }}>{b.vendor.company}</div>}
+                    {b.vendor.company && <div className={styles.vendorCompany}>{b.vendor.company}</div>}
                   </Cell>
-                  <Cell col={COLUMNS[3]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
-                    {b.category || <span style={{ color: "var(--c-text-4)" }}>—</span>}
+                  <Cell col={COLUMNS[3]} className={styles.categoryCell}>
+                    {b.category || <span className={styles.dash}>—</span>}
                   </Cell>
-                  <Cell col={COLUMNS[4]} style={{ fontWeight: 500, textAlign: "right" }}>₹{fmt(b.total)}</Cell>
-                  <Cell col={COLUMNS[5]} style={{ color: "var(--c-green-text)", textAlign: "right" }}>₹{fmt(b.paidAmount)}</Cell>
-                  <Cell col={COLUMNS[6]} style={{ textAlign: "right" }}>₹{fmt(b.total - b.paidAmount)}</Cell>
+                  <Cell col={COLUMNS[4]} className={styles.totalCell}>₹{fmt(b.total)}</Cell>
+                  <Cell col={COLUMNS[5]} className={styles.paidCell}>₹{fmt(b.paidAmount)}</Cell>
+                  <Cell col={COLUMNS[6]} className={styles.balanceCell}>₹{fmt(b.total - b.paidAmount)}</Cell>
                   <Cell col={COLUMNS[7]}><StatusBadge status={b.status} /></Cell>
                   <Cell col={COLUMNS[8]}>
                     <div className="table-actions">

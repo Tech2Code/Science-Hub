@@ -1,0 +1,115 @@
+.container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.itemWrap {
+  pointer-events: auto;
+}
+
+.toast {
+  position: relative;
+  display: flex;
+  gap: 0.625rem;
+  align-items: flex-start;
+  padding: 0.75rem 1rem 0.75rem 0.875rem;
+  border-radius: 0.625rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
+  min-width: 280px;
+  max-width: 360px;
+  overflow: hidden;
+  cursor: default;
+  transform: translateX(24px) scale(0.96);
+  opacity: 0;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.22s ease;
+}
+
+.toastVisible {
+  transform: translateX(0) scale(1);
+  opacity: 1;
+}
+
+.toastLeaving {
+  transform: translateX(24px) scale(0.96);
+  opacity: 0;
+}
+
+.colorBar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 0.625rem 0 0 0.625rem;
+}
+
+.icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 900;
+  margin-top: 1px;
+}
+
+.textWrap {
+  flex: 1;
+  min-width: 0;
+  padding-left: 0.125rem;
+}
+
+.title {
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.3;
+}
+
+.message {
+  font-size: 0.8125rem;
+  color: var(--c-text-3);
+  margin-top: 0.2rem;
+  line-height: 1.4;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.125rem;
+  color: var(--c-text-4);
+  line-height: 1;
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: -1px;
+}
+
+.progressTrack {
+  position: absolute;
+  bottom: 0;
+  left: 4px;
+  right: 0;
+  height: 3px;
+  border-radius: 0 0 0.625rem 0;
+}
+
+.progressBar {
+  height: 100%;
+  border-radius: 0 0 0.625rem 0;
+  animation: toastProgress var(--toast-duration) linear forwards;
+}
+
+@keyframes toastProgress {
+  from { width: 100%; }
+  to { width: 0%; }
+}

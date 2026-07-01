@@ -1,0 +1,351 @@
+/* Invoice detail page — styles for everything OUTSIDE #invoice-print-area.
+   The print area itself keeps literal inline styles (read imperatively by
+   src/lib/generateInvoicePdf.ts for PDF generation) and must not use these. */
+
+.errorText { color: var(--c-red); }
+.shareIconMargin { margin-right: 0.375rem; }
+
+/* ---------- Skeleton ---------- */
+.skToolbarRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.skFlexGap5 { display: flex; align-items: center; gap: 0.5rem; }
+.skActionsRow { display: flex; gap: 0.375rem; flex-wrap: wrap; }
+.skCard { overflow: hidden; }
+.skTwoCol { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.skCompanyCol {
+  padding: 14px 16px;
+  border-right: 1px solid var(--c-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.skMetaCol { display: flex; flex-direction: column; }
+.skMetaRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--c-border);
+  padding: 9px 14px;
+  gap: 8px;
+}
+.skBillTo {
+  border-top: 1px solid var(--c-border);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.skBillToRow { display: flex; gap: 16px; }
+.skTableHeader {
+  border-top: 1px solid var(--c-border);
+  display: grid;
+  grid-template-columns: 3% 25% 6% 6% 10% 10% 6% 10% 10% 11%;
+  gap: 0;
+  padding: 8px 8px;
+  background: var(--c-bg-sub);
+}
+.skTableRow {
+  border-top: 1px solid var(--c-border);
+  display: grid;
+  grid-template-columns: 3% 25% 6% 6% 10% 10% 6% 10% 10% 11%;
+  gap: 0;
+  padding: 8px 8px;
+}
+.skTotalsRow { border-top: 1px solid var(--c-border); display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.skTotalsLeft { border-right: 1px solid var(--c-border); padding: 14px 16px; }
+.skTotalsRight { display: flex; flex-direction: column; }
+.skTotalsLine {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--c-border);
+  padding: 8px 14px;
+  gap: 8px;
+}
+
+/* ---------- Toolbar ---------- */
+.toolbarActions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.inlineFlex { display: inline-flex; }
+.shareWrap { position: relative; }
+.shareOverlay { position: fixed; inset: 0; z-index: 99; }
+.shareMenu {
+  z-index: 100;
+  background: var(--c-bg-card);
+  border: 1px solid var(--c-border-md);
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, .18), 0 2px 8px -2px rgba(0, 0, 0, .12);
+  min-width: 15rem;
+  overflow: hidden;
+  padding: 0.375rem 0;
+}
+.shareMenuTitle {
+  padding: 0.5rem 1rem 0.375rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-4);
+  border-bottom: 1px solid var(--c-border);
+  margin-bottom: 0.25rem;
+}
+.shareMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.625rem 1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--c-text);
+  text-align: left;
+}
+.shareMenuItem:hover { background: var(--c-bg-sub); }
+.shareMenuItemIcon { flex-shrink: 0; display: flex; }
+
+/* ---------- Payment form ---------- */
+.paymentFormCard { padding: 1.25rem; }
+.paymentFormTitle { font-size: 0.875rem; font-weight: 600; color: var(--c-text); margin-bottom: 0.75rem; }
+.paymentFormRow { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; }
+.paymentAmountRow { display: flex; align-items: center; gap: 0.5rem; }
+.paymentAmountInput { width: 9rem; }
+.paymentFullBtn {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--c-green-border);
+  background: var(--c-green-bg);
+  color: var(--c-green-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.paymentReferenceInput { width: 12rem; }
+.paymentFormBtnRow { display: flex; gap: 0.5rem; }
+.paymentBalanceHint { margin-top: 0.375rem; font-size: 0.7rem; color: var(--c-text-4); }
+
+/* ---------- Return form modal ---------- */
+.returnModalOverlayWrap {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.returnModalBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+.returnModalBox {
+  position: relative;
+  z-index: 1;
+  background: var(--c-bg-card);
+  border-radius: 0.75rem;
+  box-shadow: 0 20px 60px -8px rgba(0, 0, 0, .35), 0 4px 16px -4px rgba(0, 0, 0, .2);
+  border: 1px solid var(--c-border-md);
+  width: 100%;
+  max-width: 540px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.returnModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--c-border);
+}
+.returnModalHeaderLeft { display: flex; align-items: center; gap: 0.5rem; }
+.returnModalTitle { font-size: 0.9375rem; font-weight: 600; color: var(--c-text); margin: 0; }
+.returnModalCloseBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--c-text-4);
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  display: flex;
+  align-items: center;
+}
+.returnModalBody { overflow-y: auto; flex: 1; }
+.returnModalMetaRow {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--c-border);
+}
+.returnModalFieldLabel {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--c-text-3);
+  margin-bottom: 0.25rem;
+}
+.returnDateInput { width: 10rem; }
+.returnNotesField { flex: 1; min-width: 12rem; }
+.returnNotesInput { width: 100%; }
+.returnItemsSection { padding: 1rem 1.25rem; }
+.returnItemsLabel { font-size: 0.75rem; font-weight: 600; color: var(--c-text-3); margin-bottom: 0.5rem; }
+.returnItemsList { display: flex; flex-direction: column; gap: 0.5rem; }
+.returnItemRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  background: var(--c-bg-sub);
+  border: 1px solid var(--c-border);
+}
+.returnItemRowSelected {
+  background: var(--c-blue-bg);
+  border: 1px solid var(--c-blue-border);
+}
+.returnItemCheckbox { width: 1rem; height: 1rem; cursor: pointer; accent-color: var(--c-blue); }
+.returnItemName { flex: 1; font-size: 0.875rem; color: var(--c-text); }
+.returnItemMax { font-size: 0.75rem; color: var(--c-text-4); }
+.returnItemQtyInput { width: 5rem; }
+.returnItemsEmpty { font-size: 0.875rem; color: var(--c-text-4); }
+.returnModalFooter {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--c-border);
+  background: var(--c-bg-sub);
+}
+
+/* ---------- Payment history card ---------- */
+.historyHeader {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--c-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.historyHeaderLeft { display: flex; align-items: center; gap: 0.625rem; }
+.historyTitle { font-weight: 600; color: var(--c-text); font-size: 0.9375rem; margin: 0; }
+.historyCountBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 9999px;
+  background: var(--c-blue-bg);
+  color: var(--c-blue);
+  font-size: 0.7rem;
+  font-weight: 700;
+  border: 1px solid var(--c-blue-border);
+}
+.historyHeaderRight { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+
+.pdfToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  border: 1px solid var(--c-blue-border);
+  background: var(--c-blue-bg);
+  color: var(--c-blue);
+}
+.pdfToggleBtnActive {
+  border: 1px solid var(--c-red-border);
+  background: var(--c-red-bg);
+  color: var(--c-red);
+}
+.pdfToggleBtnOrange {
+  border: 1px solid var(--c-orange-border, #fed7aa);
+  background: var(--c-orange-bg, #fff7ed);
+  color: var(--c-orange);
+}
+
+.historyStatsGroup {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  border-left: 1px solid var(--c-border);
+  padding-left: 1rem;
+}
+.historyStatLabel { font-size: 0.6875rem; color: var(--c-text-4); font-weight: 500; margin-bottom: 0.1rem; }
+.historyStatValue { font-size: 1rem; font-weight: 700; line-height: 1; }
+.historyStatValueGreen { color: var(--c-green); }
+.historyNetLine { font-size: 0.6875rem; color: var(--c-text-4); margin-top: 0.2rem; }
+.historyNetLineOrange { color: var(--c-orange); }
+.historyNetLineNet { color: var(--c-text-3); font-weight: 600; }
+
+.progressRowWrap { padding: 0.5rem 1.25rem; border-bottom: 1px solid var(--c-border); background: var(--c-bg-sub); }
+.progressRow { display: flex; align-items: center; gap: 0.75rem; }
+.progressTrack { flex: 1; height: 5px; border-radius: 9999px; background: var(--c-border); overflow: hidden; }
+.progressFill { height: 100%; border-radius: 9999px; transition: width 0.4s ease; }
+.progressLabel { font-size: 0.7rem; font-weight: 600; white-space: nowrap; }
+
+.payIdxCell { color: var(--c-text-4); font-size: 0.75rem; width: 2rem; }
+.payDateCell { white-space: nowrap; color: var(--c-text-2); }
+.payReferenceCell { color: var(--c-text-4); font-family: var(--font-mono); font-size: 0.75rem; }
+.payAmountCell { font-weight: 600; color: var(--c-green); white-space: nowrap; }
+
+.methodBadge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ---------- Returns history card ---------- */
+.returnsHistoryCard { overflow: hidden; }
+.returnsHistoryHeader {
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--c-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.returnsHistoryHeaderLeft { display: flex; align-items: center; gap: 0.625rem; }
+.returnsHistoryTitle { font-weight: 600; font-size: 0.875rem; color: var(--c-text); }
+.returnsCountBadge {
+  font-size: 0.75rem;
+  background: var(--c-bg-sub);
+  border: 1px solid var(--c-border);
+  border-radius: 9999px;
+  padding: 0.1rem 0.5rem;
+  color: var(--c-text-3);
+}
+.returnsHistoryTotal { font-size: 0.875rem; font-weight: 700; color: var(--c-orange); }
+.returnsList { display: flex; flex-direction: column; gap: 0; }
+.returnEntry { padding: 0.875rem 1.25rem; border-bottom: 1px solid var(--c-border); }
+.returnEntryLast { padding: 0.875rem 1.25rem; border-bottom: none; }
+.returnEntryHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+.returnEntryHeadLeft { display: flex; align-items: center; gap: 0.5rem; }
+.returnEntryDate { font-size: 0.75rem; font-weight: 600; color: var(--c-text-3); }
+.returnEntryNotes { font-size: 0.75rem; color: var(--c-text-4); }
+.returnEntryTotal { font-size: 0.875rem; font-weight: 700; color: var(--c-orange); }
+.returnItemsGroup { display: flex; flex-direction: column; gap: 0.25rem; }
+.returnLineItem { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.8125rem; }
+.returnLineItemName { color: var(--c-text-2); }
+.returnLineItemQty { color: var(--c-text-4); }
+.returnLineItemPrice { color: var(--c-text-4); font-size: 0.75rem; }
+.returnLineItemTotal { color: var(--c-text-3); font-family: var(--font-mono); white-space: nowrap; }

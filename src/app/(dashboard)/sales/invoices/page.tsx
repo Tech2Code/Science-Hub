@@ -12,6 +12,7 @@ import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
+import styles from "./invoicesList.module.css";
 
 interface Invoice {
   id: string;
@@ -154,8 +155,7 @@ export default function InvoicesPage() {
             placeholder="Search by invoice no., customer or staff name…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="search-input"
-            style={{ flex: 1 }}
+            className={["search-input", styles.searchInput].join(" ")}
           />
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
@@ -172,30 +172,30 @@ export default function InvoicesPage() {
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={COLUMNS.length} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
                   {search.trim() ? `No invoices match "${search}".` : "No invoices found."}
                 </td></tr>
               ) : visible.map((inv) => (
                 <tr key={inv.id}>
                   <Cell col={COLUMNS[0]}>
-                    <a href={`/sales/invoices/${inv.id}`} style={{ fontWeight: 500, color: "var(--c-blue)", textDecoration: "none" }}>
+                    <a href={`/sales/invoices/${inv.id}`} className={styles.invoiceLink}>
                       {inv.invoiceNumber}
                     </a>
                   </Cell>
-                  <Cell col={COLUMNS[1]} style={{ color: "var(--c-text-3)" }}>
+                  <Cell col={COLUMNS[1]} className={styles.dateCell}>
                     <div>{new Date(inv.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
-                    <div className="date-sub" style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: 2 }}>
+                    <div className={["date-sub", styles.dateSub].join(" ")}>
                       {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                     </div>
                   </Cell>
-                  <Cell col={COLUMNS[2]} style={{ color: "var(--c-text-2)", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{inv.customer?.name}</Cell>
-                  <Cell col={COLUMNS[3]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{inv.createdBy?.name ?? "—"}</Cell>
-                  <Cell col={COLUMNS[4]} style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
-                  <Cell col={COLUMNS[5]} style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
-                  <Cell col={COLUMNS[6]} style={{ color: "var(--c-text)" }}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
+                  <Cell col={COLUMNS[2]} className={styles.customerCell}>{inv.customer?.name}</Cell>
+                  <Cell col={COLUMNS[3]} className={styles.createdByCell}>{inv.createdBy?.name ?? "—"}</Cell>
+                  <Cell col={COLUMNS[4]} className={styles.totalCell}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
+                  <Cell col={COLUMNS[5]} className={styles.paidCell}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
+                  <Cell col={COLUMNS[6]} className={styles.balanceCell}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
                   <Cell col={COLUMNS[7]}><StatusBadge status={inv.status} /></Cell>
                   <Cell col={COLUMNS[8]}>
-                    <div className="table-actions" style={{ flexWrap: "wrap" }}>
+                    <div className={["table-actions", styles.actionsWrap].join(" ")}>
                         {/* 1. View → opens PDF preview modal (desktop) or invoice page (mobile) */}
                       <Button variant="viewOutline" size="sm" onClick={async () => {
                         if (pdfLoading) return;

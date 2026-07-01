@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import styles from "../login/login.module.css";
+import pageStyles from "./findEmail.module.css";
 import { rules, validate } from "@/lib/validation";
 
 interface Result {
@@ -88,14 +89,14 @@ export default function FindEmailPage() {
           </form>
 
           {results !== null && (
-            <div style={{ marginTop: "1.25rem", borderTop: "1px solid #e2e8f0", paddingTop: "1.25rem" }}>
+            <div className={pageStyles.resultsWrap}>
               {results.length === 0 ? (
-                <p style={{ fontSize: "0.875rem", color: "#64748b", textAlign: "center" }}>
+                <p className={pageStyles.noResults}>
                   No account found for &ldquo;{name}&rdquo;. Check the spelling and try again.
                 </p>
               ) : (
                 <>
-                  <p style={{ fontSize: "0.8125rem", color: "#64748b", marginBottom: "0.875rem" }}>
+                  <p className={pageStyles.resultsCount}>
                     {results.length} account{results.length > 1 ? "s" : ""} found:
                   </p>
                   {results.map((r, i) => (
@@ -110,9 +111,9 @@ export default function FindEmailPage() {
                       </button>
                     </div>
                   ))}
-                  <p style={{ fontSize: "0.78rem", color: "#94a3b8", marginTop: "0.75rem" }}>
+                  <p className={pageStyles.recogniseText}>
                     Recognise your email? Go to{" "}
-                    <Link href="/forgot-password" style={{ color: "#2563eb", textDecoration: "underline" }}>
+                    <Link href="/forgot-password" className={pageStyles.recogniseLink}>
                       Forgot password
                     </Link>{" "}
                     and enter the full address.

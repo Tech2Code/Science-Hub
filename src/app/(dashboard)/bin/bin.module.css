@@ -1,0 +1,173 @@
+.sectionCard {
+  overflow: hidden;
+}
+
+.sectionToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.875rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sectionToggleOpen {
+  border-bottom: 1px solid var(--c-border);
+}
+
+.typePill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.typePillInvoice {
+  background: var(--c-blue-bg);
+  color: var(--c-blue);
+  border: 1px solid var(--c-blue-border, #bfdbfe);
+}
+
+.typePillCustomer {
+  background: var(--c-green-bg);
+  color: var(--c-green-text);
+  border: 1px solid var(--c-green-border, #bbf7d0);
+}
+
+.typePillProduct {
+  background: #f3e8ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+}
+
+.typePillBrand {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+.typePillCategory {
+  background: #f0fdfa;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+}
+
+.itemCount {
+  font-size: 0.8125rem;
+  color: var(--c-text-3);
+  font-weight: 500;
+}
+
+.chevron {
+  margin-left: auto;
+  color: var(--c-text-4);
+  transform: none;
+  transition: transform 0.15s;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.binTable {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.colName {
+  width: 14%;
+}
+
+.colDetails {
+  width: 28%;
+}
+
+.colDeletedOn {
+  width: 13%;
+}
+
+.colDeletedBy {
+  width: 13%;
+}
+
+.colExpires {
+  width: 10%;
+}
+
+.colActions {
+  width: 22%;
+}
+
+.nameCell {
+  font-weight: 500;
+  color: var(--c-text);
+}
+
+.detailsCell {
+  color: var(--c-text-3);
+  font-size: 0.8125rem;
+  word-break: break-word;
+}
+
+.mutedCell {
+  color: var(--c-text-3);
+  font-size: 0.8125rem;
+}
+
+.emptyValue {
+  color: var(--c-text-4);
+}
+
+.daysLeftPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.daysLeftRed {
+  background: var(--c-red-bg);
+  color: var(--c-red);
+  border: 1px solid #fecaca;
+}
+
+.daysLeftYellow {
+  background: #fef9c3;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.daysLeftGreen {
+  background: var(--c-green-bg);
+  color: var(--c-green-text);
+  border: 1px solid var(--c-green-border, #bbf7d0);
+}
+
+.searchCard {
+  padding: 0.75rem 1rem;
+}
+
+.searchInputFull {
+  width: 100%;
+}
+
+.emptyState {
+  padding: 3rem;
+  text-align: center;
+  color: var(--c-text-4);
+}
+
+.emptyStateIcon {
+  margin: 0 auto 0.75rem;
+  display: block;
+  opacity: 0.3;
+}

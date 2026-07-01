@@ -1,0 +1,14 @@
+@keyframes skPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.sk {
+  background: var(--c-border);
+  animation: skPulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.cell {
+  padding: 0.75rem 1rem;
+}

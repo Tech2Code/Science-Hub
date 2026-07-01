@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
+import styles from "./vendorsList.module.css";
 
 interface Vendor {
   id: string;
@@ -103,8 +104,7 @@ export default function VendorsPage() {
             placeholder="Search by name, company, GSTIN, phone or email…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="search-input"
-            style={{ flex: 1 }}
+            className={`search-input ${styles.searchInput}`}
           />
         </div>
         <div className="table-wrap">
@@ -116,33 +116,27 @@ export default function VendorsPage() {
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={COLUMNS.length} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search.trim() ? `No vendors match "${search}".` : "No vendors yet. Add your first vendor."}
                 </td></tr>
               ) : filtered.map(v => (
                 <tr key={v.id}>
                   <Cell col={COLUMNS[0]}>
-                    <div style={{ fontWeight: 600, color: "var(--c-text)" }}>{v.name}</div>
-                    {v.company && <div style={{ fontSize: "0.78rem", color: "var(--c-text-4)" }}>{v.company}</div>}
+                    <div className={styles.nameCell}>{v.name}</div>
+                    {v.company && <div className={styles.companySub}>{v.company}</div>}
                   </Cell>
-                  <Cell col={COLUMNS[1]} style={{ fontSize: "0.8rem", color: "var(--c-text-3)", fontFamily: "var(--font-mono)" }}>
-                    {v.gstin || <span style={{ color: "var(--c-text-4)" }}>—</span>}
+                  <Cell col={COLUMNS[1]} className={styles.gstinCell}>
+                    {v.gstin || <span className={styles.emptyValue}>—</span>}
                   </Cell>
-                  <Cell col={COLUMNS[2]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
-                    {v.phone || <span style={{ color: "var(--c-text-4)" }}>—</span>}
+                  <Cell col={COLUMNS[2]} className={styles.mutedCell}>
+                    {v.phone || <span className={styles.emptyValue}>—</span>}
                   </Cell>
-                  <Cell col={COLUMNS[3]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
-                    {v.email || <span style={{ color: "var(--c-text-4)" }}>—</span>}
+                  <Cell col={COLUMNS[3]} className={styles.mutedCell}>
+                    {v.email || <span className={styles.emptyValue}>—</span>}
                   </Cell>
-                  <Cell col={COLUMNS[4]} style={{ fontWeight: 500, textAlign: "right" }}>{v._count.purchaseBills}</Cell>
+                  <Cell col={COLUMNS[4]} className={styles.countCell}>{v._count.purchaseBills}</Cell>
                   <Cell col={COLUMNS[5]}>
-                    <span style={{
-                      display: "inline-flex", alignItems: "center", padding: "0.1rem 0.5rem",
-                      borderRadius: "9999px", fontSize: "0.75rem", fontWeight: 600,
-                      background: v.isActive ? "var(--c-green-bg)" : "var(--c-bg-sub)",
-                      color: v.isActive ? "var(--c-green-text)" : "var(--c-text-4)",
-                      border: `1px solid ${v.isActive ? "var(--c-green-border, #bbf7d0)" : "var(--c-border)"}`,
-                    }}>
+                    <span className={`${styles.statusBadge} ${v.isActive ? styles.statusActive : styles.statusInactive}`}>
                       {v.isActive ? "Active" : "Inactive"}
                     </span>
                   </Cell>

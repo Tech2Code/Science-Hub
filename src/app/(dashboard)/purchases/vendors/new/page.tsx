@@ -9,6 +9,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+import styles from "./vendorNew.module.css";
 
 type StrForm = { name: string; company: string; gstin: string; phone: string; email: string; };
 
@@ -58,7 +59,7 @@ export default function NewVendorPage() {
   return (
     <>
     {saving && <OverlayLoader text="Creating vendor…" />}
-    <div className="page-stack" style={{ maxWidth: "42rem" }}>
+    <div className={`page-stack ${styles.pageStack}`}>
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "New Vendor" }]} />
       <h1 className="page-title">New Vendor</h1>
 
@@ -93,8 +94,8 @@ export default function NewVendorPage() {
           <Textarea name="notes" rows={2} value={form.notes} onChange={handleChange} placeholder="Any additional notes about this vendor…" />
         </FormField>
 
-        <label style={{ display: "flex", alignItems: "center", gap: "0.625rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--c-text-2)", fontWeight: 500 }}>
-          <input type="checkbox" name="isActive" checked={form.isActive} onChange={handleChange} style={{ width: "1rem", height: "1rem", accentColor: "var(--c-blue)", cursor: "pointer" }} />
+        <label className={styles.activeLabel}>
+          <input type="checkbox" name="isActive" checked={form.isActive} onChange={handleChange} className={styles.activeCheckbox} />
           Active vendor
         </label>
 

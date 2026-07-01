@@ -52,17 +52,13 @@ function ResetPasswordForm() {
     <div className={styles.card}>
       {done ? (
         <>
-          <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: "50%",
-              background: "#dcfce7", display: "flex", alignItems: "center",
-              justifyContent: "center", margin: "0 auto 1rem",
-            }}>
+          <div className={styles.successIconWrap}>
+            <div className={styles.successIconCircle}>
               <svg width="24" height="24" fill="none" stroke="#16a34a" strokeWidth={2.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
               </svg>
             </div>
-            <h2 className={styles.cardTitle} style={{ marginBottom: "0.5rem" }}>Password updated</h2>
+            <h2 className={`${styles.cardTitle} ${styles.successTitle}`}>Password updated</h2>
           </div>
           <p className={styles.successText}>
             Your password has been reset successfully. Redirecting you to sign in…

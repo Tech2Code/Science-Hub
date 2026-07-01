@@ -1,0 +1,49 @@
+.searchInput {
+  flex: 1;
+}
+
+.invoiceLink {
+  font-weight: 500;
+  color: var(--c-blue);
+  text-decoration: none;
+}
+
+.dateCell {
+  color: var(--c-text-3);
+}
+
+.dateSub {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  margin-top: 2px;
+}
+
+.customerCell {
+  color: var(--c-text-2);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.createdByCell {
+  color: var(--c-text-3);
+  font-size: 0.8125rem;
+}
+
+.totalCell {
+  font-weight: 500;
+  color: var(--c-text);
+}
+
+.paidCell {
+  color: var(--c-green);
+}
+
+.balanceCell {
+  color: var(--c-text);
+}
+
+.actionsWrap {
+  flex-wrap: wrap;
+}

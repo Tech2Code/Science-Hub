@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import styles from "./Toast.module.css";
 
 // ── Types ────────────────────────────────────────────────────────
 export type ToastType = "success" | "error" | "warning" | "info";
@@ -27,7 +28,7 @@ const CFG: Record<ToastType, { icon: string; bar: string; border: string; bg: st
   info:    { icon: "i", bar: "#3b82f6", border: "#bfdbfe", bg: "#eff6ff", title: "#1d4ed8" },
 };
 
-// dark-mode overrides via CSS variables already on the page
+// dark-mode overrides
 const CFG_DARK: Record<ToastType, { bar: string; border: string; bg: string; title: string }> = {
   success: { bar: "#4ade80", border: "#166534", bg: "#052e16", title: "#4ade80" },
   error:   { bar: "#f87171", border: "#7f1d1d", bg: "#2c0909", title: "#f87171" },
@@ -51,7 +52,6 @@ function Toast({ item, onDismiss }: { item: ToastItem; onDismiss: (id: string) =
   }, [leaving, onDismiss, item.id]);
 
   useEffect(() => {
-    // mount → slide in
     requestAnimationFrame(() => setVisible(true));
     timerRef.current = setTimeout(dismiss, duration);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
@@ -60,68 +60,39 @@ function Toast({ item, onDismiss }: { item: ToastItem; onDismiss: (id: string) =
   const bg = isDark ? cfg.bg : CFG[item.type].bg;
   const border = isDark ? cfg.border : CFG[item.type].border;
 
+  const toastClass = [
+    styles.toast,
+    visible && !leaving ? styles.toastVisible : "",
+    leaving ? styles.toastLeaving : "",
+  ].filter(Boolean).join(" ");
+
   return (
     <div
       role="alert"
+      className={toastClass}
       style={{
-        position: "relative", display: "flex", gap: "0.625rem", alignItems: "flex-start",
-        padding: "0.75rem 1rem 0.75rem 0.875rem",
-        borderRadius: "0.625rem",
         background: `var(--c-bg-card, ${bg})`,
         border: `1px solid ${border}`,
-        boxShadow: "0 4px 16px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.08)",
-        minWidth: 280, maxWidth: 360,
-        transform: visible && !leaving ? "translateX(0) scale(1)" : "translateX(24px) scale(0.96)",
-        opacity: visible && !leaving ? 1 : 0,
-        transition: "transform 0.28s cubic-bezier(0.34,1.56,0.64,1), opacity 0.22s ease",
-        overflow: "hidden",
-        cursor: "default",
       }}
     >
-      {/* Colour bar */}
-      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: cfg.bar, borderRadius: "0.625rem 0 0 0.625rem" }} />
-
-      {/* Icon */}
-      <div style={{
-        width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        background: cfg.bar, color: "#fff", fontSize: "0.7rem", fontWeight: 900,
-        marginTop: 1,
-      }}>
+      <div className={styles.colorBar} style={{ background: cfg.bar }} />
+      <div className={styles.icon} style={{ background: cfg.bar }}>
         {cfg.icon}
       </div>
-
-      {/* Text */}
-      <div style={{ flex: 1, minWidth: 0, paddingLeft: "0.125rem" }}>
-        <div style={{ fontWeight: 600, fontSize: "0.875rem", color: `var(--c-text, ${cfg.title})`, lineHeight: 1.3 }}>
+      <div className={styles.textWrap}>
+        <div className={styles.title} style={{ color: `var(--c-text, ${cfg.title})` }}>
           {item.title}
         </div>
         {item.message && (
-          <div style={{ fontSize: "0.8125rem", color: "var(--c-text-3)", marginTop: "0.2rem", lineHeight: 1.4 }}>
-            {item.message}
-          </div>
+          <div className={styles.message}>{item.message}</div>
         )}
       </div>
-
-      {/* Close */}
-      <button
-        onClick={dismiss}
-        style={{ background: "none", border: "none", cursor: "pointer", padding: "0.125rem", color: "var(--c-text-4)", lineHeight: 1, fontSize: "1rem", flexShrink: 0, marginTop: -1 }}
-        aria-label="Dismiss"
-      >
-        ×
-      </button>
-
-      {/* Progress bar */}
-      <div style={{
-        position: "absolute", bottom: 0, left: 4, right: 0, height: 3,
-        background: `${cfg.bar}30`,
-        borderRadius: "0 0 0.625rem 0",
-      }}>
-        <div style={{
-          height: "100%", background: cfg.bar, borderRadius: "0 0 0.625rem 0",
-          animation: `toast-progress ${duration}ms linear forwards`,
-        }} />
+      <button onClick={dismiss} className={styles.closeBtn} aria-label="Dismiss">×</button>
+      <div className={styles.progressTrack} style={{ background: `${cfg.bar}30` }}>
+        <div
+          className={styles.progressBar}
+          style={{ background: cfg.bar, "--toast-duration": `${duration}ms` } as React.CSSProperties}
+        />
       </div>
     </div>
   );
@@ -133,7 +104,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const addToast: AddToast = useCallback((t) => {
     const id = Math.random().toString(36).slice(2);
-    setToasts(prev => [...prev.slice(-4), { ...t, id }]); // cap at 5 visible
+    setToasts(prev => [...prev.slice(-4), { ...t, id }]);
   }, []);
 
   const dismiss = useCallback((id: string) => {
@@ -143,28 +114,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastCtx.Provider value={addToast}>
       {children}
-      {/* Portal-like fixed container */}
-      <div
-        aria-live="polite"
-        style={{
-          position: "fixed", top: "1rem", right: "1rem", zIndex: 9999,
-          display: "flex", flexDirection: "column", gap: "0.5rem",
-          pointerEvents: "none",
-        }}
-      >
+      <div aria-live="polite" className={styles.container}>
         {toasts.map(t => (
-          <div key={t.id} style={{ pointerEvents: "auto" }}>
+          <div key={t.id} className={styles.itemWrap}>
             <Toast item={t} onDismiss={dismiss} />
           </div>
         ))}
       </div>
-
-      <style>{`
-        @keyframes toast-progress {
-          from { width: 100%; }
-          to   { width: 0%; }
-        }
-      `}</style>
     </ToastCtx.Provider>
   );
 }

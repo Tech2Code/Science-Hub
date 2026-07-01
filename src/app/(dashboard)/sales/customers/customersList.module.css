@@ -1,0 +1,31 @@
+.searchInput {
+  flex: 1;
+}
+
+.nameCell {
+  font-weight: 500;
+  color: var(--c-text);
+}
+
+.mutedCell {
+  color: var(--c-text-3);
+}
+
+.gstinCell {
+  color: var(--c-text-3);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.smallMutedCell {
+  color: var(--c-text-3);
+  font-size: 0.8125rem;
+}
+
+.countCell {
+  color: var(--c-text-2);
+}
+
+.actionsWrap {
+  flex-wrap: wrap;
+}

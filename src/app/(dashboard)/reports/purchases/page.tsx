@@ -7,6 +7,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
 import { Cell, type Column } from "@/components/ui/Table";
+import styles from "./purchaseReports.module.css";
 
 interface SummaryRow { month: string; count: number; totalSpend: number; paid: number; payable: number; }
 interface OutstandingBill {
@@ -73,18 +74,6 @@ export default function PurchaseReportsPage() {
   const totalSpend = summaryRows.reduce((s, r) => s + r.totalSpend, 0);
   const overdueCount = outstanding.filter((b) => b.aging !== "Current").length;
 
-  const TAB_STYLE = (active: boolean): React.CSSProperties => ({
-    padding: "0.5rem 1rem",
-    fontSize: "0.8125rem",
-    fontWeight: active ? 600 : 400,
-    color: active ? "var(--c-blue)" : "var(--c-text-3)",
-    background: "none",
-    border: "none",
-    borderBottom: active ? "2px solid var(--c-blue)" : "2px solid transparent",
-    cursor: "pointer",
-    marginBottom: "-1px",
-  });
-
   return (
     <div className="page-stack">
       <div className="page-header">
@@ -119,10 +108,10 @@ export default function PurchaseReportsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="card" style={{ padding: 0 }}>
-        <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--c-border)", padding: "0 1rem" }}>
+      <div className={`card ${styles.tabsCard}`}>
+        <div className={styles.tabsRow}>
           {(["outstanding", "summary", "category"] as Tab[]).map((t) => (
-            <button key={t} style={TAB_STYLE(tab === t)} onClick={() => setTab(t)}>
+            <button key={t} className={`${styles.tabBtn} ${tab === t ? styles.active : ""}`} onClick={() => setTab(t)}>
               {t === "outstanding" ? "Outstanding" : t === "summary" ? "Monthly Summary" : "By Category"}
             </button>
           ))}
@@ -149,33 +138,36 @@ export default function PurchaseReportsPage() {
                   ) : visibleOut.map((b) => {
                     const isOverdue = b.aging !== "Current";
                     return (
-                      <tr key={b.id} style={isOverdue ? { background: "var(--c-red-bg)" } : undefined}>
+                      <tr key={b.id} className={isOverdue ? styles.overdueRow : undefined}>
                         <Cell col={OUT_COLS[0]}>
                           <Link href={`/purchases/bills/${b.id}`} className="table-link">{b.billNumber}</Link>
                         </Cell>
-                        <Cell col={OUT_COLS[1]} style={{ color: "var(--c-text-2)" }}>
-                          <Link href={`/purchases/vendors/${b.vendor.id}`} style={{ color: "inherit", textDecoration: "none" }}>{b.vendor.name}</Link>
+                        <Cell col={OUT_COLS[1]} className={styles.textMuted2}>
+                          <Link href={`/purchases/vendors/${b.vendor.id}`} className={styles.linkPlain}>{b.vendor.name}</Link>
                         </Cell>
-                        <Cell col={OUT_COLS[2]} style={{ color: "var(--c-text-3)" }}>
+                        <Cell col={OUT_COLS[2]} className={styles.textMuted3}>
                           {new Date(b.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                         </Cell>
                         <Cell col={OUT_COLS[3]}>
                           {b.dueDate
-                            ? <span style={{ color: isOverdue ? "var(--c-red)" : "var(--c-text-3)", fontWeight: isOverdue ? 500 : undefined }}>
+                            ? <span
+                                className={styles.dueDate}
+                                style={{ "--due-color": isOverdue ? "var(--c-red)" : "var(--c-text-3)", "--due-weight": isOverdue ? 500 : undefined } as React.CSSProperties}
+                              >
                                 {new Date(b.dueDate).toLocaleDateString("en-IN")}
                                 {isOverdue && " ⚠"}
                               </span>
-                            : <span style={{ color: "var(--c-text-4)" }}>—</span>
+                            : <span className={styles.textMuted4}>—</span>
                           }
                         </Cell>
                         <Cell col={OUT_COLS[4]}>
-                          <span style={{ fontSize: "0.75rem", fontWeight: 500, color: AGING_COLORS[b.aging] ?? "var(--c-text-3)" }}>
+                          <span className={styles.agingLabel} style={{ "--aging-color": AGING_COLORS[b.aging] ?? "var(--c-text-3)" } as React.CSSProperties}>
                             {b.aging}
                           </span>
                         </Cell>
-                        <Cell col={OUT_COLS[5]} style={{ color: "var(--c-text-2)" }}>{fmt(b.total)}</Cell>
-                        <Cell col={OUT_COLS[6]} style={{ color: "var(--c-green)" }}>{fmt(b.paidAmount)}</Cell>
-                        <Cell col={OUT_COLS[7]} style={{ fontWeight: 500, color: "var(--c-amber)" }}>{fmt(b.balance)}</Cell>
+                        <Cell col={OUT_COLS[5]} className={styles.textMuted2}>{fmt(b.total)}</Cell>
+                        <Cell col={OUT_COLS[6]} className={styles.paidAmount}>{fmt(b.paidAmount)}</Cell>
+                        <Cell col={OUT_COLS[7]} className={styles.balanceAmount}>{fmt(b.balance)}</Cell>
                         <Cell col={OUT_COLS[8]}><StatusBadge status={b.status} /></Cell>
                       </tr>
                     );
@@ -206,11 +198,15 @@ export default function PurchaseReportsPage() {
                     <tr><td colSpan={SUMMARY_COLS.length} className="table-empty-cell">No purchase data available.</td></tr>
                   ) : summaryRows.map((row) => (
                     <tr key={row.month}>
-                      <Cell col={SUMMARY_COLS[0]} style={{ fontWeight: 500 }}>{row.month}</Cell>
-                      <Cell col={SUMMARY_COLS[1]} style={{ color: "var(--c-text-3)" }}>{row.count}</Cell>
-                      <Cell col={SUMMARY_COLS[2]} style={{ fontWeight: 500 }}>{fmt(row.totalSpend)}</Cell>
-                      <Cell col={SUMMARY_COLS[3]} style={{ color: "var(--c-green-text)" }}>{fmt(row.paid)}</Cell>
-                      <Cell col={SUMMARY_COLS[4]} style={{ color: row.payable > 0 ? "var(--c-amber)" : "var(--c-text-4)" }}>
+                      <Cell col={SUMMARY_COLS[0]} className={styles.rowFontMedium}>{row.month}</Cell>
+                      <Cell col={SUMMARY_COLS[1]} className={styles.textMuted3}>{row.count}</Cell>
+                      <Cell col={SUMMARY_COLS[2]} className={styles.rowFontMedium}>{fmt(row.totalSpend)}</Cell>
+                      <Cell col={SUMMARY_COLS[3]} className={styles.paidGreen}>{fmt(row.paid)}</Cell>
+                      <Cell
+                        col={SUMMARY_COLS[4]}
+                        className={styles.payableCell}
+                        style={{ "--payable-color": row.payable > 0 ? "var(--c-amber)" : "var(--c-text-4)" } as React.CSSProperties}
+                      >
                         {row.payable > 0 ? fmt(row.payable) : "—"}
                       </Cell>
                     </tr>
@@ -218,12 +214,12 @@ export default function PurchaseReportsPage() {
                 </tbody>
                 {summaryRows.length > 0 && (
                   <tfoot>
-                    <tr style={{ borderTop: "2px solid var(--c-border)", background: "var(--c-bg-sub)" }}>
-                      <td style={{ padding: "0.625rem 1rem", fontWeight: 700 }}>Total</td>
-                      <td style={{ padding: "0.625rem 1rem", textAlign: "right", fontWeight: 600 }}>{summaryRows.reduce((s, r) => s + r.count, 0)}</td>
-                      <td style={{ padding: "0.625rem 1rem", textAlign: "right", fontWeight: 700 }}>{fmt(summaryRows.reduce((s, r) => s + r.totalSpend, 0))}</td>
-                      <td style={{ padding: "0.625rem 1rem", textAlign: "right", fontWeight: 600, color: "var(--c-green-text)" }}>{fmt(summaryRows.reduce((s, r) => s + r.paid, 0))}</td>
-                      <td style={{ padding: "0.625rem 1rem", textAlign: "right", fontWeight: 600, color: "var(--c-amber)" }}>{fmt(summaryRows.reduce((s, r) => s + r.payable, 0))}</td>
+                    <tr className={styles.footerRow}>
+                      <td className={styles.footerCell}>Total</td>
+                      <td className={styles.footerCellRight}>{summaryRows.reduce((s, r) => s + r.count, 0)}</td>
+                      <td className={styles.footerCellRightBold}>{fmt(summaryRows.reduce((s, r) => s + r.totalSpend, 0))}</td>
+                      <td className={styles.footerCellGreen}>{fmt(summaryRows.reduce((s, r) => s + r.paid, 0))}</td>
+                      <td className={styles.footerCellAmber}>{fmt(summaryRows.reduce((s, r) => s + r.payable, 0))}</td>
                     </tr>
                   </tfoot>
                 )}
@@ -249,15 +245,15 @@ export default function PurchaseReportsPage() {
                     <tr><td colSpan={CAT_COLS.length} className="table-empty-cell">No purchase data available.</td></tr>
                   ) : categoryRows.map((row) => (
                     <tr key={row.category}>
-                      <Cell col={CAT_COLS[0]} style={{ fontWeight: 500 }}>{row.category}</Cell>
-                      <Cell col={CAT_COLS[1]} style={{ color: "var(--c-text-3)" }}>{row.count}</Cell>
-                      <Cell col={CAT_COLS[2]} style={{ fontWeight: 600 }}>{fmt(row.totalSpend)}</Cell>
+                      <Cell col={CAT_COLS[0]} className={styles.rowFontMedium}>{row.category}</Cell>
+                      <Cell col={CAT_COLS[1]} className={styles.textMuted3}>{row.count}</Cell>
+                      <Cell col={CAT_COLS[2]} className={styles.categorySpend}>{fmt(row.totalSpend)}</Cell>
                       <Cell col={CAT_COLS[3]}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", justifyContent: "flex-end" }}>
-                          <div style={{ width: 60, height: 6, borderRadius: 3, background: "var(--c-border)", overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${row.pct}%`, background: "var(--c-amber)", borderRadius: 3 }} />
+                        <div className={styles.pctCellWrap}>
+                          <div className={styles.pctBarTrack}>
+                            <div className={styles.pctBarFill} style={{ "--bar-pct": `${row.pct}%` } as React.CSSProperties} />
                           </div>
-                          <span style={{ fontWeight: 500, minWidth: "3.5rem", textAlign: "right" }}>{row.pct}%</span>
+                          <span className={styles.pctValue}>{row.pct}%</span>
                         </div>
                       </Cell>
                     </tr>
@@ -268,7 +264,6 @@ export default function PurchaseReportsPage() {
           </>
         )}
       </div>
-      <style>{`@keyframes skPulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
     </div>
   );
 }

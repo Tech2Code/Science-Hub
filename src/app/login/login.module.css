@@ -252,3 +252,58 @@
   border-radius: 0.25rem;
   font-family: var(--font-mono), monospace;
 }
+
+/* ── Forgot password: sent-state success icon ─────── */
+.successHead {
+  text-align: center;
+  margin-bottom: 1.25rem;
+}
+.successIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #dcfce7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+.successIconWrap {
+  text-align: center;
+  margin-bottom: 1.25rem;
+}
+.successIconCircle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #dcfce7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+.successTitle {
+  margin-bottom: 0.5rem;
+}
+.successSubtext {
+  margin-bottom: 0;
+  font-size: 0.8125rem;
+  color: #94a3b8;
+}
+.linkBtn {
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+  text-decoration: underline;
+}
+.inputError {
+  border-color: var(--c-red, #dc2626);
+}
+.fieldError {
+  font-size: 0.8rem;
+  color: var(--c-red, #dc2626);
+  margin-top: 0.25rem;
+}

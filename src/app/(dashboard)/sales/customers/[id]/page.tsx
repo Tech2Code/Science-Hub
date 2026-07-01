@@ -22,11 +22,10 @@ interface Customer {
 
 function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
   return (
-    <div style={{
-      width: w, height: h, borderRadius: r,
-      background: "var(--c-border)",
-      animation: "skPulse 1.4s ease-in-out infinite",
-    }} />
+    <div
+      className={styles.skeletonBlock}
+      style={{ width: w, height: h, borderRadius: r } as React.CSSProperties}
+    />
   );
 }
 
@@ -43,23 +42,22 @@ export default function CustomerViewPage() {
   }, [id]);
 
   if (loading) return (
-    <div className="page-stack" style={{ maxWidth: "56rem" }}>
-      <style>{`@keyframes skPulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
+    <div className={`page-stack ${styles.pageStack}`}>
       {/* Breadcrumb */}
       <Sk w={160} h={13} />
 
       {/* Header card */}
-      <div className="card" style={{ padding: "1.25rem" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+      <div className={`card ${styles.cardPad}`}>
+        <div className={styles.skRow}>
+          <div className={styles.skLeftRow}>
             <Sk w={48} h={48} r={9999} />
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className={styles.skCol}>
               <Sk w={160} h={20} />
               <Sk w={220} h={13} />
               <Sk w={120} h={20} r={6} />
             </div>
           </div>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
+          <div className={styles.skActions}>
             <Sk w={72} h={32} r={8} />
             <Sk w={110} h={32} r={8} />
           </div>
@@ -69,7 +67,7 @@ export default function CustomerViewPage() {
       {/* Stats grid */}
       <div className={styles.statsGrid}>
         {[1, 2, 3].map((i) => (
-          <div key={i} className="card" style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div key={i} className={`card ${styles.skStatCard}`}>
             <Sk w={80} h={11} />
             <Sk w={120} h={22} />
             <Sk w={60} h={11} />
@@ -79,7 +77,7 @@ export default function CustomerViewPage() {
 
       {/* Invoice history table */}
       <div className="card">
-        <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--c-border)" }}>
+        <div className={styles.skTableHead}>
           <Sk w={120} h={14} />
         </div>
         <div className="table-wrap">
@@ -89,44 +87,44 @@ export default function CustomerViewPage() {
     </div>
   );
   if (error || !customer)
-    return <div className="loading-center" style={{ color: "var(--c-red)" }}>{error || "Customer not found."}</div>;
+    return <div className={`loading-center ${styles.errorCenter}`}>{error || "Customer not found."}</div>;
 
   const totalBilled = customer.invoices.reduce((s, i) => s + i.total, 0);
   const totalPaid   = customer.invoices.reduce((s, i) => s + i.paidAmount, 0);
   const outstanding = totalBilled - totalPaid;
 
   return (
-    <div className="page-stack" style={{ maxWidth: "56rem" }}>
+    <div className={`page-stack ${styles.pageStack}`}>
       <Breadcrumb items={[{ label: "Customers", href: "/sales/customers" }, { label: customer.name }]} />
 
       {/* Header */}
       <div className={`card ${styles.headerCard}`}>
         <div className={styles.headerTop}>
-          <div style={{ display: "flex", gap: "1rem" }}>
+          <div className={styles.headerLeft}>
             <div className={styles.avatar}>{customer.name[0]?.toUpperCase()}</div>
             <div>
               <h1 className="page-title">{customer.name}</h1>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", marginTop: "0.25rem" }}>
-                {customer.phone && <span style={{ fontSize: "0.75rem", color: "var(--c-text-3)" }}>{customer.phone}</span>}
-                {customer.email && <span style={{ fontSize: "0.75rem", color: "var(--c-text-3)" }}>{customer.email}</span>}
-                {customer.city  && <span style={{ fontSize: "0.75rem", color: "var(--c-text-3)" }}>{[customer.city, customer.state].filter(Boolean).join(", ")}</span>}
+              <div className={styles.contactRow}>
+                {customer.phone && <span className={styles.contactItem}>{customer.phone}</span>}
+                {customer.email && <span className={styles.contactItem}>{customer.email}</span>}
+                {customer.city  && <span className={styles.contactItem}>{[customer.city, customer.state].filter(Boolean).join(", ")}</span>}
               </div>
               {customer.gstin && (
-                <code style={{ marginTop: "0.375rem", display: "inline-block", fontSize: "0.75rem", background: "var(--c-bg-sub)", color: "var(--c-text-2)", padding: "0.125rem 0.5rem", borderRadius: "0.375rem", fontFamily: "var(--font-mono)", border: "1px solid var(--c-border)" }}>
+                <code className={styles.gstinCode}>
                   GSTIN: {customer.gstin}
                 </code>
               )}
             </div>
           </div>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
+          <div className={styles.headerActions}>
             <Button variant="secondary" href={`/sales/customers/edit/${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</Button>
             <Button variant="primary" href={`/sales/invoices/new?customerId=${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>
           </div>
         </div>
         {customer.address && (
-          <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid var(--c-border)" }}>
-            <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.25rem" }}>Address</div>
-            <p style={{ fontSize: "0.875rem", color: "var(--c-text-2)" }}>
+          <div className={styles.addressBlock}>
+            <div className={styles.addressLabel}>Address</div>
+            <p className={styles.addressText}>
               {customer.address}
               {[customer.city, customer.state, customer.pincode].filter(Boolean).length > 0 && (
                 <>, {[customer.city, customer.state, customer.pincode].filter(Boolean).join(", ")}</>
@@ -139,22 +137,22 @@ export default function CustomerViewPage() {
       {/* Stats */}
       <div className={styles.statsGrid}>
         {[
-          { label: "Total Billed", value: `₹${totalBilled.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, sub: `${customer.invoices.length} invoice(s)`, color: "var(--c-text)" },
-          { label: "Total Paid",   value: `₹${totalPaid.toLocaleString("en-IN",   { minimumFractionDigits: 2 })}`, color: "var(--c-green)" },
-          { label: "Outstanding",  value: `₹${outstanding.toLocaleString("en-IN",  { minimumFractionDigits: 2 })}`, color: outstanding > 0 ? "var(--c-red)" : "var(--c-green)" },
+          { label: "Total Billed", value: `₹${totalBilled.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, sub: `${customer.invoices.length} invoice(s)`, tone: "" as "" | "positive" | "negative" },
+          { label: "Total Paid",   value: `₹${totalPaid.toLocaleString("en-IN",   { minimumFractionDigits: 2 })}`, tone: "positive" as "" | "positive" | "negative" },
+          { label: "Outstanding",  value: `₹${outstanding.toLocaleString("en-IN",  { minimumFractionDigits: 2 })}`, tone: (outstanding > 0 ? "negative" : "positive") as "" | "positive" | "negative" },
         ].map((s) => (
-          <div key={s.label} className="card" style={{ padding: "1rem" }}>
-            <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.25rem" }}>{s.label}</div>
-            <div style={{ fontSize: "1.25rem", fontWeight: 700, color: s.color }}>{s.value}</div>
-            {s.sub && <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)", marginTop: "0.125rem" }}>{s.sub}</div>}
+          <div key={s.label} className={`card ${styles.cardPadSm}`}>
+            <div className={styles.statLabel}>{s.label}</div>
+            <div className={`${styles.statValue} ${s.tone === "positive" ? styles.positive : s.tone === "negative" ? styles.negative : ""}`}>{s.value}</div>
+            {s.sub && <div className={styles.statSub}>{s.sub}</div>}
           </div>
         ))}
       </div>
 
       {/* Invoice history */}
       <div className="card">
-        <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--c-border)" }}>
-          <h2 style={{ fontWeight: 600, color: "var(--c-text)", fontSize: "0.875rem" }}>Invoice History</h2>
+        <div className={styles.sectionHeader}>
+          <h2 className={styles.sectionTitle}>Invoice History</h2>
         </div>
         <div className="table-wrap">
           <table className="table-base">
@@ -170,23 +168,23 @@ export default function CustomerViewPage() {
             </thead>
             <tbody>
               {customer.invoices.length === 0 ? (
-                <tr><td colSpan={6} style={{ textAlign: "center", padding: "2.5rem", color: "var(--c-text-4)" }}>No invoices yet.</td></tr>
+                <tr><td colSpan={6} className={styles.emptyCell}>No invoices yet.</td></tr>
               ) : customer.invoices.map((inv) => (
                 <tr key={inv.id}>
                   <td data-mobile-full>
-                    <Link href={`/sales/invoices/${inv.id}`} style={{ fontWeight: 500, color: "var(--c-blue)", textDecoration: "none" }}>
+                    <Link href={`/sales/invoices/${inv.id}`} className={styles.invoiceLink}>
                       {inv.invoiceNumber}
                     </Link>
                   </td>
-                  <td data-label="Date" style={{ color: "var(--c-text-3)" }}>
+                  <td data-label="Date" className={styles.dateCellText}>
                     <div>{new Date(inv.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
-                    <div className="date-sub" style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: 2 }}>
+                    <div className={`date-sub ${styles.dateSubRow}`}>
                       {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                     </div>
                   </td>
-                  <td data-label="Total" className="table-td-right" style={{ color: "var(--c-text)" }}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td data-mobile-hide className="table-td-right" style={{ color: "var(--c-green)" }}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td data-label="Balance" className="table-td-right" style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  <td data-label="Total" className={`table-td-right ${styles.totalCell}`}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  <td data-mobile-hide className={`table-td-right ${styles.paidCell}`}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  <td data-label="Balance" className={`table-td-right ${styles.balanceCell}`}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   <td data-label="Status"><StatusBadge status={inv.status} /></td>
                 </tr>
               ))}

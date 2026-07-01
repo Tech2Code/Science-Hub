@@ -1,0 +1,28 @@
+.resultsWrap {
+  margin-top: 1.25rem;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 1.25rem;
+}
+
+.noResults {
+  font-size: 0.875rem;
+  color: #64748b;
+  text-align: center;
+}
+
+.resultsCount {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin-bottom: 0.875rem;
+}
+
+.recogniseText {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  margin-top: 0.75rem;
+}
+
+.recogniseLink {
+  color: #2563eb;
+  text-decoration: underline;
+}

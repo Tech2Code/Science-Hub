@@ -1,0 +1,89 @@
+.searchInput {
+  max-width: 28rem;
+}
+
+.emptyCell {
+  text-align: center;
+  padding: 3rem;
+  color: var(--c-text-4);
+}
+
+.dateSub {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  margin-top: 2px;
+}
+
+.dateCell {
+  color: var(--c-text-3);
+}
+
+.customerCell {
+  font-weight: 500;
+  color: var(--c-text);
+}
+
+.invoiceLink {
+  font-weight: 500;
+  color: var(--c-blue);
+  text-decoration: none;
+}
+
+.referenceCell {
+  color: var(--c-text-4);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.amountCell {
+  font-weight: 600;
+  color: var(--c-green);
+}
+
+.methodBadge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--badge-bg);
+  color: var(--badge-color);
+  border: 1px solid var(--badge-border);
+}
+
+.methodCash {
+  --badge-bg: var(--c-green-bg);
+  --badge-color: var(--c-green-text);
+  --badge-border: var(--c-green-border);
+}
+
+.methodUpi {
+  --badge-bg: var(--c-blue-bg);
+  --badge-color: var(--c-blue-text);
+  --badge-border: var(--c-blue-border);
+}
+
+.methodNeft,
+.methodRtgs {
+  --badge-bg: var(--c-blue-bg);
+  --badge-color: var(--c-blue);
+  --badge-border: var(--c-blue-border);
+}
+
+.methodCheque {
+  --badge-bg: var(--c-amber-bg);
+  --badge-color: var(--c-amber);
+  --badge-border: var(--c-amber-border);
+}
+
+.methodCard {
+  --badge-bg: var(--c-bg-sub);
+  --badge-color: var(--c-text-2);
+  --badge-border: var(--c-border);
+}
+
+.methodOther {
+  --badge-bg: var(--c-bg-sub);
+  --badge-color: var(--c-text-3);
+  --badge-border: var(--c-border);
+}

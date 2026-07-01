@@ -10,6 +10,7 @@ import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagina
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
+import styles from "./brands.module.css";
 
 interface Brand {
   id: string;
@@ -114,21 +115,18 @@ export default function BrandsPage() {
       <Breadcrumb items={[{ label: "Brands" }]} />
 
       {/* Add brand form */}
-      <div className="card" style={{ padding: "1.25rem" }}>
-        <h2 style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--c-text)", marginBottom: "0.875rem" }}>
+      <div className={`card ${styles.addCard}`}>
+        <h2 className={styles.addCardTitle}>
           Add New Brand
         </h2>
-        <form onSubmit={handleAdd} style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", flexWrap: "wrap" }}>
+        <form onSubmit={handleAdd} className={styles.addForm}>
           <input
             ref={inputRef}
             type="text"
             placeholder="Brand name (e.g. Merck, Borosil…)"
             value={newName}
             onChange={(e) => { setNewName(e.target.value); }}
-            className="search-input"
-            style={{
-              flex: "1 1 260px", minWidth: 0, maxWidth: "none",
-            }}
+            className={`search-input ${styles.addInput}`}
           />
           <Button type="submit" variant="primary" disabled={!newName.trim() || saving}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Brand
@@ -144,8 +142,7 @@ export default function BrandsPage() {
             placeholder="Search brands…"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
-            className="search-input"
-            style={{ maxWidth: "22rem" }}
+            className={`search-input ${styles.searchInput}`}
           />
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
@@ -162,25 +159,19 @@ export default function BrandsPage() {
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={COLUMNS.length} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search ? "No brands match your search." : "No brands yet. Add one above."}
                 </td></tr>
               ) : visible.map((b, i) => (
                 <tr key={b.id}>
-                  <Cell col={COLUMNS[0]} style={{ color: "var(--c-text-4)", fontSize: "0.8125rem" }}>{i + 1}</Cell>
-                  <Cell col={COLUMNS[1]} style={{ fontWeight: 500, color: "var(--c-text)" }}>{b.name}</Cell>
-                  <Cell col={COLUMNS[2]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{b.createdBy ?? "—"}</Cell>
-                  <Cell col={COLUMNS[3]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                  <Cell col={COLUMNS[0]} className={styles.indexCell}>{i + 1}</Cell>
+                  <Cell col={COLUMNS[1]} className={styles.nameCell}>{b.name}</Cell>
+                  <Cell col={COLUMNS[2]} className={styles.mutedCell}>{b.createdBy ?? "—"}</Cell>
+                  <Cell col={COLUMNS[3]} className={styles.mutedCell}>
                     {b.createdAt ? new Date(b.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—"}
                   </Cell>
                   <Cell col={COLUMNS[4]}>
-                    <span style={{
-                      display: "inline-block", padding: "0.125rem 0.5rem", borderRadius: "9999px",
-                      fontSize: "0.75rem", fontWeight: 500,
-                      background: b._count.products > 0 ? "var(--c-blue-bg)" : "var(--c-bg-sub)",
-                      color: b._count.products > 0 ? "var(--c-blue-text, #1d4ed8)" : "var(--c-text-4)",
-                      border: `1px solid ${b._count.products > 0 ? "var(--c-blue-border, #bfdbfe)" : "var(--c-border)"}`,
-                    }}>
+                    <span className={`${styles.productsBadge} ${b._count.products > 0 ? styles.productsBadgeActive : ""}`}>
                       {b._count.products} {b._count.products === 1 ? "product" : "products"}
                     </span>
                   </Cell>

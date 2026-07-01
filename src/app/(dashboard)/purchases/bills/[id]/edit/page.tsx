@@ -9,6 +9,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { StatusBadge } from "@/components/ui/Badge";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import styles from "./edit.module.css";
 
 interface BillItem {
   id: string; name: string; quantity: number; unit: string;
@@ -30,10 +31,10 @@ const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2 
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div style={{ padding: "0.875rem 1rem", borderRadius: "0.625rem", background: "var(--c-bg-sub)", border: "1px solid var(--c-border)" }}>
-      <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.25rem" }}>{label}</div>
-      <div style={{ fontSize: "1.0625rem", fontWeight: 700, color: "var(--c-text-2)" }}>{value}</div>
-      {sub && <div style={{ fontSize: "0.72rem", color: "var(--c-text-4)", marginTop: "0.125rem" }}>{sub}</div>}
+    <div className={styles.statCard}>
+      <div className={styles.statLabel}>{label}</div>
+      <div className={styles.statValue}>{value}</div>
+      {sub && <div className={styles.statSub}>{sub}</div>}
     </div>
   );
 }
@@ -115,12 +116,12 @@ export default function EditPurchaseBillPage() {
   }
 
   if (loading) return <div className="loading-center">Loading bill…</div>;
-  if (loadErr)  return <div className="error-banner" style={{ margin: "2rem" }}>{loadErr}</div>;
+  if (loadErr)  return <div className={`error-banner ${styles.loadErr}`}>{loadErr}</div>;
 
   return (
     <>
     {saving && <OverlayLoader text="Saving…" />}
-    <div className="page-stack" style={{ maxWidth: "52rem" }}>
+    <div className={`page-stack ${styles.pageStack}`}>
       <Breadcrumb items={[
         { label: "Purchase Bills", href: "/purchases/bills" },
         { label: bill?.billNumber ?? "Bill", href: `/purchases/bills/${id}` },
@@ -128,7 +129,7 @@ export default function EditPurchaseBillPage() {
       ]} />
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem" }}>
+      <div className={styles.header}>
         <div>
           <h1 className="page-title">Edit Bill — {bill?.billNumber}</h1>
           <p className="page-sub">{bill?.vendor.name}{bill?.vendor.company ? ` · ${bill.vendor.company}` : ""}</p>
@@ -138,7 +139,7 @@ export default function EditPurchaseBillPage() {
 
       {/* Summary stats */}
       {bill && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "0.75rem" }}>
+        <div className={styles.statGrid}>
           <StatCard label="Subtotal"    value={`₹${fmt(bill.subtotal)}`} />
           <StatCard label="GST"         value={`₹${fmt(bill.taxAmount)}`} />
           <StatCard label="Paid"        value={`₹${fmt(bill.paidAmount)}`} />
@@ -194,27 +195,27 @@ export default function EditPurchaseBillPage() {
         {/* Line items — read-only view */}
         {bill && bill.items.length > 0 && (
           <div className="form-card">
-            <h2 className="form-section-title">Items <span style={{ fontSize: "0.75rem", fontWeight: 400, color: "var(--c-text-4)", marginLeft: "0.5rem" }}>read-only — cannot be changed after creation</span></h2>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "480px" }}>
+            <h2 className={`form-section-title ${styles.itemsSectionTitle}`}>Items <span className={styles.itemsHint}>read-only — cannot be changed after creation</span></h2>
+            <div className={styles.tableScroll}>
+              <table className={styles.itemsTable}>
                 <thead>
-                  <tr style={{ borderBottom: "1px solid var(--c-border)" }}>
+                  <tr>
                     {["Item", "Qty", "Rate", "GST", "Total"].map(h => (
-                      <th key={h} style={{ padding: "0.4rem 0.625rem", fontSize: "0.7rem", fontWeight: 600, color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: h === "Total" || h === "Rate" || h === "GST" ? "right" : "left" }}>{h}</th>
+                      <th key={h} className={`${styles.itemsTh} ${h === "Total" || h === "Rate" || h === "GST" ? styles.itemsThRight : ""}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {bill.items.map((item, idx) => (
-                    <tr key={item.id} style={{ borderBottom: idx < bill.items.length - 1 ? "1px solid var(--c-border)" : "none" }}>
-                      <td style={{ padding: "0.5rem 0.625rem" }}>
-                        <div style={{ fontWeight: 500, fontSize: "0.875rem", color: "var(--c-text-2)" }}>{item.name}</div>
-                        <div style={{ fontSize: "0.72rem", color: "var(--c-text-4)" }}>{item.unit}</div>
+                  {bill.items.map((item) => (
+                    <tr key={item.id} className={styles.itemsRow}>
+                      <td className={styles.itemsTdName}>
+                        <div className={styles.itemNameText}>{item.name}</div>
+                        <div className={styles.itemUnitText}>{item.unit}</div>
                       </td>
-                      <td style={{ padding: "0.5rem 0.625rem", fontSize: "0.875rem", color: "var(--c-text-3)" }}>{item.quantity}</td>
-                      <td style={{ padding: "0.5rem 0.625rem", fontSize: "0.875rem", color: "var(--c-text-3)", textAlign: "right" }}>₹{fmt(item.purchasePrice)}</td>
-                      <td style={{ padding: "0.5rem 0.625rem", fontSize: "0.875rem", color: "var(--c-text-3)", textAlign: "right" }}>{item.gstRate}%</td>
-                      <td style={{ padding: "0.5rem 0.625rem", fontSize: "0.875rem", fontWeight: 600, color: "var(--c-text-2)", textAlign: "right" }}>₹{fmt(item.total)}</td>
+                      <td className={styles.itemsTd}>{item.quantity}</td>
+                      <td className={styles.itemsTdRight}>₹{fmt(item.purchasePrice)}</td>
+                      <td className={styles.itemsTdRight}>{item.gstRate}%</td>
+                      <td className={styles.itemsTdTotal}>₹{fmt(item.total)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -226,8 +227,8 @@ export default function EditPurchaseBillPage() {
         {/* Discount & revised total */}
         <div className="form-card">
           <h2 className="form-section-title">Discount Adjustment</h2>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: "2rem", flexWrap: "wrap" }}>
-            <div style={{ flex: "0 0 200px" }}>
+          <div className={styles.discountRow}>
+            <div className={styles.discountField}>
               <FormField label="Discount (₹)">
                 <Input
                   type="number" min="0" step="0.01"
@@ -237,11 +238,11 @@ export default function EditPurchaseBillPage() {
                 />
               </FormField>
             </div>
-            <div style={{ paddingBottom: "0.75rem", borderLeft: "2px solid var(--c-border)", paddingLeft: "2rem" }}>
-              <div style={{ fontSize: "0.72rem", color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.25rem" }}>Revised Total</div>
-              <div style={{ fontSize: "1.75rem", fontWeight: 700, color: "var(--c-text)", letterSpacing: "-0.02em" }}>₹{fmt(computedTotal)}</div>
+            <div className={styles.totalBlock}>
+              <div className={styles.totalLabel}>Revised Total</div>
+              <div className={styles.totalValue}>₹{fmt(computedTotal)}</div>
               {bill && toNum(discount) > 0 && (
-                <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)", marginTop: "0.25rem" }}>
+                <div className={styles.totalSub}>
                   ₹{fmt(bill.subtotal + bill.taxAmount)} − ₹{fmt(toNum(discount))} discount
                 </div>
               )}

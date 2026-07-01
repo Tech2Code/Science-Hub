@@ -9,6 +9,7 @@ import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/component
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
+import styles from "./productsList.module.css";
 
 type StockFilter = "all" | "low" | "out";
 
@@ -123,38 +124,35 @@ export default function ProductsPage() {
       <Breadcrumb items={[{ label: "Products" }]} />
 
       <div className="card">
-        <div className="card-toolbar" style={{ flexWrap: "wrap", rowGap: "0.625rem" }}>
+        <div className={`card-toolbar ${styles.toolbar}`}>
           <input
             type="search"
             placeholder="Search by name, SKU, brand, or category…"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
-            className="search-input"
-            style={{ flex: "1 1 200px", minWidth: 0 }}
+            className={`search-input ${styles.searchInput}`}
           />
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+          <div className={styles.filterRow}>
             {/* Stock filter tabs */}
             <div className="filter-tabs">
               {([
                 { key: "all", label: "All", count: products.length },
-                { key: "low", label: "Low Stock", count: lowStockCount, color: "var(--c-amber)" },
-                { key: "out", label: "Out of Stock", count: outOfStockCount, color: "var(--c-red)" },
-              ] as { key: StockFilter; label: string; count: number; color?: string }[]).map(tab => (
+                { key: "low", label: "Low Stock", count: lowStockCount, colorCls: styles.filterCountAmber },
+                { key: "out", label: "Out of Stock", count: outOfStockCount, colorCls: styles.filterCountRed },
+              ] as { key: StockFilter; label: string; count: number; colorCls?: string }[]).map(tab => (
                 <button
                   key={tab.key}
-                  className={["filter-tab", stockFilter === tab.key ? "filter-tab-active" : ""].join(" ")}
+                  className={["filter-tab", styles.filterTabInner, stockFilter === tab.key ? "filter-tab-active" : ""].join(" ")}
                   onClick={() => handleStockFilter(tab.key)}
-                  style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}
                 >
                   {tab.label}
                   {tab.count > 0 && (
-                    <span style={{
-                      fontSize: "0.7rem", fontWeight: 700, lineHeight: 1,
-                      padding: "0.1rem 0.375rem", borderRadius: "9999px",
-                      background: stockFilter === tab.key && tab.color ? `${tab.color}22` : "var(--c-border)",
-                      color: stockFilter === tab.key && tab.color ? tab.color : "var(--c-text-4)",
-                      transition: "all 0.15s",
-                    }}>
+                    <span
+                      className={[
+                        styles.filterCount,
+                        stockFilter === tab.key && tab.colorCls ? `${styles.filterCountActive} ${tab.colorCls}` : "",
+                      ].join(" ")}
+                    >
                       {tab.count}
                     </span>
                   )}
@@ -177,7 +175,7 @@ export default function ProductsPage() {
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={COLUMNS.length} style={{ textAlign: "center", padding: "3rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
                   {stockFilter === "out" ? "No out-of-stock products." : stockFilter === "low" ? "No low-stock products." : search ? "No products match your search." : "No products yet. Add one to get started."}
                 </td></tr>
               ) : visible.map((p) => {
@@ -185,41 +183,30 @@ export default function ProductsPage() {
                 return (
                   <tr key={p.id}>
                     <Cell col={COLUMNS[0]}>
-                      <div style={{ fontWeight: 500, color: "var(--c-text)" }}>{p.name}</div>
-                      {p.sku && <div style={{ fontSize: "0.75rem", color: "var(--c-text-4)", fontFamily: "var(--font-mono)" }}>{p.sku}</div>}
+                      <div className={styles.nameCell}>{p.name}</div>
+                      {p.sku && <div className={styles.skuCell}>{p.sku}</div>}
                     </Cell>
-                    <Cell col={COLUMNS[1]} style={{ color: "var(--c-text-3)" }}>{p.brand?.name ?? "—"}</Cell>
-                    <Cell col={COLUMNS[2]} style={{ color: "var(--c-text-3)" }}>{p.category?.name ?? "—"}</Cell>
-                    <Cell col={COLUMNS[3]} style={{ color: "var(--c-text-3)" }}>{p.unit}</Cell>
-                    <Cell col={COLUMNS[4]} style={{ fontWeight: 500, color: "var(--c-text)" }}>₹{p.price.toLocaleString("en-IN")}</Cell>
-                    <Cell col={COLUMNS[5]} style={{ color: "var(--c-text-3)" }}>{p.gstRate}%</Cell>
+                    <Cell col={COLUMNS[1]} className={styles.mutedCell}>{p.brand?.name ?? "—"}</Cell>
+                    <Cell col={COLUMNS[2]} className={styles.mutedCell}>{p.category?.name ?? "—"}</Cell>
+                    <Cell col={COLUMNS[3]} className={styles.mutedCell}>{p.unit}</Cell>
+                    <Cell col={COLUMNS[4]} className={styles.priceCell}>₹{p.price.toLocaleString("en-IN")}</Cell>
+                    <Cell col={COLUMNS[5]} className={styles.mutedCell}>{p.gstRate}%</Cell>
                     <Cell col={COLUMNS[6]}>
-                      <span style={{
-                        display: "inline-block", padding: "0.125rem 0.5rem", borderRadius: "9999px",
-                        fontSize: "0.75rem", fontWeight: 500, whiteSpace: "nowrap",
-                        background: isLow ? "var(--c-red-bg)" : "var(--c-green-bg)",
-                        color: isLow ? "var(--c-red-text)" : "var(--c-green-text)",
-                        border: `1px solid ${isLow ? "var(--c-red-border)" : "var(--c-green-border)"}`,
-                      }}>
+                      <span className={[styles.stockBadge, isLow ? styles.stockLow : styles.stockOk].join(" ")}>
                         {p.stock} {p.unit}{isLow && " ⚠"}
                       </span>
                     </Cell>
-                    <Cell col={COLUMNS[7]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>{p.createdBy ?? "—"}</Cell>
-                    <Cell col={COLUMNS[8]} style={{ color: "var(--c-text-3)", fontSize: "0.8125rem" }}>
+                    <Cell col={COLUMNS[7]} className={styles.metaCell}>{p.createdBy ?? "—"}</Cell>
+                    <Cell col={COLUMNS[8]} className={styles.metaCell}>
                       {p.createdAt ? new Date(p.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—"}
                     </Cell>
                     <Cell col={COLUMNS[9]}>
                       {(() => {
                         const count = p._count?.invoiceItems ?? 0;
                         return count > 0 ? (
-                          <span style={{
-                            display: "inline-block", padding: "0.125rem 0.5rem", borderRadius: "9999px",
-                            fontSize: "0.75rem", fontWeight: 500,
-                            background: "var(--c-blue-bg)", color: "var(--c-blue)",
-                            border: "1px solid var(--c-blue-border)",
-                          }}>{count}</span>
+                          <span className={styles.invoiceCountBadge}>{count}</span>
                         ) : (
-                          <span style={{ color: "var(--c-text-4)", fontSize: "0.8rem" }}>—</span>
+                          <span className={styles.invoiceCountEmpty}>—</span>
                         );
                       })()}
                     </Cell>

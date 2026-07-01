@@ -9,6 +9,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+import styles from "./vendorEdit.module.css";
 
 type StrForm = { name: string; company: string; gstin: string; phone: string; email: string; };
 
@@ -81,7 +82,7 @@ export default function EditVendorPage() {
   return (
     <>
     {saving && <OverlayLoader text="Saving…" />}
-    <div className="page-stack" style={{ maxWidth: "42rem" }}>
+    <div className={`page-stack ${styles.pageStack}`}>
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "Edit Vendor" }]} />
       <h1 className="page-title">Edit Vendor</h1>
 
@@ -116,8 +117,8 @@ export default function EditVendorPage() {
           <Textarea name="notes" rows={2} value={form.notes} onChange={handleChange} placeholder="Any additional notes…" />
         </FormField>
 
-        <label style={{ display: "flex", alignItems: "center", gap: "0.625rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--c-text-2)", fontWeight: 500 }}>
-          <input type="checkbox" name="isActive" checked={form.isActive} onChange={handleChange} style={{ width: "1rem", height: "1rem", accentColor: "var(--c-blue)", cursor: "pointer" }} />
+        <label className={styles.checkboxLabel}>
+          <input type="checkbox" name="isActive" checked={form.isActive} onChange={handleChange} className={styles.checkboxInput} />
           Active vendor
         </label>
 
@@ -127,7 +128,7 @@ export default function EditVendorPage() {
             Update Vendor
           </Button>
           {!hasChanges && !saving && (
-            <span style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", alignSelf: "center" }}>No changes detected.</span>
+            <span className={styles.noChanges}>No changes detected.</span>
           )}
           <Button variant="secondary" href="/purchases/vendors">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>

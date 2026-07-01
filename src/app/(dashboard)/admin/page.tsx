@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
+import styles from "./admin.module.css";
 
 interface User {
   id: string;
@@ -65,24 +66,14 @@ const ACTION_META: Record<string, { label: string; color: string; bg: string; bo
 function ActionBadge({ action }: { action: string }) {
   const m = ACTION_META[action] ?? { label: action, color: "var(--c-text-3)", bg: "var(--c-bg-sub)", border: "var(--c-border)" };
   return (
-    <span style={{
-      display: "inline-block", padding: "0.15rem 0.5rem", borderRadius: "9999px",
-      fontSize: "0.7rem", fontWeight: 600, whiteSpace: "nowrap",
-      color: m.color, background: m.bg, border: `1px solid ${m.border}`,
-    }}>{m.label}</span>
+    <span className={styles.actionBadge} style={{ color: m.color, background: m.bg, borderColor: m.border }}>{m.label}</span>
   );
 }
 
 function RoleBadge({ role }: { role: string }) {
   const isAdmin = role === "admin";
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", padding: "0.2rem 0.6rem",
-      borderRadius: "9999px", fontSize: "0.75rem", fontWeight: 600,
-      background: isAdmin ? "var(--c-blue-bg)" : "var(--c-bg-sub)",
-      color: isAdmin ? "var(--c-blue)" : "var(--c-text-3)",
-      border: `1px solid ${isAdmin ? "var(--c-blue-border)" : "var(--c-border)"}`,
-    }}>
+    <span className={`${styles.roleBadge} ${isAdmin ? styles.roleBadgeAdmin : styles.roleBadgeStaff}`}>
       {isAdmin ? "⬡ Admin" : "◌ Staff"}
     </span>
   );
@@ -96,25 +87,20 @@ const AVATAR_COLORS = {
 function UserAvatar({ name, role, isSelf, size = 30 }: { name: string; role: string; isSelf?: boolean; size?: number }) {
   const c = AVATAR_COLORS[role as keyof typeof AVATAR_COLORS] ?? AVATAR_COLORS.staff;
   return (
-    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
-      <div style={{
-        width: size, height: size, borderRadius: "50%",
-        background: c.bg, color: c.text,
-        border: isSelf ? `2px solid ${c.badge}` : `1px solid ${c.bg}99`,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: size * 0.4, fontWeight: 700,
-      }}>
+    <div className={styles.avatarWrap} style={{ width: size, height: size }}>
+      <div
+        className={`${styles.avatar} ${isSelf ? styles.avatarSelf : styles.avatarPlain}`}
+        style={{
+          width: size, height: size,
+          background: c.bg, color: c.text,
+          borderColor: isSelf ? c.badge : `${c.bg}99`,
+          fontSize: size * 0.4,
+        }}
+      >
         {name?.[0]?.toUpperCase()}
       </div>
       {/* Role badge */}
-      <div style={{
-        position: "absolute", bottom: -2, right: -2,
-        width: 13, height: 13, borderRadius: "50%",
-        background: c.badge,
-        border: "1.5px solid var(--c-bg-card, #fff)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 7, color: "#fff", fontWeight: 900, lineHeight: 1,
-      }}>
+      <div className={styles.roleDot} style={{ background: c.badge }}>
         {c.badgeIcon}
       </div>
     </div>
@@ -123,28 +109,16 @@ function UserAvatar({ name, role, isSelf, size = 30 }: { name: string; role: str
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-      <label style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.07em" }}>{label}</label>
+    <div className={styles.field}>
+      <label className={styles.fieldLabel}>{label}</label>
       {children}
     </div>
   );
 }
 
-const inp: React.CSSProperties = {
-  width: "100%", padding: "0.5rem 0.75rem", borderRadius: "var(--c-radius-sm)",
-  border: "1px solid var(--c-border-md)", background: "var(--c-bg-card)",
-  color: "var(--c-text)", fontSize: "0.875rem", outline: "none",
-  fontFamily: "var(--font-sans)", boxSizing: "border-box",
-};
-
 function Msg({ m }: { m: { type: "ok" | "err"; text: string } }) {
   return (
-    <div style={{
-      padding: "0.5rem 0.75rem", borderRadius: "var(--c-radius-sm)", fontSize: "0.8125rem",
-      background: m.type === "ok" ? "var(--c-green-bg)" : "var(--c-red-bg)",
-      color: m.type === "ok" ? "var(--c-green-text)" : "var(--c-red)",
-      border: `1px solid ${m.type === "ok" ? "var(--c-green-border)" : "var(--c-red-border)"}`,
-    }}>{m.text}</div>
+    <div className={`${styles.msg} ${m.type === "ok" ? styles.msgOk : styles.msgErr}`}>{m.text}</div>
   );
 }
 
@@ -162,7 +136,7 @@ export default function AdminPage() {
   // Redirect non-admins immediately
   useEffect(() => {
     if (session && session.user.role !== "admin") {
-      router.replace("/");
+      router.replace("/dashboard");
     }
   }, [session, router]);
 
@@ -377,26 +351,7 @@ export default function AdminPage() {
     {pwSaving && <OverlayLoader text="Updating password…" />}
     {addSaving && <OverlayLoader text="Creating user…" />}
     {editSaving && <OverlayLoader text="Saving changes…" />}
-    <div>
-      <style>{`
-        @media (max-width: 900px) { .admin-two-col { flex-direction: column !important; } .admin-role-sidebar { width: 100% !important; position: static !important; flex-direction: row !important; } }
-        @media (max-width: 540px) { .admin-role-sidebar { flex-direction: column !important; } }
-        .admin-fg4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0.875rem; }
-        .admin-fg3 { display: grid; grid-template-columns: 1fr 1fr 8rem; gap: 0.875rem; }
-        .admin-fg3pw { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.875rem; }
-        .admin-fg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-        @media (max-width: 640px) {
-          .admin-fg4 { grid-template-columns: 1fr 1fr; }
-          .admin-fg3 { grid-template-columns: 1fr 1fr; }
-          .admin-fg3pw { grid-template-columns: 1fr; }
-          .admin-fg2 { grid-template-columns: 1fr; }
-        }
-        @media (max-width: 400px) {
-          .admin-fg4 { grid-template-columns: 1fr; }
-          .admin-fg3 { grid-template-columns: 1fr; }
-        }
-        .admin-inp:focus { border-color: var(--c-blue) !important; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
-      `}</style>
+    <div className="page-stack">
       <ConfirmDialog
         open={!!deleteConfirm}
         title="Delete User"
@@ -413,15 +368,15 @@ export default function AdminPage() {
       </div>
 
       {/* ── Two-column layout ───────────────────────────────────── */}
-      <div className="admin-two-col" style={{ display: "flex", gap: "1.25rem", alignItems: "flex-start" }}>
+      <div className={styles.twoCol}>
 
         {/* ── Main content ─────────────────────────────────────── */}
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+        <div className={styles.mainCol}>
 
       {/* ── My Profile ─────────────────────────────────────────── */}
       <div className="card">
-        <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--c-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <h2 style={{ fontWeight: 600, fontSize: "0.9375rem", color: "var(--c-text)" }}>My Profile</h2>
+        <div className={styles.sectionHeader}>
+          <h2 className={styles.sectionTitle}>My Profile</h2>
           {!editingProfile && !profileLoading && (
             <Button variant="secondary" size="sm" onClick={() => { setEditingProfile(true); setChangingPw(false); setProfileMsg(null); }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -429,79 +384,67 @@ export default function AdminPage() {
             </Button>
           )}
         </div>
-        <div style={{ padding: "1.25rem" }}>
+        <div className={styles.sectionBody}>
           {profileLoading ? (
-            <div style={{ display: "flex", alignItems: "flex-start", gap: "1.25rem", flexWrap: "wrap" }}>
+            <div className={styles.skRow}>
               {/* Avatar */}
-              <div style={{ width: 52, height: 52, borderRadius: "50%", background: "var(--c-border)", flexShrink: 0, animation: "skPulse 1.4s ease-in-out infinite" }} />
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "0.25rem" }}>
-                <div style={{ height: 18, width: 160, borderRadius: 5, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
-                <div style={{ height: 14, width: 210, borderRadius: 5, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
-                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
-                  <div style={{ height: 22, width: 70, borderRadius: 99, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
-                  <div style={{ height: 14, width: 120, borderRadius: 5, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite", alignSelf: "center" }} />
+              <div className={styles.skAvatar} />
+              <div className={styles.skCol}>
+                <div className={styles.skLineLg} />
+                <div className={styles.skLineMd} />
+                <div className={styles.skBadgeRow}>
+                  <div className={styles.skPill} />
+                  <div className={styles.skLineSelfCenter} />
                 </div>
               </div>
             </div>
           ) : editingProfile ? (
-            <form onSubmit={saveProfile} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div className="admin-fg2">
-                <Field label="Full Name"><input className="admin-inp" style={inp} value={profileForm.name} onChange={e => setProfileForm(p => ({ ...p, name: e.target.value }))} required /></Field>
-                <Field label="Login Email — used to sign in to this app"><input className="admin-inp" style={inp} type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} required /></Field>
+            <form onSubmit={saveProfile} className={styles.formCol}>
+              <div className={styles.fg2}>
+                <Field label="Full Name"><input className={styles.inp} value={profileForm.name} onChange={e => setProfileForm(p => ({ ...p, name: e.target.value }))} required /></Field>
+                <Field label="Login Email — used to sign in to this app"><input className={styles.inp} type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} required /></Field>
               </div>
               {profileMsg && <Msg m={profileMsg} />}
-              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+              <div className={styles.formActions}>
                 <Button type="button" variant="secondary" size="sm" onClick={() => { setEditingProfile(false); setProfileForm({ name: profile!.name, email: profile!.email }); }}>Cancel</Button>
                 <Button type="submit" variant="primary" size="sm" disabled={profileSaving}>Save Changes</Button>
               </div>
             </form>
           ) : (
-            <div style={{ display: "flex", alignItems: "flex-start", gap: "1.25rem", flexWrap: "wrap" }}>
-              <div style={{ position: "relative", flexShrink: 0 }}>
+            <div className={styles.profileRow}>
+              <div className={styles.avatarWrapRelative}>
                 {(() => { const c = AVATAR_COLORS[(profile?.role ?? "staff") as keyof typeof AVATAR_COLORS] ?? AVATAR_COLORS.staff; return (
                   <>
-                    <div style={{
-                      width: 52, height: 52, borderRadius: "50%",
-                      background: c.bg, color: c.text,
-                      border: `2px solid ${c.badge}`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: "1.25rem", fontWeight: 700,
-                    }}>
+                    <div className={`${styles.avatarCircle} ${styles.avatarCircleLg}`} style={{ background: c.bg, color: c.text, borderColor: c.badge }}>
                       {profile?.name?.[0]?.toUpperCase()}
                     </div>
-                    <div style={{
-                      position: "absolute", bottom: 0, right: 0,
-                      width: 18, height: 18, borderRadius: "50%",
-                      background: c.badge, border: "2px solid var(--c-bg-card, #fff)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 9, color: "#fff", fontWeight: 900,
-                    }}>
+                    <div className={styles.avatarBadgeLg} style={{ background: c.badge }}>
                       {c.badgeIcon}
                     </div>
                   </>
                 ); })()}
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: "1.0625rem", fontWeight: 700, color: "var(--c-text)" }}>{profile?.name}</div>
-                <div style={{ fontSize: "0.875rem", color: "var(--c-text-3)", marginTop: "0.125rem" }}>
+              <div className={styles.profileMain}>
+                <div className={styles.profileName}>{profile?.name}</div>
+                <div className={styles.profileEmail}>
                   {profile?.email}
-                  <span style={{ marginLeft: "0.5rem", fontSize: "0.7rem", color: "var(--c-text-4)", fontWeight: 500, background: "var(--c-bg-sub)", border: "1px solid var(--c-border)", borderRadius: 4, padding: "0.1rem 0.4rem" }}>login email</span>
+                  <span className={styles.loginEmailTag}>login email</span>
                 </div>
-                <div style={{ display: "flex", gap: "0.625rem", marginTop: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                <div className={styles.profileMetaRow}>
                   <RoleBadge role={profile?.role ?? ""} />
-                  <span style={{ fontSize: "0.75rem", color: "var(--c-text-4)" }}>Joined {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</span>
-                  <span style={{ fontSize: "0.75rem", color: "var(--c-text-4)" }}>· {profile?._count.invoices ?? 0} invoices created</span>
+                  <span className={styles.metaText}>Joined {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</span>
+                  <span className={styles.metaText}>· {profile?._count.invoices ?? 0} invoices created</span>
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        <div style={{ borderTop: "1px solid var(--c-border)", padding: "1rem 1.25rem" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div className={styles.sectionFooter}>
+          <div className={styles.footerRow}>
             <div>
-              <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "var(--c-text)" }}>Password</div>
-              <div style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", marginTop: "0.125rem" }}>Change your login password</div>
+              <div className={styles.footerTitle}>Password</div>
+              <div className={styles.footerSub}>Change your login password</div>
             </div>
             {!changingPw && (
               <Button variant="secondary" size="sm" onClick={() => { setChangingPw(true); setEditingProfile(false); setPwMsg(null); }}>
@@ -511,14 +454,14 @@ export default function AdminPage() {
             )}
           </div>
           {changingPw && (
-            <form onSubmit={savePassword} style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.875rem" }}>
-              <div className="admin-fg3pw">
-                <Field label="Current Password"><input className="admin-inp" style={inp} type="password" value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))} required placeholder="••••••••" /></Field>
-                <Field label="New Password"><input className="admin-inp" style={inp} type="password" value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))} required placeholder="min. 6 characters" /></Field>
-                <Field label="Confirm Password"><input className="admin-inp" style={inp} type="password" value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} required placeholder="repeat new password" /></Field>
+            <form onSubmit={savePassword} className={styles.pwFormSpacing}>
+              <div className={styles.fg3pw}>
+                <Field label="Current Password"><input className={styles.inp} type="password" value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))} required placeholder="••••••••" /></Field>
+                <Field label="New Password"><input className={styles.inp} type="password" value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))} required placeholder="min. 6 characters" /></Field>
+                <Field label="Confirm Password"><input className={styles.inp} type="password" value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} required placeholder="repeat new password" /></Field>
               </div>
               {pwMsg && <Msg m={pwMsg} />}
-              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+              <div className={styles.formActions}>
                 <Button type="button" variant="secondary" size="sm" onClick={() => { setChangingPw(false); setPwForm({ current: "", next: "", confirm: "" }); setPwMsg(null); }}>Cancel</Button>
                 <Button type="submit" variant="primary" size="sm" disabled={pwSaving}>Update Password</Button>
               </div>
@@ -529,10 +472,10 @@ export default function AdminPage() {
 
       {/* ── User Management ────────────────────────────────────── */}
       <div className="card">
-        <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--c-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div className={styles.sectionHeader}>
           <div>
-            <h2 style={{ fontWeight: 600, fontSize: "0.9375rem", color: "var(--c-text)" }}>User Management</h2>
-            <p style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", marginTop: "0.125rem" }}>{users.length} user{users.length !== 1 ? "s" : ""} in the system</p>
+            <h2 className={styles.sectionTitle}>User Management</h2>
+            <p className={styles.sectionSub}>{users.length} user{users.length !== 1 ? "s" : ""} in the system</p>
           </div>
           {!addOpen && (
             <Button variant="primary" size="sm" onClick={() => { setAddOpen(true); setEditUser(null); setAddMsg(null); }}>
@@ -543,43 +486,43 @@ export default function AdminPage() {
         </div>
 
         {addOpen && (
-          <div style={{ padding: "1.25rem", borderBottom: "1px solid var(--c-border)", background: "var(--c-bg-sub)" }}>
-            <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "var(--c-text)", marginBottom: "0.875rem" }}>New User</div>
-            <form onSubmit={addUser} style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
-              <div className="admin-fg4">
+          <div className={styles.inlineForm}>
+            <div className={styles.inlineFormTitle}>New User</div>
+            <form onSubmit={addUser} className={styles.formColTight}>
+              <div className={styles.fg4}>
                 <Field label="Full Name">
-                  <input className="admin-inp" style={{ ...inp, borderColor: addFieldErrors.name ? "var(--c-red)" : undefined }} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} required placeholder="Jane Smith" />
-                  {addFieldErrors.name && <span style={{ fontSize: "0.75rem", color: "var(--c-red)", marginTop: "0.125rem", display: "block" }}>{addFieldErrors.name}</span>}
+                  <input className={`${styles.inp} ${addFieldErrors.name ? styles.inpError : ""}`} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} required placeholder="Jane Smith" />
+                  {addFieldErrors.name && <span className={styles.fieldErr}>{addFieldErrors.name}</span>}
                 </Field>
                 <Field label="Email">
-                  <div style={{ position: "relative" }}>
-                    <input className="admin-inp" style={{ ...inp, borderColor: addFieldErrors.email ? "var(--c-red)" : undefined }} type="email" value={addForm.email} onChange={e => handleAddFormChange("email", e.target.value)} required placeholder="jane@example.com" />
-                    {emailCheckLoading && <span style={{ position: "absolute", right: "0.625rem", top: "50%", transform: "translateY(-50%)", fontSize: "0.7rem", color: "var(--c-text-4)" }}>checking…</span>}
+                  <div className={styles.emailWrap}>
+                    <input className={`${styles.inp} ${addFieldErrors.email ? styles.inpError : ""}`} type="email" value={addForm.email} onChange={e => handleAddFormChange("email", e.target.value)} required placeholder="jane@example.com" />
+                    {emailCheckLoading && <span className={styles.emailChecking}>checking…</span>}
                   </div>
-                  {addFieldErrors.email && <span style={{ fontSize: "0.75rem", color: "var(--c-red)", marginTop: "0.125rem", display: "block" }}>{addFieldErrors.email}</span>}
+                  {addFieldErrors.email && <span className={styles.fieldErr}>{addFieldErrors.email}</span>}
                 </Field>
                 <Field label="Password">
-                  <PasswordInput style={inp as React.CSSProperties} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} required placeholder="min. 6 characters" />
-                  {addFieldErrors.password && <span style={{ fontSize: "0.75rem", color: "var(--c-red)", marginTop: "0.125rem", display: "block" }}>{addFieldErrors.password}</span>}
+                  <PasswordInput className={styles.inp} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} required placeholder="min. 6 characters" />
+                  {addFieldErrors.password && <span className={styles.fieldErr}>{addFieldErrors.password}</span>}
                 </Field>
                 <Field label="Re-enter Password">
-                  <PasswordInput style={inp as React.CSSProperties} value={addForm.confirmPassword} onChange={e => handleAddFormChange("confirmPassword", e.target.value)} required placeholder="repeat password" />
+                  <PasswordInput className={styles.inp} value={addForm.confirmPassword} onChange={e => handleAddFormChange("confirmPassword", e.target.value)} required placeholder="repeat password" />
                   {addFieldErrors.confirmPassword && (
-                    <span style={{ fontSize: "0.75rem", color: "var(--c-red)", marginTop: "0.125rem", display: "block" }}>{addFieldErrors.confirmPassword}</span>
+                    <span className={styles.fieldErr}>{addFieldErrors.confirmPassword}</span>
                   )}
                   {!addFieldErrors.confirmPassword && addForm.confirmPassword && addForm.password === addForm.confirmPassword && (
-                    <span style={{ fontSize: "0.75rem", color: "var(--c-green-text)", marginTop: "0.125rem", display: "block" }}>✓ Passwords match</span>
+                    <span className={styles.fieldOk}>✓ Passwords match</span>
                   )}
                 </Field>
                 <Field label="Role">
-                  <select className="admin-inp" style={{ ...inp, cursor: "pointer" }} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>
+                  <select className={`${styles.inp} ${styles.inpCursor}`} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>
                     <option value="staff">Staff</option>
                     <option value="admin">Admin</option>
                   </select>
                 </Field>
               </div>
               {addMsg && <Msg m={addMsg} />}
-              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+              <div className={styles.formActions}>
                 <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}>Cancel</Button>
                 <Button type="submit" variant="primary" size="sm" disabled={addSaving || !!addFieldErrors.name || !!addFieldErrors.email || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
               </div>
@@ -589,27 +532,27 @@ export default function AdminPage() {
 
 
         {editUser && (
-          <div style={{ padding: "1.25rem", borderBottom: "1px solid var(--c-border)", background: "var(--c-bg-sub)" }}>
-            <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "var(--c-text)", marginBottom: "0.875rem" }}>Edit: {editUser.name}</div>
-            <form onSubmit={saveEdit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div className="admin-fg3">
-                <Field label="Full Name"><input className="admin-inp" style={inp} value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} required /></Field>
-                <Field label="Email"><input className="admin-inp" style={inp} type="email" value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} required /></Field>
+          <div className={styles.inlineForm}>
+            <div className={styles.inlineFormTitle}>Edit: {editUser.name}</div>
+            <form onSubmit={saveEdit} className={styles.formCol}>
+              <div className={styles.fg3}>
+                <Field label="Full Name"><input className={styles.inp} value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} required /></Field>
+                <Field label="Email"><input className={styles.inp} type="email" value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} required /></Field>
                 <Field label="Role">
-                  <select className="admin-inp" style={{ ...inp, cursor: "pointer" }} value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value as Role }))}>
+                  <select className={`${styles.inp} ${styles.inpCursor}`} value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value as Role }))}>
                     <option value="staff">Staff</option>
                     <option value="admin">Admin</option>
                   </select>
                 </Field>
               </div>
-              <div style={{ paddingTop: "0.75rem", borderTop: "1px solid var(--c-border)" }}>
-                <div style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", marginBottom: "0.5rem" }}>New password — leave blank to keep current</div>
-                <div style={{ maxWidth: "20rem" }}>
-                  <Field label="New Password"><input className="admin-inp" style={inp} type="password" value={editForm.newPassword} onChange={e => setEditForm(p => ({ ...p, newPassword: e.target.value }))} placeholder="min. 6 characters" /></Field>
+              <div className={styles.pwSection}>
+                <div className={styles.pwSectionHint}>New password — leave blank to keep current</div>
+                <div className={styles.maxW20}>
+                  <Field label="New Password"><input className={styles.inp} type="password" value={editForm.newPassword} onChange={e => setEditForm(p => ({ ...p, newPassword: e.target.value }))} placeholder="min. 6 characters" /></Field>
                 </div>
               </div>
               {editMsg && <Msg m={editMsg} />}
-              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+              <div className={styles.formActions}>
                 <Button type="button" variant="secondary" size="sm" onClick={() => { setEditUser(null); setEditMsg(null); }}>Cancel</Button>
                 <Button type="submit" variant="primary" size="sm" disabled={editSaving}>Save Changes</Button>
               </div>
@@ -634,43 +577,43 @@ export default function AdminPage() {
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}>
                     <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--c-border)", flexShrink: 0, animation: "skPulse 1.4s ease-in-out infinite" }} />
-                        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                          <div style={{ height: 13, width: 110, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
-                          <div style={{ height: 11, width: 150, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
+                      <div className={styles.skUserCell}>
+                        <div className={styles.skAvatarSm} />
+                        <div className={styles.skCellCol}>
+                          <div className={styles.skLineName} />
+                          <div className={styles.skLineEmail} />
                         </div>
                       </div>
                     </td>
-                    <td><div style={{ height: 22, width: 60, borderRadius: 99, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} /></td>
-                    <td className="table-td-right"><div style={{ height: 13, width: 24, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite", marginLeft: "auto" }} /></td>
-                    <td><div style={{ height: 13, width: 90, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} /></td>
-                    <td><div style={{ height: 28, width: 80, borderRadius: 6, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} /></td>
+                    <td><div className={styles.skRolePill} /></td>
+                    <td className="table-td-right"><div className={styles.skNumCell} /></td>
+                    <td><div className={styles.skJoinedCell} /></td>
+                    <td><div className={styles.skActionsCell} /></td>
                   </tr>
                 ))
               ) : users.map((u) => {
                 const isSelf = u.id === selfId;
                 return (
-                  <tr key={u.id} style={editUser?.id === u.id ? { background: "var(--c-blue-bg)" } : {}}>
+                  <tr key={u.id} className={editUser?.id === u.id ? styles.rowHighlight : ""}>
                     <td data-mobile-full data-label="User">
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                      <div className={styles.userCell}>
                         <UserAvatar name={u.name} role={u.role} isSelf={isSelf} size={32} />
                         <div>
-                          <div style={{ fontWeight: 600, color: "var(--c-text)", fontSize: "0.875rem" }}>
-                            {u.name}{isSelf && <span style={{ marginLeft: "0.375rem", fontSize: "0.7rem", color: "var(--c-text-4)", fontWeight: 400 }}>(you)</span>}
+                          <div className={styles.userName}>
+                            {u.name}{isSelf && <span className={styles.youTag}>(you)</span>}
                           </div>
-                          <div style={{ fontSize: "0.78rem", color: "var(--c-text-4)" }}>{u.email}</div>
+                          <div className={styles.userEmail}>{u.email}</div>
                         </div>
                       </div>
                     </td>
                     <td data-label="Role"><RoleBadge role={u.role} /></td>
-                    <td data-label="Invoices" className="table-td-right" style={{ color: "var(--c-text-3)" }}>{u._count.invoices}</td>
-                    <td data-label="Joined" style={{ color: "var(--c-text-4)", fontSize: "0.8rem" }}>
+                    <td data-label="Invoices" className={`table-td-right ${styles.invoicesCell}`}>{u._count.invoices}</td>
+                    <td data-label="Joined" className={styles.joinedCell}>
                       {new Date(u.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                     </td>
                     <td data-mobile-full data-label="Actions">
                       {isSelf ? (
-                        <span style={{ fontSize: "0.78rem", color: "var(--c-text-4)", fontStyle: "italic" }}>Use My Profile above</span>
+                        <span className={styles.selfNote}>Use My Profile above</span>
                       ) : (
                         <div className="table-actions">
                           <Button variant="editOutline" size="sm" onClick={() => { setEditUser(u); setEditForm({ name: u.name, email: u.email, role: u.role as Role, newPassword: "" }); setEditMsg(null); setAddOpen(false); }}>
@@ -694,10 +637,10 @@ export default function AdminPage() {
 
       {/* ── Activity Log ───────────────────────────────────────── */}
       <div className="card">
-        <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--c-border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+        <div className={styles.sectionHeaderWrap}>
           <div>
-            <h2 style={{ fontWeight: 600, fontSize: "0.9375rem", color: "var(--c-text)" }}>Activity Log</h2>
-            <p style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", marginTop: "0.125rem" }}>{logsTotal} total actions recorded</p>
+            <h2 className={styles.sectionTitle}>Activity Log</h2>
+            <p className={styles.sectionSub}>{logsTotal} total actions recorded</p>
           </div>
           <Button variant="secondary" size="sm" onClick={() => loadLogs(logsPage, logsFilter)}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
@@ -706,14 +649,13 @@ export default function AdminPage() {
         </div>
 
         {/* Filters */}
-        <div style={{ padding: "0.75rem 1.25rem", borderBottom: "1px solid var(--c-border)", display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+        <div className={styles.filterBar}>
           <input
-            className="admin-inp" type="search" placeholder="Search actions or details…" value={logsSearch}
+            className={`${styles.inp} ${styles.inpCompact}`} type="search" placeholder="Search actions or details…" value={logsSearch}
             onChange={e => setLogsSearch(e.target.value)}
-            style={{ ...inp, maxWidth: "18rem", padding: "0.375rem 0.75rem" }}
           />
           <select
-            className="admin-inp" style={{ ...inp, width: "auto", padding: "0.375rem 0.75rem", cursor: "pointer" }}
+            className={`${styles.inp} ${styles.inpAuto} ${styles.inpCursor} ${styles.inpCompact}`}
             value={logsFilter}
             onChange={e => { setLogsFilter(e.target.value); setLogsPage(1); }}
           >
@@ -721,7 +663,7 @@ export default function AdminPage() {
             {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
           {(logsSearch || logsFilter) && (
-            <button onClick={() => { setLogsSearch(""); setLogsFilter(""); setLogsPage(1); }} style={{ fontSize: "0.8125rem", color: "var(--c-text-4)", background: "none", border: "none", cursor: "pointer", padding: "0.375rem 0" }}>
+            <button className={styles.clearFiltersBtn} onClick={() => { setLogsSearch(""); setLogsFilter(""); setLogsPage(1); }}>
               Clear filters
             </button>
           )}
@@ -730,10 +672,10 @@ export default function AdminPage() {
         <div className="table-wrap">
           <table className="table-base">
             <colgroup>
-              <col style={{ width: "200px" }} />
-              <col style={{ width: "160px" }} />
+              <col className={styles.colUser} />
+              <col className={styles.colAction} />
               <col />
-              <col style={{ width: "160px" }} />
+              <col className={styles.colTime} />
             </colgroup>
             <thead>
               <tr>
@@ -748,34 +690,34 @@ export default function AdminPage() {
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i}>
                     <td>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                        <div style={{ height: 13, width: [90, 110, 80, 100, 95, 105, 88, 115][i % 8], borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
-                        <div style={{ height: 20, width: 52, borderRadius: 99, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} />
+                      <div className={styles.skLogUserCol}>
+                        <div className={styles.skLogLine} style={{ width: [90, 110, 80, 100, 95, 105, 88, 115][i % 8] }} />
+                        <div className={styles.skLogPill} />
                       </div>
                     </td>
-                    <td><div style={{ height: 22, width: [100, 120, 95, 130, 108, 118, 100, 125][i % 8], borderRadius: 99, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} /></td>
-                    <td><div style={{ height: 13, width: "80%", borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} /></td>
-                    <td><div style={{ height: 13, width: 110, borderRadius: 4, background: "var(--c-border)", animation: "skPulse 1.4s ease-in-out infinite" }} /></td>
+                    <td><div className={styles.skLogActionPill} style={{ width: [100, 120, 95, 130, 108, 118, 100, 125][i % 8] }} /></td>
+                    <td><div className={styles.skLogDetails} /></td>
+                    <td><div className={styles.skLogTime} /></td>
                   </tr>
                 ))
               ) : visibleLogs.length === 0 ? (
-                <tr><td colSpan={4} style={{ textAlign: "center", padding: "2.5rem", color: "var(--c-text-4)" }}>
+                <tr><td colSpan={4} className="table-empty-cell">
                   {logsSearch || logsFilter ? "No matching activity found." : "No activity recorded yet. Actions will appear here as staff use the app."}
                 </td></tr>
               ) : visibleLogs.map(log => (
                 <tr key={log.id}>
                   <td data-label="User">
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <div className={styles.logUserCell}>
                       <UserAvatar name={log.user.name} role={log.user.role} size={30} />
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: "0.8125rem", color: "var(--c-text)", lineHeight: 1.3 }}>{log.user.name}</div>
+                        <div className={styles.logUserName}>{log.user.name}</div>
                         <RoleBadge role={log.user.role} />
                       </div>
                     </div>
                   </td>
                   <td data-label="Action"><ActionBadge action={log.action} /></td>
-                  <td data-mobile-full data-label="Details" style={{ color: "var(--c-text-2)", fontSize: "0.8125rem" }}>{log.details}</td>
-                  <td data-label="Time" style={{ color: "var(--c-text-4)", fontSize: "0.78rem", whiteSpace: "nowrap" }}>{fmtTime(log.createdAt)}</td>
+                  <td data-mobile-full data-label="Details" className={styles.logDetails}>{log.details}</td>
+                  <td data-label="Time" className={styles.logTime}>{fmtTime(log.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -784,15 +726,11 @@ export default function AdminPage() {
 
         {/* Pagination */}
         {logsTotal > LOGS_LIMIT && (
-          <div style={{
-            padding: "0.75rem 1.25rem",
-            borderTop: "1px solid var(--c-border)",
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap",
-          }}>
-            <span style={{ fontSize: "0.8125rem", color: "var(--c-text-4)" }}>
+          <div className={styles.pagination}>
+            <span className={styles.paginationInfo}>
               {logsTotal} total · page {logsPage} of {logsTotalPages}
             </span>
-            <div style={{ display: "flex", gap: "0.5rem" }}>
+            <div className={styles.paginationBtns}>
               <Button
                 variant="secondary" size="sm"
                 disabled={logsLoading || logsPage <= 1}
@@ -815,39 +753,26 @@ export default function AdminPage() {
       </div>
 
       </div>{/* end main content column */}
-      <style>{`@keyframes skPulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
 
         {/* ── Right sidebar — Role Reference ───────────────────── */}
-        <div className="admin-role-sidebar" style={{ width: "220px", flexShrink: 0, position: "sticky", top: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          <div style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--c-text-4)", textTransform: "uppercase", letterSpacing: "0.08em", paddingLeft: "0.25rem" }}>
+        <div className={styles.roleSidebar}>
+          <div className={styles.roleSidebarLabel}>
             Role Permissions
           </div>
           {ROLE_INFO.map(r => (
-            <div key={r.role} className="card" style={{ padding: "0.875rem 1rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.625rem" }}>
+            <div key={r.role} className={`card ${styles.roleCard}`}>
+              <div className={styles.roleCardHead}>
                 {(() => { const c = AVATAR_COLORS[r.role as keyof typeof AVATAR_COLORS]; return (
-                  <div style={{
-                    width: 28, height: 28, borderRadius: "50%",
-                    background: c.bg, color: c.text,
-                    border: `1px solid ${c.bg}99`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "0.625rem", fontWeight: 900, position: "relative",
-                  }}>
+                  <div className={styles.roleAvatar} style={{ background: c.bg, color: c.text, borderColor: `${c.bg}99` }}>
                     {r.role === "admin" ? "A" : "S"}
-                    <span style={{
-                      position: "absolute", bottom: -2, right: -2,
-                      width: 10, height: 10, borderRadius: "50%",
-                      background: c.badge, border: "1.5px solid var(--c-bg-card, #fff)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 6, color: "#fff", fontWeight: 900,
-                    }}>{c.badgeIcon}</span>
+                    <span className={styles.roleAvatarBadge} style={{ background: c.badge }}>{c.badgeIcon}</span>
                   </div>
                 ); })()}
-                <span style={{ fontWeight: 700, fontSize: "0.875rem", color: r.color, textTransform: "capitalize" }}>{r.role}</span>
+                <span className={styles.roleName} style={{ color: r.color }}>{r.role}</span>
               </div>
-              <ul style={{ margin: 0, padding: "0 0 0 0.875rem", display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+              <ul className={styles.roleList}>
                 {r.perms.map(p => (
-                  <li key={p} style={{ fontSize: "0.775rem", color: "var(--c-text-3)", lineHeight: 1.45 }}>{p}</li>
+                  <li key={p} className={styles.roleListItem}>{p}</li>
                 ))}
               </ul>
             </div>
