@@ -126,7 +126,7 @@ export async function PUT(
 
       // Deduct stock for new items — update() returns the row directly so we
       // don't need a second round-trip per item to check for negative stock.
-      const updatedProducts = await Promise.all(invoiceItems.map((item) =>
+      const updatedProducts = await Promise.all(invoiceItems.map((item: { productId: string; quantity: number }) =>
         tx.product.update({
           where: { id: item.productId },
           data: { stock: { decrement: item.quantity } },
