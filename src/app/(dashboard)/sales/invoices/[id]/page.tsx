@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 import styles from "./invoiceDetail.module.css";
 
@@ -188,6 +189,9 @@ export default function InvoiceDetailPage() {
   const [showReturnInPdf, setShowReturnInPdf] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [pdfCopyDialogOpen, setPdfCopyDialogOpen] = useState(false);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
+  const [pdfPrinting, setPdfPrinting] = useState(false);
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
   const [showReturnForm, setShowReturnForm] = useState(false);
   const [returnItems, setReturnItems] = useState<ReturnFormItem[]>([]);
@@ -239,21 +243,6 @@ export default function InvoiceDetailPage() {
     const prev = document.title;
     document.title = invoice.invoiceNumber;
     return () => { document.title = prev; };
-  }, [invoice]);
-
-  // Auto-trigger print/save-as-PDF when ?print=1 is in the URL
-  useEffect(() => {
-    if (!invoice) return;
-    const shouldPrint = new URLSearchParams(window.location.search).get("print") === "1";
-    if (shouldPrint) {
-      const timer = setTimeout(() => {
-        const prev = document.title;
-        document.title = invoice.invoiceNumber;
-        window.print();
-        setTimeout(() => { document.title = prev; }, 1000);
-      }, 400);
-      return () => clearTimeout(timer);
-    }
   }, [invoice]);
 
   async function handleAddPayment(e: React.FormEvent) {
@@ -345,20 +334,29 @@ export default function InvoiceDetailPage() {
     setAddingReturn(false);
   }
 
-  async function generatePdfBlob(): Promise<Blob | null> {
+  async function generatePdfBlob(copyLabels?: string[]): Promise<Blob | null> {
     const el = document.getElementById("invoice-print-area");
     if (!el) return null;
-    return generateInvoicePdfBlob(el);
+    return generateInvoicePdfBlob(el, copyLabels ? { copyLabels } : undefined);
   }
 
-  async function handleDownload() {
+  function handleDownloadClick() {
     if (!invoice) return;
-    setShareLoadingText("Preparing PDF…");
-    setShareLoading(true);
+    setPdfCopyDialogOpen(true);
+  }
+
+  async function handleDownloadConfirm(copyLabels: string[]) {
+    if (!invoice) return;
+    setPdfDownloading(true);
+    // Force a real paint before the CPU-heavy html2canvas work blocks the main
+    // thread — `document.fonts.ready` alone often resolves as a microtask
+    // without yielding a frame, so the loading spinner never gets drawn.
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     await document.fonts.ready;
-    const blob = await generatePdfBlob();
-    setShareLoading(false);
+    const blob = await generatePdfBlob(copyLabels);
+    setPdfDownloading(false);
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
+    setPdfCopyDialogOpen(false);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `${invoice.invoiceNumber}.pdf`;
@@ -366,16 +364,39 @@ export default function InvoiceDetailPage() {
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
 
-  function handlePrint() {
+  async function handlePrint() {
     if (!invoice) return;
-    const prev = document.title;
-    document.title = invoice.invoiceNumber;
-    const onAfterPrint = () => {
-      window.removeEventListener("afterprint", onAfterPrint);
-      document.title = prev;
+    // Print goes through the exact same generateInvoicePdfBlob() pipeline as
+    // Download/View, so the printed output is byte-identical to the PDF file
+    // — not a separate hand-rolled @media print layout that can drift out of
+    // sync (it previously used table border-collapse, which silently drops
+    // borders across colSpan boundaries; the PDF pipeline already works around
+    // that by switching to border-collapse:separate with per-cell borders).
+    setPdfPrinting(true);
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await document.fonts.ready;
+    const blob = await generatePdfBlob(["ORIGINAL COPY", "DUPLICATE COPY"]);
+    setPdfPrinting(false);
+    if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
+
+    const url = URL.createObjectURL(blob);
+    const iframe = document.createElement("iframe");
+    Object.assign(iframe.style, { position: "fixed", width: "0", height: "0", border: "none", visibility: "hidden" });
+    const cleanup = () => { try { document.body.removeChild(iframe); } catch { /* already removed */ } URL.revokeObjectURL(url); };
+    iframe.onload = () => {
+      try {
+        iframe.contentWindow?.print();
+      } catch {
+        // Fallback: some browsers block programmatic print on embedded PDFs — open it instead.
+        window.open(url, "_blank");
+      }
+      // The PDF print dialog is a native OS surface Playwright/JS can't observe
+      // closing, so clean up the hidden iframe on a delay rather than waiting
+      // for an event that won't fire reliably across browsers.
+      setTimeout(cleanup, 60000);
     };
-    window.addEventListener("afterprint", onAfterPrint);
-    window.print();
+    document.body.appendChild(iframe);
+    iframe.src = url;
   }
 
   async function handleShare(channel: "native" | "whatsapp" | "email" | "copy") {
@@ -384,11 +405,12 @@ export default function InvoiceDetailPage() {
     const num = invoice.invoiceNumber;
     const customer = invoice.customer.name;
 
-    // Generate PDF for all channels
+    // Generate PDF for all channels — shared copies are always the Original
+    // (the Duplicate is for the seller's own records, not for the customer).
     setShareLoadingText("Preparing PDF…");
     setShareLoading(true);
     await document.fonts.ready;
-    const blob = await generatePdfBlob();
+    const blob = await generatePdfBlob(["ORIGINAL COPY"]);
     setShareLoading(false);
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
 
@@ -498,7 +520,14 @@ export default function InvoiceDetailPage() {
         onConfirm={handleDelete}
         onCancel={() => { if (!deleting) setDeleteConfirm(false); }}
       />
+      <PdfCopyDialog
+        open={pdfCopyDialogOpen}
+        loading={pdfDownloading}
+        onConfirm={handleDownloadConfirm}
+        onCancel={() => { if (!pdfDownloading) setPdfCopyDialogOpen(false); }}
+      />
       {shareLoading && <OverlayLoader text={shareLoadingText} />}
+      {pdfPrinting && <OverlayLoader text="Preparing PDF…" />}
       {addingPayment && <OverlayLoader text="Saving payment…" />}
       {addingReturn && <OverlayLoader text="Saving return…" />}
 
@@ -515,33 +544,11 @@ export default function InvoiceDetailPage() {
           --inv-tx:#f1f5f9;--inv-tx2:#cbd5e1;--inv-tx3:#94a3b8;
           --inv-brand:#93c5fd;--inv-green:#34d399;--inv-blue:#60a5fa;--inv-red:#f87171;
         }
-        @page { size: A4 portrait; margin: 3px; }
-        @media print {
-          *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-          html,body{background:#fff!important;color:#0f172a!important}
-          body *{visibility:hidden!important}
-          #invoice-print-area,#invoice-print-area *{visibility:visible!important}
-          #invoice-print-area{
-            position:absolute!important;top:0!important;left:0!important;
-            width:100%!important;height:auto!important;padding:3px!important;
-            box-shadow:none!important;border-radius:0!important;
-            --inv-bg:#fff!important;--inv-bg2:#f8fafc!important;--inv-bg3:#f1f5f9!important;--inv-bg4:#e2e8f0!important;
-            --inv-bd:#64748b!important;--inv-bd2:#94a3b8!important;
-            --inv-tx:#0f172a!important;--inv-tx2:#334155!important;--inv-tx3:#64748b!important;
-            --inv-brand:#1e3a8a!important;--inv-green:#059669!important;--inv-blue:#2563eb!important;--inv-red:#dc2626!important;
-          }
-          #invoice-print-area > div { height:auto!important; overflow:visible!important; }
-          #invoice-print-area table { height:auto!important; border-collapse:collapse!important; }
-          #invoice-print-area thead { display:table-header-group!important; }
-          #invoice-print-area tfoot { display:table-footer-group!important; }
-          #invoice-print-area tbody tr { break-inside:avoid!important; page-break-inside:avoid!important; }
-          #invoice-print-area tfoot tr { break-inside:avoid!important; page-break-inside:avoid!important; }
-        }
       `}</style>
 
       <div className="page-stack">
         {/* Toolbar */}
-        <div className="page-header no-print">
+        <div className="page-header">
           <Breadcrumb items={[{ label: "Invoices", href: "/sales/invoices" }, { label: invoice.invoiceNumber }]} />
           <div className={styles.toolbarActions}>
             <StatusBadge status={invoice.status} />
@@ -565,7 +572,7 @@ export default function InvoiceDetailPage() {
                 Record Return
               </Button>
             </span>
-            <Button variant="secondary" size="sm" onClick={handleDownload}>
+            <Button variant="secondary" size="sm" onClick={handleDownloadClick}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Download PDF
             </Button>
@@ -638,7 +645,7 @@ export default function InvoiceDetailPage() {
 
         {/* Payment form */}
         {showPaymentForm && (
-          <div className={`card no-print ${styles.paymentFormCard}`}>
+          <div className={`card ${styles.paymentFormCard}`}>
             <h3 className={styles.paymentFormTitle}>Record Payment</h3>
             <form onSubmit={handleAddPayment}>
               <div className={styles.paymentFormRow}>
@@ -699,7 +706,7 @@ export default function InvoiceDetailPage() {
 
         {/* Return form modal */}
         {showReturnForm && (
-          <div className={`no-print ${styles.returnModalOverlayWrap}`}>
+          <div className={styles.returnModalOverlayWrap}>
             <div className={styles.returnModalBackdrop} onClick={() => { if (!addingReturn) setShowReturnForm(false); }} />
             <div className={styles.returnModalBox}>
               {/* Modal header */}
@@ -801,8 +808,13 @@ export default function InvoiceDetailPage() {
               <thead>
                 <tr>
                   <th colSpan={invoice.isInterState ? 9 : 10}
-                    style={{ border:"1px solid var(--inv-bd)", padding:"14px 20px",
+                    style={{ position:"relative", border:"1px solid var(--inv-bd)", padding:"14px 20px",
                       textAlign:"center", background:"var(--inv-bg)", fontWeight:"normal" }}>
+                    {/* Populated + shown only during PDF generation / printing.
+                        data-role survives node cloning (ids get stripped there). */}
+                    <div id="invoice-copy-badge" data-role="copy-badge" style={{ display:"none", position:"absolute", top:10, right:14,
+                      fontSize:9, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase",
+                      color:"var(--inv-tx2)", border:"1px solid var(--inv-bd)", borderRadius:4, padding:"3px 9px" }} />
                     <div style={{ fontSize:10, textDecoration:"underline", letterSpacing:"0.2em",
                       textTransform:"uppercase", color:"var(--inv-tx3)", marginBottom:5 }}>
                       Tax Invoice
@@ -859,9 +871,10 @@ export default function InvoiceDetailPage() {
                 {invoice.dueDate && (
                   <tr>
                     <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Due Date</td>
-                    <td colSpan={invoice.isInterState ? 7 : 8} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
+                    <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
                       {new Date(invoice.dueDate).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
                     </td>
+                    <td colSpan={5} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px" }} />
                   </tr>
                 )}
 
@@ -1005,11 +1018,20 @@ export default function InvoiceDetailPage() {
                     style={{ border:"1px solid var(--inv-bd)",padding:"14px 16px",verticalAlign:"top",color:"var(--inv-tx3)" }}>
                     <div style={{ display:"flex",flexDirection:"column",height:"100%",minHeight:120 }}>
                       <div style={{ marginTop:"auto" }}>
-                        {invoice.notes
-                          ? <><div style={{ fontWeight:700,textTransform:"uppercase",fontSize:11,marginBottom:4,color:"var(--inv-tx2)" }}>Notes</div><p>{invoice.notes}</p></>
-                          : <p style={{ fontStyle:"italic",opacity:0.5 }}>No notes</p>}
+                        <div style={{ marginBottom:10 }}>
+                          <div style={{ fontWeight:700,textTransform:"uppercase",fontSize:11,marginBottom:4,color:"var(--inv-tx2)" }}>Terms &amp; Conditions</div>
+                          <ol style={{ margin:0,paddingLeft:14,fontSize:10.5,lineHeight:1.5 }}>
+                            <li>Interest @ 24%p.a would be charged after 45 days of Invoice</li>
+                            <li>Material sold strictly for lab use only</li>
+                            <li>We are not responsible for any loss in transit.</li>
+                            <li>Subject to &apos;Delhi&apos; Jurisdiction only.</li>
+                          </ol>
+                        </div>
+                        {invoice.notes && (
+                          <><div style={{ fontWeight:700,textTransform:"uppercase",fontSize:11,marginBottom:4,color:"var(--inv-tx2)" }}>Notes</div><p>{invoice.notes}</p></>
+                        )}
                         <p style={{ marginTop:10,fontSize:11,opacity:0.55 }}>This is a computer-generated invoice.</p>
-                        <div style={{ marginTop:16,marginLeft:8,marginRight:8,borderTop:"1px solid var(--inv-bd2)",paddingTop:8 }}>
+                        <div style={{ marginTop:16,borderTop:"1px solid var(--inv-bd2)",paddingTop:8 }}>
                           <div style={{ fontSize:11,fontWeight:600,color:"var(--inv-tx2)",marginBottom:20 }}>For {settings?.name}</div>
                           <div style={{ fontSize:10,color:"var(--inv-tx3)" }}>Authorised Signatory</div>
                         </div>
@@ -1056,7 +1078,15 @@ export default function InvoiceDetailPage() {
               {showPaymentInPdf && invoice.payments.length > 0 && (() => {
                 const sorted = [...invoice.payments].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                 const allCols = invoice.isInterState ? 9 : 10;
-                const refCols = invoice.isInterState ? 3 : 4;
+                // Reference/UTR and Amount columns are sized so the divider between
+                // them lands on the same underlying column boundary as the Grand
+                // Total / Balance Due label|value divider above — columns have very
+                // unequal widths (Description alone is 25%), so simply matching
+                // colSpan *counts* between the two tables doesn't align them; the
+                // divider must land after the same number of real columns (7 for
+                // intra-state, 6 for inter-state) in both.
+                const refCols = invoice.isInterState ? 2 : 3;
+                const amountCols = 3;
                 const bd: React.CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 10px", fontSize: 11 };
                 return (
                   <tbody>
@@ -1069,7 +1099,7 @@ export default function InvoiceDetailPage() {
                       <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date &amp; Time</td>
                       <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Method</td>
                       <td colSpan={refCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Reference / UTR</td>
-                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
+                      <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
                     </tr>
                     {sorted.map((p) => (
                       <tr key={p.id}>
@@ -1078,7 +1108,7 @@ export default function InvoiceDetailPage() {
                         </td>
                         <td colSpan={2} style={{ ...bd, color: "var(--inv-tx2)" }}>{p.method}</td>
                         <td colSpan={refCols} style={{ ...bd, color: "var(--inv-tx2)" }}>{p.reference || "—"}</td>
-                        <td colSpan={2} style={{ ...bd, textAlign: "right", color: "var(--inv-green)", fontWeight: 600 }}>{fmt(p.amount)}</td>
+                        <td colSpan={amountCols} style={{ ...bd, textAlign: "right", color: "var(--inv-green)", fontWeight: 600 }}>{fmt(p.amount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1087,6 +1117,13 @@ export default function InvoiceDetailPage() {
 
               {showReturnInPdf && returns.length > 0 && (() => {
                 const allCols = invoice.isInterState ? 9 : 10;
+                // Column widths are tuned so two dividers line up with the tables
+                // above: Item|Qty×Rate lands on the same column boundary as the
+                // Grand Total/Balance Due label|value split (the "notes" cell's
+                // colSpan), and Qty×Rate|Amount lands on the same boundary as
+                // Payment History's Reference|Amount divider.
+                const itemCols = invoice.isInterState ? 2 : 3;
+                const amountCols = 3;
                 const bd: React.CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 10px", fontSize: 11 };
                 return (
                   <tbody>
@@ -1097,9 +1134,9 @@ export default function InvoiceDetailPage() {
                     </tr>
                     <tr>
                       <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date &amp; Time</td>
-                      <td colSpan={4} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Item</td>
+                      <td colSpan={itemCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Item</td>
                       <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Qty × Rate</td>
-                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
+                      <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
                     </tr>
                     {returns.map((ret) =>
                       ret.items.map((ri, riIdx) => (
@@ -1110,15 +1147,15 @@ export default function InvoiceDetailPage() {
                               {ret.notes ? <div style={{ fontSize: 10, color: "var(--inv-tx3)", marginTop: 2 }}>{ret.notes}</div> : null}
                             </td>
                           )}
-                          <td colSpan={4} style={{ ...bd, color: "var(--inv-tx2)" }}>{ri.name}</td>
+                          <td colSpan={itemCols} style={{ ...bd, color: "var(--inv-tx2)" }}>{ri.name}</td>
                           <td colSpan={2} style={{ ...bd, color: "var(--inv-tx3)" }}>{ri.quantity} × ₹{fmt(ri.price)}</td>
-                          <td colSpan={2} style={{ ...bd, textAlign: "right", color: "var(--inv-red)", fontWeight: 600 }}>−{fmt(ri.total)}</td>
+                          <td colSpan={amountCols} style={{ ...bd, textAlign: "right", color: "var(--inv-red)", fontWeight: 600 }}>−{fmt(ri.total)}</td>
                         </tr>
                       ))
                     )}
                     <tr>
-                      <td colSpan={allCols - 2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Total Returned</td>
-                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-red)", fontWeight: 700, textAlign: "right" }}>
+                      <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Total Returned</td>
+                      <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-red)", fontWeight: 700, textAlign: "right" }}>
                         −{fmt(returns.reduce((s, r) => s + r.items.reduce((ss, ri) => ss + ri.total, 0), 0))}
                       </td>
                     </tr>
@@ -1156,7 +1193,7 @@ export default function InvoiceDetailPage() {
           const paidPct = Math.min(100, (paidTotal / invoice.total) * 100);
 
           return (
-            <div className="card no-print">
+            <div className="card">
               {/* Header */}
               <div className={styles.historyHeader}>
                 {/* Left: title + count */}
@@ -1265,7 +1302,7 @@ export default function InvoiceDetailPage() {
         {returns.length > 0 && (() => {
           const totalReturned = returns.reduce((s, r) => s + r.items.reduce((ss, ri) => ss + ri.total, 0), 0);
           return (
-            <div className={`card no-print ${styles.returnsHistoryCard}`}>
+            <div className={`card ${styles.returnsHistoryCard}`}>
               <div className={styles.returnsHistoryHeader}>
                 <div className={styles.returnsHistoryHeaderLeft}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>

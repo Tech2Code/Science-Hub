@@ -29,13 +29,6 @@
 }
 .link:hover { color: var(--c-text); }
 
-.arrow {
-  width: 0.875rem;
-  height: 0.875rem;
-  transition: transform 0.15s;
-}
-.link:hover .arrow { transform: translateX(-2px); }
-
 .current {
   font-weight: 600;
   color: var(--c-text);

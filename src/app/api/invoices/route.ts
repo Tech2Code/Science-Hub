@@ -69,20 +69,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate invoice number: SH-{YYYY}-{0001}
+    // Derived from the highest existing number for the year (not a row count) so that
+    // permanently-deleted invoices don't free up a number that collides with a later one.
     const currentYear = new Date().getFullYear();
-    const yearStart = new Date(`${currentYear}-01-01T00:00:00.000Z`);
-    const yearEnd = new Date(`${currentYear + 1}-01-01T00:00:00.000Z`);
 
-    const invoiceCountThisYear = await prisma.invoice.count({
-      where: {
-        date: {
-          gte: yearStart,
-          lt: yearEnd,
-        },
-      },
+    const lastInvoiceThisYear = await prisma.invoice.findFirst({
+      where: { invoiceNumber: { startsWith: `SH-${currentYear}-` } },
+      orderBy: { invoiceNumber: "desc" },
+      select: { invoiceNumber: true },
     });
 
-    const sequentialNumber = String(invoiceCountThisYear + 1).padStart(4, "0");
+    const lastSequentialNumber = lastInvoiceThisYear
+      ? parseInt(lastInvoiceThisYear.invoiceNumber.split("-")[2], 10)
+      : 0;
+    const sequentialNumber = String(lastSequentialNumber + 1).padStart(4, "0");
     const invoiceNumber = `SH-${currentYear}-${sequentialNumber}`;
 
     // Fetch product details for each item

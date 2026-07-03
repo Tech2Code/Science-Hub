@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -11,6 +11,7 @@ import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
 import { useToast } from "@/components/ui/Toast";
 import styles from "./invoicesList.module.css";
 
@@ -47,16 +48,77 @@ export default function InvoicesPage() {
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [pdfLoading, setPdfLoading] = useState<string | null>(null);
+  // Ref-based lock (synchronous, unlike React state) — guards against duplicate
+  // touch+click event synthesis on mobile/touch devices firing the handler twice.
+  const pdfBusyRef = useRef(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewInvoice, setPdfPreviewInvoice] = useState<{ number: string; customer: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [pdfDialogInvoice, setPdfDialogInvoice] = useState<Invoice | null>(null);
+  const [pdfDialogLoading, setPdfDialogLoading] = useState(false);
   const toast = useToast();
 
   function closePdfPreview() {
     if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
     setPdfPreviewUrl(null);
     setPdfPreviewInvoice(null);
+  }
+
+  // Loads the invoice detail page into a hidden iframe (to render its full
+  // #invoice-print-area, which this list page doesn't have the data for) and
+  // generates a PDF blob from it — optionally stamped with copy labels.
+  function generatePdfViaIframe(invoiceId: string, copyLabels?: string[]): Promise<Blob | null> {
+    return new Promise((resolve) => {
+      const iframe = document.createElement("iframe");
+      Object.assign(iframe.style, { position: "fixed", width: "850px", height: "1200px", top: "-9999px", left: "-9999px", border: "none", opacity: "0", pointerEvents: "none" });
+      const cleanup = () => { try { document.body.removeChild(iframe); } catch {} };
+      const safetyTimer = setTimeout(() => { cleanup(); resolve(null); }, 45000);
+      iframe.onload = async () => {
+        const el = await new Promise<HTMLElement | null>(resolveEl => {
+          let tries = 0;
+          const check = () => {
+            const area = iframe.contentDocument?.getElementById("invoice-print-area");
+            if (area?.querySelector("tbody tr")) { resolveEl(area); return; }
+            if (++tries > 40) { resolveEl(null); return; }
+            setTimeout(check, 250);
+          };
+          setTimeout(check, 250);
+        });
+        if (!el) { clearTimeout(safetyTimer); cleanup(); resolve(null); return; }
+        await new Promise(r => setTimeout(r, 400));
+        let blob: Blob | null = null;
+        try {
+          blob = await generateInvoicePdfBlob(el, copyLabels ? { copyLabels } : undefined);
+        } catch { /* resolved as null below */ }
+        clearTimeout(safetyTimer); cleanup();
+        resolve(blob);
+      };
+      document.body.appendChild(iframe);
+      iframe.src = `/sales/invoices/${invoiceId}`;
+    });
+  }
+
+  async function handlePdfDialogConfirm(copyLabels: string[]) {
+    if (!pdfDialogInvoice) return;
+    setPdfDialogLoading(true);
+    // Force a real paint before the (mostly synchronous) iframe setup + PDF
+    // work runs, so the loading spinner is actually visible on screen.
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const blob = await generatePdfViaIframe(pdfDialogInvoice.id, copyLabels);
+    setPdfDialogLoading(false);
+    if (!blob) {
+      toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${pdfDialogInvoice.invoiceNumber}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    setPdfDialogInvoice(null);
   }
 
   const apiUrl = filter === "All" ? "/api/invoices" : `/api/invoices?status=${filter}`;
@@ -111,6 +173,13 @@ export default function InvoicesPage() {
       onCancel={() => { if (!deleting) setDeleteTarget(null); }}
     />
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
+
+    <PdfCopyDialog
+      open={!!pdfDialogInvoice}
+      loading={pdfDialogLoading}
+      onConfirm={handlePdfDialogConfirm}
+      onCancel={() => { if (!pdfDialogLoading) setPdfDialogInvoice(null); }}
+    />
 
     {pdfPreviewUrl && pdfPreviewInvoice && (
       <PdfPreviewModal
@@ -196,19 +265,14 @@ export default function InvoicesPage() {
                   <Cell col={COLUMNS[7]}><StatusBadge status={inv.status} /></Cell>
                   <Cell col={COLUMNS[8]}>
                     <div className={["table-actions", styles.actionsWrap].join(" ")}>
-                        {/* 1. View → opens PDF preview modal (desktop) or invoice page (mobile) */}
+                        {/* 1. View → opens PDF preview modal (same on desktop and mobile) */}
                       <Button variant="viewOutline" size="sm" onClick={async () => {
-                        if (pdfLoading) return;
-                        // On mobile/touch devices, iframe PDF generation is unreliable — navigate to invoice page instead
-                        const isMobile = window.innerWidth < 1024 && (('ontouchstart' in window) || navigator.maxTouchPoints > 0);
-                        if (isMobile) {
-                          window.location.href = `/sales/invoices/${inv.id}`;
-                          return;
-                        }
+                        if (pdfBusyRef.current) return;
+                        pdfBusyRef.current = true;
                         setPdfLoading(inv.id);
                         const iframe = document.createElement("iframe");
                         Object.assign(iframe.style, { position: "fixed", width: "850px", height: "1200px", top: "-9999px", left: "-9999px", border: "none", opacity: "0", pointerEvents: "none" });
-                        const cleanup = () => { try { document.body.removeChild(iframe); } catch {} setPdfLoading(null); };
+                        const cleanup = () => { try { document.body.removeChild(iframe); } catch {} setPdfLoading(null); pdfBusyRef.current = false; };
                         const safetyTimer = setTimeout(cleanup, 45000);
                         iframe.onload = async () => {
                           const el = await new Promise<HTMLElement | null>(resolve => {
@@ -225,7 +289,7 @@ export default function InvoicesPage() {
                           await new Promise(r => setTimeout(r, 400));
                           let previewSet = false;
                           try {
-                            const blob = await generateInvoicePdfBlob(el);
+                            const blob = await generateInvoicePdfBlob(el, { copyLabels: ["ORIGINAL COPY", "DUPLICATE COPY"] });
                             if (blob) {
                               const url = URL.createObjectURL(blob);
                               previewSet = true;
@@ -245,55 +309,10 @@ export default function InvoicesPage() {
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         View
                       </Button>
-                      {/* 2. PDF → direct download (desktop) or invoice page (mobile) */}
-                      <Button variant="secondary" size="sm" title="Download PDF" onClick={async () => {
-                        if (pdfLoading) return;
-                        // On mobile/touch devices, navigate to invoice page which has working download
-                        const isMobile = window.innerWidth < 1024 && (('ontouchstart' in window) || navigator.maxTouchPoints > 0);
-                        if (isMobile) {
-                          window.location.href = `/sales/invoices/${inv.id}`;
-                          return;
-                        }
-                        setPdfLoading(inv.id);
-                        const iframe = document.createElement("iframe");
-                        Object.assign(iframe.style, { position: "fixed", width: "850px", height: "1200px", top: "-9999px", left: "-9999px", border: "none", opacity: "0", pointerEvents: "none" });
-                        const cleanup = () => { try { document.body.removeChild(iframe); } catch {} setPdfLoading(null); };
-                        const safetyTimer = setTimeout(cleanup, 45000);
-                        iframe.onload = async () => {
-                          const el = await new Promise<HTMLElement | null>(resolve => {
-                            let tries = 0;
-                            const check = () => {
-                              const area = iframe.contentDocument?.getElementById("invoice-print-area");
-                              if (area?.querySelector("tbody tr")) { resolve(area); return; }
-                              if (++tries > 40) { resolve(null); return; }
-                              setTimeout(check, 250);
-                            };
-                            setTimeout(check, 250);
-                          });
-                          if (!el) { clearTimeout(safetyTimer); cleanup(); return; }
-                          await new Promise(r => setTimeout(r, 400));
-                          let downloadStarted = false;
-                          try {
-                            const blob = await generateInvoicePdfBlob(el);
-                            if (blob) {
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url; a.download = `${inv.invoiceNumber}.pdf`;
-                              document.body.appendChild(a);
-                              downloadStarted = true;
-                              a.click();
-                              document.body.removeChild(a);
-                              setTimeout(() => URL.revokeObjectURL(url), 5000);
-                            } else {
-                              toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
-                            }
-                          } catch {
-                            if (!downloadStarted) toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
-                          }
-                          clearTimeout(safetyTimer); cleanup();
-                        };
-                        document.body.appendChild(iframe);
-                        iframe.src = `/sales/invoices/${inv.id}`;
+                      {/* 2. PDF → opens copy-selection dialog (same on desktop and mobile) */}
+                      <Button variant="secondary" size="sm" title="Download PDF" onClick={() => {
+                        if (pdfBusyRef.current) return;
+                        setPdfDialogInvoice(inv);
                       }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         PDF

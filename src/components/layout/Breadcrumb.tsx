@@ -20,11 +20,6 @@ export function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
           )}
           {item.href ? (
             <Link href={item.href} className={styles.link}>
-              {i === 0 && (
-                <svg className={styles.arrow} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              )}
               {item.label}
             </Link>
           ) : (

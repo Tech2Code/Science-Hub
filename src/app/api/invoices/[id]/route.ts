@@ -98,12 +98,12 @@ export async function PUT(
         where: { invoiceId: id },
         select: { productId: true, quantity: true },
       });
-      for (const old of oldItems) {
-        await tx.product.updateMany({
+      await Promise.all(oldItems.map((old) =>
+        tx.product.update({
           where: { id: old.productId },
           data: { stock: { increment: old.quantity } },
-        });
-      }
+        })
+      ));
 
       await tx.invoiceItem.deleteMany({ where: { invoiceId: id } });
 
@@ -124,24 +124,21 @@ export async function PUT(
         include: { items: true, customer: true },
       });
 
-      // Deduct stock for new items
-      const warnings: string[] = [];
-      for (const item of invoiceItems) {
-        await tx.product.updateMany({
+      // Deduct stock for new items — update() returns the row directly so we
+      // don't need a second round-trip per item to check for negative stock.
+      const updatedProducts = await Promise.all(invoiceItems.map((item) =>
+        tx.product.update({
           where: { id: item.productId },
           data: { stock: { decrement: item.quantity } },
-        });
-        const prod = await tx.product.findUnique({
-          where: { id: item.productId },
           select: { name: true, stock: true },
-        });
-        if (prod && prod.stock < 0) {
-          warnings.push(`${prod.name} (stock: ${prod.stock})`);
-        }
-      }
+        })
+      ));
+      const warnings = updatedProducts
+        .filter((p) => p.stock < 0)
+        .map((p) => `${p.name} (stock: ${p.stock})`);
 
       return { invoice: inv, stockWarnings: warnings };
-    });
+    }, { timeout: 20000, maxWait: 10000 });
 
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });

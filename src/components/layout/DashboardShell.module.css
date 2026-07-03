@@ -65,6 +65,48 @@
   flex-shrink: 0;
   transition: border-color 0.2s;
 }
+
+.sidebarLogoCollapsed {
+  padding: 0;
+  justify-content: center;
+}
+
+.sidebarCollapseBtn {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--c-text-3);
+  cursor: pointer;
+}
+.sidebarCollapseBtn:hover {
+  background: var(--c-bg-sub);
+  color: var(--c-text);
+}
+
+.sidebarCloseBtn {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--c-text-3);
+  cursor: pointer;
+}
+.sidebarCloseBtn:hover {
+  background: var(--c-bg-sub);
+  color: var(--c-text);
+}
 .logoIcon {
   width: 2.25rem;
   height: 2.25rem;
@@ -231,8 +273,6 @@
   transition: background-color 0.15s, color 0.15s;
 }
 .collapseBtn:hover { background: var(--c-bg-sub); color: var(--c-text); }
-.collapseIcon { width: 1rem; height: 1rem; transition: transform 0.3s; }
-.collapseIconFlipped { transform: rotate(180deg); }
 
 .divider {
   width: 1px;
@@ -366,6 +406,52 @@
 }
 @media (max-width: 480px) {
   .content { padding: 0.875rem 0.75rem; padding-bottom: 2rem; }
+}
+
+.pageNavRow {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 0.625rem 1.5rem;
+  background: var(--c-bg);
+  border-bottom: 1px solid var(--c-border);
+  transition: background-color 0.2s, border-color 0.2s;
+}
+@media (max-width: 767px) {
+  .pageNavRow { padding: 0.5rem 1rem; }
+}
+@media (max-width: 480px) {
+  .pageNavRow { padding: 0.5rem 0.75rem; }
+}
+
+.pageNavBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.625rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--c-border);
+  background: var(--c-bg-card);
+  color: var(--c-text-3);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+.pageNavBtn:hover {
+  background: var(--c-bg-sub);
+  color: var(--c-text);
+  border-color: var(--c-border-md);
+}
+
+.pageNavLabel { line-height: 1; }
+@media (max-width: 480px) {
+  .pageNavLabel { display: none; }
+  .pageNavBtn { padding: 0.375rem; }
 }
 
 /* ── Loading screen ──────────────── */

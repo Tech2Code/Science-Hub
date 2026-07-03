@@ -213,11 +213,6 @@ input, textarea, select {
 ::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,0.6); }
 
 /* ─────────────────────────────────────────────
-   Print
-───────────────────────────────────────────── */
-@media print { .no-print { display: none !important; } }
-
-/* ─────────────────────────────────────────────
    Theme toggle — View Transitions cross-fade
 ───────────────────────────────────────────── */
 ::view-transition-old(root),
@@ -255,6 +250,9 @@ input, textarea, select {
   flex-wrap: wrap;
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--c-border);
+  z-index: 4;
+  background: var(--c-bg);
+  transition: background-color 0.2s, border-color 0.2s;
 }
 
 .page-title { font-size: 1.25rem; font-weight: 700; color: var(--c-text); }

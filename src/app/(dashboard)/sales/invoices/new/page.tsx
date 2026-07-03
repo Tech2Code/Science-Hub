@@ -23,7 +23,6 @@ export default function NewInvoicePage() {
   const router = useRouter();
   const toast = useToast();
   const searchParams = useSearchParams();
-  const [sellerState, setSellerState] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customerMode, setCustomerMode] = useState<"existing" | "custom">("existing");
@@ -44,7 +43,6 @@ export default function NewInvoicePage() {
   const [stockOutItems, setStockOutItems] = useState<{ name: string; available: number; requested: number }[]>([]);
 
   useEffect(() => {
-    fetch("/api/settings").then((r) => r.json()).then((s) => { setSellerState(s.state ?? ""); }).catch(() => {});
     fetch("/api/customers").then((r) => r.json()).then((all: Customer[]) => {
       setCustomers(all);
       const prefillId = searchParams.get("customerId");
@@ -53,7 +51,6 @@ export default function NewInvoicePage() {
         if (found) {
           setCustomerId(found.id);
           setCustomerSearch(found.name);
-          setIsInterState(found.state && found.state !== sellerState ? true : false);
         }
       }
     }).catch(() => {});
@@ -68,8 +65,7 @@ export default function NewInvoicePage() {
     setCustomerId(c.id);
     setCustomerSearch(c.name);
     setShowCustomerDropdown(false);
-    setIsInterState(c.state && c.state !== sellerState ? true : false);
-  }, [sellerState]);
+  }, []);
 
   function addProduct(p: Product) {
     setItems((prev) => [...prev, { productId: p.id, productName: p.name, unit: p.unit, qty: 1, price: p.price, gstRate: p.gstRate }]);
@@ -316,11 +312,8 @@ export default function NewInvoicePage() {
                     <input type="text" placeholder="City" value={customCustomer.city}
                       onChange={(e) => setCustomCustomer((p) => ({ ...p, city: e.target.value }))} className={styles.input} />
                     <input type="text" placeholder="State" value={customCustomer.state}
-                      onChange={(e) => {
-                        const state = e.target.value;
-                        setCustomCustomer((p) => ({ ...p, state }));
-                        setIsInterState(!!state && state !== sellerState);
-                      }} className={styles.input} />
+                      onChange={(e) => setCustomCustomer((p) => ({ ...p, state: e.target.value }))}
+                      className={styles.input} />
                     <div>
                       <input type="text" placeholder="Pincode" value={customCustomer.pincode}
                         onChange={(e) => { setCustomCustomer((p) => ({ ...p, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })); clearErr("pincode"); }}

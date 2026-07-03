@@ -22,6 +22,14 @@
   opacity: 0.5;
 }
 
+/* Spinner.module.css hardcodes a blue color for its standalone (page/overlay
+   loader) use — but inline in a button it must match the button's own text
+   color, or it goes invisible against colored backgrounds (blue spinner on a
+   blue "primary" button, for example). */
+.inlineSpinner {
+  color: currentColor !important;
+}
+
 /* ── Sizes ───────────────────────────── */
 .sm   { padding: 0.25rem 0.625rem; font-size: 0.75rem; border-radius: var(--c-radius-xs); }
 .md   { padding: 0.625rem 1.25rem; }

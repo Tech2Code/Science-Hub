@@ -254,12 +254,42 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       )}
 
       <aside className={[styles.sidebar, sidebarOpen ? styles.sidebarOpen : styles.sidebarClosed].join(" ")}>
-        <div className={styles.sidebarLogo}>
-          <Image src="/logo.png" alt="Science Hub" width={36} height={36} loading="eager" className={styles.logoIcon} />
-          <div className={styles.logoText}>
-            <div className={styles.logoName}>Science Hub</div>
-            <div className={styles.logoSub}>Billing &amp; Inventory</div>
-          </div>
+        <div className={[styles.sidebarLogo, (!mobile && !sidebarOpen) ? styles.sidebarLogoCollapsed : ""].join(" ")}>
+          {!mobile && (
+            <button
+              onClick={() => setSidebarOpen((v) => !v)}
+              title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+              aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+              className={styles.sidebarCollapseBtn}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <line x1="9.5" y1="4" x2="9.5" y2="20" />
+              </svg>
+            </button>
+          )}
+          {(mobile || sidebarOpen) && (
+            <>
+              <Image src="/logo.png" alt="Science Hub" width={36} height={36} loading="eager" className={styles.logoIcon} />
+              <div className={styles.logoText}>
+                <div className={styles.logoName}>Science Hub</div>
+                <div className={styles.logoSub}>Billing &amp; Inventory</div>
+              </div>
+            </>
+          )}
+          {mobile && sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(false)}
+              title="Close menu"
+              aria-label="Close menu"
+              className={styles.sidebarCloseBtn}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
         </div>
 
         <nav className={styles.nav} ref={navRef}>
@@ -332,27 +362,20 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <div className={styles.main}>
         <header className={styles.topbar}>
           <div className={styles.topbarLeft}>
-            <button
-              onClick={() => setSidebarOpen((v) => !v)}
-              title={sidebarOpen ? "Close menu" : "Open menu"}
-              className={styles.collapseBtn}
-            >
-              {mobile ? (
+            {mobile && (
+              <button
+                onClick={() => setSidebarOpen((v) => !v)}
+                title={sidebarOpen ? "Close menu" : "Open menu"}
+                className={styles.collapseBtn}
+              >
                 <svg className={styles.mobileMenuIcon} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   {sidebarOpen
                     ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     : <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                   }
                 </svg>
-              ) : (
-                <svg
-                  className={[styles.collapseIcon, !sidebarOpen ? styles.collapseIconFlipped : ""].join(" ")}
-                  fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7M18 19l-7-7 7-7" />
-                </svg>
-              )}
-            </button>
+              </button>
+            )}
             <div className={styles.divider} />
             {currentNav && (() => {
               const Icon = NavIcons[currentNav.iconKey];
@@ -390,7 +413,24 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className={styles.content}>{children}</main>
+        <div className={styles.pageNavRow}>
+          <button onClick={() => router.back()} title="Go back" aria-label="Go back" className={styles.pageNavBtn}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            <span className={styles.pageNavLabel}>Back</span>
+          </button>
+          <button onClick={() => router.forward()} title="Go forward" aria-label="Go forward" className={styles.pageNavBtn}>
+            <span className={styles.pageNavLabel}>Forward</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        </div>
+
+        <main className={styles.content}>
+          {children}
+        </main>
       </div>
     </div>
   );

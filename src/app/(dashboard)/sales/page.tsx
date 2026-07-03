@@ -32,6 +32,7 @@ function BarChart({ data }: { data: MonthlyBar[] }) {
   const max = Math.max(...data.map((d) => d.total), 1);
   const [hovered, setHovered] = useState<number | null>(null);
   return (
+    <div className={styles.chartScroll}>
     <div className={styles.chart}>
       {data.map((bar, idx) => {
         const pct = (bar.total / max) * 100;
@@ -43,12 +44,13 @@ function BarChart({ data }: { data: MonthlyBar[] }) {
             onMouseEnter={() => setHovered(idx)}
             onMouseLeave={() => setHovered(null)}
           >
-            {/* Value label — always visible, full value on hover */}
-            <div className={`${styles.chartValue} ${isHov ? styles.hovered : ""}`}>
-              {isHov ? fmt(bar.total) : shortFmt(bar.total)}
+            {/* Value label — always shows the short form; full value floats in a tooltip on hover */}
+            <div className={styles.chartValue}>
+              {shortFmt(bar.total)}
             </div>
             {/* Bar */}
             <div className={styles.chartBarWrap}>
+              {isHov && <div className={styles.chartTooltip}>{fmt(bar.total)}</div>}
               <div
                 className={`${styles.chartBar} ${hovered !== null && !isHov ? styles.dimmed : ""}`}
                 style={{ "--bar-pct": `${Math.max(pct, 2)}%` } as React.CSSProperties}
@@ -60,6 +62,7 @@ function BarChart({ data }: { data: MonthlyBar[] }) {
           </div>
         );
       })}
+    </div>
     </div>
   );
 }
@@ -88,10 +91,6 @@ export default function SalesDashboardPage() {
           <p className="page-sub" suppressHydrationWarning>
             {new Date().toLocaleString("en-IN", { month: "long", year: "numeric" })}
           </p>
-        </div>
-        <div className={styles.headerActions}>
-          <Button variant="secondary" href="/sales/customers/new">+ Customer</Button>
-          <Button variant="primary" href="/sales/invoices/new">+ Invoice</Button>
         </div>
       </div>
 

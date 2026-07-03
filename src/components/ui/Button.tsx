@@ -93,7 +93,7 @@ export function Button({
         style={style}
         title={title}
       >
-        {loading && !fullScreen && <Spinner size="sm" />}
+        {loading && !fullScreen && <Spinner size="sm" className={styles.inlineSpinner} />}
         {children}
       </button>
     </>
