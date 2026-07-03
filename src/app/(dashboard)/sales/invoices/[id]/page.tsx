@@ -690,11 +690,11 @@ export default function InvoiceDetailPage() {
                   />
                 </FormField>
                 <div className={styles.paymentFormBtnRow}>
-                  <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment}>
+                  <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment} loading={addingPayment}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
                     Save Payment
                   </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => { setShowPaymentForm(false); }}>Cancel</Button>
+                  <Button type="button" variant="secondary" size="sm" onClick={() => { setShowPaymentForm(false); }} disabled={addingPayment}>Cancel</Button>
                 </div>
               </div>
               <p className={styles.paymentBalanceHint}>
@@ -871,16 +871,16 @@ export default function InvoiceDetailPage() {
                 {invoice.dueDate && (
                   <tr>
                     <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Due Date</td>
-                    <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
+                    <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
                       {new Date(invoice.dueDate).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
                     </td>
-                    <td colSpan={5} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px" }} />
+                    <td colSpan={invoice.isInterState ? 4 : 5} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px" }} />
                   </tr>
                 )}
 
                 {/* ── Buyer: Bill To / Ship To ── */}
                 <tr>
-                  <td colSpan={invoice.isInterState ? 4 : 5}
+                  <td colSpan={5}
                     style={{ border:"1px solid var(--inv-bd)", padding:0, verticalAlign:"top" }}>
                     <div style={{ background:"var(--inv-bg3)", padding:"5px 14px", fontSize:11, fontWeight:700,
                       color:"var(--inv-tx2)", borderBottom:"1px solid var(--inv-bd)" }}>
@@ -922,7 +922,7 @@ export default function InvoiceDetailPage() {
                       </div>
                     </div>
                   </td>
-                  <td colSpan={5}
+                  <td colSpan={invoice.isInterState ? 4 : 5}
                     style={{ border:"1px solid var(--inv-bd)", padding:0, verticalAlign:"top" }}>
                     <div style={{ background:"var(--inv-bg3)", padding:"5px 14px", fontSize:11, fontWeight:700,
                       color:"var(--inv-tx2)", borderBottom:"1px solid var(--inv-bd)" }}>
@@ -1014,7 +1014,7 @@ export default function InvoiceDetailPage() {
 
                 {/* Notes + Totals */}
                 <tr>
-                  <td colSpan={invoice.isInterState ? 4 : 5} rowSpan={invoice.isInterState ? 6 : 7}
+                  <td colSpan={5} rowSpan={invoice.isInterState ? 6 : 7}
                     style={{ border:"1px solid var(--inv-bd)",padding:"14px 16px",verticalAlign:"top",color:"var(--inv-tx3)" }}>
                     <div style={{ display:"flex",flexDirection:"column",height:"100%",minHeight:120 }}>
                       <div style={{ marginTop:"auto" }}>
@@ -1039,12 +1039,12 @@ export default function InvoiceDetailPage() {
                     </div>
                   </td>
                   <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>Subtotal</td>
-                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.subtotal)}</td>
+                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.subtotal)}</td>
                 </tr>
                 {invoice.isInterState ? (
                   <tr>
                     <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>IGST</td>
-                    <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.igst)}</td>
+                    <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.igst)}</td>
                   </tr>
                 ) : (
                   <>
@@ -1060,15 +1060,15 @@ export default function InvoiceDetailPage() {
                 )}
                 <tr>
                   <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",fontWeight:700,color:"var(--inv-tx)",background:"var(--inv-bg4)",fontSize:13 }}>Grand Total</td>
-                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",textAlign:"right",fontWeight:700,color:"var(--inv-tx)",background:"var(--inv-bg4)",fontSize:13 }}>₹{fmt(invoice.total)}</td>
+                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",textAlign:"right",fontWeight:700,color:"var(--inv-tx)",background:"var(--inv-bg4)",fontSize:13 }}>₹{fmt(invoice.total)}</td>
                 </tr>
                 <tr>
                   <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-green)",background:"var(--inv-bg2)" }}>Paid</td>
-                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-green)",fontWeight:600,background:"var(--inv-bg2)" }}>₹{fmt(invoice.paidAmount)}</td>
+                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-green)",fontWeight:600,background:"var(--inv-bg2)" }}>₹{fmt(invoice.paidAmount)}</td>
                 </tr>
                 <tr>
                   <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",fontWeight:700,color:"var(--inv-tx)",background:"var(--inv-bg3)" }}>Balance Due</td>
-                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",textAlign:"right",fontWeight:700,fontSize:14,background:"var(--inv-bg3)",
+                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",textAlign:"right",fontWeight:700,fontSize:14,background:"var(--inv-bg3)",
                     color: balance > 0 ? "var(--inv-red)" : "var(--inv-green)" }}>₹{fmt(balance)}</td>
                 </tr>
 
@@ -1080,13 +1080,13 @@ export default function InvoiceDetailPage() {
                 const allCols = invoice.isInterState ? 9 : 10;
                 // Reference/UTR and Amount columns are sized so the divider between
                 // them lands on the same underlying column boundary as the Grand
-                // Total / Balance Due label|value divider above — columns have very
-                // unequal widths (Description alone is 25%), so simply matching
-                // colSpan *counts* between the two tables doesn't align them; the
-                // divider must land after the same number of real columns (7 for
-                // intra-state, 6 for inter-state) in both.
-                const refCols = invoice.isInterState ? 2 : 3;
-                const amountCols = 3;
+                // Total / Balance Due label|value divider above — the notes cell
+                // (colSpan 5, fixed for both supply types) plus the label (colSpan 2)
+                // always puts that divider after 7 real columns, so Date+Method+Ref
+                // must also total 7 in both states; Amount absorbs the 1-column
+                // difference between inter-state (9 total) and intra-state (10).
+                const refCols = 3;
+                const amountCols = invoice.isInterState ? 2 : 3;
                 const bd: React.CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 10px", fontSize: 11 };
                 return (
                   <tbody>
@@ -1119,11 +1119,13 @@ export default function InvoiceDetailPage() {
                 const allCols = invoice.isInterState ? 9 : 10;
                 // Column widths are tuned so two dividers line up with the tables
                 // above: Item|Qty×Rate lands on the same column boundary as the
-                // Grand Total/Balance Due label|value split (the "notes" cell's
-                // colSpan), and Qty×Rate|Amount lands on the same boundary as
-                // Payment History's Reference|Amount divider.
-                const itemCols = invoice.isInterState ? 2 : 3;
-                const amountCols = 3;
+                // Grand Total/Balance Due label|value split (the notes cell is now
+                // always colSpan 5), and Qty×Rate|Amount lands on the same boundary
+                // as Payment History's Reference|Amount divider (also now fixed,
+                // since both boundaries above are fixed for both supply types).
+                const itemCols = 3;
+                const qtyRateCols = 2;
+                const amountCols = invoice.isInterState ? 2 : 3;
                 const bd: React.CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 10px", fontSize: 11 };
                 return (
                   <tbody>
@@ -1135,7 +1137,7 @@ export default function InvoiceDetailPage() {
                     <tr>
                       <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date &amp; Time</td>
                       <td colSpan={itemCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Item</td>
-                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Qty × Rate</td>
+                      <td colSpan={qtyRateCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Qty × Rate</td>
                       <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
                     </tr>
                     {returns.map((ret) =>
@@ -1148,7 +1150,7 @@ export default function InvoiceDetailPage() {
                             </td>
                           )}
                           <td colSpan={itemCols} style={{ ...bd, color: "var(--inv-tx2)" }}>{ri.name}</td>
-                          <td colSpan={2} style={{ ...bd, color: "var(--inv-tx3)" }}>{ri.quantity} × ₹{fmt(ri.price)}</td>
+                          <td colSpan={qtyRateCols} style={{ ...bd, color: "var(--inv-tx3)" }}>{ri.quantity} × ₹{fmt(ri.price)}</td>
                           <td colSpan={amountCols} style={{ ...bd, textAlign: "right", color: "var(--inv-red)", fontWeight: 600 }}>−{fmt(ri.total)}</td>
                         </tr>
                       ))

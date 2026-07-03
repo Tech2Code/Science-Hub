@@ -214,7 +214,7 @@
 .returnItemCheckbox { width: 1rem; height: 1rem; cursor: pointer; accent-color: var(--c-blue); }
 .returnItemName { flex: 1; font-size: 0.875rem; color: var(--c-text); }
 .returnItemMax { font-size: 0.75rem; color: var(--c-text-4); }
-.returnItemQtyInput { width: 5rem; }
+.returnItemRow .returnItemQtyInput { width: 5rem; flex: 0 0 5rem; }
 .returnItemsEmpty { font-size: 0.875rem; color: var(--c-text-4); }
 .returnModalFooter {
   display: flex;

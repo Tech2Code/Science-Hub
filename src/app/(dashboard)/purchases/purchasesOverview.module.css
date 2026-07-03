@@ -3,10 +3,10 @@
   50% { opacity: .35; }
 }
 
-.chartScroll {
+/* .chartScroll {
   overflow-x: auto;
   overflow-y: visible;
-}
+} */
 
 .chart {
   display: flex;
