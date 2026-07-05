@@ -8,7 +8,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
-import { rules, validate, type FormErrors } from "@/lib/validation";
+import { rules, validate } from "@/lib/validation";
 import styles from "./productNew.module.css";
 
 const UNITS = ["Nos", "Kg", "Ltr", "Box", "Pack", "Set", "Mtr", "Pcs"];

@@ -55,6 +55,7 @@ export default function NewInvoicePage() {
       }
     }).catch(() => {});
     fetch("/api/products").then((r) => r.json()).then(setProducts).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount prefill from the initial URL, not meant to re-run on searchParams changes
   }, []);
 
   const filteredCustomers = customers.filter((c) => c.name.toLowerCase().includes(customerSearch.toLowerCase()));

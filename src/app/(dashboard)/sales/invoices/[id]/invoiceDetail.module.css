@@ -158,6 +158,12 @@
   display: flex;
   flex-direction: column;
 }
+.returnModalForm {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
 .returnModalHeader {
   display: flex;
   align-items: center;
@@ -177,8 +183,9 @@
   display: flex;
   align-items: center;
 }
-.returnModalBody { overflow-y: auto; flex: 1; }
+.returnModalBody { overflow-y: auto; flex: 1; min-height: 0; }
 .returnModalMetaRow {
+  flex-shrink: 0;
   padding: 1rem 1.25rem;
   display: flex;
   flex-wrap: wrap;

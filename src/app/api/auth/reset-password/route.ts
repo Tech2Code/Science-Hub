@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { rateLimit, getClientIp } from "@/lib/rateLimit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,8 +10,13 @@ export async function POST(req: NextRequest) {
     if (!token || !password) {
       return NextResponse.json({ error: "Token and password are required." }, { status: 400 });
     }
-    if (password.length < 6) {
-      return NextResponse.json({ error: "Password must be at least 6 characters." }, { status: 400 });
+    if (password.length < 8) {
+      return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
+    }
+
+    const limit = rateLimit(`reset-password:${getClientIp(req)}`, 10, 15 * 60 * 1000);
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429 });
     }
 
     const record = await prisma.passwordResetToken.findUnique({ where: { token } });
@@ -25,7 +31,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "This reset link has expired. Request a new one." }, { status: 400 });
     }
 
-    const hashed = await bcrypt.hash(password, 10);
+    const hashed = await bcrypt.hash(password, 12);
 
     await prisma.$transaction([
       prisma.user.update({ where: { id: record.userId }, data: { password: hashed } }),

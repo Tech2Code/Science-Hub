@@ -138,7 +138,7 @@ function TypeSection({
 
 export default function BinPage() {
   const { data, loading, mutate } = useFetch<BinItem[]>("/api/bin");
-  const items = data ?? [];
+  const items = useMemo(() => data ?? [], [data]);
   const toast = useToast();
 
   const [search, setSearch] = useState("");

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, getClientIp } from "@/lib/rateLimit";
 
 function maskEmail(email: string): string {
   const [local, domain] = email.split("@");
@@ -11,20 +12,24 @@ function maskEmail(email: string): string {
 export async function POST(req: NextRequest) {
   try {
     const { name } = await req.json();
-    if (!name || name.trim().length < 2) {
+    if (!name || typeof name !== "string" || name.trim().length < 2) {
       return NextResponse.json({ error: "Enter at least 2 characters." }, { status: 400 });
+    }
+
+    const limit = rateLimit(`find-email:${getClientIp(req)}`, 10, 15 * 60 * 1000);
+    if (!limit.allowed) {
+      return NextResponse.json({ results: [] });
     }
 
     const users = await prisma.user.findMany({
       where: { name: { contains: name.trim(), mode: "insensitive" } },
-      select: { name: true, email: true, role: true },
+      select: { name: true, email: true },
       take: 5,
     });
 
     const results = users.map((u) => ({
       name: u.name,
       maskedEmail: maskEmail(u.email),
-      role: u.role,
     }));
 
     return NextResponse.json({ results });

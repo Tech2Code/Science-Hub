@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import styles from "./login.module.css";
@@ -33,7 +34,7 @@ export default function LoginPage() {
       <div className={styles.grid} />
       <div className={styles.wrap}>
         <div className={styles.brand}>
-          <img src="/logo.png" alt="Science Hub" className={styles.brandIcon} />
+          <Image src="/logo.png" alt="Science Hub" width={56} height={56} className={styles.brandIcon} priority />
           <h1 className={styles.brandName}>Science Hub</h1>
           <p className={styles.brandSub}>Billing &amp; Inventory</p>
         </div>

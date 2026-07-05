@@ -3,19 +3,30 @@ import { prisma } from "@/lib/prisma";
 import { getBusinessSettings } from "@/lib/db";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
+import { rateLimit, getClientIp } from "@/lib/rateLimit";
+
+// Always resolves to the same generic response, whether or not the email is
+// registered — the caller must not be able to distinguish the two cases.
+const GENERIC_OK = NextResponse.json({ ok: true });
 
 export async function POST(req: NextRequest) {
   try {
     const { email } = await req.json();
-    if (!email) return NextResponse.json({ error: "Email required." }, { status: 400 });
+    if (!email || typeof email !== "string") {
+      return NextResponse.json({ error: "Email required." }, { status: 400 });
+    }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const ipLimit = rateLimit(`forgot-password:ip:${getClientIp(req)}`, 10, 15 * 60 * 1000);
+    const emailLimit = rateLimit(`forgot-password:email:${email.trim().toLowerCase()}`, 3, 60 * 60 * 1000);
+    if (!ipLimit.allowed || !emailLimit.allowed) {
+      // Still don't reveal whether the account exists — just stop sending.
+      return GENERIC_OK;
+    }
 
+    const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
     if (!user) {
-      return NextResponse.json(
-        { error: "No account found with this email address." },
-        { status: 404 }
-      );
+      // Same response as success — do not leak account existence.
+      return GENERIC_OK;
     }
 
     // Check Gmail is configured before generating token
@@ -23,10 +34,8 @@ export async function POST(req: NextRequest) {
     const gmailUser = biz.gmailUser || process.env.GMAIL_USER;
     const gmailPass = biz.gmailAppPassword || process.env.GMAIL_APP_PASSWORD;
     if (!gmailUser || !gmailPass) {
-      return NextResponse.json(
-        { error: "Email sending is not configured. Contact your administrator." },
-        { status: 503 }
-      );
+      console.error("forgot-password: email sending is not configured (missing Gmail credentials)");
+      return GENERIC_OK;
     }
 
     // Invalidate any existing unexpired tokens for this user
@@ -76,15 +85,11 @@ export async function POST(req: NextRequest) {
       `,
     });
 
-    return NextResponse.json({ ok: true });
+    return GENERIC_OK;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("forgot-password error:", msg);
-    const friendly = msg.includes("Invalid login") || msg.includes("535") || msg.includes("auth")
-      ? "Gmail rejected the credentials. Check the App Password in Business Settings."
-      : msg.includes("passwordResetToken") || msg.includes("does not exist")
-      ? "Server not ready — run `npx prisma generate` and restart."
-      : "Failed to send reset email.";
-    return NextResponse.json({ error: friendly }, { status: 500 });
+    // Log full detail server-side only; never expose internal/operational
+    // detail (Gmail auth failures, Prisma state, etc.) to the caller.
+    console.error("forgot-password error:", err);
+    return GENERIC_OK;
   }
 }

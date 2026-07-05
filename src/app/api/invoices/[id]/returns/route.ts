@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
     const returns = await prisma.return.findMany({
       where: { invoiceId: id },
@@ -28,10 +30,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
 
+    const { id } = await params;
     const body = await request.json();
     const { items, notes, date } = body as {
       items: { productId: string; name: string; quantity: number; price: number }[];
@@ -112,7 +114,7 @@ export async function POST(
 
     const itemSummary = items.map(i => `${i.name} ×${i.quantity}`).join(", ");
     await logActivity(
-      session.user.id,
+      auth.session.user.id,
       "create_return",
       `Return recorded for invoice ${invoice.invoiceNumber} (${invoice.customer.name}) — ${itemSummary}`,
       id,

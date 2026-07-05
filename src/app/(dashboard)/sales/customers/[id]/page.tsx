@@ -1,11 +1,12 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import styles from "./view.module.css";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { fetchCached } from "@/lib/useCache";
@@ -31,9 +32,11 @@ function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?
 
 export default function CustomerViewPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [openingEdit, setOpeningEdit] = useState(false);
 
   useEffect(() => {
     fetchCached(`/api/customers/${id}`)
@@ -95,6 +98,7 @@ export default function CustomerViewPage() {
 
   return (
     <div className={`page-stack ${styles.pageStack}`}>
+      {openingEdit && <OverlayLoader text="Opening editor…" />}
       <Breadcrumb items={[{ label: "Customers", href: "/sales/customers" }, { label: customer.name }]} />
 
       {/* Header */}
@@ -117,7 +121,7 @@ export default function CustomerViewPage() {
             </div>
           </div>
           <div className={styles.headerActions}>
-            <Button variant="secondary" href={`/sales/customers/edit/${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</Button>
+            <Button variant="secondary" onClick={() => { setOpeningEdit(true); router.push(`/sales/customers/edit/${id}`); }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</Button>
             <Button variant="primary" href={`/sales/invoices/new?customerId=${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>
           </div>
         </div>

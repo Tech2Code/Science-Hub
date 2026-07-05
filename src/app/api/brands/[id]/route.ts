@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
 
-    const session = await getServerSession(authOptions);
     const brand = await prisma.brand.findUnique({ where: { id }, select: { name: true, _count: { select: { products: true } } } });
     if (!brand) return NextResponse.json({ error: "Brand not found" }, { status: 404 });
 
@@ -22,10 +23,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
     await prisma.brand.update({ where: { id }, data: { deletedAt: new Date() } });
 
-    if (session?.user?.id) {
-      const affected = brand._count.products > 0 ? ` | ${brand._count.products} product(s) still assigned` : "";
-      await logActivity(session.user.id, "delete_brand", `Moved brand "${brand.name}" to bin${affected}`, id, "brand");
-    }
+    const affected = brand._count.products > 0 ? ` | ${brand._count.products} product(s) still assigned` : "";
+    await logActivity(auth.session.user.id, "delete_brand", `Moved brand "${brand.name}" to bin${affected}`, id, "brand");
     return NextResponse.json({ message: "Brand moved to bin" });
   } catch (error) {
     console.error("DELETE /api/brands/[id] error:", error);

@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { getInvoice } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
     const invoice = await getInvoice(id);
     if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -26,6 +28,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
     const body = await request.json();
     const { items, notes, dueDate, isInterState, status } = body;
@@ -89,9 +94,6 @@ export async function PUT(
     if (paidAmount >= total) newStatus = "paid";
     else if (paidAmount > 0) newStatus = "partial";
 
-    const session = await getServerSession(authOptions);
-    void session; // used for auth check in production
-
     const { invoice, stockWarnings } = await prisma.$transaction(async (tx) => {
       // Restore stock for old items before replacing them
       const oldItems = await tx.invoiceItem.findMany({
@@ -143,11 +145,8 @@ export async function PUT(
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
 
-    const sess = await getServerSession(authOptions);
-    if (sess?.user?.id) {
-      const inv = invoice as { invoiceNumber?: string; customer?: { name?: string }; total?: number; items?: unknown[] };
-      await logActivity(sess.user.id, "update_invoice", `Edited invoice ${inv.invoiceNumber ?? id} for ${inv.customer?.name ?? ""} | Total: ₹${(inv.total ?? 0).toFixed(2)} | Items: ${inv.items?.length ?? 0} | Tax: ${inter ? "IGST" : "CGST+SGST"}`, id, "invoice");
-    }
+    const inv = invoice as { invoiceNumber?: string; customer?: { name?: string }; total?: number; items?: unknown[] };
+    await logActivity(auth.session.user.id, "update_invoice", `Edited invoice ${inv.invoiceNumber ?? id} for ${inv.customer?.name ?? ""} | Total: ₹${(inv.total ?? 0).toFixed(2)} | Items: ${inv.items?.length ?? 0} | Tax: ${inter ? "IGST" : "CGST+SGST"}`, id, "invoice");
     return NextResponse.json({ ...invoice, stockWarnings });
   } catch (error) {
     console.error(error);
@@ -160,8 +159,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
-    const sess = await getServerSession(authOptions);
     const inv = await prisma.invoice.findUnique({ where: { id }, select: { invoiceNumber: true, total: true, customer: { select: { name: true } } } });
 
     // Restore stock before soft-deleting
@@ -182,8 +183,8 @@ export async function DELETE(
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
 
-    if (sess?.user?.id && inv) {
-      await logActivity(sess.user.id, "delete_invoice", `Moved invoice ${inv.invoiceNumber} to bin | Customer: ${inv.customer?.name ?? "—"} | Total: ₹${inv.total.toFixed(2)}`, id, "invoice");
+    if (inv) {
+      await logActivity(auth.session.user.id, "delete_invoice", `Moved invoice ${inv.invoiceNumber} to bin | Customer: ${inv.customer?.name ?? "—"} | Total: ₹${inv.total.toFixed(2)}`, id, "invoice");
     }
     return NextResponse.json({ message: "Invoice moved to bin" });
   } catch (error) {

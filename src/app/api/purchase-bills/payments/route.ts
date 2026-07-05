@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function GET() {
   try {
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
     const payments = await prisma.purchasePayment.findMany({
       orderBy: { date: "desc" },
       include: {

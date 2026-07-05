@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
@@ -111,8 +110,6 @@ export default function BrandsPage() {
           <p className="page-sub">{brands.length} brands in catalog</p>
         </div>
       </div>
-
-      <Breadcrumb items={[{ label: "Brands" }]} />
 
       {/* Add brand form */}
       <div className={`card ${styles.addCard}`}>

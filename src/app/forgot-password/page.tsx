@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import styles from "../login/login.module.css";
 import { rules, validate } from "@/lib/validation";
 
@@ -46,7 +47,7 @@ export default function ForgotPasswordPage() {
       <div className={styles.grid} />
       <div className={styles.wrap}>
         <div className={styles.brand}>
-          <img src="/logo.png" alt="Science Hub" className={styles.brandIcon} />
+          <Image src="/logo.png" alt="Science Hub" width={56} height={56} className={styles.brandIcon} />
           <h1 className={styles.brandName}>Science Hub</h1>
           <p className={styles.brandSub}>Billing &amp; Inventory</p>
         </div>

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { fetchCached } from "@/lib/useCache";
 import styles from "./vendorDetail.module.css";
 
@@ -33,9 +34,11 @@ const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigi
 
 export default function VendorDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [vendor, setVendor] = useState<Vendor | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [openingEdit, setOpeningEdit] = useState(false);
 
   useEffect(() => {
     fetchCached(`/api/vendors/${id}`)
@@ -79,6 +82,7 @@ export default function VendorDetailPage() {
 
   return (
     <div className={`page-stack ${styles.pageStack}`}>
+      {openingEdit && <OverlayLoader text="Opening editor…" />}
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: vendor.name }]} />
 
       {/* Header */}
@@ -110,7 +114,7 @@ export default function VendorDetailPage() {
             </div>
           </div>
           <div className={styles.headerActions}>
-            <Button variant="secondary" href={`/purchases/vendors/${id}/edit`}>
+            <Button variant="secondary" onClick={() => { setOpeningEdit(true); router.push(`/purchases/vendors/${id}/edit`); }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               Edit
             </Button>

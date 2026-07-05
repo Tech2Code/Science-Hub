@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import styles from "../login/login.module.css";
 import pageStyles from "./findEmail.module.css";
 import { rules, validate } from "@/lib/validation";
@@ -10,7 +11,6 @@ import { rules, validate } from "@/lib/validation";
 interface Result {
   name: string;
   maskedEmail: string;
-  role: string;
 }
 
 export default function FindEmailPage() {
@@ -56,7 +56,7 @@ export default function FindEmailPage() {
       <div className={styles.grid} />
       <div className={styles.wrap}>
         <div className={styles.brand}>
-          <img src="/logo.png" alt="Science Hub" className={styles.brandIcon} />
+          <Image src="/logo.png" alt="Science Hub" width={56} height={56} className={styles.brandIcon} />
           <h1 className={styles.brandName}>Science Hub</h1>
           <p className={styles.brandSub}>Billing &amp; Inventory</p>
         </div>
@@ -101,10 +101,9 @@ export default function FindEmailPage() {
                   </p>
                   {results.map((r, i) => (
                     <div key={i} className={styles.resultCard}>
-                      <div>
+                      <div className={pageStyles.resultInfo}>
                         <div className={styles.resultName}>{r.name}</div>
                         <div className={styles.resultEmail}>{r.maskedEmail}</div>
-                        <div className={styles.resultRole}>{r.role}</div>
                       </div>
                       <button className={styles.useBtn} onClick={() => handleUse(r.maskedEmail)}>
                         Use this →

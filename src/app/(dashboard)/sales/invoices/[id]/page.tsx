@@ -199,6 +199,7 @@ export default function InvoiceDetailPage() {
   const [returnNotes, setReturnNotes] = useState("");
   const [returnDate, setReturnDate] = useState("");
   const [addingReturn, setAddingReturn] = useState(false);
+  const [openingEdit, setOpeningEdit] = useState(false);
   const toast = useToast();
   const router = useRouter();
 
@@ -381,10 +382,15 @@ export default function InvoiceDetailPage() {
 
     const url = URL.createObjectURL(blob);
     const iframe = document.createElement("iframe");
-    Object.assign(iframe.style, { position: "fixed", width: "0", height: "0", border: "none", visibility: "hidden" });
+    // Chrome refuses to run print() on a hidden iframe (visibility:hidden /
+    // display:none) — it silently no-ops or throws, which used to trip the
+    // window.open fallback below on every print. Keep it "visible" but
+    // pushed off-screen at zero size instead.
+    Object.assign(iframe.style, { position: "fixed", right: "0", bottom: "0", width: "0", height: "0", border: "none" });
     const cleanup = () => { try { document.body.removeChild(iframe); } catch { /* already removed */ } URL.revokeObjectURL(url); };
     iframe.onload = () => {
       try {
+        iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
       } catch {
         // Fallback: some browsers block programmatic print on embedded PDFs — open it instead.
@@ -508,6 +514,13 @@ export default function InvoiceDetailPage() {
 
   const balance = invoice.total - invoice.paidAmount;
 
+  // True once every line item's quantity has already been fully returned.
+  const allItemsReturned = invoice.items.length > 0 && invoice.items.every(item => {
+    const returnedQty = returns.reduce((sum, ret) =>
+      sum + ret.items.filter(ri => ri.productId === item.productId).reduce((s, ri) => s + ri.quantity, 0), 0);
+    return returnedQty >= item.quantity;
+  });
+
   return (
     <>
       <ConfirmDialog
@@ -530,6 +543,7 @@ export default function InvoiceDetailPage() {
       {pdfPrinting && <OverlayLoader text="Preparing PDF…" />}
       {addingPayment && <OverlayLoader text="Saving payment…" />}
       {addingReturn && <OverlayLoader text="Saving return…" />}
+      {openingEdit && <OverlayLoader text="Opening editor…" />}
 
       <style>{`
         #invoice-print-area {
@@ -552,7 +566,7 @@ export default function InvoiceDetailPage() {
           <Breadcrumb items={[{ label: "Invoices", href: "/sales/invoices" }, { label: invoice.invoiceNumber }]} />
           <div className={styles.toolbarActions}>
             <StatusBadge status={invoice.status} />
-            <Button variant="editOutline" size="sm" href={`/sales/invoices/edit/${id}`}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit Invoice</Button>
+            <Button variant="editOutline" size="sm" onClick={() => { setOpeningEdit(true); router.push(`/sales/invoices/edit/${id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit Invoice</Button>
             {balance > 0 && (
               <Button
                 variant="greenPrimary"
@@ -566,10 +580,19 @@ export default function InvoiceDetailPage() {
                 Record Payment
               </Button>
             )}
-            <span title={invoice.paidAmount <= 0 ? "No payment received yet — pay first to enable returns" : undefined} className={styles.inlineFlex}>
-              <Button variant="secondary" size="sm" disabled={invoice.paidAmount <= 0} onClick={openReturnForm}>
+            <span
+              title={
+                invoice.paidAmount <= 0
+                  ? "No payment received yet — pay first to enable returns"
+                  : allItemsReturned
+                  ? "All items on this invoice have already been returned"
+                  : undefined
+              }
+              className={styles.inlineFlex}
+            >
+              <Button variant="secondary" size="sm" disabled={invoice.paidAmount <= 0 || allItemsReturned} onClick={openReturnForm}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
-                Record Return
+                {allItemsReturned ? "All Items Returned" : "Record Return"}
               </Button>
             </span>
             <Button variant="secondary" size="sm" onClick={handleDownloadClick}>
@@ -709,34 +732,35 @@ export default function InvoiceDetailPage() {
           <div className={styles.returnModalOverlayWrap}>
             <div className={styles.returnModalBackdrop} onClick={() => { if (!addingReturn) setShowReturnForm(false); }} />
             <div className={styles.returnModalBox}>
-              {/* Modal header */}
-              <div className={styles.returnModalHeader}>
-                <div className={styles.returnModalHeaderLeft}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
-                  <h3 className={styles.returnModalTitle}>Record Return</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { if (!addingReturn) setShowReturnForm(false); }}
-                  disabled={addingReturn}
-                  className={styles.returnModalCloseBtn}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-              </div>
-              {/* Modal body */}
-              <div className={styles.returnModalBody}>
-                <form onSubmit={handleAddReturn}>
-                  <div className={styles.returnModalMetaRow}>
-                    <div>
-                      <label className={styles.returnModalFieldLabel}>Return Date</label>
-                      <Input type="date" sz="sm" value={returnDate} onChange={e => setReturnDate(e.target.value)} className={styles.returnDateInput} />
-                    </div>
-                    <div className={styles.returnNotesField}>
-                      <label className={styles.returnModalFieldLabel}>Notes</label>
-                      <Input type="text" sz="sm" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Optional reason" className={styles.returnNotesInput} />
-                    </div>
+              <form onSubmit={handleAddReturn} className={styles.returnModalForm}>
+                {/* Modal header */}
+                <div className={styles.returnModalHeader}>
+                  <div className={styles.returnModalHeaderLeft}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                    <h3 className={styles.returnModalTitle}>Record Return</h3>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => { if (!addingReturn) setShowReturnForm(false); }}
+                    disabled={addingReturn}
+                    className={styles.returnModalCloseBtn}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+                {/* Meta row (pinned, outside the scrollable body) */}
+                <div className={styles.returnModalMetaRow}>
+                  <div>
+                    <label className={styles.returnModalFieldLabel}>Return Date</label>
+                    <Input type="date" sz="sm" value={returnDate} onChange={e => setReturnDate(e.target.value)} className={styles.returnDateInput} />
+                  </div>
+                  <div className={styles.returnNotesField}>
+                    <label className={styles.returnModalFieldLabel}>Notes</label>
+                    <Input type="text" sz="sm" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Optional reason" className={styles.returnNotesInput} />
+                  </div>
+                </div>
+                {/* Modal body (scrollable) */}
+                <div className={styles.returnModalBody}>
                   <div className={styles.returnItemsSection}>
                     <div className={styles.returnItemsLabel}>Select Items to Return</div>
                     <div className={styles.returnItemsList}>
@@ -785,16 +809,16 @@ export default function InvoiceDetailPage() {
                       )}
                     </div>
                   </div>
-                  {/* Modal footer */}
-                  <div className={styles.returnModalFooter}>
-                    <Button type="submit" variant="primary" size="sm" disabled={addingReturn || returnItems.length === 0} loading={addingReturn}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                      Save Return
-                    </Button>
-                    <Button type="button" variant="secondary" size="sm" onClick={() => { if (!addingReturn) setShowReturnForm(false); }} disabled={addingReturn}>Cancel</Button>
-                  </div>
-                </form>
-              </div>
+                </div>
+                {/* Modal footer (pinned, outside the scrollable body) */}
+                <div className={styles.returnModalFooter}>
+                  <Button type="submit" variant="primary" size="sm" disabled={addingReturn || returnItems.length === 0} loading={addingReturn}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    Save Return
+                  </Button>
+                  <Button type="button" variant="secondary" size="sm" onClick={() => { if (!addingReturn) setShowReturnForm(false); }} disabled={addingReturn}>Cancel</Button>
+                </div>
+              </form>
             </div>
           </div>
         )}

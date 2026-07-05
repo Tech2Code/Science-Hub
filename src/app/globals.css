@@ -402,6 +402,12 @@ input, textarea, select {
   .form-actions > * { width: 100%; justify-content: center; }
 }
 
+.form-actions-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 0.375rem; }
+.form-actions-wrap .form-actions { padding-top: 0; }
+@media (max-width: 480px) {
+  .form-actions-wrap { align-items: stretch; }
+}
+
 .field-label {
   display: block;
   font-size: 0.875rem;

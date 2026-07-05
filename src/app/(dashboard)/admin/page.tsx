@@ -217,7 +217,7 @@ export default function AdminPage() {
   async function savePassword(e: React.FormEvent) {
     e.preventDefault();
     const curErr  = validate(pwForm.current, rules.required("Current password is required."));
-    const nextErr = validate(pwForm.next,    rules.required("New password is required."), rules.minLength(6, "Password must be at least 6 characters."));
+    const nextErr = validate(pwForm.next,    rules.required("New password is required."), rules.minLength(8, "Password must be at least 8 characters."));
     const confErr = validate(pwForm.confirm, rules.required("Please confirm your new password."), rules.passwordMatch(pwForm.next));
     if (curErr || nextErr || confErr) { setPwMsg({ type: "err", text: curErr ?? nextErr ?? confErr ?? "" }); return; }
     setPwSaving(true); setPwMsg(null);
@@ -246,8 +246,8 @@ export default function AdminPage() {
       } else {
         setAddFieldErrors(prev => ({ ...prev, confirmPassword: undefined }));
       }
-      if (field === "password" && value && value.length < 6) {
-        setAddFieldErrors(prev => ({ ...prev, password: "Password must be at least 6 characters." }));
+      if (field === "password" && value && value.length < 8) {
+        setAddFieldErrors(prev => ({ ...prev, password: "Password must be at least 8 characters." }));
       } else if (field === "password") {
         setAddFieldErrors(prev => ({ ...prev, password: undefined }));
       }
@@ -273,7 +273,7 @@ export default function AdminPage() {
     e.preventDefault();
     const nameErr  = validate(addForm.name,            rules.required("Name is required."));
     const emailErr = validate(addForm.email,           rules.required("Email is required."), rules.email());
-    const pwErr    = validate(addForm.password,        rules.required("Password is required."), rules.minLength(6, "Password must be at least 6 characters."));
+    const pwErr    = validate(addForm.password,        rules.required("Password is required."), rules.minLength(8, "Password must be at least 8 characters."));
     const confErr  = validate(addForm.confirmPassword, rules.required("Please confirm the password."), rules.passwordMatch(addForm.password));
     if (nameErr || emailErr || pwErr || confErr) { setAddMsg({ type: "err", text: nameErr ?? emailErr ?? pwErr ?? confErr ?? "" }); return; }
     setAddSaving(true); setAddMsg(null);
@@ -289,7 +289,7 @@ export default function AdminPage() {
     if (!editUser) return;
     const nameErr  = validate(editForm.name,        rules.required("Name is required."));
     const emailErr = validate(editForm.email,       rules.required("Email is required."), rules.email());
-    const pwErr    = editForm.newPassword ? validate(editForm.newPassword, rules.minLength(6, "New password must be at least 6 characters.")) : null;
+    const pwErr    = editForm.newPassword ? validate(editForm.newPassword, rules.minLength(8, "New password must be at least 8 characters.")) : null;
     if (nameErr || emailErr || pwErr) { setEditMsg({ type: "err", text: nameErr ?? emailErr ?? pwErr ?? "" }); return; }
     setEditSaving(true); setEditMsg(null);
     const body: Record<string, string> = { name: editForm.name, email: editForm.email, role: editForm.role };
@@ -457,7 +457,7 @@ export default function AdminPage() {
             <form onSubmit={savePassword} className={styles.pwFormSpacing}>
               <div className={styles.fg3pw}>
                 <Field label="Current Password"><input className={styles.inp} type="password" value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))} required placeholder="••••••••" /></Field>
-                <Field label="New Password"><input className={styles.inp} type="password" value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))} required placeholder="min. 6 characters" /></Field>
+                <Field label="New Password"><input className={styles.inp} type="password" value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))} required placeholder="min. 8 characters" /></Field>
                 <Field label="Confirm Password"><input className={styles.inp} type="password" value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} required placeholder="repeat new password" /></Field>
               </div>
               {pwMsg && <Msg m={pwMsg} />}
@@ -502,7 +502,7 @@ export default function AdminPage() {
                   {addFieldErrors.email && <span className={styles.fieldErr}>{addFieldErrors.email}</span>}
                 </Field>
                 <Field label="Password">
-                  <PasswordInput className={styles.inp} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} required placeholder="min. 6 characters" />
+                  <PasswordInput className={styles.inp} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} required placeholder="min. 8 characters" />
                   {addFieldErrors.password && <span className={styles.fieldErr}>{addFieldErrors.password}</span>}
                 </Field>
                 <Field label="Re-enter Password">
@@ -548,7 +548,7 @@ export default function AdminPage() {
               <div className={styles.pwSection}>
                 <div className={styles.pwSectionHint}>New password — leave blank to keep current</div>
                 <div className={styles.maxW20}>
-                  <Field label="New Password"><input className={styles.inp} type="password" value={editForm.newPassword} onChange={e => setEditForm(p => ({ ...p, newPassword: e.target.value }))} placeholder="min. 6 characters" /></Field>
+                  <Field label="New Password"><input className={styles.inp} type="password" value={editForm.newPassword} onChange={e => setEditForm(p => ({ ...p, newPassword: e.target.value }))} placeholder="min. 8 characters" /></Field>
                 </div>
               </div>
               {editMsg && <Msg m={editMsg} />}

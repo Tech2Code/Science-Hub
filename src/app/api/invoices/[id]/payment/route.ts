@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
-    const session = await getServerSession(authOptions);
     const body = await request.json();
     const { amount, method, reference, notes } = body;
 
@@ -48,16 +49,14 @@ export async function POST(
       include: { payments: { orderBy: { date: "desc" } } },
     });
 
-    if (session?.user?.id) {
-      const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
-      await logActivity(
-        session.user.id,
-        "record_payment",
-        `Recorded payment ₹${fmt(parseFloat(amount))} via ${method || "Cash"} for invoice ${invoice.invoiceNumber} (${invoice.customer.name})`,
-        id,
-        "invoice"
-      );
-    }
+    const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+    await logActivity(
+      auth.session.user.id,
+      "record_payment",
+      `Recorded payment ₹${fmt(parseFloat(amount))} via ${method || "Cash"} for invoice ${invoice.invoiceNumber} (${invoice.customer.name})`,
+      id,
+      "invoice"
+    );
 
     return NextResponse.json(updated, { status: 201 });
   } catch (error) {

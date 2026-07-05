@@ -182,14 +182,16 @@ export default function EditProductPage() {
           </FormField>
         </div>
 
-        <div className="form-actions">
-          <Button type="submit" variant="primary" disabled={saving || (initialForm !== null && JSON.stringify(form) === JSON.stringify(initialForm))}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Product
-          </Button>
+        <div className="form-actions-wrap">
+          <div className="form-actions">
+            <Button type="submit" variant="primary" disabled={saving || (initialForm !== null && JSON.stringify(form) === JSON.stringify(initialForm))}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Product
+            </Button>
+            <Button variant="secondary" href="/products"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
+          </div>
           {initialForm !== null && JSON.stringify(form) === JSON.stringify(initialForm) && !saving && (
             <span className={styles.noChanges}>No changes detected.</span>
           )}
-          <Button variant="secondary" href="/products"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
         </div>
       </form>
     </div>

@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { getInvoices } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const customerId = searchParams.get("customerId");
@@ -21,19 +23,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    // Fall back to first admin user if session not available (dev mode)
-    let user = session?.user?.email
-      ? await prisma.user.findUnique({ where: { email: session.user.email } })
-      : null;
-
-    if (!user) {
-      user = await prisma.user.findFirst({ where: { role: "admin" } });
-    }
-
-    if (!user) {
-      return NextResponse.json({ error: "No user found. Please log in." }, { status: 401 });
-    }
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+    const user = auth.session.user;
 
     const body = await request.json();
     const { items, notes, dueDate, isInterState, customCustomer } = body;
@@ -145,7 +137,7 @@ export async function POST(request: NextRequest) {
         data: {
           invoiceNumber,
           customerId,
-          userId: user!.id,
+          userId: user.id,
           status: "unpaid",
           subtotal,
           cgst,

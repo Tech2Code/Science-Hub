@@ -8,7 +8,7 @@ export function useFetch<T>(url: string | null) {
   useEffect(() => {
     if (!url) return;
     let active = true;
-    setLoading(true);
+    setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect -- resets loading state when url changes, ahead of the fetch below
     fetch(url, { headers: { "x-no-loader": "1" } })
       .then((r) => r.json())
       .then((d: T) => { if (active) { setData(d); setLoading(false); } })

@@ -1,23 +1,37 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
-export async function POST() {
+// One-time database seed endpoint. Disabled in production and refuses to run
+// (or wipe anything) once a single user already exists, so it can never be
+// used to destroy or take over a live deployment.
+export async function POST(request: NextRequest) {
   try {
-    // Wipe all data in FK-safe order
-    await prisma.payment.deleteMany();
-    await prisma.invoiceItem.deleteMany();
-    await prisma.invoice.deleteMany();
-    await prisma.product.deleteMany();
-    await prisma.customer.deleteMany();
-    await prisma.brand.deleteMany();
-    await prisma.category.deleteMany();
-    await prisma.user.deleteMany();
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
 
-    // Admin user
-    const hashedPassword = await bcrypt.hash("admin123", 10);
+    const existingUserCount = await prisma.user.count();
+    if (existingUserCount > 0) {
+      return NextResponse.json(
+        { error: "Setup has already run — the database is not empty." },
+        { status: 409 }
+      );
+    }
+
+    const body = await request.json().catch(() => ({}) as Record<string, string>);
+    const adminEmail = (body.email as string | undefined)?.trim() || "admin@sciencehub.com";
+    const adminName = (body.name as string | undefined)?.trim() || "Admin";
+    const generatedPassword = crypto.randomBytes(9).toString("base64url");
+    const adminPassword = (body.password as string | undefined) || generatedPassword;
+    if (adminPassword.length < 8) {
+      return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
+    }
+
+    const hashedPassword = await bcrypt.hash(adminPassword, 12);
     const admin = await prisma.user.create({
-      data: { email: "admin@sciencehub.com", password: hashedPassword, name: "Naresh Jha", role: "admin" },
+      data: { email: adminEmail, password: hashedPassword, name: adminName, role: "admin" },
     });
 
     // Brands
@@ -223,6 +237,7 @@ export async function POST() {
 
     return NextResponse.json({
       message: "Setup complete",
+      admin: { email: adminEmail, password: body.password ? undefined : generatedPassword },
       summary: {
         users: 1, brands: brandNames.length, categories: categoryNames.length,
         products: productData.length, customers: customerRows.length,

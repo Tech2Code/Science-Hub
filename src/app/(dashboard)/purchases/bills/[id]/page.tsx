@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Input";
@@ -58,10 +58,12 @@ function InfoRow({ label, value, mono }: { label: string; value: string; mono?: 
 export default function PurchaseBillDetailPage() {
   const { id } = useParams<{ id: string }>();
   const toast   = useToast();
+  const router  = useRouter();
 
   const [bill,    setBill]    = useState<PurchaseBill | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState("");
+  const [openingEdit, setOpeningEdit] = useState(false);
 
   // Payment form
   const [showPayForm, setShowPayForm]   = useState(false);
@@ -71,7 +73,7 @@ export default function PurchaseBillDetailPage() {
   const [payDate,     setPayDate]       = useState(() => new Date().toISOString().slice(0, 10));
   const [submitting,  setSubmitting]    = useState(false);
 
-  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [updatingStatus] = useState(false);
   const [confirmCancel,  setConfirmCancel]  = useState(false);
   const [cancelling,     setCancelling]     = useState(false);
 
@@ -83,7 +85,8 @@ export default function PurchaseBillDetailPage() {
       .catch(() => { setError("Failed to load purchase bill."); setLoading(false); });
   }
 
-  useEffect(() => { load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- fetch-on-id-change; load() sets loading/bill state
+  useEffect(() => { load(); }, [id]);
 
   async function handlePayment(e: React.FormEvent) {
     e.preventDefault();
@@ -153,6 +156,7 @@ export default function PurchaseBillDetailPage() {
   return (
     <>
     {(submitting || updatingStatus || cancelling) && <OverlayLoader text="Saving…" />}
+    {openingEdit && <OverlayLoader text="Opening editor…" />}
 
     <ConfirmDialog
       open={confirmCancel}
@@ -182,7 +186,7 @@ export default function PurchaseBillDetailPage() {
           </div>
         </div>
         <div className={styles.toolbarActions}>
-          <Button variant="secondary" size="sm" href={`/purchases/bills/${bill.id}/edit`}>
+          <Button variant="secondary" size="sm" onClick={() => { setOpeningEdit(true); router.push(`/purchases/bills/${bill.id}/edit`); }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Edit
           </Button>

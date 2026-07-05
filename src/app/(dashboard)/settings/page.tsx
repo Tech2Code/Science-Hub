@@ -10,13 +10,13 @@ import styles from "./settings.module.css";
 interface BusinessSettings {
   name: string; tagline: string; email: string; phone: string;
   address: string; city: string; state: string; pincode: string; gstin: string;
-  gmailUser: string; gmailAppPassword: string;
+  gmailUser: string; gmailAppPasswordSet: boolean;
 }
 
 const EMPTY: BusinessSettings = {
   name: "", tagline: "", email: "", phone: "",
   address: "", city: "", state: "", pincode: "", gstin: "",
-  gmailUser: "", gmailAppPassword: "",
+  gmailUser: "", gmailAppPasswordSet: false,
 };
 
 function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
@@ -69,12 +69,12 @@ export default function SettingsPage() {
 
   const toast = useToast();
 
-  function applyLoaded(d: Record<string, string>) {
+  function applyLoaded(d: Record<string, string | boolean>) {
     const s: BusinessSettings = {
-      name: d.name ?? "", tagline: d.tagline ?? "", email: d.email ?? "",
-      phone: d.phone ?? "", address: d.address ?? "", city: d.city ?? "",
-      state: d.state ?? "", pincode: d.pincode ?? "", gstin: d.gstin ?? "",
-      gmailUser: d.gmailUser ?? "", gmailAppPassword: d.gmailAppPassword ?? "",
+      name: (d.name as string) ?? "", tagline: (d.tagline as string) ?? "", email: (d.email as string) ?? "",
+      phone: (d.phone as string) ?? "", address: (d.address as string) ?? "", city: (d.city as string) ?? "",
+      state: (d.state as string) ?? "", pincode: (d.pincode as string) ?? "", gstin: (d.gstin as string) ?? "",
+      gmailUser: (d.gmailUser as string) ?? "", gmailAppPasswordSet: Boolean(d.gmailAppPasswordSet),
     };
     setSaved(s);
     setForm(s);
@@ -113,7 +113,7 @@ export default function SettingsPage() {
     if (!hasChanges) { setEditing(false); return; }
     setSaving(true);
     try {
-      const body = { ...form, gmailUser: saved.gmailUser, gmailAppPassword: saved.gmailAppPassword };
+      const body = { ...form, gmailUser: saved.gmailUser };
       const res = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (res.ok) {
         applyLoaded(await res.json());
@@ -147,7 +147,7 @@ export default function SettingsPage() {
     e.preventDefault();
     const gmailErr = validate(emailForm.gmailUser, rules.required("Enter a Gmail address."), rules.email("Enter a valid Gmail address."));
     if (gmailErr) { toast({ type: "error", title: "Gmail required", message: gmailErr }); return; }
-    if (!saved.gmailAppPassword && !emailForm.gmailAppPassword) {
+    if (!saved.gmailAppPasswordSet && !emailForm.gmailAppPassword) {
       toast({ type: "error", title: "App Password required", message: "No existing password — enter one to enable email." });
       return;
     }
@@ -194,7 +194,7 @@ export default function SettingsPage() {
   }
 
   const address = [saved.address, saved.city, saved.state, saved.pincode].filter(Boolean).join(", ");
-  const emailConfigured = !!(saved.gmailUser && saved.gmailAppPassword);
+  const emailConfigured = !!(saved.gmailUser && saved.gmailAppPasswordSet);
 
   return (
     <div className="page-stack">
@@ -334,12 +334,12 @@ export default function SettingsPage() {
                       required
                     />
                   </FormField>
-                  <FormField label={saved.gmailAppPassword ? "New App Password (leave blank to keep current)" : "App Password"}>
+                  <FormField label={saved.gmailAppPasswordSet ? "New App Password (leave blank to keep current)" : "App Password"}>
                     <Input
                       type="password"
                       value={emailForm.gmailAppPassword}
                       onChange={(e) => setEmailForm((f) => ({ ...f, gmailAppPassword: e.target.value }))}
-                      placeholder={saved.gmailAppPassword ? "Leave blank to keep existing" : "16-character App Password"}
+                      placeholder={saved.gmailAppPasswordSet ? "Leave blank to keep existing" : "16-character App Password"}
                       autoComplete="new-password"
                     />
                   </FormField>

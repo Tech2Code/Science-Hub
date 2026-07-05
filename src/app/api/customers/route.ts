@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { getCustomers } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function GET() {
   try {
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
     const customers = await getCustomers();
     const ids = customers.map((c) => c.id);
     const logs = await prisma.activityLog.findMany({
@@ -25,7 +27,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const { name, phone, email, address, city, state, pincode, gstin } = body;
 
@@ -37,9 +41,7 @@ export async function POST(request: NextRequest) {
       data: { name, phone, email, address, city, state, pincode, gstin },
     });
 
-    if (session?.user?.id) {
-      await logActivity(session.user.id, "add_customer", `Added customer "${name}" | Phone: ${phone || "—"} | City: ${city || "—"} | GSTIN: ${gstin || "—"}`, customer.id, "customer");
-    }
+    await logActivity(auth.session.user.id, "add_customer", `Added customer "${name}" | Phone: ${phone || "—"} | City: ${city || "—"} | GSTIN: ${gstin || "—"}`, customer.id, "customer");
     return NextResponse.json(customer, { status: 201 });
   } catch (error) {
     console.error("POST /api/customers error:", error);

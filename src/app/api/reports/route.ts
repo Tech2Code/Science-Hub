@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getReportSummary, getReportOutstanding, getReportStock } from "@/lib/db";
 import { prisma } from "@/lib/prisma";
+import { requireSession } from "@/lib/apiAuth";
 
 async function getSalesDashboard() {
   const now = new Date();
@@ -229,6 +230,9 @@ async function getGstSummary() {
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");
 

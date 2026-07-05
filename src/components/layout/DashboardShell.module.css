@@ -17,7 +17,7 @@
   box-shadow: var(--c-shadow-sm);
   transition: width 0.3s ease, transform 0.3s ease, background-color 0.2s, border-color 0.2s;
   overflow: hidden;
-  z-index: 50;
+  z-index: 5;
 }
 .sidebarOpen   { width: 13rem; }
 .sidebarClosed { width: 4rem; }

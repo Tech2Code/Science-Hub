@@ -376,7 +376,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 </svg>
               </button>
             )}
-            <div className={styles.divider} />
+            {/* <div className={styles.divider} /> */}
             {currentNav && (() => {
               const Icon = NavIcons[currentNav.iconKey];
               return <Icon className={styles.pageIcon} />;

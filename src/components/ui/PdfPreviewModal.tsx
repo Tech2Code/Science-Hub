@@ -18,7 +18,7 @@ export function PdfPreviewModal({ url, fileName, title, subtitle, onClose }: Pdf
   useEffect(() => {
     const ua = navigator.userAgent;
     const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua) || window.innerWidth < 768;
-    setIsMobile(mobile);
+    setIsMobile(mobile); // eslint-disable-line react-hooks/set-state-in-effect -- reads browser-only navigator/window APIs, unavailable during SSR
   }, []);
 
   function handleDownload() {

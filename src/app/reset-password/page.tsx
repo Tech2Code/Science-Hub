@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import styles from "../login/login.module.css";
 import { rules, validate } from "@/lib/validation";
@@ -19,13 +20,13 @@ function ResetPasswordForm() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    if (!token) setError("Invalid reset link. Please request a new one.");
+    if (!token) setError("Invalid reset link. Please request a new one."); // eslint-disable-line react-hooks/set-state-in-effect -- derives error message from the URL token param
   }, [token]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    const pwErr   = validate(password, rules.required("Password is required."), rules.minLength(6, "Password must be at least 6 characters."));
+    const pwErr   = validate(password, rules.required("Password is required."), rules.minLength(8, "Password must be at least 8 characters."));
     const confErr = validate(confirm,  rules.required("Please confirm your password."), rules.passwordMatch(password));
     if (pwErr || confErr) { setError(pwErr ?? confErr ?? ""); return; }
     setLoading(true);
@@ -76,10 +77,10 @@ function ResetPasswordForm() {
                   id="password"
                   autoComplete="new-password"
                   required
-                  minLength={6}
+                  minLength={8}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="min. 6 characters"
+                  placeholder="min. 8 characters"
                 />
               </div>
               <div>
@@ -110,7 +111,7 @@ export default function ResetPasswordPage() {
       <div className={styles.grid} />
       <div className={styles.wrap}>
         <div className={styles.brand}>
-          <img src="/logo.png" alt="Science Hub" className={styles.brandIcon} />
+          <Image src="/logo.png" alt="Science Hub" width={56} height={56} className={styles.brandIcon} />
           <h1 className={styles.brandName}>Science Hub</h1>
           <p className={styles.brandSub}>Billing &amp; Inventory</p>
         </div>
