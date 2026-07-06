@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { logActivity } from "@/lib/activity";
+import { recordStockMovement } from "@/lib/stockMovement";
 
 const BILL_INCLUDE = {
   vendor: { select: { id: true, name: true, company: true } },
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
     const userId = session.user.id;
 
     const body = await req.json();
-    const { vendorId, billDate, dueDate, subtotal, taxAmount, discount, total, notes, category, items, payment } = body;
+    const { vendorId, billDate, dueDate, discount, notes, category, items, payment, attachmentUrl, attachmentName } = body;
 
     if (!vendorId) return NextResponse.json({ error: "Vendor is required." }, { status: 400 });
     if (!Array.isArray(items) || items.length === 0) return NextResponse.json({ error: "At least one item is required." }, { status: 400 });
@@ -59,9 +60,30 @@ export async function POST(req: NextRequest) {
       if (!(purchasePrice >= 0)) return NextResponse.json({ error: "Item price cannot be negative" }, { status: 400 });
     }
 
+    // Recompute every item's GST/total server-side from quantity × price × rate —
+    // mirrors the invoices route, so a stale or tampered client-sent total/GST
+    // can never get persisted as the bill's authoritative amount.
+    const computedItems = (items as {
+      productId?: string; name: string; quantity: number;
+      unit?: string; purchasePrice: number; gstRate?: number;
+    }[]).map((item) => {
+      const quantity = parseFloat(String(item.quantity));
+      const purchasePrice = parseFloat(String(item.purchasePrice));
+      const gstRate = parseFloat(String(item.gstRate ?? 0));
+      const itemSubtotal = quantity * purchasePrice;
+      const gstAmount = itemSubtotal * gstRate / 100;
+      return { ...item, quantity, purchasePrice, gstRate, gstAmount, total: itemSubtotal + gstAmount, itemSubtotal };
+    });
+    const subtotal = computedItems.reduce((s, i) => s + i.itemSubtotal, 0);
+    const taxAmount = computedItems.reduce((s, i) => s + i.gstAmount, 0);
+    const parsedDiscount = discount !== undefined && discount !== null && discount !== "" ? parseFloat(String(discount)) : 0;
+    if (Number.isNaN(parsedDiscount) || parsedDiscount < 0) {
+      return NextResponse.json({ error: "Discount cannot be negative" }, { status: 400 });
+    }
+
     const payAmt = payment?.amount ?? 0;
-    const billTotal = total ?? 0;
-    if (billTotal < 0) return NextResponse.json({ error: "Total cannot be negative" }, { status: 400 });
+    const billTotal = subtotal + taxAmount - parsedDiscount;
+    if (billTotal < 0) return NextResponse.json({ error: "Discount cannot exceed the bill total" }, { status: 400 });
     const paidAmount = Math.min(payAmt, billTotal);
     const status = paidAmount >= billTotal && billTotal > 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
     const year = new Date(billDate ?? Date.now()).getFullYear();
@@ -85,27 +107,26 @@ export async function POST(req: NextRequest) {
             vendorId,
             billDate: billDate ? new Date(billDate) : new Date(),
             dueDate: dueDate ? new Date(dueDate) : null,
-            subtotal: subtotal ?? 0,
-            taxAmount: taxAmount ?? 0,
-            discount: discount ?? 0,
+            subtotal,
+            taxAmount,
+            discount: parsedDiscount,
             total: billTotal,
             paidAmount,
             status,
             notes: notes || null,
             category: category || null,
+            attachmentUrl: attachmentUrl || null,
+            attachmentName: attachmentName || null,
             createdByUserId: userId,
             items: {
-              create: items.map((item: {
-                productId?: string; name: string; quantity: number;
-                unit?: string; purchasePrice: number; gstRate?: number; gstAmount?: number; total: number;
-              }) => ({
+              create: computedItems.map((item) => ({
                 productId: item.productId || null,
                 name: item.name,
                 quantity: item.quantity,
                 unit: item.unit ?? "Nos",
                 purchasePrice: item.purchasePrice,
-                gstRate: item.gstRate ?? 0,
-                gstAmount: item.gstAmount ?? 0,
+                gstRate: item.gstRate,
+                gstAmount: item.gstAmount,
                 total: item.total,
               })),
             },
@@ -126,16 +147,23 @@ export async function POST(req: NextRequest) {
 
         // A purchase bill's whole point is restocking — without this, inventory
         // only ever drains via sales and never gets replenished.
-        await Promise.all(
-          (items as { productId?: string; quantity: number }[])
-            .filter(item => item.productId)
-            .map(item =>
-              tx.product.update({
-                where: { id: item.productId! },
-                data: { stock: { increment: item.quantity } },
-              })
-            )
-        );
+        const stockedItems = computedItems.filter(item => item.productId);
+        for (const item of stockedItems) {
+          const product = await tx.product.update({
+            where: { id: item.productId! },
+            data: { stock: { increment: item.quantity } },
+            select: { id: true, stock: true },
+          });
+          await recordStockMovement(tx, {
+            productId: product.id,
+            type: "purchase",
+            quantity: item.quantity,
+            balanceAfter: product.stock,
+            reference: created.billNumber,
+            purchaseBillId: created.id,
+            createdByUserId: userId,
+          });
+        }
 
         return created;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });

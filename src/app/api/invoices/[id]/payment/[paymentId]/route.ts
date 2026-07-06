@@ -58,7 +58,7 @@ export async function PUT(
     revalidateTag("invoices", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
 
-    const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+    const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     await logActivity(
       auth.session.user.id,
       "update_payment",

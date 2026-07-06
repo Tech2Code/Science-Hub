@@ -33,6 +33,10 @@
     width: 13rem !important;
     transform: translateX(-100%);
     box-shadow: var(--c-shadow-lg);
+    /* Must sit above both the dimmed backdrop (z-index 40) and the sticky
+       page-nav row (z-index 5) — otherwise the backdrop dims the open
+       drawer itself, and the Back/Forward buttons render on top of it. */
+    z-index: 50;
   }
   .sidebarOpen  { transform: translateX(0); }
   .sidebarClosed { transform: translateX(-100%); }

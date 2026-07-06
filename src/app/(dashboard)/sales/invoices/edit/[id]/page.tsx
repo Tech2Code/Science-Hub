@@ -375,30 +375,30 @@ export default function EditInvoicePage() {
               <div className={styles.summaryList}>
                 <div className={styles.summaryRow}>
                   <span>Subtotal</span>
-                  <span>₹{subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                  <span>₹{subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 {Object.entries(taxBreakdown).map(([rate, amt]) =>
                   isInterState ? (
                     <div key={rate} className={styles.summaryRow}>
                       <span>IGST {rate}%</span>
-                      <span>₹{amt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                      <span>₹{amt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                   ) : (
                     <div key={rate} className={styles.summaryGstGroup}>
                       <div className={styles.summaryRow}>
                         <span>CGST {Number(rate) / 2}%</span>
-                        <span>₹{(amt / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                        <span>₹{(amt / 2).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                       <div className={styles.summaryRow}>
                         <span>SGST {Number(rate) / 2}%</span>
-                        <span>₹{(amt / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                        <span>₹{(amt / 2).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                     </div>
                   )
                 )}
                 <div className={styles.summaryTotalRow}>
                   <span>Grand Total</span>
-                  <span>₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                  <span>₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
               {items.length === 0 && (

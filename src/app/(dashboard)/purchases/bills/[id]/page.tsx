@@ -11,6 +11,8 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
+import { amountInWordsINR } from "@/lib/numberToWords";
 import styles from "./billDetail.module.css";
 
 interface PurchaseBillItem {
@@ -29,10 +31,16 @@ interface PurchaseBill {
   createdBy: { id: string; name: string };
   items: PurchaseBillItem[];
   payments: PurchasePayment[];
+  attachmentUrl: string | null;
+  attachmentName: string | null;
+}
+interface BusinessSettings {
+  name: string; tagline: string; email: string; phone: string;
+  address: string; city: string; state: string; pincode: string; gstin: string;
 }
 
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
-const fmt     = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+const fmt     = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtShort = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
@@ -64,6 +72,8 @@ export default function PurchaseBillDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState("");
   const [openingEdit, setOpeningEdit] = useState(false);
+  const [settings, setSettings] = useState<BusinessSettings | null>(null);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
 
   // Payment form
   const [showPayForm, setShowPayForm]   = useState(false);
@@ -87,6 +97,26 @@ export default function PurchaseBillDetailPage() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- fetch-on-id-change; load() sets loading/bill state
   useEffect(() => { load(); }, [id]);
+
+  useEffect(() => {
+    fetch("/api/settings").then(r => r.json()).then(setSettings).catch(() => {});
+  }, []);
+
+  async function handleDownloadPdf() {
+    if (!bill) return;
+    setPdfDownloading(true);
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await document.fonts.ready;
+    const el = document.getElementById("bill-print-area");
+    const blob = el ? await generateInvoicePdfBlob(el) : null;
+    setPdfDownloading(false);
+    if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${bill.billNumber}.pdf`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
 
   async function handlePayment(e: React.FormEvent) {
     e.preventDefault();
@@ -157,6 +187,100 @@ export default function PurchaseBillDetailPage() {
     <>
     {(submitting || updatingStatus || cancelling) && <OverlayLoader text="Saving…" />}
     {openingEdit && <OverlayLoader text="Opening editor…" />}
+    {pdfDownloading && <OverlayLoader text="Generating PDF…" />}
+
+    <style>{`
+      #bill-print-area {
+        --bp-bg:#fff; --bp-bd:#475569; --bp-tx:#0f172a; --bp-tx2:#334155; --bp-tx3:#64748b;
+      }
+    `}</style>
+
+    <div id="bill-print-area" style={{ position: "fixed", left: -9999, top: 0, width: 794, background: "var(--bp-bg)", color: "var(--bp-tx)", padding: 28, fontFamily: "Arial, sans-serif" }} aria-hidden="true">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, borderBottom: `2px solid var(--bp-bd)`, paddingBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--bp-tx)" }}>{settings?.name || "Science Hub"}</div>
+          {(settings?.address || settings?.city || settings?.state || settings?.pincode) && (
+            <div style={{ fontSize: 11, color: "var(--bp-tx3)", maxWidth: 320 }}>
+              {[settings?.address, settings?.city, settings?.state, settings?.pincode].filter(Boolean).join(", ")}
+            </div>
+          )}
+          {(settings?.phone || settings?.email) && (
+            <div style={{ fontSize: 11, color: "var(--bp-tx3)" }}>
+              {[settings?.phone && `Tel: ${settings.phone}`, settings?.email].filter(Boolean).join(" · ")}
+            </div>
+          )}
+          {settings?.gstin && <div style={{ fontSize: 11, color: "var(--bp-tx3)" }}>GSTIN: {settings.gstin}</div>}
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--bp-tx)" }}>PURCHASE BILL</div>
+          <div style={{ fontSize: 12, color: "var(--bp-tx2)" }}>{bill.billNumber}</div>
+          <div style={{ fontSize: 11, color: "var(--bp-tx3)" }}>Date: {fmtDate(bill.billDate)}</div>
+          {bill.dueDate && <div style={{ fontSize: 11, color: "var(--bp-tx3)" }}>Due: {fmtDate(bill.dueDate)}</div>}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--bp-tx3)", textTransform: "uppercase", marginBottom: 3 }}>Vendor</div>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{bill.vendor.name}</div>
+        {bill.vendor.company && <div style={{ fontSize: 11, color: "var(--bp-tx2)" }}>{bill.vendor.company}</div>}
+        {bill.vendor.address && <div style={{ fontSize: 11, color: "var(--bp-tx3)" }}>{bill.vendor.address}</div>}
+        {bill.vendor.gstin && <div style={{ fontSize: 11, color: "var(--bp-tx3)" }}>GSTIN: {bill.vendor.gstin}</div>}
+      </div>
+
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+        <thead>
+          <tr style={{ background: "#f1f5f9" }}>
+            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "left", width: 28 }}>#</th>
+            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "left" }}>Item</th>
+            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>Qty</th>
+            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>Rate</th>
+            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>GST %</th>
+            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {bill.items.map((item, idx) => (
+            <tr key={item.id}>
+              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, color: "var(--bp-tx3)" }}>{idx + 1}</td>
+              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6 }}>{item.name} <span style={{ color: "var(--bp-tx3)" }}>({item.unit})</span></td>
+              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{item.quantity}</td>
+              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{fmt(item.purchasePrice)}</td>
+              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{item.gstRate}%</td>
+              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{fmt(item.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colSpan={5} style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right", fontWeight: 700 }}>Grand Total</td>
+            <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right", fontWeight: 700 }}>{fmt(bill.total)}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+        <table style={{ fontSize: 11, minWidth: 220 }}>
+          <tbody>
+            <tr><td style={{ padding: "2px 8px", color: "var(--bp-tx3)" }}>Subtotal</td><td style={{ padding: "2px 8px", textAlign: "right" }}>₹{fmt(bill.subtotal)}</td></tr>
+            <tr><td style={{ padding: "2px 8px", color: "var(--bp-tx3)" }}>GST</td><td style={{ padding: "2px 8px", textAlign: "right" }}>₹{fmt(bill.taxAmount)}</td></tr>
+            {bill.discount > 0 && <tr><td style={{ padding: "2px 8px", color: "var(--bp-tx3)" }}>Discount</td><td style={{ padding: "2px 8px", textAlign: "right" }}>−₹{fmt(bill.discount)}</td></tr>}
+            <tr><td style={{ padding: "4px 8px", fontWeight: 700, borderTop: `1px solid var(--bp-bd)` }}>Total</td><td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 700, borderTop: `1px solid var(--bp-bd)` }}>₹{fmt(bill.total)}</td></tr>
+            <tr><td style={{ padding: "2px 8px", color: "var(--bp-tx3)" }}>Paid</td><td style={{ padding: "2px 8px", textAlign: "right" }}>₹{fmt(bill.paidAmount)}</td></tr>
+            <tr><td style={{ padding: "2px 8px", fontWeight: 700 }}>Balance Due</td><td style={{ padding: "2px 8px", textAlign: "right", fontWeight: 700 }}>₹{fmt(balance)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ marginTop: 8, fontSize: 10.5, fontStyle: "italic", color: "var(--bp-tx3)", textAlign: "right" }}>
+        {amountInWordsINR(bill.total)}
+      </div>
+
+      {bill.notes && (
+        <div style={{ marginTop: 14, fontSize: 11, color: "var(--bp-tx2)" }}>
+          <strong>Note:</strong> {bill.notes}
+        </div>
+      )}
+    </div>
 
     <ConfirmDialog
       open={confirmCancel}
@@ -186,7 +310,17 @@ export default function PurchaseBillDetailPage() {
           </div>
         </div>
         <div className={styles.toolbarActions}>
-          <Button variant="secondary" size="sm" onClick={() => { setOpeningEdit(true); router.push(`/purchases/bills/${bill.id}/edit`); }}>
+          <Button variant="secondary" size="sm" onClick={handleDownloadPdf} disabled={pdfDownloading}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            {pdfDownloading ? "Generating…" : "Download PDF"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={bill.status === "paid" || bill.status === "cancelled"}
+            title={bill.status === "paid" || bill.status === "cancelled" ? `Bill is ${bill.status} — nothing left to edit` : undefined}
+            onClick={() => { setOpeningEdit(true); router.push(`/purchases/bills/${bill.id}/edit`); }}
+          >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Edit
           </Button>
@@ -260,6 +394,14 @@ export default function PurchaseBillDetailPage() {
           <InfoRow label="Due Date"    value={bill.dueDate ? fmtDate(bill.dueDate) : "Not set"} />
           <InfoRow label="Category"    value={bill.category || "—"} />
           <InfoRow label="Created By"  value={bill.createdBy.name} />
+          {bill.attachmentUrl && (
+            <div className={styles.infoRow}>
+              <span className={styles.infoRowLabel}>Attachment</span>
+              <a href={bill.attachmentUrl} target="_blank" rel="noopener noreferrer" download={bill.attachmentName ?? undefined} className={styles.infoRowValue}>
+                {bill.attachmentName || "View attachment"}
+              </a>
+            </div>
+          )}
           {bill.notes && (
             <div className={styles.billNote}>
               <span className={styles.billNoteLabel}>Note:</span>{bill.notes}
@@ -361,6 +503,9 @@ export default function PurchaseBillDetailPage() {
               <tr className={styles.tfootRow}>
                 <td colSpan={6} className={styles.tfootLabelCell}>Grand Total</td>
                 <td className={styles.tfootValueCell}>₹{fmt(bill.total)}</td>
+              </tr>
+              <tr>
+                <td colSpan={7} className={styles.amountInWordsCell}>{amountInWordsINR(bill.total)}</td>
               </tr>
             </tfoot>
           </table>

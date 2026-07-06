@@ -108,7 +108,7 @@ export default function BrandsPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Brands</h1>
-          <p className="page-sub">{brands.length} brands in catalog</p>
+          <p className="page-sub">{loading ? "Loading…" : `${brands.length} brands in catalog`}</p>
         </div>
       </div>
 

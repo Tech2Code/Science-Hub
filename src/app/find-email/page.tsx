@@ -79,7 +79,7 @@ export default function FindEmailPage() {
                 autoComplete="name"
                 value={name}
                 onChange={(e) => { setName(e.target.value); setResults(null); setError(""); }}
-                placeholder="e.g. Gyan Singh"
+                placeholder="e.g. Enter Your Name"
                 className={styles.input}
               />
             </div>

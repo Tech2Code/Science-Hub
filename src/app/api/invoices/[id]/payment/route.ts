@@ -57,7 +57,7 @@ export async function POST(
       include: { payments: { orderBy: { date: "desc" } } },
     });
 
-    const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+    const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     await logActivity(
       auth.session.user.id,
       "record_payment",

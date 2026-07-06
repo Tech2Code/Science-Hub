@@ -8,10 +8,11 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
 import styles from "./billNew.module.css";
 
 interface Vendor { id: string; name: string; company: string | null; gstin: string | null; }
-interface Product { id: string; name: string; sku: string | null; unit: string; purchasePrice: number | null; gstRate: number; }
+interface Product { id: string; name: string; sku: string | null; unit: string; price: number; purchasePrice: number | null; gstRate: number; }
 
 interface LineItem {
   productId: string;
@@ -22,6 +23,7 @@ interface LineItem {
   gstRate: string;
 }
 
+type InlineVendorForm = { name: string; phone: string; email: string; gstin: string; address: string };
 const BLANK_ITEM: LineItem = { productId: "", name: "", unit: "Pcs", quantity: "1", purchasePrice: "", gstRate: "18" };
 const UNITS = ["Pcs", "Box", "Set", "Kg", "Ltr", "Mtr", "Dozen", "Pack", "Pair"];
 const GST_RATES = ["0", "5", "12", "18", "28"];
@@ -29,7 +31,7 @@ const CATEGORIES = ["Raw Materials", "Lab Chemicals", "Lab Equipment", "Office S
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
 
 function toNum(s: string) { const n = parseFloat(s); return isNaN(n) ? 0 : n; }
-const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function calcItem(item: LineItem) {
   const qty   = toNum(item.quantity);
@@ -58,6 +60,7 @@ export default function NewPurchaseBillPage() {
   const [ivAddress, setIvAddress] = useState("");
   const [ivSaving,  setIvSaving]  = useState(false);
   const [ivError,   setIvError]   = useState("");
+  const [ivFieldErrors, setIvFieldErrors] = useState<FormErrors<InlineVendorForm>>({});
 
   // Catalog save state: set of item indices currently being saved
   const [catalogSaving, setCatalogSaving] = useState<Set<number>>(new Set());
@@ -69,6 +72,9 @@ export default function NewPurchaseBillPage() {
   const [discount,  setDiscount]  = useState("0");
   const [notes,     setNotes]     = useState("");
   const [items,     setItems]     = useState<LineItem[]>([{ ...BLANK_ITEM }]);
+  const [attachmentUrl,  setAttachmentUrl]  = useState<string | null>(null);
+  const [attachmentName, setAttachmentName] = useState<string | null>(null);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
 
   // Optional: record payment immediately
   const [addPayment,   setAddPayment]   = useState(false);
@@ -83,7 +89,15 @@ export default function NewPurchaseBillPage() {
   }, []);
 
   async function handleCreateInlineVendor() {
-    if (!ivName.trim()) { setIvError("Vendor name is required."); return; }
+    const newErrors = validateForm<InlineVendorForm>({ name: ivName, phone: ivPhone, email: ivEmail, gstin: ivGstin, address: ivAddress }, {
+      name:    [rules.required("Vendor name is required.")],
+      phone:   [rules.required("Phone number is required."), rules.phone10()],
+      email:   [rules.email()],
+      gstin:   [rules.maxLength(15), rules.gstin()],
+      address: [rules.required("Address is required.")],
+    });
+    if (hasErrors(newErrors)) { setIvFieldErrors(newErrors); return; }
+    setIvFieldErrors({});
     setIvSaving(true); setIvError("");
     try {
       const res = await fetch("/api/vendors", {
@@ -123,10 +137,11 @@ export default function NewPurchaseBillPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name:     item.name.trim(),
-          unit:     item.unit,
-          price:    toNum(item.purchasePrice),
-          gstRate:  toNum(item.gstRate),
+          name:          item.name.trim(),
+          unit:          item.unit,
+          price:         toNum(item.purchasePrice),
+          purchasePrice: toNum(item.purchasePrice),
+          gstRate:       toNum(item.gstRate),
           stock:    0,
           minStock: 0,
         }),
@@ -168,12 +183,16 @@ export default function NewPurchaseBillPage() {
     setItems(prev => {
       const next = [...prev];
       if (product) {
+        // Prefer the dedicated purchase price; most existing catalog items
+        // won't have one set yet, so fall back to the sale price rather
+        // than leaving the rate blank.
+        const rate = product.purchasePrice ?? product.price;
         next[idx] = {
           ...next[idx],
           productId: product.id,
           name: product.name,
           unit: product.unit,
-          purchasePrice: product.purchasePrice != null ? String(product.purchasePrice) : "",
+          purchasePrice: rate != null ? String(rate) : "",
           gstRate: String(product.gstRate),
         };
       } else {
@@ -182,6 +201,41 @@ export default function NewPurchaseBillPage() {
       return next;
     });
   }, [products]);
+
+  async function handleAttachmentChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAttachmentUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/purchase-bills/upload", { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setAttachmentUrl(data.url);
+        setAttachmentName(data.name);
+      } else {
+        toast({ type: "error", title: "Upload failed", message: data.error ?? "Could not upload file." });
+      }
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Could not upload file." });
+    }
+    setAttachmentUploading(false);
+    e.target.value = "";
+  }
+
+  function removeAttachment() {
+    // Never saved to a bill yet, so it's safe to discard the blob right away.
+    if (attachmentUrl) {
+      fetch("/api/purchase-bills/upload", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: attachmentUrl }),
+      }).catch(() => {});
+    }
+    setAttachmentUrl(null);
+    setAttachmentName(null);
+  }
 
   function addItem() { setItems(prev => [...prev, { ...BLANK_ITEM }]); }
   function removeItem(idx: number) { setItems(prev => prev.filter((_, i) => i !== idx)); }
@@ -197,6 +251,7 @@ export default function NewPurchaseBillPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (attachmentUploading)                         { validationToast("Please wait for the attachment to finish uploading."); return; }
     if (!vendorId)                                   { validationToast("Please select a vendor."); return; }
     if (items.length === 0)                          { validationToast("Add at least one item."); return; }
     if (items.some(i => !i.name.trim()))             { validationToast("All items must have a name."); return; }
@@ -225,6 +280,8 @@ export default function NewPurchaseBillPage() {
       total:     grandTotal,
       notes:     notes.trim() || null,
       items:     billItems,
+      attachmentUrl,
+      attachmentName,
     };
 
     if (addPayment && toNum(payAmount) > 0) {
@@ -282,7 +339,7 @@ export default function NewPurchaseBillPage() {
               {!vendorId && !showVendorCreate && (
                 <button
                   type="button"
-                  onClick={() => { setIvName(""); setIvCompany(""); setIvGstin(""); setIvPhone(""); setIvEmail(""); setIvAddress(""); setIvError(""); setShowVendorCreate(true); }}
+                  onClick={() => { setIvName(""); setIvCompany(""); setIvGstin(""); setIvPhone(""); setIvEmail(""); setIvAddress(""); setIvError(""); setIvFieldErrors({}); setShowVendorCreate(true); }}
                   className={styles.addVendorLink}
                 >
                   + Add new vendor manually
@@ -325,23 +382,23 @@ export default function NewPurchaseBillPage() {
                 )}
 
                 <div className={styles.inlineVendorGrid}>
-                  <FormField label="Vendor Name" required>
-                    <Input value={ivName} onChange={e => setIvName(e.target.value)} placeholder="e.g. Sharma Chemicals" />
+                  <FormField label="Vendor Name" required error={ivFieldErrors.name}>
+                    <Input value={ivName} onChange={e => { setIvName(e.target.value); setIvFieldErrors(p => ({ ...p, name: undefined })); }} placeholder="e.g. Sharma Chemicals" />
                   </FormField>
                   <FormField label="Company / Trade Name">
                     <Input value={ivCompany} onChange={e => setIvCompany(e.target.value)} placeholder="Optional" />
                   </FormField>
-                  <FormField label="GSTIN">
-                    <Input value={ivGstin} onChange={e => setIvGstin(e.target.value)} placeholder="22AAAAA0000A1Z5" />
+                  <FormField label="GSTIN" error={ivFieldErrors.gstin}>
+                    <Input value={ivGstin} onChange={e => { setIvGstin(e.target.value); setIvFieldErrors(p => ({ ...p, gstin: undefined })); }} placeholder="22AAAAA0000A1Z5" maxLength={15} mono />
                   </FormField>
-                  <FormField label="Phone">
-                    <Input value={ivPhone} onChange={e => setIvPhone(e.target.value)} placeholder="10-digit mobile" />
+                  <FormField label="Phone" required error={ivFieldErrors.phone}>
+                    <Input type="tel" inputMode="numeric" value={ivPhone} onChange={e => { setIvPhone(e.target.value); setIvFieldErrors(p => ({ ...p, phone: undefined })); }} placeholder="10-digit mobile" maxLength={10} />
                   </FormField>
-                  <FormField label="Email">
-                    <Input type="email" value={ivEmail} onChange={e => setIvEmail(e.target.value)} placeholder="vendor@example.com" />
+                  <FormField label="Email" error={ivFieldErrors.email}>
+                    <Input type="email" value={ivEmail} onChange={e => { setIvEmail(e.target.value); setIvFieldErrors(p => ({ ...p, email: undefined })); }} placeholder="vendor@example.com" />
                   </FormField>
-                  <FormField label="Address">
-                    <Input value={ivAddress} onChange={e => setIvAddress(e.target.value)} placeholder="Street / locality" />
+                  <FormField label="Address" required error={ivFieldErrors.address}>
+                    <Input value={ivAddress} onChange={e => { setIvAddress(e.target.value); setIvFieldErrors(p => ({ ...p, address: undefined })); }} placeholder="Street / locality" />
                   </FormField>
                 </div>
               </div>
@@ -372,6 +429,28 @@ export default function NewPurchaseBillPage() {
 
           <FormField label="Notes">
             <Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes about this purchase…" />
+          </FormField>
+
+          <FormField label="Attachment (bill copy / receipt)">
+            {attachmentUploading ? (
+              <span className={styles.attachmentUploading}>Uploading…</span>
+            ) : attachmentName ? (
+              <div className={styles.attachmentRow}>
+                <span className={styles.attachmentName}>{attachmentName}</span>
+                <button type="button" onClick={removeAttachment} className={styles.attachmentRemoveBtn}>Remove</button>
+              </div>
+            ) : (
+              <label className={styles.attachmentPicker}>
+                <span className={styles.attachmentPickerBtn}>Choose File</span>
+                <span className={styles.attachmentPickerHint}>No file chosen</span>
+                <input
+                  type="file"
+                  accept="application/pdf,image/*"
+                  onChange={handleAttachmentChange}
+                  className={styles.attachmentPickerInput}
+                />
+              </label>
+            )}
           </FormField>
         </div>
 
@@ -414,7 +493,7 @@ export default function NewPurchaseBillPage() {
                         </Select>
                       </td>
                       <td className={styles.tdQty}>
-                        <Input sz="sm" type="number" min="0.01" step="0.01" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} className={styles.numInputRight} />
+                        <Input sz="sm" type="number" min="1" step="1" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} className={styles.numInputRight} />
                       </td>
                       <td className={styles.tdRate}>
                         <Input sz="sm" type="number" min="0" step="0.01" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value)} placeholder="0.00" className={styles.numInputRight} />

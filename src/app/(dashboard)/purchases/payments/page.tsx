@@ -65,7 +65,7 @@ export default function PurchasePaymentsPage() {
         <div>
           <h1 className="page-title">Payments Made</h1>
           <p className="page-sub">
-            {payments.length} payments · Total paid ₹{totalPaid.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+            {payments.length} payments · Total paid ₹{totalPaid.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
         </div>
       </div>
@@ -118,7 +118,7 @@ export default function PurchasePaymentsPage() {
                       {p.reference || "—"}
                     </Cell>
                     <Cell col={COLUMNS[5]} className={styles.amountCell}>
-                      ₹{p.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      ₹{p.amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Cell>
                   </tr>
                 );

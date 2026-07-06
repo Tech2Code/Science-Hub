@@ -31,10 +31,10 @@
 }
 
 /* ── Field grids ────────────────────────────────────────── */
-.fg4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0.875rem; }
-.fg3 { display: grid; grid-template-columns: 1fr 1fr 8rem; gap: 0.875rem; }
-.fg3pw { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.875rem; }
-.fg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.fg4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1.375rem 0.875rem; }
+.fg3 { display: grid; grid-template-columns: 1fr 1fr 8rem; gap: 1.375rem 0.875rem; }
+.fg3pw { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.375rem 0.875rem; }
+.fg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.375rem 1rem; }
 @media (max-width: 640px) {
   .fg4 { grid-template-columns: 1fr 1fr; }
   .fg3 { grid-template-columns: 1fr 1fr; }

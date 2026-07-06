@@ -103,7 +103,9 @@ export default function CustomersPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Customers</h1>
-          <p className="page-sub">{customers.length} total customers</p>
+          <p className="page-sub">
+            {loading ? "Loading…" : search.trim() ? `${filtered.length} of ${customers.length} customers` : `${customers.length} total customers`}
+          </p>
         </div>
         <Button variant="primary" href="/sales/customers/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Customer</Button>
       </div>

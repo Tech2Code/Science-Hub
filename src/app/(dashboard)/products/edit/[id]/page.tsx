@@ -20,7 +20,7 @@ interface Category { id: string; name: string; }
 
 interface FormData {
   name: string; sku: string; description: string; unit: string;
-  price: string; gstRate: string; stock: string; minStock: string;
+  price: string; purchasePrice: string; gstRate: string; stock: string; minStock: string;
   brandId: string; categoryId: string;
 }
 
@@ -30,7 +30,7 @@ export default function EditProductPage() {
   const { id } = useParams<{ id: string }>();
   const [form, setForm] = useState<FormData>({
     name: "", sku: "", description: "", unit: "Nos",
-    price: "", gstRate: "18", stock: "0", minStock: "0",
+    price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: "0",
     brandId: "", categoryId: "",
   });
   const [initialForm, setInitialForm] = useState<FormData | null>(null);
@@ -51,7 +51,8 @@ export default function EditProductPage() {
         const loaded: FormData = {
           name: product.name ?? "", sku: product.sku ?? "",
           description: product.description ?? "", unit: product.unit ?? "Nos",
-          price: product.price?.toString() ?? "", gstRate: product.gstRate?.toString() ?? "18",
+          price: product.price?.toString() ?? "", purchasePrice: product.purchasePrice != null ? product.purchasePrice.toString() : "",
+          gstRate: product.gstRate?.toString() ?? "18",
           stock: product.stock?.toString() ?? "0", minStock: product.minStock?.toString() ?? "0",
           brandId: product.brandId ?? "", categoryId: product.categoryId ?? "",
         };
@@ -75,7 +76,8 @@ export default function EditProductPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: form.name, sku: form.sku, description: form.description, unit: form.unit,
-        price: parseFloat(form.price), gstRate: parseInt(form.gstRate),
+        price: parseFloat(form.price), purchasePrice: form.purchasePrice.trim() ? parseFloat(form.purchasePrice) : null,
+        gstRate: parseInt(form.gstRate),
         stock: parseInt(form.stock), minStock: parseInt(form.minStock),
         brandId: form.brandId || null, categoryId: form.categoryId || null,
       }),
@@ -155,6 +157,12 @@ export default function EditProductPage() {
             <Select name="gstRate" value={form.gstRate} onChange={handleChange}>
               {GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
             </Select>
+          </FormField>
+        </div>
+
+        <div className="form-grid-2">
+          <FormField label="Purchase Price (₹)" hint="Used to auto-fill the rate on Purchase Bills.">
+            <Input name="purchasePrice" type="number" min="0" step="0.01" value={form.purchasePrice} onChange={handleChange} placeholder="0.00" />
           </FormField>
         </div>
 

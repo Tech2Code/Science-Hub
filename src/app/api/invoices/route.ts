@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getInvoices } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { requireSession } from "@/lib/apiAuth";
+import { recordStockMovement } from "@/lib/stockMovement";
 
 export async function GET(request: NextRequest) {
   try {
@@ -170,16 +171,23 @@ export async function POST(request: NextRequest) {
           include: { customer: true, items: true },
         });
 
-        const updatedProducts = await Promise.all(invoiceItems.map((item: { productId: string; quantity: number }) =>
-          tx.product.update({
+        const warnings: string[] = [];
+        for (const item of invoiceItems as { productId: string; quantity: number }[]) {
+          const product = await tx.product.update({
             where: { id: item.productId },
             data: { stock: { decrement: item.quantity } },
-            select: { name: true, stock: true },
-          })
-        ));
-        const warnings = updatedProducts
-          .filter((p) => p.stock < 0)
-          .map((p) => `${p.name} (stock: ${p.stock})`);
+            select: { id: true, name: true, stock: true },
+          });
+          if (product.stock < 0) warnings.push(`${product.name} (stock: ${product.stock})`);
+          await recordStockMovement(tx, {
+            productId: product.id,
+            type: "sale",
+            quantity: -item.quantity,
+            balanceAfter: product.stock,
+            reference: inv.invoiceNumber,
+            createdByUserId: user.id,
+          });
+        }
 
         return { invoice: inv, stockWarnings: warnings };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });

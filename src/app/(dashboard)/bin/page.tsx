@@ -9,7 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import styles from "./bin.module.css";
 
-type BinType = "invoice" | "customer" | "product" | "brand" | "category";
+type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill";
 
 interface BinItem {
   id: string;
@@ -22,14 +22,16 @@ interface BinItem {
 }
 
 const TYPE_META: Record<BinType, { plural: string; pillCls: string }> = {
-  invoice:  { plural: "Invoices",   pillCls: styles.typePillInvoice },
-  customer: { plural: "Customers",  pillCls: styles.typePillCustomer },
-  product:  { plural: "Products",   pillCls: styles.typePillProduct },
-  brand:    { plural: "Brands",     pillCls: styles.typePillBrand },
-  category: { plural: "Categories", pillCls: styles.typePillCategory },
+  invoice:       { plural: "Invoices",      pillCls: styles.typePillInvoice },
+  customer:      { plural: "Customers",     pillCls: styles.typePillCustomer },
+  product:       { plural: "Products",      pillCls: styles.typePillProduct },
+  brand:         { plural: "Brands",        pillCls: styles.typePillBrand },
+  category:      { plural: "Categories",    pillCls: styles.typePillCategory },
+  vendor:        { plural: "Vendors",       pillCls: styles.typePillVendor },
+  purchase_bill: { plural: "Purchase Bills", pillCls: styles.typePillPurchaseBill },
 };
 
-const TYPE_ORDER: BinType[] = ["invoice", "customer", "product", "brand", "category"];
+const TYPE_ORDER: BinType[] = ["invoice", "customer", "product", "brand", "category", "vendor", "purchase_bill"];
 
 function DaysLeftPill({ daysLeft }: { daysLeft: number }) {
   const red    = daysLeft <= 7;
@@ -271,7 +273,7 @@ export default function BinPage() {
         <div className="card">
           <div className="table-wrap">
             <table className="table-base">
-              <thead><tr><th>Name</th><th>Details</th><th>Deleted On</th><th>Expires</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Name</th><th>Details</th><th>Deleted On</th><th>Deleted By</th><th>Expires</th><th>Actions</th></tr></thead>
               <tbody><TableSkeleton cols={6} /></tbody>
             </table>
           </div>

@@ -13,6 +13,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
+import { amountInWordsINR } from "@/lib/numberToWords";
 import styles from "./invoiceDetail.module.css";
 
 interface InvoiceItem {
@@ -46,7 +47,11 @@ interface BusinessSettings {
 }
 
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
-const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Derives the effective tax rate from the amount rather than trusting a single
+// stored rate, since items on the same invoice can carry different GST rates.
+const taxRatePct = (taxAmount: number, subtotal: number) =>
+  subtotal > 0 ? Math.round((taxAmount / subtotal) * 10000) / 100 : 0;
 
 // Use createdAt (always a full server timestamp) for display rather than date
 // (which is a user-picked date-only value stored as UTC midnight).
@@ -264,7 +269,7 @@ export default function InvoiceDetailPage() {
       setPaymentForm({ amount: "", method: "Cash", reference: "" });
       bustCache(`/api/invoices/${id}`);
       load(true);
-      toast({ type: "success", title: "Payment recorded", message: `₹${parseFloat(paymentForm.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })} via ${paymentForm.method}` });
+      toast({ type: "success", title: "Payment recorded", message: `₹${parseFloat(paymentForm.amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via ${paymentForm.method}` });
     } else {
       const d = await res.json().catch(() => ({}));
       toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to record payment." });
@@ -373,14 +378,61 @@ export default function InvoiceDetailPage() {
     // sync (it previously used table border-collapse, which silently drops
     // borders across colSpan boundaries; the PDF pipeline already works around
     // that by switching to border-collapse:separate with per-cell borders).
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
     setPdfPrinting(true);
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    // requestAnimationFrame is fully suspended for backgrounded tabs. That
+    // used to matter here because an earlier version opened a tab up front
+    // (backgrounding this one) before this wait — now nothing backgrounds
+    // this tab on the mobile path, but keep the setTimeout fallback anyway
+    // since it's strictly safer than rAF with no downside.
+    await new Promise(r => (isMobile ? setTimeout(r, 30) : requestAnimationFrame(() => requestAnimationFrame(r))));
     await document.fonts.ready;
     const blob = await generatePdfBlob(["ORIGINAL COPY", "DUPLICATE COPY"]);
     setPdfPrinting(false);
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
 
     const url = URL.createObjectURL(blob);
+
+    // Mobile browsers don't support calling .print() on a hidden/off-screen
+    // iframe hosting a PDF. The OS share sheet is the one mobile surface
+    // that raises an actual print dialog: iOS lists "Print" (AirPrint)
+    // directly among the share targets for a PDF file, and Android exposes
+    // its system print service the same way.
+    if (isMobile) {
+      const file = new File([blob], `${invoice.invoiceNumber}.pdf`, { type: "application/pdf" });
+      let shared = false;
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: `Invoice ${invoice.invoiceNumber}` });
+          shared = true;
+        } catch (err) {
+          // Treat a user-cancelled share as handled (don't fall back and
+          // redownload a PDF they deliberately dismissed). Any other
+          // failure falls through to the download below.
+          const e = err as Error;
+          if (e.name === "AbortError") shared = true;
+          else console.warn("navigator.share failed, falling back to download:", e.name, e.message);
+        }
+      }
+      if (shared) {
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        return;
+      }
+      // Sharing unavailable or failed — download the PDF instead of opening
+      // it in a bare tab: mobile Chrome's inline viewer for a JS-navigated
+      // blob URL doesn't reliably expose a print control (confirmed — it
+      // opened with no print option at all), but every downloaded PDF opens
+      // in the device's own PDF app, which always has one. Same mechanism
+      // as the working "Download PDF" button.
+      const a = document.createElement("a");
+      a.href = url; a.download = `${invoice.invoiceNumber}.pdf`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      toast({ type: "info", title: "PDF downloaded", message: "Open it from your Downloads/notifications and tap Print from there." });
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return;
+    }
+
     const iframe = document.createElement("iframe");
     // Chrome refuses to run print() on a hidden iframe (visibility:hidden /
     // display:none) — it silently no-ops or throws, which used to trip the
@@ -1039,7 +1091,7 @@ export default function InvoiceDetailPage() {
 
                 {/* Notes + Totals */}
                 <tr>
-                  <td colSpan={5} rowSpan={invoice.isInterState ? 6 : 7}
+                  <td colSpan={5} rowSpan={invoice.isInterState ? 7 : 8}
                     style={{ border:"1px solid var(--inv-bd)",padding:"14px 16px",verticalAlign:"top",color:"var(--inv-tx3)" }}>
                     <div style={{ display:"flex",flexDirection:"column",height:"100%",minHeight:120 }}>
                       <div style={{ marginTop:"auto" }}>
@@ -1068,17 +1120,17 @@ export default function InvoiceDetailPage() {
                 </tr>
                 {invoice.isInterState ? (
                   <tr>
-                    <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>IGST</td>
+                    <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>IGST ({taxRatePct(invoice.igst, invoice.subtotal)}%)</td>
                     <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.igst)}</td>
                   </tr>
                 ) : (
                   <>
                     <tr>
-                      <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>CGST</td>
+                      <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>CGST ({taxRatePct(invoice.cgst, invoice.subtotal)}%)</td>
                       <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.cgst)}</td>
                     </tr>
                     <tr>
-                      <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>SGST</td>
+                      <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>SGST ({taxRatePct(invoice.sgst, invoice.subtotal)}%)</td>
                       <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.sgst)}</td>
                     </tr>
                   </>
@@ -1086,6 +1138,10 @@ export default function InvoiceDetailPage() {
                 <tr>
                   <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",fontWeight:700,color:"var(--inv-tx)",background:"var(--inv-bg4)",fontSize:13 }}>Grand Total</td>
                   <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",textAlign:"right",fontWeight:700,color:"var(--inv-tx)",background:"var(--inv-bg4)",fontSize:13 }}>₹{fmt(invoice.total)}</td>
+                </tr>
+                <tr>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"7px 14px",color:"var(--inv-tx3)",background:"var(--inv-bg2)",fontSize:10.5,fontStyle:"italic" }}>Amount in Words</td>
+                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"7px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)",fontSize:10.5,fontStyle:"italic" }}>{amountInWordsINR(invoice.total)}</td>
                 </tr>
                 <tr>
                   <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-green)",background:"var(--inv-bg2)" }}>Paid</td>

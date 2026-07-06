@@ -9,10 +9,18 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   sz?: "sm" | "md";
 }
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  function Input({ mono, sz, className, ...props }, ref) {
+  function Input({ mono, sz, className, type, onWheel, ...props }, ref) {
     const cls = [styles.input, mono && styles.mono, sz === "sm" && styles.sm, className]
       .filter(Boolean).join(" ");
-    return <input ref={ref} className={cls} {...props} />;
+    // Scrolling the page with the cursor over a focused number input silently
+    // increments/decrements its value in Chrome/Firefox — blurring on wheel
+    // (rather than preventDefault, which React's passive wheel listener
+    // ignores) is the standard workaround so mouse-wheel scroll never edits
+    // a number field by accident.
+    const handleWheel = type === "number"
+      ? (e: React.WheelEvent<HTMLInputElement>) => { onWheel?.(e); e.currentTarget.blur(); }
+      : onWheel;
+    return <input ref={ref} type={type} className={cls} onWheel={handleWheel} {...props} />;
   }
 );
 

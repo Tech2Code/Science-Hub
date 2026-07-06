@@ -20,6 +20,8 @@ interface PurchaseBill {
   total: number;
   paidAmount: number;
   category: string | null;
+  attachmentUrl: string | null;
+  attachmentName: string | null;
   vendor: { id: string; name: string; company: string | null };
   createdBy: { id: string; name: string };
 }
@@ -39,7 +41,7 @@ const COLUMNS: Column[] = [
   { label: "Actions",   mobile: "full+label" },
 ];
 
-const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function PurchasesPage() {
   const [filter, setFilter] = useState<StatusFilter>("All");
@@ -185,6 +187,18 @@ export default function PurchasesPage() {
                 <tr key={b.id}>
                   <Cell col={COLUMNS[0]}>
                     <a href={`/purchases/bills/${b.id}`} className={styles.billLink}>{b.billNumber}</a>
+                    {b.attachmentUrl && (
+                      <a
+                        href={b.attachmentUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={b.attachmentName || "View attachment"}
+                        className={styles.attachmentIconLink}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                      </a>
+                    )}
                   </Cell>
                   <Cell col={COLUMNS[1]} className={styles.dateCell}>
                     {new Date(b.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}

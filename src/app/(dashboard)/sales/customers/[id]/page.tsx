@@ -141,9 +141,9 @@ export default function CustomerViewPage() {
       {/* Stats */}
       <div className={styles.statsGrid}>
         {[
-          { label: "Total Billed", value: `₹${totalBilled.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, sub: `${customer.invoices.length} invoice(s)`, tone: "" as "" | "positive" | "negative" },
-          { label: "Total Paid",   value: `₹${totalPaid.toLocaleString("en-IN",   { minimumFractionDigits: 2 })}`, tone: "positive" as "" | "positive" | "negative" },
-          { label: "Outstanding",  value: `₹${outstanding.toLocaleString("en-IN",  { minimumFractionDigits: 2 })}`, tone: (outstanding > 0 ? "negative" : "positive") as "" | "positive" | "negative" },
+          { label: "Total Billed", value: `₹${totalBilled.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: `${customer.invoices.length} invoice(s)`, tone: "" as "" | "positive" | "negative" },
+          { label: "Total Paid",   value: `₹${totalPaid.toLocaleString("en-IN",   { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, tone: "positive" as "" | "positive" | "negative" },
+          { label: "Outstanding",  value: `₹${outstanding.toLocaleString("en-IN",  { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, tone: (outstanding > 0 ? "negative" : "positive") as "" | "positive" | "negative" },
         ].map((s) => (
           <div key={s.label} className={`card ${styles.cardPadSm}`}>
             <div className={styles.statLabel}>{s.label}</div>
@@ -186,9 +186,9 @@ export default function CustomerViewPage() {
                       {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                     </div>
                   </td>
-                  <td data-label="Total" className={`table-td-right ${styles.totalCell}`}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td data-mobile-hide className={`table-td-right ${styles.paidCell}`}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td data-label="Balance" className={`table-td-right ${styles.balanceCell}`}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  <td data-label="Total" className={`table-td-right ${styles.totalCell}`}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td data-mobile-hide className={`table-td-right ${styles.paidCell}`}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td data-label="Balance" className={`table-td-right ${styles.balanceCell}`}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td data-label="Status"><StatusBadge status={inv.status} /></td>
                 </tr>
               ))}

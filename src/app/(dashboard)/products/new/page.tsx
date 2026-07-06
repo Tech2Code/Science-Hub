@@ -24,7 +24,7 @@ export default function NewProductPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [form, setForm] = useState({
     name: "", sku: "", description: "", unit: "Nos",
-    price: "", gstRate: "18", stock: "0", minStock: "5",
+    price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: "5",
     brandId: "", categoryId: "",
   });
   const [fieldErrors, setFieldErrors] = useState<{ name?: string; price?: string }>({});
@@ -53,6 +53,7 @@ export default function NewProductPage() {
       body: JSON.stringify({
         ...form,
         price: parseFloat(form.price),
+        purchasePrice: form.purchasePrice.trim() ? parseFloat(form.purchasePrice) : null,
         gstRate: parseInt(form.gstRate),
         stock: parseInt(form.stock),
         minStock: parseInt(form.minStock),
@@ -107,6 +108,12 @@ export default function NewProductPage() {
             <Select name="gstRate" value={form.gstRate} onChange={handleChange}>
               {GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
             </Select>
+          </FormField>
+        </div>
+
+        <div className="form-grid-2">
+          <FormField label="Purchase Price (₹)" hint="Used to auto-fill the rate on Purchase Bills.">
+            <Input name="purchasePrice" type="number" min="0" step="0.01" value={form.purchasePrice} onChange={handleChange} placeholder="0.00" />
           </FormField>
         </div>
 

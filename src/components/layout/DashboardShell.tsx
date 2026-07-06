@@ -71,6 +71,12 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
     </svg>
   ),
+  categories: ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+      <rect x="3" y="3" width="8" height="8" rx="1.5" /><rect x="13" y="3" width="8" height="8" rx="1.5" />
+      <rect x="3" y="13" width="8" height="8" rx="1.5" /><path strokeLinecap="round" strokeLinejoin="round" d="M17 13v8m-4-4h8" />
+    </svg>
+  ),
   bin: ({ className }) => (
     <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -127,7 +133,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/products",   label: "Products",   iconKey: "products", adminOnly: false },
       { href: "/brands",     label: "Brands",      iconKey: "brands",   adminOnly: false },
-      { href: "/categories", label: "Categories",  iconKey: "brands",   adminOnly: false },
+      { href: "/categories", label: "Categories",  iconKey: "categories", adminOnly: false },
     ],
   },
   {

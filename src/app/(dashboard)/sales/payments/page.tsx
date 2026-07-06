@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
@@ -67,10 +66,9 @@ export default function PaymentsPage() {
         <div>
           <h1 className="page-title">Payments</h1>
           <p className="page-sub">
-            {payments.length} payments · Total collected ₹{totalCollected.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+            {payments.length} payments · Total collected ₹{totalCollected.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
         </div>
-        <Button variant="primary" href="/sales/invoices/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>
       </div>
 
       <div className="card">
@@ -126,7 +124,7 @@ export default function PaymentsPage() {
                       {p.reference || "—"}
                     </Cell>
                     <Cell col={COLUMNS[5]} className={styles.amountCell}>
-                      ₹{p.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      ₹{p.amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Cell>
                   </tr>
                 );

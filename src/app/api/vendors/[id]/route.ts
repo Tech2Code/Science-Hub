@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
+import { validateVendorInput } from "@/lib/validation";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -34,7 +35,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const body = await req.json();
     const { name, company, gstin, phone, email, address, notes, isActive } = body;
-    if (!name?.trim()) return NextResponse.json({ error: "Vendor name is required." }, { status: 400 });
+    const validationError = validateVendorInput({ name, phone, email, gstin });
+    if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
     const vendor = await prisma.vendor.update({
       where: { id },

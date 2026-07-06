@@ -370,6 +370,14 @@
   font-size: 1rem;
 }
 
+.amountInWordsCell {
+  text-align: right;
+  color: var(--c-text-4);
+  font-size: 0.75rem;
+  font-style: italic;
+  padding: 0.375rem 0.75rem 0.625rem 0;
+}
+
 /* ── Payment history status pills ── */
 .outstandingPill {
   font-size: 0.75rem;

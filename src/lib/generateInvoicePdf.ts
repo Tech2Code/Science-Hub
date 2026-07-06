@@ -7,6 +7,9 @@
  * ["ORIGINAL COPY", "DUPLICATE COPY"]) into a single output PDF — each copy
  * renders as its own full paginated section, one after another.
  */
+// Border color — matches the @media print override in the invoice detail page CSS
+const BD = "#64748b";
+
 async function fetchLogoDataUrl(): Promise<string | null> {
   try {
     const res = await fetch("/logo.png");
@@ -49,6 +52,14 @@ export async function generateInvoicePdfBlob(
     el.getBoundingClientRect(); // force reflow
     const elRect = el.getBoundingClientRect();
     const elTop = elRect.top;
+    const elLeft = elRect.left;
+
+    // Measure the outer table's left/right edges, so the pinned-footer
+    // render can draw connecting border lines through the blank gap above it.
+    const tableEl = el.querySelector("table") as HTMLElement | null;
+    const tableRect = tableEl?.getBoundingClientRect();
+    const tableLeftPx  = tableRect ? Math.round((tableRect.left  - elLeft) * SCALE) : 0;
+    const tableRightPx = tableRect ? Math.round((tableRect.right - elLeft) * SCALE) : 0;
 
     // Measure TAX INVOICE banner (thead) — repeated at top of every page after page 1
     const theadRowEl = el.querySelector("thead tr") as HTMLElement | null;
@@ -85,7 +96,7 @@ export async function generateInvoicePdfBlob(
         width: A4_PX, windowWidth: A4_PX,
         onclone: (clonedDoc) => {
           clonedDoc.documentElement.classList.remove("dark");
-          const printEl = clonedDoc.getElementById("invoice-print-area");
+          const printEl = el.id ? clonedDoc.getElementById(el.id) : null;
           if (!printEl) return;
           printEl.style.width = `${A4_PX}px`;
           printEl.style.minWidth = `${A4_PX}px`;
@@ -129,9 +140,6 @@ export async function generateInvoicePdfBlob(
             });
           }
 
-          // Border color — matches the @media print override in the invoice detail page CSS
-          const BD = "#64748b";
-
           // Fix borders: switch to separate+0 spacing with single-side borders so
           // html2canvas never doubles them and CSS vars resolve to a real color.
           printEl.querySelectorAll<HTMLElement>("table").forEach((t) => {
@@ -146,7 +154,14 @@ export async function generateInvoicePdfBlob(
               c.style.borderBottom = `1px solid ${BD}`;
             }
           });
-          // First row in each table → add top border
+          // First row in each table → add top border. Note: tfoot's row is
+          // NOT given its own top border here — it sits immediately after
+          // tbody's last row in the captured image (the pinned-footer
+          // renderer only rearranges pixels *after* capture), so adding one
+          // would double up with that row's existing bottom border and also
+          // grow the row taller than the pre-capture height measurement,
+          // cropping the slice. The pinned renderer draws that top border
+          // itself, directly on the canvas, only where the gap exists.
           printEl.querySelectorAll<HTMLElement>("table").forEach((t) => {
             const firstRow = t.querySelector("tr");
             if (firstRow) {
@@ -216,6 +231,79 @@ export async function generateInvoicePdfBlob(
         return { dataUrl: pc.toDataURL("image/jpeg", 0.95), totalH };
       };
 
+      // Renders a full page-height canvas with the footer pinned to the very
+      // bottom instead of floating directly under the last content row —
+      // used only for the actual last page, and only when its content
+      // doesn't already reach the bottom of the page on its own.
+      const slicePagePinned = (startPx: number, endPx: number, withHeader: boolean) => {
+        const pc = document.createElement("canvas");
+        pc.width = canvas.width;
+        pc.height = pageHeightPx;
+        const ctx = pc.getContext("2d")!;
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, canvas.width, pageHeightPx);
+        let y = 0;
+        if (withHeader) {
+          ctx.drawImage(canvas, 0, theadTop, canvas.width, theadH, 0, y, canvas.width, theadH);
+          y += theadH;
+        }
+        const bodyEndPx = Math.min(tfootTop, endPx);
+        const bodySliceH = Math.max(0, bodyEndPx - startPx);
+        if (bodySliceH > 0) {
+          ctx.drawImage(canvas, 0, startPx, canvas.width, bodySliceH, 0, y, canvas.width, bodySliceH);
+        }
+        y += bodySliceH;
+        // Connect the table's left/right border lines straight down through
+        // the blank gap, so the box reads as one continuous frame ending at
+        // the footer instead of the footer looking detached at the bottom.
+        // Drawn once here — not baked into the DOM — so it can't double up
+        // with any border already present in the captured image.
+        const footerTop = pageHeightPx - (tfootH > 0 ? tfootH : 0);
+        const drawGapBorders = footerTop > y && tableRightPx > tableLeftPx;
+        // A touch thicker than the table's own borders (SCALE) — a plain
+        // canvas stroke over a large blank area comes out visibly fainter
+        // than the same-width border baked into the busy, JPEG-compressed
+        // table image, so match it by eye rather than by nominal px value.
+        const BORDER_W = SCALE + 1;
+        // A flat, full-opacity stroke of the exact border color reads darker
+        // than the real borders, which come out softened by anti-aliasing
+        // and JPEG compression once baked into the table image — dial the
+        // opacity down to match instead of using BD at full strength.
+        const BORDER_STROKE = "rgba(100, 116, 139, 0.75)"; // BD (#64748b) at 75% opacity
+        if (drawGapBorders) {
+          ctx.strokeStyle = BORDER_STROKE;
+          ctx.lineWidth = BORDER_W;
+          // A CSS border sits INSIDE the box's edge, not centered on it: a
+          // left border occupies [edge, edge+width), a right border occupies
+          // [edge-width, edge). A canvas stroke centers on its coordinate, so
+          // match that by offsetting the left line inward (+) and the right
+          // line inward (-) by half the width — using the same +offset for
+          // both, as before, pushed the right line half a pixel past the
+          // table's actual right edge instead of just inside it.
+          [tableLeftPx + BORDER_W / 2, tableRightPx - BORDER_W / 2].forEach((x) => {
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x, footerTop);
+            ctx.stroke();
+          });
+        }
+        if (tfootH > 0) {
+          ctx.drawImage(canvas, 0, tfootTop, canvas.width, tfootH, 0, footerTop, canvas.width, tfootH);
+        }
+        // Footer's top border, drawn last so it paints over the footer image
+        // instead of being covered by it — not baked into the DOM (which
+        // would double up with the preceding row's existing bottom border).
+        if (drawGapBorders) {
+          ctx.strokeStyle = BORDER_STROKE;
+          ctx.lineWidth = BORDER_W;
+          ctx.beginPath();
+          ctx.moveTo(tableLeftPx, footerTop + 0.5);
+          ctx.lineTo(tableRightPx, footerTop + 0.5);
+          ctx.stroke();
+        }
+        return { dataUrl: pc.toDataURL("image/jpeg", 0.95), totalH: pageHeightPx };
+      };
+
       const addPageBreakIfNeeded = () => {
         if (!isFirstPageOverall) pdf.addPage();
         isFirstPageOverall = false;
@@ -223,7 +311,9 @@ export async function generateInvoicePdfBlob(
 
       if (canvas.height <= pageHeightPx) {
         addPageBreakIfNeeded();
-        const { dataUrl, totalH } = slicePage(0, canvas.height, false, false);
+        const { dataUrl, totalH } = tfootH > 0 && canvas.height < pageHeightPx
+          ? slicePagePinned(0, canvas.height, false)
+          : slicePage(0, canvas.height, false, false);
         pdf.addImage(dataUrl, "JPEG", M, M, contentW, totalH * mmPerPx);
       } else {
         // Pass 1: compute split points, reserving tfootH on every non-last page
@@ -253,14 +343,21 @@ export async function generateInvoicePdfBlob(
           }
         }
 
-        // Pass 2: render — append footer on all pages except the last
+        // Pass 2: render — append footer on all pages except the last; on
+        // the last page, pin the real footer to the bottom of the page
+        // instead of the sheer content height when it doesn't fill the page.
         let start = 0;
         pageSplits.forEach((splitAt, i) => {
-          const isLast       = i === pageSplits.length - 1;
-          const withHeader   = i > 0;
-          const appendFooter = !isLast && tfootH > 0;
+          const isLast     = i === pageSplits.length - 1;
+          const withHeader = i > 0;
+          const availPx    = i === 0 ? pageHeightPx : page2HeightPx;
           addPageBreakIfNeeded();
-          const { dataUrl, totalH } = slicePage(start, splitAt, withHeader, appendFooter);
+          let dataUrl: string, totalH: number;
+          if (isLast && tfootH > 0 && splitAt - start < availPx) {
+            ({ dataUrl, totalH } = slicePagePinned(start, splitAt, withHeader));
+          } else {
+            ({ dataUrl, totalH } = slicePage(start, splitAt, withHeader, !isLast && tfootH > 0));
+          }
           pdf.addImage(dataUrl, "JPEG", M, M, contentW, totalH * mmPerPx);
           start = splitAt;
         });

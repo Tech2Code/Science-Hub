@@ -134,7 +134,7 @@ export default function CategoriesPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Categories</h1>
-          <p className="page-sub">{categories.length} categories in catalog</p>
+          <p className="page-sub">{loading ? "Loading…" : `${categories.length} categories in catalog`}</p>
         </div>
       </div>
 

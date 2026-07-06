@@ -59,6 +59,18 @@
   text-decoration: none;
 }
 
+.attachmentIconLink {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.4rem;
+  color: var(--c-text-4);
+  vertical-align: middle;
+}
+
+.attachmentIconLink:hover {
+  color: var(--c-blue);
+}
+
 .dateCell {
   color: var(--c-text-3);
   font-size: 0.8125rem;

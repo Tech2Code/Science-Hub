@@ -52,7 +52,7 @@ const CAT_COLS: Column[] = [
   { label: "% of Total",  cls: "table-th-right", mobile: "full+label" },
 ];
 
-const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 function toCsv(headers: string[], rows: (string | number)[][]) {
   const escape = (v: string | number) => {
@@ -138,12 +138,12 @@ export default function PurchaseReportsPage() {
         <div className="stat-banner stat-banner-amber">
           <div className="stat-banner-label">Total Spend (12 months)</div>
           <div className="stat-banner-value">{loadingSummary ? "—" : fmt(totalSpend)}</div>
-          <div className="stat-banner-sub">{summaryRows.reduce((s, r) => s + r.count, 0)} bills</div>
+          <div className="stat-banner-sub">{loadingSummary ? "…" : `${summaryRows.reduce((s, r) => s + r.count, 0)} bills`}</div>
         </div>
         <div className="stat-banner stat-banner-red">
           <div className="stat-banner-label">Total Payable</div>
           <div className="stat-banner-value">{loadingOut ? "—" : fmt(totalPayable)}</div>
-          <div className="stat-banner-sub">Across {outstanding.length} unpaid/partial bill{outstanding.length !== 1 ? "s" : ""}</div>
+          <div className="stat-banner-sub">{loadingOut ? "…" : `Across ${outstanding.length} unpaid/partial bill${outstanding.length !== 1 ? "s" : ""}`}</div>
         </div>
         <div className="stat-banner stat-banner-purple">
           <div className="stat-banner-label">Overdue Bills</div>

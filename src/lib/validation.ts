@@ -82,3 +82,25 @@ export function validateCustomerInput(input: {
     null
   );
 }
+
+// Server-side counterpart to the vendor form's client-side validation —
+// API route handlers must not rely solely on the browser to enforce this.
+// `requireContactDetails` is set on creation only — existing vendors may
+// predate the phone/address requirement, so edits don't retroactively block on it.
+export function validateVendorInput(input: {
+  name?: string; phone?: string; email?: string; gstin?: string; address?: string;
+}, requireContactDetails = false): string | null {
+  const name = (input.name ?? "").trim();
+  if (!name) return "Vendor name is required.";
+  if (name.length > 200) return "Name is too long (max 200 characters).";
+  if (requireContactDetails) {
+    if (!(input.phone ?? "").trim()) return "Phone number is required.";
+    if (!(input.address ?? "").trim()) return "Address is required.";
+  }
+  return (
+    validate(input.phone ?? "", rules.phone10()) ||
+    validate(input.email ?? "", rules.email()) ||
+    validate(input.gstin ?? "", rules.maxLength(15), rules.gstin()) ||
+    null
+  );
+}

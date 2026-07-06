@@ -98,7 +98,7 @@ export default function EditVendorPage() {
 
         <div className="form-grid-2">
           <FormField label="Phone" error={errors.phone as string}>
-            <Input name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="10-digit mobile" />
+            <Input name="phone" type="tel" inputMode="numeric" value={form.phone} onChange={handleChange} placeholder="10-digit mobile" maxLength={10} />
           </FormField>
           <FormField label="Email" error={errors.email as string}>
             <Input name="email" type="email" value={form.email} onChange={handleChange} placeholder="vendor@example.com" />

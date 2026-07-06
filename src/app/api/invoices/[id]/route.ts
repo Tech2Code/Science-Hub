@@ -4,6 +4,8 @@ import { getInvoice } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession } from "@/lib/apiAuth";
+import { assertInvoiceQuantitiesNotBelowReturned, InvoiceQuantityValidationError } from "@/lib/invoiceReturns";
+import { recordStockMovement } from "@/lib/stockMovement";
 
 export async function GET(
   request: NextRequest,
@@ -48,7 +50,7 @@ export async function PUT(
 
     const existing = await prisma.invoice.findUnique({
       where: { id },
-      select: { paidAmount: true, status: true },
+      select: { paidAmount: true, status: true, invoiceNumber: true },
     });
     if (!existing) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     if (existing.status === "paid") {
@@ -115,17 +117,34 @@ export async function PUT(
     else if (paidAmount > 0) newStatus = "partial";
 
     const { invoice, stockWarnings } = await prisma.$transaction(async (tx) => {
+      // Must run before any mutation: an edited quantity can never drop
+      // below what's already been returned against that product, otherwise
+      // stock/ledger/accounting would be reconciled against units that no
+      // longer exist on the invoice. Throwing here aborts the transaction
+      // untouched — nothing has been written yet.
+      await assertInvoiceQuantitiesNotBelowReturned(tx, id, invoiceItems);
+
       // Restore stock for old items before replacing them
       const oldItems = await tx.invoiceItem.findMany({
         where: { invoiceId: id },
         select: { productId: true, quantity: true },
       });
-      await Promise.all(oldItems.map((old) =>
-        tx.product.update({
+      for (const old of oldItems) {
+        const product = await tx.product.update({
           where: { id: old.productId },
           data: { stock: { increment: old.quantity } },
-        })
-      ));
+          select: { id: true, stock: true },
+        });
+        await recordStockMovement(tx, {
+          productId: product.id,
+          type: "adjustment",
+          quantity: old.quantity,
+          balanceAfter: product.stock,
+          reference: existing.invoiceNumber,
+          notes: "Invoice edited — old items reversed",
+          createdByUserId: auth.session.user.id,
+        });
+      }
 
       await tx.invoiceItem.deleteMany({ where: { invoiceId: id } });
 
@@ -148,16 +167,24 @@ export async function PUT(
 
       // Deduct stock for new items — update() returns the row directly so we
       // don't need a second round-trip per item to check for negative stock.
-      const updatedProducts = await Promise.all(invoiceItems.map((item: { productId: string; quantity: number }) =>
-        tx.product.update({
+      const warnings: string[] = [];
+      for (const item of invoiceItems as { productId: string; quantity: number }[]) {
+        const product = await tx.product.update({
           where: { id: item.productId },
           data: { stock: { decrement: item.quantity } },
-          select: { name: true, stock: true },
-        })
-      ));
-      const warnings = updatedProducts
-        .filter((p) => p.stock < 0)
-        .map((p) => `${p.name} (stock: ${p.stock})`);
+          select: { id: true, name: true, stock: true },
+        });
+        if (product.stock < 0) warnings.push(`${product.name} (stock: ${product.stock})`);
+        await recordStockMovement(tx, {
+          productId: product.id,
+          type: "adjustment",
+          quantity: -item.quantity,
+          balanceAfter: product.stock,
+          reference: existing.invoiceNumber,
+          notes: "Invoice edited — new items applied",
+          createdByUserId: auth.session.user.id,
+        });
+      }
 
       return { invoice: inv, stockWarnings: warnings };
     }, { timeout: 20000, maxWait: 10000 });
@@ -170,6 +197,9 @@ export async function PUT(
     await logActivity(auth.session.user.id, "update_invoice", `Edited invoice ${inv.invoiceNumber ?? id} for ${inv.customer?.name ?? ""} | Total: ₹${(inv.total ?? 0).toFixed(2)} | Items: ${inv.items?.length ?? 0} | Tax: ${inter ? "IGST" : "CGST+SGST"}`, id, "invoice");
     return NextResponse.json({ ...invoice, stockWarnings });
   } catch (error) {
+    if (error instanceof InvoiceQuantityValidationError) {
+      return NextResponse.json({ error: error.message, errors: error.errors }, { status: 400 });
+    }
     console.error(error);
     return NextResponse.json({ error: "Failed to update invoice" }, { status: 500 });
   }
@@ -207,11 +237,24 @@ export async function DELETE(
       if (updateResult.count === 0) {
         return { found: true, alreadyDeleted: true, inv };
       }
-      await Promise.all(items.map(item =>
-        tx.product.update({ where: { id: item.productId }, data: { stock: { increment: item.quantity } } })
-      ));
+      for (const item of items) {
+        const product = await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+          select: { id: true, stock: true },
+        });
+        await recordStockMovement(tx, {
+          productId: product.id,
+          type: "adjustment",
+          quantity: item.quantity,
+          balanceAfter: product.stock,
+          reference: inv.invoiceNumber,
+          notes: "Invoice deleted",
+          createdByUserId: auth.session.user.id,
+        });
+      }
       return { found: true, alreadyDeleted: false, inv };
-    });
+    }, { timeout: 20000, maxWait: 10000 });
 
     if (!result.found) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     if (result.alreadyDeleted) return NextResponse.json({ message: "Invoice already moved to bin" });

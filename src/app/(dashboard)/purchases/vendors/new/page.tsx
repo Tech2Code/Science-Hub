@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
 import styles from "./vendorNew.module.css";
 
-type StrForm = { name: string; company: string; gstin: string; phone: string; email: string; };
+type StrForm = { name: string; company: string; gstin: string; phone: string; email: string; address: string; };
 
 export default function NewVendorPage() {
   const router = useRouter();
@@ -30,12 +30,13 @@ export default function NewVendorPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const strForm: StrForm = { name: form.name, company: form.company, gstin: form.gstin, phone: form.phone, email: form.email };
+    const strForm: StrForm = { name: form.name, company: form.company, gstin: form.gstin, phone: form.phone, email: form.email, address: form.address };
     const newErrors = validateForm(strForm, {
-      name:  [rules.required("Vendor name is required.")],
-      phone: [rules.phone10()],
-      email: [rules.email()],
-      gstin: [rules.maxLength(15), rules.gstin()],
+      name:    [rules.required("Vendor name is required.")],
+      phone:   [rules.required("Phone number is required."), rules.phone10()],
+      email:   [rules.email()],
+      gstin:   [rules.maxLength(15), rules.gstin()],
+      address: [rules.required("Address is required.")],
     });
     if (hasErrors(newErrors)) { setErrors(newErrors); return; }
     setErrors({});
@@ -74,8 +75,8 @@ export default function NewVendorPage() {
         </div>
 
         <div className="form-grid-2">
-          <FormField label="Phone" error={errors.phone as string}>
-            <Input name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="10-digit mobile" />
+          <FormField label="Phone" required error={errors.phone as string}>
+            <Input name="phone" type="tel" inputMode="numeric" value={form.phone} onChange={handleChange} placeholder="10-digit mobile" maxLength={10} />
           </FormField>
           <FormField label="Email" error={errors.email as string}>
             <Input name="email" type="email" value={form.email} onChange={handleChange} placeholder="vendor@example.com" />
@@ -86,7 +87,7 @@ export default function NewVendorPage() {
           <Input name="gstin" value={form.gstin} onChange={handleChange} placeholder="15-character GST number" maxLength={15} mono />
         </FormField>
 
-        <FormField label="Address">
+        <FormField label="Address" required error={errors.address as string}>
           <Textarea name="address" rows={2} value={form.address} onChange={handleChange} placeholder="Street, city, state…" />
         </FormField>
 

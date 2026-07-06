@@ -34,7 +34,7 @@ const GST_COLUMNS: Column[] = [
   { label: "Total GST",      cls: "table-th-right", mobile: "full+label" },
 ];
 
-const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 type Tab = "summary" | "outstanding" | "gst";
 
@@ -118,12 +118,12 @@ export default function SalesReportsPage() {
         <div className="stat-banner stat-banner-blue">
           <div className="stat-banner-label">Revenue This Month</div>
           <div className="stat-banner-value">{loadingSummary ? "—" : fmt(summaryData?.revenueThisMonth ?? 0)}</div>
-          <div className="stat-banner-sub">{summaryData?.invoicesThisMonth ?? 0} invoice{(summaryData?.invoicesThisMonth ?? 0) !== 1 ? "s" : ""} this month</div>
+          <div className="stat-banner-sub">{loadingSummary ? "…" : `${summaryData?.invoicesThisMonth ?? 0} invoice${(summaryData?.invoicesThisMonth ?? 0) !== 1 ? "s" : ""} this month`}</div>
         </div>
         <div className="stat-banner stat-banner-amber">
           <div className="stat-banner-label">Total Outstanding</div>
           <div className="stat-banner-value">{loadingOut ? "—" : fmt(totalOutstanding)}</div>
-          <div className="stat-banner-sub">Across {outstanding.length} unpaid/partial invoice{outstanding.length !== 1 ? "s" : ""}</div>
+          <div className="stat-banner-sub">{loadingOut ? "…" : `Across ${outstanding.length} unpaid/partial invoice${outstanding.length !== 1 ? "s" : ""}`}</div>
         </div>
         <div className="stat-banner stat-banner-green">
           <div className="stat-banner-label">Total Collected</div>

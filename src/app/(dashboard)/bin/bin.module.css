@@ -58,6 +58,18 @@
   border: 1px solid #99f6e4;
 }
 
+.typePillVendor {
+  background: #fdf4ff;
+  color: #a21caf;
+  border: 1px solid #f5d0fe;
+}
+
+.typePillPurchaseBill {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
 .itemCount {
   font-size: 0.8125rem;
   color: var(--c-text-3);

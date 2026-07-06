@@ -30,7 +30,7 @@ function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?
   );
 }
 
-const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function VendorDetailPage() {
   const { id } = useParams<{ id: string }>();

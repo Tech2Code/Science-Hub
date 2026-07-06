@@ -36,7 +36,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { name, description, sku, unit, price, gstRate, stock, minStock, categoryId, brandId } = body;
+    const { name, description, sku, unit, price, purchasePrice, gstRate, stock, minStock, categoryId, brandId } = body;
     const data: Record<string, unknown> = {};
     if (name !== undefined) {
       const trimmedName = typeof name === "string" ? name.trim() : "";
@@ -46,6 +46,16 @@ export async function PUT(
     if (description !== undefined) data.description = description;
     if (sku !== undefined) data.sku = typeof sku === "string" ? sku.trim() || null : null;
     if (unit !== undefined) data.unit = unit;
+    if (purchasePrice !== undefined) {
+      if (purchasePrice === null || purchasePrice === "") {
+        data.purchasePrice = null;
+      } else {
+        const parsed = parseFloat(purchasePrice as string);
+        if (Number.isNaN(parsed)) return NextResponse.json({ error: "purchasePrice must be a valid number" }, { status: 400 });
+        if (parsed < 0) return NextResponse.json({ error: "purchasePrice must be between 0 and ∞" }, { status: 400 });
+        data.purchasePrice = parsed;
+      }
+    }
     const numericFields: [string, unknown, number, number, boolean][] = [
       ["price", price, 0, Infinity, false],
       ["gstRate", gstRate, 0, 100, false],
@@ -96,7 +106,7 @@ export async function DELETE(
     const { id } = await params;
     const product = await prisma.product.findUnique({ where: { id }, select: { name: true, sku: true, price: true, stock: true, unit: true } });
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
-    const invoiceItemCount = await prisma.invoiceItem.count({ where: { productId: id } });
+    const invoiceItemCount = await prisma.invoiceItem.count({ where: { productId: id, invoice: { deletedAt: null } } });
     if (invoiceItemCount > 0) {
       return NextResponse.json(
         { error: `"${product.name}" is used in ${invoiceItemCount} invoice line item${invoiceItemCount > 1 ? "s" : ""} and cannot be deleted.` },

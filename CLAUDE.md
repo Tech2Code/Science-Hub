@@ -74,7 +74,7 @@ src/
                           #   ConfirmDialog, Skeleton, Spinner
   lib/
     auth.ts               # NextAuth config (CredentialsProvider, JWT)
-    db.ts                 # Server-side cached query helpers (unstable_cache)
+    db.ts                 # Plain Prisma query helpers (invoices, customers, products, reports) — not all routes use these; many write Prisma queries directly
     prisma.ts             # Prisma client singleton
     theme.tsx             # ThemeContext — light/dark via localStorage
     useCache.ts           # Client-side in-memory cache (TTL 2 min) + useFetch hook
@@ -92,7 +92,7 @@ prisma/
 
 | File | Why it matters |
 |------|----------------|
-| `src/lib/db.ts` | All server-side DB queries go here, wrapped in `unstable_cache`. Add new queries here, not directly in route handlers. |
+| `src/lib/db.ts` | Holds plain Prisma query helpers for the original invoices/customers/products/reports routes. In practice most newer routes (vendors, purchase-bills, etc.) write Prisma queries directly in the route handler instead — follow whichever pattern the route you're editing already uses. |
 | `src/lib/useCache.ts` | Client-side fetch + cache hook. `useFetch(url)` returns `{ data, loading, mutate }`. Call `mutate()` after mutations. `bustCache(url)` for one-off busting. |
 | `src/lib/auth.ts` | NextAuth config. `NEXTAUTH_SECRET` must be a real secret in production. |
 | `prisma/schema.prisma` | Source of truth for data model. Run `npx prisma migrate dev` after schema changes. |
@@ -105,12 +105,11 @@ prisma/
 All pages are `"use client"`. There are no async server components that fetch data.
 
 ```
-Browser → useFetch("/api/...") → API Route Handler → unstable_cache → Prisma → Neon DB
-                                         ↑ on mutation: revalidateTag(tag, { expire: 0 })
+Browser → useFetch("/api/...") → API Route Handler → Prisma → Neon DB
 ```
 
-- **Reads**: `useFetch` hits API route → route handler calls `unstable_cache` wrapper → cache hit (fast) or DB query (first time / after mutation)
-- **Writes**: POST/PUT/DELETE route handler mutates DB, then calls `revalidateTag` to expire server cache. Client calls `mutate()` to refresh its local state.
+- **Reads**: `useFetch` hits API route → route handler queries Prisma directly (or via a `src/lib/db.ts` helper for the older routes) → client caches the response in-memory for 2 min (`src/lib/useCache.ts`)
+- **Writes**: POST/PUT/DELETE route handler mutates DB, then calls `revalidateTag(tag, { expire: 0 })` (kept for convention/future use with Next's data cache) and the client calls `mutate()`/`bustCache()` to refresh its own in-memory cache — the client-side cache is what actually keeps lists in sync today, since no route currently uses `fetch()`-based or `unstable_cache` server caching for `revalidateTag` to invalidate.
 
 ---
 
@@ -131,7 +130,7 @@ Reports are also busted on invoice and product mutations since they aggregate th
 
 ## Rules — Do Not
 
-- **Do not** write Prisma queries directly in route handlers. Add them to `src/lib/db.ts` as `unstable_cache` wrappers.
+- Writing Prisma queries directly in route handlers is the established pattern for most routes (vendors, purchase-bills, invoices/[id], etc.) — `src/lib/db.ts` only holds helpers for the original invoices/customers/products/reports list routes. Match the existing pattern for the file you're editing.
 - **Do not** add `"use cache"` directive anywhere — it requires `cacheComponents: true` which triggers "Blocking Route Server" errors on navigation.
 - **Do not** add `cacheComponents: true` to `next.config.ts` — confirmed to break this app.
 - **Do not** use single-arg `revalidateTag(tag)` — deprecated in Next.js 16. Always use `revalidateTag(tag, { expire: 0 })`.
@@ -161,15 +160,16 @@ Reports are also busted on invoice and product mutations since they aggregate th
 | `DATABASE_URL` | Yes | Neon PostgreSQL connection string. Use the **pooled** URL (`?pgbouncer=true&connection_limit=1`) in production. |
 | `NEXTAUTH_SECRET` | Yes | Random secret min 32 chars. Generate: `openssl rand -base64 32`. |
 | `NEXTAUTH_URL` | Production only | Full deployed URL e.g. `https://your-app.vercel.app`. Required by NextAuth v4. |
+| `GMAIL_USER` / `GMAIL_APP_PASSWORD` | For email sending | Gmail address + App Password used to send invoice PDFs. |
+| `BLOB_READ_WRITE_TOKEN` | For purchase bill attachments | Vercel Blob token — auto-set on Vercel, pull locally with `vercel env pull`. |
 
 ---
 
 ## Common Tasks
 
-**Add a new cached query:**
-1. Add an `unstable_cache` wrapper to `src/lib/db.ts`
-2. Import and call it from the GET route handler
-3. Add `revalidateTag` calls to any mutation handlers that affect that data
+**Add a new query:**
+1. Write the Prisma query directly in the GET route handler (the prevailing pattern), or add a plain helper to `src/lib/db.ts` if it belongs alongside the existing invoices/customers/products/reports helpers
+2. Add `revalidateTag(tag, { expire: 0 })` calls to any mutation handlers that affect that data, for consistency with the rest of the codebase
 
 **Add a new page:**
 1. Create `src/app/(dashboard)/<page>/page.tsx` with `"use client"` at top
@@ -258,6 +258,12 @@ prisma/schema.prisma, seed.ts
 - **InvoiceItem** — invoiceId, productId, name, quantity, unit, price, gstRate, gstAmount, total
 - **Payment** — invoiceId, amount, method, reference?, date, notes?
 - **BusinessSettings** — singleton row: id="singleton", name, tagline, email (contact/printed), phone, address, city, state, pincode, gstin, **gmailUser** (send-from), **gmailAppPassword**, updatedAt
+- **Return** / **ReturnItem** — invoice returns; restores stock and is capped by the invoice's paid amount
+- **Vendor** — id, name, company?, gstin?, phone?, email?, address?, notes?, isActive, deletedAt?
+- **PurchaseBill** — billNumber (PB-YYYY-0001), vendorId, billDate, dueDate?, subtotal, taxAmount, discount, total, paidAmount, status (unpaid/partial/paid/cancelled), category?, attachmentUrl?/attachmentName? (Vercel Blob URL, uploaded via `/api/purchase-bills/upload`), deletedAt?
+- **PurchaseBillItem** — purchaseBillId, productId?, name, quantity, unit, purchasePrice, gstRate, gstAmount, total
+- **PurchasePayment** — purchaseBillId, amount, method, reference?, date, notes?
+- **StockMovement** — productId, type (purchase/sale/adjustment/return), quantity (signed), balanceAfter, reference?, purchaseBillId?, createdByUserId?, createdAt — ledger row written for every stock change
 
 > ⚠️ Three distinct email concepts: `User.email` = login email · `BusinessSettings.email` = printed on invoices · `BusinessSettings.gmailUser` = Gmail used to send emails
 
@@ -304,7 +310,7 @@ prisma/schema.prisma, seed.ts
 6. **Reports** — Summary dashboard, outstanding invoices, low-stock report
 7. **Admin panel** — User management (create/edit/delete staff+admin); activity log with user/text filter and page-based pagination (20/page); login-email badge on profile view
 8. **Activity logging** — Every mutation logs to `ActivityLog` via `src/lib/activity.ts`; full detail logging
-9. **Bin (Recycle Bin)** — View soft-deleted customers, products, invoices; restore or permanently delete
+9. **Bin (Recycle Bin)** — View soft-deleted customers, products, invoices, vendors, purchase bills; restore or permanently delete; restoring an invoice/purchase bill reverses its stock movement
 10. **Business Settings** — Singleton `BusinessSettings` row; editable name, tagline, contact email, phone, address, GSTIN; Gmail send-from section has independent edit/clear flow with status dot
 11. **Email invoice** — `/api/send-invoice` reads Gmail creds from `BusinessSettings` (falls back to env vars); returns 503 with clear message if not configured
 12. **Auth** — NextAuth v4 credentials + JWT; role-based (admin/staff); JWT callback syncs name/email/role on `updateSession`; `resolveSessionUser` fallback in profile API handles old JWTs without `id`
@@ -312,6 +318,8 @@ prisma/schema.prisma, seed.ts
 14. **Find email** — `/find-email` page: search by name → see masked email (`gy***@domain.com`) → link to forgot-password
 15. **Theme** — Light/dark toggle via CSS variables + localStorage
 16. **Common Loader** — Shared full-screen loading UI component
+17. **Purchases (vendors & purchase bills)** — Vendor CRUD with soft-delete; purchase bill creation (auto-number `PB-YYYY-0001`) with inline vendor creation, stock increment on create/reversal on delete/restore, payment recording, PDF download, and an optional attachment (image/PDF up to 10 MB, uploaded to Vercel Blob via `/api/purchase-bills/upload`; orphaned/replaced blobs are cleaned up on remove, edit, and permanent delete)
+18. **Stock movement ledger** — `StockMovement` rows are written for every stock change (purchase, sale, adjustment, return) with a running balance, tied to the invoice/purchase bill that caused it
 
 ---
 
@@ -354,17 +362,18 @@ Nothing actively in progress — all recent features complete and deployed.
 | `NEXTAUTH_URL` | Production | Full deployed URL |
 | `GMAIL_USER` | Yes (email) | Gmail address for sending invoices |
 | `GMAIL_APP_PASSWORD` | Yes (email) | Gmail App Password (not account password) |
+| `BLOB_READ_WRITE_TOKEN` | Yes (purchase bill attachments) | Vercel Blob token. Auto-set on Vercel once a Blob store is connected; for local dev pull it with `vercel env pull` or copy from the dashboard. Without it, attachment upload fails but everything else works. |
 
 ---
 
 # Important Decisions
 
 - All pages `"use client"` — no async server components; data fetched via `useFetch` hook
-- `unstable_cache` used for server-side caching; `revalidateTag(tag, { expire: 0 })` on every mutation
+- No server-side data caching is actually in use (`unstable_cache` isn't called anywhere) — freshness comes entirely from `src/lib/useCache.ts`'s client-side 2-min TTL plus `mutate()`/`bustCache()` after writes. `revalidateTag(tag, { expire: 0 })` is still called on every mutation for consistency and in case server caching is added later.
 - `"use cache"` directive forbidden — causes "Blocking Route Server" errors
 - `cacheComponents: true` forbidden in next.config — confirmed to break this app
 - Single-arg `revalidateTag(tag)` deprecated in Next.js 16 — always use two-arg form
-- Soft-delete pattern (`deletedAt` field) used for customers, products, brands, categories, invoices
+- Soft-delete pattern (`deletedAt` field) used for customers, products, brands, categories, invoices, vendors, purchase bills
 - BusinessSettings stored as singleton row with id="singleton"
 - Activity logging never throws — wrapped in try/catch so it never breaks main operations
 

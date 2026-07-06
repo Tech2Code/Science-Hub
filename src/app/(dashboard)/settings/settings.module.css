@@ -98,7 +98,7 @@
 .infoGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1.25rem;
+  gap: 1.375rem 1.25rem;
 }
 
 .fullAddressBlock {
@@ -176,7 +176,7 @@
 .emailFormGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1rem;
+  gap: 1.375rem 1rem;
   margin-bottom: 1rem;
 }
 
@@ -209,7 +209,7 @@
 .formGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1rem;
+  gap: 1.375rem 1rem;
 }
 
 .cardSpaced {

@@ -444,10 +444,10 @@ export default function NewInvoicePage() {
                               </span>
                             </td>
                             <td className={styles.tdGstAmt}>
-                              ₹{lineGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                              ₹{lineGst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td className={styles.tdTotal}>
-                              ₹{lineTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                              ₹{lineTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td className={styles.tdActionCell}>
                               <button type="button" onClick={() => removeItem(idx)} aria-label="Remove" className={styles.removeBtn}>
@@ -487,30 +487,30 @@ export default function NewInvoicePage() {
               <div className={styles.summaryList}>
                 <div className={styles.summaryLine}>
                   <span>Subtotal</span>
-                  <span>₹{subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                  <span>₹{subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 {Object.entries(taxBreakdown).map(([rate, amt]) =>
                   isInterState ? (
                     <div key={rate} className={styles.summaryLine}>
                       <span>IGST {rate}%</span>
-                      <span>₹{amt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                      <span>₹{amt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                   ) : (
                     <div key={rate} className={styles.summaryGroup}>
                       <div className={styles.summaryLine}>
                         <span>CGST {Number(rate) / 2}%</span>
-                        <span>₹{(amt / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                        <span>₹{(amt / 2).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                       <div className={styles.summaryLine}>
                         <span>SGST {Number(rate) / 2}%</span>
-                        <span>₹{(amt / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                        <span>₹{(amt / 2).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                     </div>
                   )
                 )}
                 <div className={styles.summaryTotal}>
                   <span>Grand Total</span>
-                  <span>₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                  <span>₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
               {((customerMode === "existing" ? !customerId : (!customCustomer.name.trim() || !customCustomer.phone.trim())) || items.length === 0) && (

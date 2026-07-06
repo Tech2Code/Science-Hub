@@ -118,7 +118,7 @@ export default function ProductsPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Products</h1>
-          <p className="page-sub">{products.length} products in catalog</p>
+          <p className="page-sub">{loading ? "Loading…" : `${products.length} products in catalog`}</p>
         </div>
         <Button variant="primary" href="/products/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Product</Button>
       </div>

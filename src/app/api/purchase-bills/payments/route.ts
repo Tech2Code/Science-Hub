@@ -8,6 +8,7 @@ export async function GET() {
     if (!auth.ok) return auth.response;
 
     const payments = await prisma.purchasePayment.findMany({
+      where: { purchaseBill: { deletedAt: null } },
       orderBy: { date: "desc" },
       include: {
         purchaseBill: {

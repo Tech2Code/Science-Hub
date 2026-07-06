@@ -13,6 +13,76 @@
   text-decoration: underline;
 }
 
+/* ── Attachment ────────────────────────────────── */
+.attachmentRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+}
+
+.attachmentName {
+  color: var(--c-text);
+}
+
+.attachmentRemoveBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.78rem;
+  color: var(--c-red);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.attachmentUploading {
+  font-size: 0.82rem;
+  color: var(--c-text-3);
+}
+
+.attachmentPicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.attachmentPickerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--c-radius-sm);
+  border: 1px solid var(--c-border);
+  background: var(--c-bg-card);
+  color: var(--c-text-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+.attachmentPickerBtn:hover {
+  background: var(--c-bg-sub);
+  color: var(--c-text);
+  border-color: var(--c-border-md);
+}
+
+.attachmentPickerInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.attachmentPickerHint {
+  font-size: 0.8125rem;
+  color: var(--c-text-4);
+}
+
 /* ── Inline vendor create card ────────────────── */
 .inlineVendorCard {
   margin-top: 0.5rem;
@@ -60,7 +130,7 @@
   line-height: 0;
 }
 
-.inlineVendorBody { padding: 1rem 1rem 0.75rem; }
+.inlineVendorBody { padding: 1rem; }
 
 .inlineVendorError {
   margin-bottom: 0.75rem;
@@ -75,7 +145,7 @@
 .inlineVendorGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.75rem 1rem;
+  gap: 1.375rem 1rem;
 }
 
 .inlineVendorFooter {
@@ -235,6 +305,7 @@
   padding: 0.3rem 0;
   font-size: 0.875rem;
   color: var(--c-text-3);
+  white-space: nowrap;
 }
 
 .totalsDiscountLine {

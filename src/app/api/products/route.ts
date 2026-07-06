@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
-    const { name, description, sku, unit, price, gstRate, stock, minStock, categoryId, brandId } = body;
+    const { name, description, sku, unit, price, purchasePrice, gstRate, stock, minStock, categoryId, brandId } = body;
     const trimmedName = typeof name === "string" ? name.trim() : "";
 
     if (!trimmedName || price === undefined) {
@@ -43,13 +43,18 @@ export async function POST(request: NextRequest) {
     }
 
     const parsedPrice = parseFloat(price);
+    const parsedPurchasePrice = purchasePrice !== undefined && purchasePrice !== null && purchasePrice !== "" ? parseFloat(purchasePrice) : null;
     const parsedGstRate = gstRate !== undefined ? parseFloat(gstRate) : 18;
     const parsedStock = stock !== undefined ? parseFloat(stock) : 0;
     const parsedMinStock = minStock !== undefined ? parseFloat(minStock) : 5;
     if ([parsedPrice, parsedGstRate, parsedStock, parsedMinStock].some((n) => Number.isNaN(n))) {
       return NextResponse.json({ error: "Price, GST rate, stock, and min stock must be valid numbers" }, { status: 400 });
     }
+    if (parsedPurchasePrice !== null && Number.isNaN(parsedPurchasePrice)) {
+      return NextResponse.json({ error: "Purchase price must be a valid number" }, { status: 400 });
+    }
     if (parsedPrice < 0) return NextResponse.json({ error: "Price cannot be negative" }, { status: 400 });
+    if (parsedPurchasePrice !== null && parsedPurchasePrice < 0) return NextResponse.json({ error: "Purchase price cannot be negative" }, { status: 400 });
     if (parsedGstRate < 0 || parsedGstRate > 100) return NextResponse.json({ error: "GST rate must be between 0 and 100" }, { status: 400 });
     if (parsedStock < 0) return NextResponse.json({ error: "Stock cannot be negative" }, { status: 400 });
     if (parsedMinStock < 0) return NextResponse.json({ error: "Min stock cannot be negative" }, { status: 400 });
@@ -63,6 +68,7 @@ export async function POST(request: NextRequest) {
       data: {
         name: trimmedName, description, sku: trimmedSku, unit,
         price: parsedPrice,
+        purchasePrice: parsedPurchasePrice,
         gstRate: parsedGstRate,
         stock: parsedStock,
         minStock: parsedMinStock,

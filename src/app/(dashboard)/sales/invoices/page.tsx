@@ -270,9 +270,9 @@ export default function InvoicesPage() {
                   </Cell>
                   <Cell col={COLUMNS[2]} className={styles.customerCell}>{inv.customer?.name}</Cell>
                   <Cell col={COLUMNS[3]} className={styles.createdByCell}>{inv.createdBy?.name ?? "—"}</Cell>
-                  <Cell col={COLUMNS[4]} className={styles.totalCell}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
-                  <Cell col={COLUMNS[5]} className={styles.paidCell}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
-                  <Cell col={COLUMNS[6]} className={styles.balanceCell}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</Cell>
+                  <Cell col={COLUMNS[4]} className={styles.totalCell}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Cell>
+                  <Cell col={COLUMNS[5]} className={styles.paidCell}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Cell>
+                  <Cell col={COLUMNS[6]} className={styles.balanceCell}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Cell>
                   <Cell col={COLUMNS[7]}><StatusBadge status={inv.status} /></Cell>
                   <Cell col={COLUMNS[8]}>
                     <div className={["table-actions", styles.actionsWrap].join(" ")}>

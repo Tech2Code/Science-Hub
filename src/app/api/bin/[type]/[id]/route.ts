@@ -4,8 +4,10 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
+import { recordStockMovement } from "@/lib/stockMovement";
+import { deleteAttachmentBlob } from "@/lib/blobStorage";
 
-type BinType = "invoice" | "customer" | "product" | "brand" | "category";
+type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill";
 
 async function getItemName(type: BinType, id: string): Promise<string> {
   switch (type) {
@@ -28,6 +30,14 @@ async function getItemName(type: BinType, id: string): Promise<string> {
     case "category": {
       const cat = await prisma.category.findUnique({ where: { id }, select: { name: true } });
       return cat?.name ?? id;
+    }
+    case "vendor": {
+      const v = await prisma.vendor.findUnique({ where: { id }, select: { name: true } });
+      return v?.name ?? id;
+    }
+    case "purchase_bill": {
+      const b = await prisma.purchaseBill.findUnique({ where: { id }, select: { billNumber: true } });
+      return b?.billNumber ?? id;
     }
   }
 }
@@ -59,11 +69,24 @@ export async function POST(
             where: { invoiceId: id },
             select: { productId: true, quantity: true },
           });
-          await Promise.all(invItems.map(item =>
-            tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.quantity } } })
-          ));
+          for (const item of invItems) {
+            const product = await tx.product.update({
+              where: { id: item.productId },
+              data: { stock: { decrement: item.quantity } },
+              select: { id: true, stock: true },
+            });
+            await recordStockMovement(tx, {
+              productId: product.id,
+              type: "adjustment",
+              quantity: -item.quantity,
+              balanceAfter: product.stock,
+              reference: name,
+              notes: "Invoice restored from bin",
+              createdByUserId: session.user?.id,
+            });
+          }
           return true;
-        });
+        }, { timeout: 20000, maxWait: 10000 });
         if (!restored) return NextResponse.json({ message: "Already restored" });
         revalidateTag("invoices", { expire: 0 });
         revalidateTag("products", { expire: 0 });
@@ -90,6 +113,47 @@ export async function POST(
         revalidateTag("products", { expire: 0 });
         revalidateTag("reports", { expire: 0 });
         break;
+      case "vendor":
+        await prisma.vendor.update({ where: { id }, data: { deletedAt: null } });
+        revalidateTag("vendors", { expire: 0 });
+        break;
+      case "purchase_bill": {
+        // Guard against double-restore, symmetric to the invoice case above.
+        const restored = await prisma.$transaction(async (tx) => {
+          const updateResult = await tx.purchaseBill.updateMany({
+            where: { id, deletedAt: { not: null } },
+            data: { deletedAt: null },
+          });
+          if (updateResult.count === 0) return false;
+          const billItems = await tx.purchaseBillItem.findMany({
+            where: { purchaseBillId: id },
+            select: { productId: true, quantity: true },
+          });
+          for (const item of billItems.filter(i => i.productId)) {
+            const product = await tx.product.update({
+              where: { id: item.productId! },
+              data: { stock: { increment: item.quantity } },
+              select: { id: true, stock: true },
+            });
+            await recordStockMovement(tx, {
+              productId: product.id,
+              type: "purchase",
+              quantity: item.quantity,
+              balanceAfter: product.stock,
+              reference: name,
+              purchaseBillId: id,
+              notes: "Purchase bill restored from bin",
+              createdByUserId: session.user?.id,
+            });
+          }
+          return true;
+        }, { timeout: 20000, maxWait: 10000 });
+        if (!restored) return NextResponse.json({ message: "Already restored" });
+        revalidateTag("purchase-bills", { expire: 0 });
+        revalidateTag("products", { expire: 0 });
+        revalidateTag("reports", { expire: 0 });
+        break;
+      }
       default:
         return NextResponse.json({ error: "Invalid type" }, { status: 400 });
     }
@@ -148,11 +212,29 @@ export async function DELETE(
         break;
       }
       case "product": {
-        // Check if invoiceItems reference this product
-        const itemCount = await prisma.invoiceItem.count({ where: { productId: id } });
+        // Check every FK that references this product without cascading —
+        // any of these would otherwise crash the delete with a raw,
+        // unexplained 500 instead of a clear message.
+        const [itemCount, purchaseItemCount, movementCount] = await Promise.all([
+          prisma.invoiceItem.count({ where: { productId: id } }),
+          prisma.purchaseBillItem.count({ where: { productId: id } }),
+          prisma.stockMovement.count({ where: { productId: id } }),
+        ]);
         if (itemCount > 0) {
           return NextResponse.json(
-            { error: `Cannot permanently delete "${name}" — it appears in ${itemCount} invoice line item(s).` },
+            { error: `Cannot permanently delete "${name}" — it appears in ${itemCount} invoice line item(s) (including any in the bin).` },
+            { status: 400 }
+          );
+        }
+        if (purchaseItemCount > 0) {
+          return NextResponse.json(
+            { error: `Cannot permanently delete "${name}" — it appears in ${purchaseItemCount} purchase bill line item(s) (including any in the bin).` },
+            { status: 400 }
+          );
+        }
+        if (movementCount > 0) {
+          return NextResponse.json(
+            { error: `Cannot permanently delete "${name}" — it has ${movementCount} stock movement record(s) in its history.` },
             { status: 400 }
           );
         }
@@ -173,6 +255,29 @@ export async function DELETE(
         revalidateTag("products", { expire: 0 });
         revalidateTag("reports", { expire: 0 });
         break;
+      case "vendor": {
+        // Check for ANY purchase bills referencing this vendor, active or
+        // soft-deleted — the FK constraint blocks the delete either way.
+        const billCount = await prisma.purchaseBill.count({ where: { vendorId: id } });
+        if (billCount > 0) {
+          return NextResponse.json(
+            { error: `Cannot permanently delete "${name}" — they have ${billCount} purchase bill(s) on record (including any in the bin). Permanently delete those bills first.` },
+            { status: 400 }
+          );
+        }
+        await prisma.vendor.delete({ where: { id } });
+        revalidateTag("vendors", { expire: 0 });
+        break;
+      }
+      case "purchase_bill": {
+        const toDelete = await prisma.purchaseBill.findUnique({ where: { id }, select: { attachmentUrl: true } });
+        // Prisma cascade handles items/payments
+        await prisma.purchaseBill.delete({ where: { id } });
+        await deleteAttachmentBlob(toDelete?.attachmentUrl);
+        revalidateTag("purchase-bills", { expire: 0 });
+        revalidateTag("reports", { expire: 0 });
+        break;
+      }
       default:
         return NextResponse.json({ error: "Invalid type" }, { status: 400 });
     }
