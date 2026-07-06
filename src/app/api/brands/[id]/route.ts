@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireSession } from "@/lib/apiAuth";
@@ -20,11 +21,18 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
         { status: 400 }
       );
     }
+    if (brand._count.products > 0) {
+      return NextResponse.json(
+        { error: `"${brand.name}" has ${brand._count.products} product(s) assigned and cannot be deleted. Reassign or delete those products first.` },
+        { status: 400 }
+      );
+    }
 
     await prisma.brand.update({ where: { id }, data: { deletedAt: new Date() } });
 
-    const affected = brand._count.products > 0 ? ` | ${brand._count.products} product(s) still assigned` : "";
-    await logActivity(auth.session.user.id, "delete_brand", `Moved brand "${brand.name}" to bin${affected}`, id, "brand");
+    await logActivity(auth.session.user.id, "delete_brand", `Moved brand "${brand.name}" to bin`, id, "brand");
+    revalidateTag("products", { expire: 0 });
+    revalidateTag("reports", { expire: 0 });
     return NextResponse.json({ message: "Brand moved to bin" });
   } catch (error) {
     console.error("DELETE /api/brands/[id] error:", error);

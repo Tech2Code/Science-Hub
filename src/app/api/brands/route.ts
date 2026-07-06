@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireSession } from "@/lib/apiAuth";
@@ -41,17 +43,22 @@ export async function POST(request: NextRequest) {
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
-    const { name } = body;
+    const trimmedName = typeof body.name === "string" ? body.name.trim() : "";
 
-    if (!name) {
+    if (!trimmedName) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 
-    const brand = await prisma.brand.create({ data: { name } });
+    const brand = await prisma.brand.create({ data: { name: trimmedName } });
 
-    await logActivity(auth.session.user.id, "add_brand", `Added brand "${name}"`, brand.id, "brand");
+    await logActivity(auth.session.user.id, "add_brand", `Added brand "${trimmedName}"`, brand.id, "brand");
+    revalidateTag("products", { expire: 0 });
+    revalidateTag("reports", { expire: 0 });
     return NextResponse.json(brand, { status: 201 });
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json({ error: "A brand with this name already exists" }, { status: 400 });
+    }
     console.error("POST /api/brands error:", error);
     return NextResponse.json({ error: "Failed to create brand" }, { status: 500 });
   }

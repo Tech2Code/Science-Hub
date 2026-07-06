@@ -32,7 +32,17 @@ export function rateLimit(key: string, limit: number, windowMs: number): { allow
 }
 
 export function getClientIp(request: Request): string {
+  // x-forwarded-for is client-suppliable and trivially spoofed to defeat
+  // per-IP rate limiting. Prefer headers the platform itself sets and a
+  // client can't override: on Vercel that's x-vercel-forwarded-for (or
+  // x-real-ip behind a trusted proxy). Only fall back to the spoofable
+  // x-forwarded-for when neither is present (e.g. local dev), where it's
+  // the best signal available but not a security boundary.
+  const vercelForwarded = request.headers.get("x-vercel-forwarded-for");
+  if (vercelForwarded) return vercelForwarded.split(",")[0].trim();
+  const realIp = request.headers.get("x-real-ip");
+  if (realIp) return realIp.trim();
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0].trim();
-  return request.headers.get("x-real-ip") || "unknown";
+  return "unknown";
 }

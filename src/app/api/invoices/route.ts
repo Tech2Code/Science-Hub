@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getInvoices } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
@@ -34,6 +35,20 @@ export async function POST(request: NextRequest) {
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "At least one item is required" }, { status: 400 });
     }
+    for (const item of items as { quantity?: number; qty?: number; price: number; gstRate?: number }[]) {
+      const quantity = parseFloat(String(item.quantity ?? item.qty ?? 1));
+      const price = parseFloat(String(item.price));
+      const gstRate = parseFloat(String(item.gstRate ?? 0));
+      if (!(quantity > 0)) {
+        return NextResponse.json({ error: "Item quantity must be greater than 0" }, { status: 400 });
+      }
+      if (!(price >= 0)) {
+        return NextResponse.json({ error: "Item price cannot be negative" }, { status: 400 });
+      }
+      if (!(gstRate >= 0)) {
+        return NextResponse.json({ error: "Item GST rate cannot be negative" }, { status: 400 });
+      }
+    }
 
     // If no existing customer selected, create one from the custom details
     if (!customerId) {
@@ -60,22 +75,7 @@ export async function POST(request: NextRequest) {
       revalidateTag("customers", { expire: 0 });
     }
 
-    // Generate invoice number: SH-{YYYY}-{0001}
-    // Derived from the highest existing number for the year (not a row count) so that
-    // permanently-deleted invoices don't free up a number that collides with a later one.
     const currentYear = new Date().getFullYear();
-
-    const lastInvoiceThisYear = await prisma.invoice.findFirst({
-      where: { invoiceNumber: { startsWith: `SH-${currentYear}-` } },
-      orderBy: { invoiceNumber: "desc" },
-      select: { invoiceNumber: true },
-    });
-
-    const lastSequentialNumber = lastInvoiceThisYear
-      ? parseInt(lastInvoiceThisYear.invoiceNumber.split("-")[2], 10)
-      : 0;
-    const sequentialNumber = String(lastSequentialNumber + 1).padStart(4, "0");
-    const invoiceNumber = `SH-${currentYear}-${sequentialNumber}`;
 
     // Fetch product details for each item
     const productIds = items.map((item: { productId: string }) => item.productId);
@@ -132,47 +132,75 @@ export async function POST(request: NextRequest) {
 
     const total = subtotal + cgst + sgst + igst;
 
-    const { invoice, stockWarnings } = await prisma.$transaction(async (tx) => {
-      const inv = await tx.invoice.create({
-        data: {
-          invoiceNumber,
-          customerId,
-          userId: user.id,
-          status: "unpaid",
-          subtotal,
-          cgst,
-          sgst,
-          igst,
-          total,
-          paidAmount: 0,
-          notes: notes || null,
-          dueDate: dueDate ? new Date(dueDate) : null,
-          isInterState: Boolean(isInterState),
-          items: { create: invoiceItems },
-        },
-        include: { customer: true, items: true },
-      });
+    // Invoice-number generation (highest-existing-number-for-year + 1) and the
+    // create both run inside one Serializable transaction, with a retry on the
+    // write-conflict Postgres reports when two requests race for the same
+    // number — without this, concurrent requests would hand out duplicate
+    // invoice numbers instead of one of them safely retrying.
+    async function attemptCreate() {
+      return prisma.$transaction(async (tx) => {
+        const lastInvoiceThisYear = await tx.invoice.findFirst({
+          where: { invoiceNumber: { startsWith: `SH-${currentYear}-` } },
+          orderBy: { invoiceNumber: "desc" },
+          select: { invoiceNumber: true },
+        });
+        const lastSequentialNumber = lastInvoiceThisYear
+          ? parseInt(lastInvoiceThisYear.invoiceNumber.split("-")[2], 10)
+          : 0;
+        const sequentialNumber = String(lastSequentialNumber + 1).padStart(4, "0");
+        const invoiceNumber = `SH-${currentYear}-${sequentialNumber}`;
 
-      // Deduct stock for each item
-      const warnings: string[] = [];
-      for (const item of invoiceItems) {
-        await tx.product.updateMany({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
+        const inv = await tx.invoice.create({
+          data: {
+            invoiceNumber,
+            customerId,
+            userId: user.id,
+            status: "unpaid",
+            subtotal,
+            cgst,
+            sgst,
+            igst,
+            total,
+            paidAmount: 0,
+            notes: notes || null,
+            dueDate: dueDate ? new Date(dueDate) : null,
+            isInterState: Boolean(isInterState),
+            items: { create: invoiceItems },
+          },
+          include: { customer: true, items: true },
         });
-        const prod = await tx.product.findUnique({
-          where: { id: item.productId },
-          select: { name: true, stock: true },
-        });
-        if (prod && prod.stock < 0) {
-          warnings.push(`${prod.name} (stock: ${prod.stock})`);
-        }
+
+        const updatedProducts = await Promise.all(invoiceItems.map((item: { productId: string; quantity: number }) =>
+          tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity } },
+            select: { name: true, stock: true },
+          })
+        ));
+        const warnings = updatedProducts
+          .filter((p) => p.stock < 0)
+          .map((p) => `${p.name} (stock: ${p.stock})`);
+
+        return { invoice: inv, stockWarnings: warnings };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });
+    }
+
+    const maxAttempts = 5;
+    let result: Awaited<ReturnType<typeof attemptCreate>> | undefined;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        result = await attemptCreate();
+        break;
+      } catch (error) {
+        const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+        if (isWriteConflict && attempt < maxAttempts) continue;
+        throw error;
       }
+    }
+    const { invoice, stockWarnings } = result!;
 
-      return { invoice: inv, stockWarnings: warnings };
-    });
-
-    await logActivity(user.id, "create_invoice", `Created invoice ${invoiceNumber} for ${invoice.customer.name} | Total: ₹${invoice.total.toFixed(2)} | Items: ${invoiceItems.length} | Tax: ${isInterState ? "IGST" : "CGST+SGST"}`, invoice.id, "invoice");
+    await logActivity(user.id, "create_invoice", `Created invoice ${invoice.invoiceNumber} for ${invoice.customer.name} | Total: ₹${invoice.total.toFixed(2)} | Items: ${invoiceItems.length} | Tax: ${isInterState ? "IGST" : "CGST+SGST"}`, invoice.id, "invoice");
+    revalidateTag("invoices", { expire: 0 });
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
     return NextResponse.json({ ...invoice, stockWarnings }, { status: 201 });

@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -55,7 +55,6 @@ export default function InvoicesPage() {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewInvoice, setPdfPreviewInvoice] = useState<{ number: string; customer: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
-  const [deleting, setDeleting] = useState(false);
   const [pdfDialogInvoice, setPdfDialogInvoice] = useState<Invoice | null>(null);
   const [pdfDialogLoading, setPdfDialogLoading] = useState(false);
   const [openingEditId, setOpeningEditId] = useState<string | null>(null);
@@ -63,10 +62,16 @@ export default function InvoicesPage() {
   const router = useRouter();
 
   function closePdfPreview() {
-    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
     setPdfPreviewUrl(null);
     setPdfPreviewInvoice(null);
   }
+
+  // Revokes the previous blob URL whenever it's replaced (including by a
+  // second preview opened without closing the first) or on unmount —
+  // covering cases closePdfPreview()'s own revoke doesn't.
+  useEffect(() => {
+    return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
+  }, [pdfPreviewUrl]);
 
   // Loads the invoice detail page into a hidden iframe (to render its full
   // #invoice-print-area, which this list page doesn't have the data for) and
@@ -125,7 +130,7 @@ export default function InvoicesPage() {
   }
 
   const apiUrl = filter === "All" ? "/api/invoices" : `/api/invoices?status=${filter}`;
-  const { data, loading, mutate } = useFetch<Invoice[]>(apiUrl);
+  const { data, loading, patchData } = useFetch<Invoice[]>(apiUrl);
   const invoices = data ?? [];
 
   const filtered = search.trim()
@@ -146,21 +151,23 @@ export default function InvoicesPage() {
 
   async function handleDelete() {
     if (!deleteTarget) return;
-    setDeleting(true);
+    const target = deleteTarget;
+    const previous = invoices;
+    patchData((prev) => (prev ?? []).filter((inv) => inv.id !== target.id));
+    setDeleteTarget(null);
     try {
-      const res = await fetch(`/api/invoices/${deleteTarget.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/invoices/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
-        mutate();
-        toast({ type: "success", title: "Moved to bin", message: `${deleteTarget.invoiceNumber} moved to bin. You can restore it within 30 days.` });
+        toast({ type: "success", title: "Moved to bin", message: `${target.invoiceNumber} moved to bin. You can restore it within 30 days.` });
       } else {
+        patchData(() => previous);
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete invoice." });
       }
     } catch {
+      patchData(() => previous);
       toast({ type: "error", title: "Delete failed", message: "Network error." });
     }
-    setDeleting(false);
-    setDeleteTarget(null);
   }
 
   return (
@@ -171,9 +178,8 @@ export default function InvoicesPage() {
       message={`Move invoice ${deleteTarget?.invoiceNumber} to bin? You can restore it within 30 days.`}
       confirmLabel="Move to Bin"
       variant="danger"
-      loading={deleting}
       onConfirm={handleDelete}
-      onCancel={() => { if (!deleting) setDeleteTarget(null); }}
+      onCancel={() => setDeleteTarget(null)}
     />
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
     {openingEditId && <OverlayLoader text="Opening editor…" />}
@@ -225,6 +231,7 @@ export default function InvoicesPage() {
         <div className="card-toolbar">
           <input
             type="search"
+            aria-label="Search invoices"
             placeholder="Search by invoice no., customer or staff name…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
@@ -274,41 +281,19 @@ export default function InvoicesPage() {
                         if (pdfBusyRef.current) return;
                         pdfBusyRef.current = true;
                         setPdfLoading(inv.id);
-                        const iframe = document.createElement("iframe");
-                        Object.assign(iframe.style, { position: "fixed", width: "850px", height: "1200px", top: "-9999px", left: "-9999px", border: "none", opacity: "0", pointerEvents: "none" });
-                        const cleanup = () => { try { document.body.removeChild(iframe); } catch {} setPdfLoading(null); pdfBusyRef.current = false; };
-                        const safetyTimer = setTimeout(cleanup, 45000);
-                        iframe.onload = async () => {
-                          const el = await new Promise<HTMLElement | null>(resolve => {
-                            let tries = 0;
-                            const check = () => {
-                              const area = iframe.contentDocument?.getElementById("invoice-print-area");
-                              if (area?.querySelector("tbody tr")) { resolve(area); return; }
-                              if (++tries > 40) { resolve(null); return; }
-                              setTimeout(check, 250);
-                            };
-                            setTimeout(check, 250);
-                          });
-                          if (!el) { clearTimeout(safetyTimer); cleanup(); return; }
-                          await new Promise(r => setTimeout(r, 400));
-                          let previewSet = false;
-                          try {
-                            const blob = await generateInvoicePdfBlob(el, { copyLabels: ["ORIGINAL COPY", "DUPLICATE COPY"] });
-                            if (blob) {
-                              const url = URL.createObjectURL(blob);
-                              previewSet = true;
-                              setPdfPreviewUrl(url);
-                              setPdfPreviewInvoice({ number: inv.invoiceNumber, customer: inv.customer?.name ?? "" });
-                            } else {
-                              toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
-                            }
-                          } catch {
-                            if (!previewSet) toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
+                        try {
+                          const blob = await generatePdfViaIframe(inv.id, ["ORIGINAL COPY", "DUPLICATE COPY"]);
+                          if (blob) {
+                            const url = URL.createObjectURL(blob);
+                            setPdfPreviewUrl(url);
+                            setPdfPreviewInvoice({ number: inv.invoiceNumber, customer: inv.customer?.name ?? "" });
+                          } else {
+                            toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
                           }
-                          clearTimeout(safetyTimer); cleanup();
-                        };
-                        document.body.appendChild(iframe);
-                        iframe.src = `/sales/invoices/${inv.id}`;
+                        } finally {
+                          setPdfLoading(null);
+                          pdfBusyRef.current = false;
+                        }
                       }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         View

@@ -58,6 +58,15 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { id } = await params;
+    const existing = await prisma.vendor.findUnique({ where: { id }, select: { name: true } });
+    if (!existing) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
+    const activeBillCount = await prisma.purchaseBill.count({ where: { vendorId: id, deletedAt: null } });
+    if (activeBillCount > 0) {
+      return NextResponse.json(
+        { error: `"${existing.name}" has ${activeBillCount} active purchase bill(s) and cannot be deleted. Delete those bills first.` },
+        { status: 400 }
+      );
+    }
     const vendor = await prisma.vendor.update({ where: { id }, data: { deletedAt: new Date() } });
     await logActivity(session.user.id, "delete_vendor", `Deleted vendor "${vendor.name}"`, vendor.id, "vendor");
     revalidateTag("vendors", { expire: 0 });

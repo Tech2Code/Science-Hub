@@ -74,6 +74,7 @@ export default function PurchasePaymentsPage() {
         <div className="card-toolbar">
           <input
             type="search"
+            aria-label="Search purchase payments"
             placeholder="Search by vendor, bill no, method or reference…"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}

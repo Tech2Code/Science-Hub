@@ -43,7 +43,7 @@ export default function NewInvoicePage() {
   const [stockOutItems, setStockOutItems] = useState<{ name: string; available: number; requested: number }[]>([]);
 
   useEffect(() => {
-    fetch("/api/customers").then((r) => r.json()).then((all: Customer[]) => {
+    fetch("/api/customers", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((all: Customer[]) => {
       setCustomers(all);
       const prefillId = searchParams.get("customerId");
       if (prefillId) {
@@ -54,7 +54,7 @@ export default function NewInvoicePage() {
         }
       }
     }).catch(() => {});
-    fetch("/api/products").then((r) => r.json()).then(setProducts).catch(() => {});
+    fetch("/api/products", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then(setProducts).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount prefill from the initial URL, not meant to re-run on searchParams changes
   }, []);
 

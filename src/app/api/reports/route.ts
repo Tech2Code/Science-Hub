@@ -7,6 +7,7 @@ async function getSalesDashboard() {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   const [revenueAgg, collectedAgg, unpaidInvoices, overdueCount, recentInvoices, customers] = await Promise.all([
     prisma.invoice.aggregate({
@@ -22,7 +23,7 @@ async function getSalesDashboard() {
       select: { total: true, paidAmount: true, dueDate: true },
     }),
     prisma.invoice.count({
-      where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: now } },
+      where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } },
     }),
     prisma.invoice.findMany({
       where: { deletedAt: null },
@@ -84,6 +85,7 @@ async function getPurchaseDashboard() {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   const [spendAgg, paidAgg, unpaidBills, overdueCount, recentBills, vendors] = await Promise.all([
     prisma.purchaseBill.aggregate({
@@ -99,7 +101,7 @@ async function getPurchaseDashboard() {
       select: { total: true, paidAmount: true, dueDate: true },
     }),
     prisma.purchaseBill.count({
-      where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: now } },
+      where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } },
     }),
     prisma.purchaseBill.findMany({
       where: { deletedAt: null },
@@ -169,17 +171,17 @@ async function getCombinedDashboard() {
   ] = await Promise.all([
     prisma.invoice.aggregate({ where: { deletedAt: null, date: { gte: monthStart, lt: monthEnd } }, _sum: { total: true } }),
     prisma.invoice.findMany({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] } }, select: { total: true, paidAmount: true } }),
-    prisma.invoice.count({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: now } } }),
+    prisma.invoice.count({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } } }),
     prisma.payment.aggregate({ where: { date: { gte: todayStart, lt: todayEnd } }, _sum: { amount: true } }),
     prisma.purchaseBill.aggregate({ where: { deletedAt: null, billDate: { gte: monthStart, lt: monthEnd } }, _sum: { total: true } }),
     prisma.purchaseBill.findMany({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] } }, select: { total: true, paidAmount: true } }),
-    prisma.purchaseBill.count({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: now } } }),
+    prisma.purchaseBill.count({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } } }),
     prisma.purchasePayment.aggregate({ where: { date: { gte: todayStart, lt: todayEnd } }, _sum: { amount: true } }),
     prisma.invoice.findMany({ where: { deletedAt: null }, orderBy: { date: "desc" }, take: 5, include: { customer: { select: { name: true } } } }),
     prisma.purchaseBill.findMany({ where: { deletedAt: null }, orderBy: { billDate: "desc" }, take: 5, include: { vendor: { select: { name: true } } } }),
     prisma.product.count({ where: { deletedAt: null } }).then(async () => {
       const prods = await prisma.product.findMany({ where: { deletedAt: null }, select: { stock: true, minStock: true } });
-      return prods.filter((p) => p.stock < p.minStock).length;
+      return prods.filter((p) => p.stock <= p.minStock).length;
     }),
   ]);
 
@@ -208,9 +210,13 @@ async function getCombinedDashboard() {
   };
 }
 
-async function getGstSummary() {
+async function getGstSummary(startDate?: string, endDate?: string) {
+  const dateFilter: { gte?: Date; lte?: Date } = {};
+  if (startDate) dateFilter.gte = new Date(startDate);
+  if (endDate) dateFilter.lte = new Date(endDate);
+
   const invoices = await prisma.invoice.findMany({
-    where: { deletedAt: null },
+    where: { deletedAt: null, ...(Object.keys(dateFilter).length > 0 && { date: dateFilter }) },
     select: { date: true, subtotal: true, cgst: true, sgst: true, igst: true },
     orderBy: { date: "asc" },
   });
@@ -235,18 +241,20 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");
+    const startDate = searchParams.get("startDate") || undefined;
+    const endDate = searchParams.get("endDate") || undefined;
 
     if (!type) {
       return NextResponse.json({ error: "Query parameter 'type' is required" }, { status: 400 });
     }
 
     if (type === "summary")            return NextResponse.json(await getReportSummary());
-    if (type === "outstanding")        return NextResponse.json(await getReportOutstanding());
+    if (type === "outstanding")        return NextResponse.json(await getReportOutstanding(startDate, endDate));
     if (type === "stock")              return NextResponse.json(await getReportStock());
     if (type === "sales-dashboard")    return NextResponse.json(await getSalesDashboard());
     if (type === "purchase-dashboard") return NextResponse.json(await getPurchaseDashboard());
     if (type === "combined-dashboard") return NextResponse.json(await getCombinedDashboard());
-    if (type === "gst-summary")        return NextResponse.json(await getGstSummary());
+    if (type === "gst-summary")        return NextResponse.json(await getGstSummary(startDate, endDate));
 
     return NextResponse.json({ error: `Unknown report type: ${type}` }, { status: 400 });
   } catch (error) {

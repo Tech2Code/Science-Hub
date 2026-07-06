@@ -125,8 +125,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "CATALOG",
     items: [
-      { href: "/products", label: "Products", iconKey: "products", adminOnly: false },
-      { href: "/brands",   label: "Brands",   iconKey: "brands",   adminOnly: false },
+      { href: "/products",   label: "Products",   iconKey: "products", adminOnly: false },
+      { href: "/brands",     label: "Brands",      iconKey: "brands",   adminOnly: false },
+      { href: "/categories", label: "Categories",  iconKey: "brands",   adminOnly: false },
     ],
   },
   {

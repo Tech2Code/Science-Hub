@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCustomers } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { requireSession } from "@/lib/apiAuth";
+import { validateCustomerInput } from "@/lib/validation";
 
 export async function GET() {
   try {
@@ -33,15 +35,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, phone, email, address, city, state, pincode, gstin } = body;
 
-    if (!name) {
-      return NextResponse.json({ error: "Name is required" }, { status: 400 });
+    const validationError = validateCustomerInput({ name, phone, email, pincode, gstin });
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
     const customer = await prisma.customer.create({
-      data: { name, phone, email, address, city, state, pincode, gstin },
+      data: { name: name.trim(), phone, email, address, city, state, pincode, gstin },
     });
 
-    await logActivity(auth.session.user.id, "add_customer", `Added customer "${name}" | Phone: ${phone || "—"} | City: ${city || "—"} | GSTIN: ${gstin || "—"}`, customer.id, "customer");
+    await logActivity(auth.session.user.id, "add_customer", `Added customer "${customer.name}" | Phone: ${phone || "—"} | City: ${city || "—"} | GSTIN: ${gstin || "—"}`, customer.id, "customer");
+    revalidateTag("customers", { expire: 0 });
     return NextResponse.json(customer, { status: 201 });
   } catch (error) {
     console.error("POST /api/customers error:", error);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireSession } from "@/lib/apiAuth";
@@ -24,6 +25,13 @@ export async function POST(
       include: { customer: true },
     });
     if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+
+    const remaining = invoice.total - invoice.paidAmount;
+    if (parseFloat(amount) > remaining + 0.01) {
+      return NextResponse.json({
+        error: `Payment (₹${parseFloat(amount).toFixed(2)}) exceeds the remaining balance (₹${remaining.toFixed(2)})`,
+      }, { status: 400 });
+    }
 
     await prisma.payment.create({
       data: {
@@ -58,6 +66,8 @@ export async function POST(
       "invoice"
     );
 
+    revalidateTag("invoices", { expire: 0 });
+    revalidateTag("reports", { expire: 0 });
     return NextResponse.json(updated, { status: 201 });
   } catch (error) {
     console.error(error);

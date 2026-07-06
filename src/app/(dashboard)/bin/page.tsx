@@ -258,6 +258,7 @@ export default function BinPage() {
         <div className={`card ${styles.searchCard}`}>
           <input
             type="search"
+            aria-label="Search bin"
             placeholder="Search by name, invoice no., customer, phone, amount, deleted by, date…"
             value={search}
             onChange={e => setSearch(e.target.value)}

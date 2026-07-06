@@ -35,7 +35,7 @@ export default function EditCustomerPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/customers/${id}`)
+    fetch(`/api/customers/${id}`, { headers: { "x-no-loader": "1" } })
       .then((r) => r.json())
       .then((d) => {
         const loaded = { name: d.name ?? "", phone: d.phone ?? "", email: d.email ?? "",

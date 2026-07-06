@@ -41,6 +41,8 @@ export async function PUT(
       if (status !== undefined) data.status = status;
       if (notes !== undefined) data.notes = notes;
       const invoice = await prisma.invoice.update({ where: { id }, data });
+      revalidateTag("invoices", { expire: 0 });
+      revalidateTag("reports", { expire: 0 });
       return NextResponse.json(invoice);
     }
 
@@ -49,6 +51,24 @@ export async function PUT(
       select: { paidAmount: true, status: true },
     });
     if (!existing) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    if (existing.status === "paid") {
+      return NextResponse.json({ error: "A fully paid invoice cannot be edited" }, { status: 400 });
+    }
+
+    for (const item of items as { qty?: number; quantity?: number; price: number; gstRate?: number }[]) {
+      const quantity = parseFloat(String(item.qty ?? item.quantity ?? 1));
+      const price = parseFloat(String(item.price));
+      const gstRate = parseFloat(String(item.gstRate ?? 0));
+      if (!(quantity > 0)) {
+        return NextResponse.json({ error: "Item quantity must be greater than 0" }, { status: 400 });
+      }
+      if (!(price >= 0)) {
+        return NextResponse.json({ error: "Item price cannot be negative" }, { status: 400 });
+      }
+      if (!(gstRate >= 0)) {
+        return NextResponse.json({ error: "Item GST rate cannot be negative" }, { status: 400 });
+      }
+    }
 
     // Fetch product info for names/units
     const productIds = items.map((i: { productId: string }) => i.productId);
@@ -142,6 +162,7 @@ export async function PUT(
       return { invoice: inv, stockWarnings: warnings };
     }, { timeout: 20000, maxWait: 10000 });
 
+    revalidateTag("invoices", { expire: 0 });
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
 
@@ -163,28 +184,44 @@ export async function DELETE(
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
-    const inv = await prisma.invoice.findUnique({ where: { id }, select: { invoiceNumber: true, total: true, customer: { select: { name: true } } } });
 
-    // Restore stock before soft-deleting
-    const items = await prisma.invoiceItem.findMany({
-      where: { invoiceId: id },
-      select: { productId: true, quantity: true },
+    // Guard against double-delete (double-click, retry, repeated API call):
+    // only restore stock if this call is the one that actually transitions
+    // the invoice from active to deleted — updateMany's count tells us that
+    // atomically, so a repeat call finds count 0 and skips re-crediting stock.
+    const result = await prisma.$transaction(async (tx) => {
+      const inv = await tx.invoice.findUnique({
+        where: { id },
+        select: { invoiceNumber: true, total: true, customer: { select: { name: true } } },
+      });
+      if (!inv) return { found: false, alreadyDeleted: false, inv: null };
+
+      const items = await tx.invoiceItem.findMany({
+        where: { invoiceId: id },
+        select: { productId: true, quantity: true },
+      });
+      const updateResult = await tx.invoice.updateMany({
+        where: { id, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
+      if (updateResult.count === 0) {
+        return { found: true, alreadyDeleted: true, inv };
+      }
+      await Promise.all(items.map(item =>
+        tx.product.update({ where: { id: item.productId }, data: { stock: { increment: item.quantity } } })
+      ));
+      return { found: true, alreadyDeleted: false, inv };
     });
-    await prisma.$transaction([
-      ...items.map(item =>
-        prisma.product.updateMany({
-          where: { id: item.productId },
-          data: { stock: { increment: item.quantity } },
-        })
-      ),
-      prisma.invoice.update({ where: { id }, data: { deletedAt: new Date() } }),
-    ]);
 
+    if (!result.found) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    if (result.alreadyDeleted) return NextResponse.json({ message: "Invoice already moved to bin" });
+
+    revalidateTag("invoices", { expire: 0 });
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
 
-    if (inv) {
-      await logActivity(auth.session.user.id, "delete_invoice", `Moved invoice ${inv.invoiceNumber} to bin | Customer: ${inv.customer?.name ?? "—"} | Total: ₹${inv.total.toFixed(2)}`, id, "invoice");
+    if (result.inv) {
+      await logActivity(auth.session.user.id, "delete_invoice", `Moved invoice ${result.inv.invoiceNumber} to bin | Customer: ${result.inv.customer?.name ?? "—"} | Total: ₹${result.inv.total.toFixed(2)}`, id, "invoice");
     }
     return NextResponse.json({ message: "Invoice moved to bin" });
   } catch (error) {

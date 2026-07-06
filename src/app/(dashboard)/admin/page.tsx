@@ -184,7 +184,7 @@ export default function AdminPage() {
     const offset = (page - 1) * LOGS_LIMIT;
     const qs = new URLSearchParams({ limit: String(LOGS_LIMIT), offset: String(offset) });
     if (userId) qs.set("userId", userId);
-    const res = await fetch(`/api/admin/activity?${qs}`);
+    const res = await fetch(`/api/admin/activity?${qs}`, { headers: { "x-no-loader": "1" } });
     const data = await res.json();
     setLogsLoading(false);
     if (res.ok) {
@@ -194,9 +194,9 @@ export default function AdminPage() {
     }
   }, []);
 
-  useEffect(() => { fetch("/api/admin/profile").then(r => r.json()).then(d => { setProfile(d); setProfileForm({ name: d.name, email: d.email }); }).finally(() => setProfileLoading(false)); }, []);
+  useEffect(() => { fetch("/api/admin/profile", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then(d => { setProfile(d); setProfileForm({ name: d.name, email: d.email }); }).finally(() => setProfileLoading(false)); }, []);
   /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => { if (!isAdmin) return; setUsersLoading(true); fetch("/api/admin/users").then(r => r.json()).then(setUsers).finally(() => setUsersLoading(false)); }, [isAdmin]);
+  useEffect(() => { if (!isAdmin) return; setUsersLoading(true); fetch("/api/admin/users", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then(setUsers).finally(() => setUsersLoading(false)); }, [isAdmin]);
   useEffect(() => { if (isAdmin) loadLogs(1, logsFilter); }, [isAdmin, logsFilter, loadLogs]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -651,7 +651,7 @@ export default function AdminPage() {
         {/* Filters */}
         <div className={styles.filterBar}>
           <input
-            className={`${styles.inp} ${styles.inpCompact}`} type="search" placeholder="Search actions or details…" value={logsSearch}
+            className={`${styles.inp} ${styles.inpCompact}`} type="search" aria-label="Search activity log" placeholder="Search actions or details…" value={logsSearch}
             onChange={e => setLogsSearch(e.target.value)}
           />
           <select

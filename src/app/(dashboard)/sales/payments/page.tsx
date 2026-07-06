@@ -77,6 +77,7 @@ export default function PaymentsPage() {
         <div className="card-toolbar">
           <input
             type="search"
+            aria-label="Search payments"
             placeholder="Search by customer, invoice no, method or reference…"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}

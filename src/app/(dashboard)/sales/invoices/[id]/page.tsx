@@ -229,7 +229,7 @@ export default function InvoiceDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    fetch(`/api/invoices/${id}/returns`)
+    fetch(`/api/invoices/${id}/returns`, { headers: { "x-no-loader": "1" } })
       .then(r => r.json())
       .then(data => {
         if (!Array.isArray(data)) { setReturns([]); return; }
@@ -768,6 +768,7 @@ export default function InvoiceDetailPage() {
                         <div key={idx} className={`${styles.returnItemRow} ${ri.selected ? styles.returnItemRowSelected : ""}`}>
                           <input
                             type="checkbox"
+                            aria-label={ri.name}
                             checked={ri.selected}
                             onChange={e => {
                               const checked = e.target.checked;

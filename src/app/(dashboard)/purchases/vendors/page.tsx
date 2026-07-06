@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -33,12 +34,13 @@ const COLUMNS: Column[] = [
 ];
 
 export default function VendorsPage() {
-  const { data, loading, mutate } = useFetch<Vendor[]>("/api/vendors");
+  const { data, loading, patchData } = useFetch<Vendor[]>("/api/vendors");
   const vendors = data ?? [];
   const toast = useToast();
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [showAll, setShowAll] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null);
-  const [deleting, setDeleting] = useState(false);
   const [openingEditId, setOpeningEditId] = useState<string | null>(null);
   const router = useRouter();
 
@@ -55,23 +57,29 @@ export default function VendorsPage() {
       })
     : vendors;
 
+  const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const clampedPage = Math.min(page, maxPage);
+  const { visible } = usePagination(filtered, clampedPage, showAll);
+
   async function handleDelete() {
     if (!deleteTarget) return;
-    setDeleting(true);
+    const target = deleteTarget;
+    const previous = vendors;
+    patchData((prev) => (prev ?? []).filter((v) => v.id !== target.id));
+    setDeleteTarget(null);
     try {
-      const res = await fetch(`/api/vendors/${deleteTarget.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/vendors/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
-        mutate();
-        toast({ type: "success", title: "Vendor deleted", message: `"${deleteTarget.name}" removed.` });
+        toast({ type: "success", title: "Vendor deleted", message: `"${target.name}" removed.` });
       } else {
+        patchData(() => previous);
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete vendor." });
       }
     } catch {
+      patchData(() => previous);
       toast({ type: "error", title: "Delete failed", message: "Network error." });
     }
-    setDeleting(false);
-    setDeleteTarget(null);
   }
 
   return (
@@ -83,9 +91,8 @@ export default function VendorsPage() {
       message={`Delete "${deleteTarget?.name}"? This cannot be undone.`}
       confirmLabel="Delete"
       variant="danger"
-      loading={deleting}
       onConfirm={handleDelete}
-      onCancel={() => { if (!deleting) setDeleteTarget(null); }}
+      onCancel={() => setDeleteTarget(null)}
     />
 
     <div className="page-stack">
@@ -106,11 +113,15 @@ export default function VendorsPage() {
         <div className="card-toolbar">
           <input
             type="search"
+            aria-label="Search vendors"
             placeholder="Search by name, company, GSTIN, phone or email…"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
             className={`search-input ${styles.searchInput}`}
           />
+          {!loading && (
+            <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />
+          )}
         </div>
         <div className="table-wrap">
           <table className="table-base">
@@ -124,7 +135,7 @@ export default function VendorsPage() {
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search.trim() ? `No vendors match "${search}".` : "No vendors yet. Add your first vendor."}
                 </td></tr>
-              ) : filtered.map(v => (
+              ) : visible.map(v => (
                 <tr key={v.id}>
                   <Cell col={COLUMNS[0]}>
                     <div className={styles.nameCell}>{v.name}</div>
@@ -166,6 +177,9 @@ export default function VendorsPage() {
             </tbody>
           </table>
         </div>
+        {!loading && filtered.length > 0 && (
+          <Pagination total={filtered.length} page={clampedPage} showAll={showAll} onPage={setPage} label="vendors" />
+        )}
       </div>
     </div>
     </>

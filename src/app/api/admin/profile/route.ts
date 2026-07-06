@@ -72,9 +72,11 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Email uniqueness check (against other users)
-    if (email !== undefined && email !== currentUser.email) {
-      const conflict = await prisma.user.findUnique({ where: { email } });
+    // Email uniqueness check (against other users) — normalized the same
+    // way login does, so case-variant duplicates can't be created here.
+    const normalizedEmail = email !== undefined ? email.trim().toLowerCase() : undefined;
+    if (normalizedEmail !== undefined && normalizedEmail !== currentUser.email) {
+      const conflict = await prisma.user.findUnique({ where: { email: normalizedEmail } });
       if (conflict) {
         return NextResponse.json(
           { error: "A user with that email already exists" },
@@ -115,8 +117,8 @@ export async function PUT(request: NextRequest) {
       where: { id: currentUser.id },
       data: {
         ...(name !== undefined && { name }),
-        ...(email !== undefined && { email }),
-        ...(hashedPassword !== undefined && { password: hashedPassword }),
+        ...(normalizedEmail !== undefined && { email: normalizedEmail }),
+        ...(hashedPassword !== undefined && { password: hashedPassword, tokenVersion: { increment: 1 } }),
       },
       select: USER_SELECT,
     });

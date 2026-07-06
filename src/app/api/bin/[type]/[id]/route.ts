@@ -47,20 +47,24 @@ export async function POST(
 
     switch (binType) {
       case "invoice": {
-        // Re-deduct stock when restoring from bin
-        const invItems = await prisma.invoiceItem.findMany({
-          where: { invoiceId: id },
-          select: { productId: true, quantity: true },
+        // Guard against double-restore: only re-deduct stock if this call is
+        // the one that actually transitions deletedAt from set to null.
+        const restored = await prisma.$transaction(async (tx) => {
+          const updateResult = await tx.invoice.updateMany({
+            where: { id, deletedAt: { not: null } },
+            data: { deletedAt: null },
+          });
+          if (updateResult.count === 0) return false;
+          const invItems = await tx.invoiceItem.findMany({
+            where: { invoiceId: id },
+            select: { productId: true, quantity: true },
+          });
+          await Promise.all(invItems.map(item =>
+            tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.quantity } } })
+          ));
+          return true;
         });
-        await prisma.$transaction([
-          prisma.invoice.update({ where: { id }, data: { deletedAt: null } }),
-          ...invItems.map(item =>
-            prisma.product.updateMany({
-              where: { id: item.productId },
-              data: { stock: { decrement: item.quantity } },
-            })
-          ),
-        ]);
+        if (!restored) return NextResponse.json({ message: "Already restored" });
         revalidateTag("invoices", { expire: 0 });
         revalidateTag("products", { expire: 0 });
         revalidateTag("reports", { expire: 0 });
@@ -125,13 +129,16 @@ export async function DELETE(
         revalidateTag("reports", { expire: 0 });
         break;
       case "customer": {
-        // Check for non-deleted invoices
-        const activeInvoiceCount = await prisma.invoice.count({
-          where: { customerId: id, deletedAt: null },
+        // Check for ANY invoices referencing this customer, active or
+        // soft-deleted — the FK constraint blocks the delete either way, so
+        // a soft-deleted invoice left unpurged would otherwise crash this
+        // with a raw, unexplained 500.
+        const invoiceCount = await prisma.invoice.count({
+          where: { customerId: id },
         });
-        if (activeInvoiceCount > 0) {
+        if (invoiceCount > 0) {
           return NextResponse.json(
-            { error: `Cannot permanently delete "${name}" — they have ${activeInvoiceCount} active invoice(s). Delete those invoices first.` },
+            { error: `Cannot permanently delete "${name}" — they have ${invoiceCount} invoice(s) on record (including any in the bin). Permanently delete those invoices first.` },
             { status: 400 }
           );
         }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
@@ -53,18 +54,67 @@ const CAT_COLS: Column[] = [
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 
+function toCsv(headers: string[], rows: (string | number)[][]) {
+  const escape = (v: string | number) => {
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [headers, ...rows].map(row => row.map(escape).join(",")).join("\n");
+}
+
+// Excel auto-detects date-shaped CSV text and converts it to its internal
+// date serial number, then shows "######" once the column is too narrow to
+// display that number — wrapping as ="..." forces Excel to treat the cell
+// as a literal text formula instead of a date.
+function csvDate(s: string) {
+  return s ? `="${s}"` : "";
+}
+
+function downloadCsv(filename: string, csv: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 type Tab = "summary" | "outstanding" | "category";
 
 export default function PurchaseReportsPage() {
   const [tab, setTab] = useState<Tab>("outstanding");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const dateQuery = startDate || endDate ? `&startDate=${startDate}&endDate=${endDate}` : "";
 
   const { data: summaryData, loading: loadingSummary } = useFetch<SummaryRow[]>("/api/purchase-reports?type=summary");
-  const { data: outstandingData, loading: loadingOut } = useFetch<OutstandingBill[]>("/api/purchase-reports?type=outstanding");
+  const { data: outstandingData, loading: loadingOut } = useFetch<OutstandingBill[]>(`/api/purchase-reports?type=outstanding${dateQuery}`);
   const { data: categoryData, loading: loadingCat } = useFetch<CategoryRow[]>("/api/purchase-reports?type=category");
 
   const summaryRows = summaryData ?? [];
   const outstanding = outstandingData ?? [];
   const categoryRows = categoryData ?? [];
+
+  function exportOutstandingCsv() {
+    const csv = toCsv(
+      ["Bill No.", "Vendor", "Bill Date", "Due Date", "Aging", "Total", "Paid", "Balance", "Status"],
+      outstanding.map(b => [
+        b.billNumber, b.vendor.name,
+        csvDate(new Date(b.billDate).toLocaleDateString("en-IN")),
+        csvDate(b.dueDate ? new Date(b.dueDate).toLocaleDateString("en-IN") : ""),
+        b.aging, b.total, b.paidAmount, b.balance, b.status,
+      ])
+    );
+    downloadCsv("outstanding-bills.csv", csv);
+  }
+
+  function exportCategoryCsv() {
+    const csv = toCsv(
+      ["Category", "Bills", "Total Spend", "% of Total"],
+      categoryRows.map(r => [r.category, r.count, r.totalSpend, r.pct])
+    );
+    downloadCsv("spend-by-category.csv", csv);
+  }
 
   const [outPage, setOutPage] = useState(1);
   const [outShowAll, setOutShowAll] = useState(false);
@@ -117,6 +167,22 @@ export default function PurchaseReportsPage() {
           ))}
         </div>
 
+        {tab === "outstanding" && (
+          <div className={styles.dateFilterRow}>
+            <label className={styles.dateFilterLabel}>
+              From
+              <input type="date" aria-label="Start date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={styles.dateInput} />
+            </label>
+            <label className={styles.dateFilterLabel}>
+              To
+              <input type="date" aria-label="End date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={styles.dateInput} />
+            </label>
+            {(startDate || endDate) && (
+              <Button variant="secondary" size="sm" onClick={() => { setStartDate(""); setEndDate(""); }}>Clear</Button>
+            )}
+          </div>
+        )}
+
         {/* Outstanding tab */}
         {tab === "outstanding" && (
           <>
@@ -125,9 +191,14 @@ export default function PurchaseReportsPage() {
                 <h2 className="card-header-title">Outstanding Bills</h2>
                 <p className="card-header-sub">Unpaid and partially paid purchase bills with aging</p>
               </div>
-              {!loadingOut && (
-                <ShowAllToggle total={outstanding.length} showAll={outShowAll} onToggle={() => { setOutShowAll((v) => !v); setOutPage(1); }} />
-              )}
+              <div className={styles.headerActionsRow}>
+                {!loadingOut && outstanding.length > 0 && (
+                  <Button variant="secondary" size="sm" onClick={exportOutstandingCsv}>Export CSV</Button>
+                )}
+                {!loadingOut && (
+                  <ShowAllToggle total={outstanding.length} showAll={outShowAll} onToggle={() => { setOutShowAll((v) => !v); setOutPage(1); }} />
+                )}
+              </div>
             </div>
             <div className="table-wrap">
               <table className="table-base">
@@ -236,6 +307,9 @@ export default function PurchaseReportsPage() {
                 <h2 className="card-header-title">Spend by Category</h2>
                 <p className="card-header-sub">Total purchase spend grouped by category</p>
               </div>
+              {!loadingCat && categoryRows.length > 0 && (
+                <Button variant="secondary" size="sm" onClick={exportCategoryCsv}>Export CSV</Button>
+              )}
             </div>
             <div className="table-wrap">
               <table className="table-base">

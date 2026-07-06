@@ -47,39 +47,41 @@ export function PdfCopyDialog({ open, loading = false, onConfirm, onCancel }: Pr
       <div className={styles.backdrop} onClick={onCancel} />
       <div className={styles.center}>
         <div className={styles.dialog}>
-          <h2 className={styles.title}>Download Invoice PDF</h2>
-          <p className={styles.subtitle}>Choose which copies to include in the download.</p>
+          <div className={styles.body}>
+            <h2 className={styles.title}>Download Invoice PDF</h2>
+            <p className={styles.subtitle}>Choose which copies to include in the download.</p>
 
-          <div className={styles.options}>
-            <label className={styles.option}>
-              <input
-                type="checkbox"
-                className={styles.checkbox}
-                checked={original}
-                onChange={(e) => setOriginal(e.target.checked)}
-              />
-              <div>
-                <div className={styles.optionLabel}>Original Copy</div>
-                <div className={styles.optionHint}>For recipient</div>
-              </div>
-            </label>
-            <label className={styles.option}>
-              <input
-                type="checkbox"
-                className={styles.checkbox}
-                checked={duplicate}
-                onChange={(e) => setDuplicate(e.target.checked)}
-              />
-              <div>
-                <div className={styles.optionLabel}>Duplicate Copy</div>
-                <div className={styles.optionHint}>For your records</div>
-              </div>
-            </label>
+            <div className={styles.options}>
+              <label className={styles.option}>
+                <input
+                  type="checkbox"
+                  className={styles.checkbox}
+                  checked={original}
+                  onChange={(e) => setOriginal(e.target.checked)}
+                />
+                <div>
+                  <div className={styles.optionLabel}>Original Copy</div>
+                  <div className={styles.optionHint}>For recipient</div>
+                </div>
+              </label>
+              <label className={styles.option}>
+                <input
+                  type="checkbox"
+                  className={styles.checkbox}
+                  checked={duplicate}
+                  onChange={(e) => setDuplicate(e.target.checked)}
+                />
+                <div>
+                  <div className={styles.optionLabel}>Duplicate Copy</div>
+                  <div className={styles.optionHint}>For your records</div>
+                </div>
+              </label>
+            </div>
+
+            {noneSelected && (
+              <div className={styles.warning}>Select at least one copy to download.</div>
+            )}
           </div>
-
-          {noneSelected && (
-            <div className={styles.warning}>Select at least one copy to download.</div>
-          )}
 
           <div className={styles.actions}>
             <Button variant="secondary" onClick={onCancel} disabled={loading}>

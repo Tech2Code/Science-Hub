@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
@@ -37,15 +38,64 @@ const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigi
 
 type Tab = "summary" | "outstanding" | "gst";
 
+function toCsv(headers: string[], rows: (string | number)[][]) {
+  const escape = (v: string | number) => {
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [headers, ...rows].map(row => row.map(escape).join(",")).join("\n");
+}
+
+// Excel auto-detects date-shaped CSV text and converts it to its internal
+// date serial number, then shows "######" once the column is too narrow to
+// display that number — wrapping as ="..." forces Excel to treat the cell
+// as a literal text formula instead of a date.
+function csvDate(s: string) {
+  return s ? `="${s}"` : "";
+}
+
+function downloadCsv(filename: string, csv: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function SalesReportsPage() {
   const [tab, setTab] = useState<Tab>("outstanding");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const dateQuery = startDate || endDate ? `&startDate=${startDate}&endDate=${endDate}` : "";
 
   const { data: summaryData, loading: loadingSummary } = useFetch<SummaryRow>("/api/reports?type=summary");
-  const { data: outstandingData, loading: loadingOut } = useFetch<OutstandingItem[]>("/api/reports?type=outstanding");
-  const { data: gstData, loading: loadingGst } = useFetch<GstRow[]>("/api/reports?type=gst-summary");
+  const { data: outstandingData, loading: loadingOut } = useFetch<OutstandingItem[]>(`/api/reports?type=outstanding${dateQuery}`);
+  const { data: gstData, loading: loadingGst } = useFetch<GstRow[]>(`/api/reports?type=gst-summary${dateQuery}`);
 
   const outstanding = outstandingData ?? [];
   const gstRows = gstData ?? [];
+
+  function exportOutstandingCsv() {
+    const csv = toCsv(
+      ["Invoice No.", "Customer", "Invoice Date", "Due Date", "Total", "Paid", "Balance", "Status"],
+      outstanding.map(inv => [
+        inv.invoiceNumber, inv.customer.name,
+        csvDate(new Date(inv.date).toLocaleDateString("en-IN")),
+        csvDate(inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("en-IN") : ""),
+        inv.total, inv.paidAmount, inv.total - inv.paidAmount, inv.status,
+      ])
+    );
+    downloadCsv("outstanding-invoices.csv", csv);
+  }
+
+  function exportGstCsv() {
+    const csv = toCsv(
+      ["Month", "Taxable Value", "CGST", "SGST", "IGST", "Total GST"],
+      gstRows.map(r => [r.month, r.taxableValue, r.cgst, r.sgst, r.igst, r.cgst + r.sgst + r.igst])
+    );
+    downloadCsv("gst-summary.csv", csv);
+  }
 
   const [outPage, setOutPage] = useState(1);
   const [outShowAll, setOutShowAll] = useState(false);
@@ -97,6 +147,22 @@ export default function SalesReportsPage() {
           ))}
         </div>
 
+        {(tab === "outstanding" || tab === "gst") && (
+          <div className={styles.dateFilterRow}>
+            <label className={styles.dateFilterLabel}>
+              From
+              <input type="date" aria-label="Start date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={styles.dateInput} />
+            </label>
+            <label className={styles.dateFilterLabel}>
+              To
+              <input type="date" aria-label="End date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={styles.dateInput} />
+            </label>
+            {(startDate || endDate) && (
+              <Button variant="secondary" size="sm" onClick={() => { setStartDate(""); setEndDate(""); }}>Clear</Button>
+            )}
+          </div>
+        )}
+
         {/* Outstanding tab */}
         {tab === "outstanding" && (
           <>
@@ -105,9 +171,14 @@ export default function SalesReportsPage() {
                 <h2 className="card-header-title">Outstanding Invoices</h2>
                 <p className="card-header-sub">Invoices awaiting full payment</p>
               </div>
-              {!loadingOut && (
-                <ShowAllToggle total={outstanding.length} showAll={outShowAll} onToggle={() => { setOutShowAll((v) => !v); setOutPage(1); }} />
-              )}
+              <div className={styles.headerActionsRow}>
+                {!loadingOut && outstanding.length > 0 && (
+                  <Button variant="secondary" size="sm" onClick={exportOutstandingCsv}>Export CSV</Button>
+                )}
+                {!loadingOut && (
+                  <ShowAllToggle total={outstanding.length} showAll={outShowAll} onToggle={() => { setOutShowAll((v) => !v); setOutPage(1); }} />
+                )}
+              </div>
             </div>
             <div className="table-wrap">
               <table className="table-base">
@@ -188,6 +259,9 @@ export default function SalesReportsPage() {
                 <h2 className="card-header-title">GST Summary</h2>
                 <p className="card-header-sub">Monthly GST breakdown across all invoices</p>
               </div>
+              {!loadingGst && gstRows.length > 0 && (
+                <Button variant="secondary" size="sm" onClick={exportGstCsv}>Export CSV</Button>
+              )}
             </div>
             <div className="table-wrap">
               <table className="table-base">

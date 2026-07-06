@@ -64,7 +64,7 @@ function KpiCard({ icon, label, value, tone = "neutral", loading }: { icon: keyo
 }
 
 export default function DashboardPage() {
-  const { data, loading } = useFetch<CombinedDashboard>("/api/reports?type=combined-dashboard");
+  const { data, loading, error } = useFetch<CombinedDashboard>("/api/reports?type=combined-dashboard");
   const { data: session } = useSession();
 
   const firstName = session?.user?.name?.split(/[\s-]/)[0] ?? "";
@@ -128,6 +128,12 @@ export default function DashboardPage() {
           </p>
         </div>
       </div>
+
+      {error && !loading && (
+        <div className="error-banner">
+          Couldn&apos;t load dashboard data. The figures below may be missing or stale — try refreshing the page.
+        </div>
+      )}
 
       {/* ── Primary action tiles ── */}
       <div className={`${styles.actionTilesGrid} animate-card animate-card-2`}>

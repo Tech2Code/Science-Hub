@@ -43,9 +43,9 @@ export default function EditProductPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/products/${id}`).then((r) => r.json()),
-      fetch("/api/brands").then((r) => r.json()).catch(() => []),
-      fetch("/api/categories").then((r) => r.json()).catch(() => []),
+      fetch(`/api/products/${id}`, { headers: { "x-no-loader": "1" } }).then((r) => r.json()),
+      fetch("/api/brands", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).catch(() => []),
+      fetch("/api/categories", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).catch(() => []),
     ])
       .then(([product, b, c]) => {
         const loaded: FormData = {

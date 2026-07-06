@@ -78,8 +78,8 @@ export default function NewPurchaseBillPage() {
   const [payDate,      setPayDate]      = useState(() => new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
-    fetch("/api/vendors").then(r => r.json()).then(setVendors).catch(() => {});
-    fetch("/api/products").then(r => r.json()).then(setProducts).catch(() => {});
+    fetch("/api/vendors", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then(setVendors).catch(() => {});
+    fetch("/api/products", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then(setProducts).catch(() => {});
   }, []);
 
   async function handleCreateInlineVendor() {

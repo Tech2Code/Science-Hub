@@ -36,7 +36,7 @@ const COLUMNS: Column[] = [
 ];
 
 export default function CustomersPage() {
-  const { data, loading, mutate } = useFetch<Customer[]>("/api/customers");
+  const { data, loading, patchData } = useFetch<Customer[]>("/api/customers");
   const customers = data ?? [];
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -44,7 +44,6 @@ export default function CustomersPage() {
   const [confirmState, setConfirmState] = useState<{
     title: string; message: string; onConfirm: () => void;
   } | null>(null);
-  const [confirmLoading, setConfirmLoading] = useState(false);
   const [openingEditId, setOpeningEditId] = useState<string | null>(null);
   const toast = useToast();
   const router = useRouter();
@@ -54,16 +53,19 @@ export default function CustomersPage() {
       title: "Delete Customer",
       message: `Delete "${name}"? All associated data will be permanently removed.`,
       onConfirm: async () => {
-        setConfirmLoading(true);
-        const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
-        const data = await res.json().catch(() => ({}));
-        setConfirmLoading(false);
+        // Remove it from the list immediately — don't make the user wait on
+        // the round-trip to see the row disappear. Roll back via a real
+        // refetch only if the delete actually fails server-side.
+        const previous = customers;
+        patchData((prev) => (prev ?? []).filter((c) => c.id !== id));
         setConfirmState(null);
+        const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
+        const resBody = await res.json().catch(() => ({}));
         if (res.ok) {
-          mutate();
           toast({ type: "success", title: "Customer deleted", message: `"${name}" removed.` });
         } else {
-          toast({ type: "error", title: "Delete failed", message: data.error ?? "Could not delete customer." });
+          patchData(() => previous);
+          toast({ type: "error", title: "Delete failed", message: resBody.error ?? "Could not delete customer." });
         }
       },
     });
@@ -94,9 +96,8 @@ export default function CustomersPage() {
         message={confirmState?.message ?? ""}
         confirmLabel="Delete"
         variant="danger"
-        loading={confirmLoading}
         onConfirm={confirmState?.onConfirm ?? (() => {})}
-        onCancel={() => { if (!confirmLoading) setConfirmState(null); }}
+        onCancel={() => setConfirmState(null)}
       />
 
       <div className="page-header">
@@ -111,6 +112,7 @@ export default function CustomersPage() {
         <div className="card-toolbar">
           <input
             type="search"
+            aria-label="Search customers"
             placeholder="Search by name, phone, email, GSTIN, or city…"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}

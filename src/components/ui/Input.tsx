@@ -1,4 +1,6 @@
-import React from "react";
+"use client";
+
+import React, { useId } from "react";
 import styles from "./Input.module.css";
 
 /* ── Input ─────────────────────────────────── */
@@ -41,13 +43,20 @@ interface FieldProps {
   children: React.ReactNode;
 }
 export function FormField({ label, required, hint, error, children }: FieldProps) {
+  const generatedId = useId();
+  const child = React.isValidElement(children)
+    ? (children as React.ReactElement<{ id?: string }>)
+    : null;
+  const fieldId = child?.props.id || generatedId;
+  const content = child ? React.cloneElement(child, { id: fieldId }) : children;
+
   return (
     <div className={styles.field} {...(error ? { "data-error": "" } : {})}>
-      <label className={styles.label}>
+      <label className={styles.label} htmlFor={fieldId}>
         {label}
         {required && <span className={styles.required}> *</span>}
       </label>
-      {children}
+      {content}
       {error && (
         <p className={styles.errorMsg} role="alert">
           <svg className={styles.errorIcon} viewBox="0 0 16 16" fill="none" aria-hidden="true">

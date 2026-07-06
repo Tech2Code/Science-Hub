@@ -60,8 +60,8 @@ export default function EditPurchaseBillPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/purchase-bills/${id}`).then(r => r.json()),
-      fetch("/api/vendors").then(r => r.json()),
+      fetch(`/api/purchase-bills/${id}`, { headers: { "x-no-loader": "1" } }).then(r => r.json()),
+      fetch("/api/vendors", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
     ]).then(([b, v]) => {
       setBill(b);
       setVendors(v);

@@ -81,7 +81,7 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
-    fetch("/api/settings")
+    fetch("/api/settings", { headers: { "x-no-loader": "1" } })
       .then((r) => r.json())
       .then(applyLoaded)
       .catch(() => {})

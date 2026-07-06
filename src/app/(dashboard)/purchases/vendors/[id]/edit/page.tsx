@@ -26,7 +26,7 @@ export default function EditVendorPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/vendors/${id}`)
+    fetch(`/api/vendors/${id}`, { headers: { "x-no-loader": "1" } })
       .then(r => r.json())
       .then(d => {
         const loaded = {

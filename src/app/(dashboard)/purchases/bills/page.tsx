@@ -47,11 +47,10 @@ export default function PurchasesPage() {
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PurchaseBill | null>(null);
-  const [deleting, setDeleting] = useState(false);
   const toast = useToast();
 
   const apiUrl = filter === "All" ? "/api/purchase-bills" : `/api/purchase-bills?status=${filter}`;
-  const { data, loading, mutate } = useFetch<PurchaseBill[]>(apiUrl);
+  const { data, loading, patchData } = useFetch<PurchaseBill[]>(apiUrl);
   const bills = data ?? [];
 
   const filtered = search.trim()
@@ -79,21 +78,23 @@ export default function PurchasesPage() {
 
   async function handleDelete() {
     if (!deleteTarget) return;
-    setDeleting(true);
+    const target = deleteTarget;
+    const previous = bills;
+    patchData((prev) => (prev ?? []).filter((b) => b.id !== target.id));
+    setDeleteTarget(null);
     try {
-      const res = await fetch(`/api/purchase-bills/${deleteTarget.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/purchase-bills/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
-        mutate();
-        toast({ type: "success", title: "Bill deleted", message: `${deleteTarget.billNumber} removed.` });
+        toast({ type: "success", title: "Bill deleted", message: `${target.billNumber} removed.` });
       } else {
+        patchData(() => previous);
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete bill." });
       }
     } catch {
+      patchData(() => previous);
       toast({ type: "error", title: "Delete failed", message: "Network error." });
     }
-    setDeleting(false);
-    setDeleteTarget(null);
   }
 
   return (
@@ -104,9 +105,8 @@ export default function PurchasesPage() {
       message={`Delete purchase bill ${deleteTarget?.billNumber}? This cannot be undone.`}
       confirmLabel="Delete"
       variant="danger"
-      loading={deleting}
       onConfirm={handleDelete}
-      onCancel={() => { if (!deleting) setDeleteTarget(null); }}
+      onCancel={() => setDeleteTarget(null)}
     />
 
     <div className="page-stack">
@@ -159,6 +159,7 @@ export default function PurchasesPage() {
         <div className="card-toolbar">
           <input
             type="search"
+            aria-label="Search purchase bills"
             placeholder="Search by bill no., vendor, category or staff…"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}

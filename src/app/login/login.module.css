@@ -6,6 +6,15 @@
   background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0d9488 100%);
   padding: 1rem;
   position: relative;
+  /* This page's white card is always light regardless of the dashboard's
+     dark-mode toggle (a `.dark` class on <html> can persist from a prior
+     dashboard session) — pin the shared theme variables so components used
+     here too (e.g. PasswordInput) render with this page's fixed palette. */
+  --c-bg-input: #f8fafc;
+  --c-text: #0f172a;
+  --c-text-4: #94a3b8;
+  --c-border: #e2e8f0;
+  --c-blue: #2563eb;
 }
 
 .grid {

@@ -29,7 +29,7 @@ const COLUMNS: Column[] = [
 ];
 
 export default function BrandsPage() {
-  const { data, loading, mutate } = useFetch<Brand[]>("/api/brands");
+  const { data, loading, patchData } = useFetch<Brand[]>("/api/brands");
   const brands = data ?? [];
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -37,7 +37,6 @@ export default function BrandsPage() {
   const [saving, setSaving] = useState(false);
   const [newName, setNewName] = useState("");
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
-  const [confirmLoading, setConfirmLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
@@ -52,8 +51,11 @@ export default function BrandsPage() {
       body: JSON.stringify({ name }),
     });
     if (r.ok) {
+      const created = await r.json();
       setNewName("");
-      mutate();
+      // The create response already has the full record — merge it straight
+      // into the list instead of waiting on a full refetch.
+      patchData((prev) => [...(prev ?? []), created]);
       toast({ type: "success", title: "Brand added", message: `"${name}" added to catalog.` });
     } else {
       const d = await r.json();
@@ -67,15 +69,15 @@ export default function BrandsPage() {
       title: "Delete Brand",
       message: `Move "${name}" to bin?`,
       onConfirm: async () => {
-        setConfirmLoading(true);
+        const previous = brands;
+        patchData((prev) => (prev ?? []).filter((b) => b.id !== id));
+        setConfirmState(null);
         const res = await fetch(`/api/brands/${id}`, { method: "DELETE" });
         const d = await res.json().catch(() => ({}));
-        setConfirmLoading(false);
-        setConfirmState(null);
         if (res.ok) {
-          mutate();
           toast({ type: "success", title: "Brand deleted", message: `"${name}" moved to bin.` });
         } else {
+          patchData(() => previous);
           toast({ type: "error", title: "Cannot delete brand", message: d.error ?? "Could not delete brand." });
         }
       },
@@ -99,9 +101,8 @@ export default function BrandsPage() {
         message={confirmState?.message ?? ""}
         confirmLabel="Delete"
         variant="danger"
-        loading={confirmLoading}
         onConfirm={confirmState?.onConfirm ?? (() => {})}
-        onCancel={() => { if (!confirmLoading) setConfirmState(null); }}
+        onCancel={() => setConfirmState(null)}
       />
 
       <div className="page-header">
@@ -136,6 +137,7 @@ export default function BrandsPage() {
         <div className="card-toolbar">
           <input
             type="search"
+            aria-label="Search brands"
             placeholder="Search brands…"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}

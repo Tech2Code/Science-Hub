@@ -76,7 +76,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const existing = await prisma.user.findUnique({ where: { email } });
+    // Normalize case the same way login does (auth.ts lowercases the
+    // submitted email before lookup) — otherwise "Foo@x.com" and "foo@x.com"
+    // are treated as distinct accounts here but collide at login.
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existing) {
       return NextResponse.json(
         { error: "A user with that email already exists" },
@@ -87,12 +92,12 @@ export async function POST(request: NextRequest) {
     const hashedPassword = await bcrypt.hash(password, 12);
 
     const user = await prisma.user.create({
-      data: { name, email, password: hashedPassword, role },
+      data: { name, email: normalizedEmail, password: hashedPassword, role },
       select: USER_SELECT,
     });
 
     const { session } = auth;
-    await logActivity(session.user.id, "add_user", `Created user "${name}" | Role: ${role} | Email: ${email}`, user.id, "user");
+    await logActivity(session.user.id, "add_user", `Created user "${name}" | Role: ${role} | Email: ${normalizedEmail}`, user.id, "user");
     return NextResponse.json(user, { status: 201 });
   } catch (error) {
     console.error("POST /api/admin/users error:", error);

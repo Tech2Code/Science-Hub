@@ -65,3 +65,20 @@ export function validateForm<T extends Record<string, string>>(
 export function hasErrors<T>(errors: FormErrors<T>): boolean {
   return Object.values(errors).some(Boolean);
 }
+
+// Server-side counterpart to the customer form's client-side validation —
+// API route handlers must not rely solely on the browser to enforce this.
+export function validateCustomerInput(input: {
+  name?: string; phone?: string; email?: string; pincode?: string; gstin?: string;
+}): string | null {
+  const name = (input.name ?? "").trim();
+  if (!name) return "Name is required.";
+  if (name.length > 200) return "Name is too long (max 200 characters).";
+  return (
+    validate(input.phone ?? "", rules.phone10()) ||
+    validate(input.email ?? "", rules.email()) ||
+    validate(input.pincode ?? "", rules.pincode()) ||
+    validate(input.gstin ?? "", rules.gstin()) ||
+    null
+  );
+}

@@ -45,7 +45,7 @@ const COLUMNS: Column[] = [
 ];
 
 export default function ProductsPage() {
-  const { data, loading, mutate } = useFetch<Product[]>("/api/products");
+  const { data, loading, patchData } = useFetch<Product[]>("/api/products");
   const products = data ?? [];
   const [search, setSearch] = useState("");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
@@ -54,7 +54,6 @@ export default function ProductsPage() {
   const [confirmState, setConfirmState] = useState<{
     title: string; message: string; onConfirm: () => void;
   } | null>(null);
-  const [confirmLoading, setConfirmLoading] = useState(false);
   const [openingEdit, setOpeningEdit] = useState(false);
   const toast = useToast();
   const router = useRouter();
@@ -64,16 +63,16 @@ export default function ProductsPage() {
       title: "Delete Product",
       message: `Delete "${name}"? This will permanently remove it from your catalog.`,
       onConfirm: async () => {
-        setConfirmLoading(true);
-        const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
-        const data = await res.json().catch(() => ({}));
-        setConfirmLoading(false);
+        const previous = products;
+        patchData((prev) => (prev ?? []).filter((p) => p.id !== id));
         setConfirmState(null);
+        const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
+        const resBody = await res.json().catch(() => ({}));
         if (res.ok) {
-          mutate();
           toast({ type: "success", title: "Product deleted", message: `"${name}" removed from catalog.` });
         } else {
-          toast({ type: "error", title: "Delete failed", message: data.error ?? "Could not delete product." });
+          patchData(() => previous);
+          toast({ type: "error", title: "Delete failed", message: resBody.error ?? "Could not delete product." });
         }
       },
     });
@@ -112,9 +111,8 @@ export default function ProductsPage() {
         message={confirmState?.message ?? ""}
         confirmLabel="Delete"
         variant="danger"
-        loading={confirmLoading}
         onConfirm={confirmState?.onConfirm ?? (() => {})}
-        onCancel={() => { if (!confirmLoading) setConfirmState(null); }}
+        onCancel={() => setConfirmState(null)}
       />
 
       <div className="page-header">
@@ -129,6 +127,7 @@ export default function ProductsPage() {
         <div className={`card-toolbar ${styles.toolbar}`}>
           <input
             type="search"
+            aria-label="Search products"
             placeholder="Search by name, SKU, brand, or category…"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}

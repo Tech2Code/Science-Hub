@@ -31,8 +31,8 @@ export default function NewProductPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch("/api/brands").then((r) => r.json()).then(setBrands).catch(() => {});
-    fetch("/api/categories").then((r) => r.json()).then(setCategories).catch(() => {});
+    fetch("/api/brands", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then(setBrands).catch(() => {});
+    fetch("/api/categories", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then(setCategories).catch(() => {});
   }, []);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {

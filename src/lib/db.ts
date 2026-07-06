@@ -1,11 +1,16 @@
 import { prisma } from "@/lib/prisma";
+import { decrypt } from "@/lib/crypto";
 
 export async function getBusinessSettings() {
-  return prisma.businessSettings.upsert({
+  const settings = await prisma.businessSettings.upsert({
     where: { id: "singleton" },
     create: { id: "singleton" },
     update: {},
   });
+  return {
+    ...settings,
+    gmailAppPassword: settings.gmailAppPassword ? decrypt(settings.gmailAppPassword) : settings.gmailAppPassword,
+  };
 }
 
 export async function getInvoices(status?: string | null, customerId?: string | null) {
@@ -84,11 +89,15 @@ export async function getReportSummary() {
     (sum, inv) => sum + (inv.total - inv.paidAmount),
     0
   );
+  const allTimeAgg = await prisma.invoice.aggregate({
+    where: { deletedAt: null },
+    _sum: { total: true, paidAmount: true },
+  });
   const allProducts = await prisma.product.findMany({
     where: { deletedAt: null },
     select: { stock: true, minStock: true },
   });
-  const lowStockCount = allProducts.filter((p) => p.stock < p.minStock).length;
+  const lowStockCount = allProducts.filter((p) => p.stock <= p.minStock).length;
   const recent = await prisma.invoice.findMany({
     where: { deletedAt: null },
     orderBy: { date: "desc" },
@@ -110,14 +119,26 @@ export async function getReportSummary() {
     invoicesThisMonth,
     revenueThisMonth: revenueAgg._sum.total ?? 0,
     outstandingAmount,
+    totalRevenue: allTimeAgg._sum.total ?? 0,
+    totalCollected: allTimeAgg._sum.paidAmount ?? 0,
+    outstandingTotal: outstandingAmount,
+    pendingCount: unpaidInvoices.length,
     lowStockCount,
     recentInvoices,
   };
 }
 
-export async function getReportOutstanding() {
+export async function getReportOutstanding(startDate?: string, endDate?: string) {
+  const dateFilter: { gte?: Date; lte?: Date } = {};
+  if (startDate) dateFilter.gte = new Date(startDate);
+  if (endDate) dateFilter.lte = new Date(endDate);
+
   const invoices = await prisma.invoice.findMany({
-    where: { deletedAt: null, status: { in: ["unpaid", "partial"] } },
+    where: {
+      deletedAt: null,
+      status: { in: ["unpaid", "partial"] },
+      ...(Object.keys(dateFilter).length > 0 && { date: dateFilter }),
+    },
     orderBy: { date: "asc" },
     include: { customer: { select: { id: true, name: true } } },
   });
@@ -141,5 +162,5 @@ export async function getReportStock() {
     orderBy: { stock: "asc" },
     include: { category: true, brand: true },
   });
-  return allProducts.filter((p) => p.stock < p.minStock);
+  return allProducts.filter((p) => p.stock <= p.minStock);
 }

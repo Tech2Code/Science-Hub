@@ -24,10 +24,18 @@ async function getPurchaseSummary() {
   return result;
 }
 
-async function getPurchaseOutstanding() {
+async function getPurchaseOutstanding(startDate?: string, endDate?: string) {
   const now = new Date();
+  const dateFilter: { gte?: Date; lte?: Date } = {};
+  if (startDate) dateFilter.gte = new Date(startDate);
+  if (endDate) dateFilter.lte = new Date(endDate);
+
   const bills = await prisma.purchaseBill.findMany({
-    where: { deletedAt: null, status: { in: ["unpaid", "partial"] } },
+    where: {
+      deletedAt: null,
+      status: { in: ["unpaid", "partial"] },
+      ...(Object.keys(dateFilter).length > 0 && { billDate: dateFilter }),
+    },
     orderBy: { billDate: "asc" },
     include: { vendor: { select: { id: true, name: true } } },
   });
@@ -83,9 +91,11 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");
+    const startDate = searchParams.get("startDate") || undefined;
+    const endDate = searchParams.get("endDate") || undefined;
 
     if (type === "summary")     return NextResponse.json(await getPurchaseSummary());
-    if (type === "outstanding") return NextResponse.json(await getPurchaseOutstanding());
+    if (type === "outstanding") return NextResponse.json(await getPurchaseOutstanding(startDate, endDate));
     if (type === "category")    return NextResponse.json(await getPurchaseByCategory());
 
     return NextResponse.json({ error: `Unknown type: ${type}` }, { status: 400 });
