@@ -32,8 +32,7 @@ interface ReturnFormItem {
 }
 interface Invoice {
   id: string; invoiceNumber: string; date: string; dueDate?: string; createdAt: string;
-  status: string; isInterState: boolean;
-  createdBy?: { id: string; name: string };
+  status: string; isInterState: boolean; placeOfSupply?: string; reverseCharge?: boolean;
   customer: { name: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; gstin: string; };
   items: InvoiceItem[];
   payments: Payment[];
@@ -111,7 +110,7 @@ function InvoiceSkeleton() {
             </div>
             {/* Right: invoice meta rows */}
             <div className={styles.skMetaCol}>
-              {["Invoice No.", "Date", "Created By", "Supply Type"].map(label => (
+              {["Invoice No.", "Date", "Supply Type"].map(label => (
                 <div key={label} className={styles.skMetaRow}>
                   <Sk w="70%" h={11} r={3} />
                   <Sk w="85%" h={11} r={3} />
@@ -935,25 +934,26 @@ export default function InvoiceDetailPage() {
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Created By</td>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,whiteSpace:"nowrap",background:"var(--inv-bg2)" }}>Due Date</td>
                   <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
-                    {invoice.createdBy?.name ?? "—"}
+                    {invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "—"}
                   </td>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,whiteSpace:"nowrap",background:"var(--inv-bg2)" }}>Place of Supply</td>
+                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
+                    {invoice.placeOfSupply || invoice.customer.state || "—"}
+                  </td>
+                </tr>
+                <tr>
                   <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Supply Type</td>
-                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",
+                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",
                     color:invoice.isInterState ? "var(--inv-blue)" : "var(--inv-green)", fontWeight:600 }}>
                     {invoice.isInterState ? "Inter-state (IGST)" : "Intra-state (CGST+SGST)"}
                   </td>
+                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Reverse Charge</td>
+                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",fontWeight:600 }}>
+                    {invoice.reverseCharge ? "Yes" : "No"}
+                  </td>
                 </tr>
-                {invoice.dueDate && (
-                  <tr>
-                    <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Due Date</td>
-                    <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
-                      {new Date(invoice.dueDate).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
-                    </td>
-                    <td colSpan={invoice.isInterState ? 4 : 5} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px" }} />
-                  </tr>
-                )}
 
                 {/* ── Buyer: Bill To / Ship To ── */}
                 <tr>
@@ -986,9 +986,9 @@ export default function InvoiceDetailPage() {
                         </div>
                       )}
                       <div style={{ marginTop:6, borderTop:"1px solid var(--inv-bd)", paddingTop:5 }}>
-                        {invoice.customer.state && (
+                        {(invoice.placeOfSupply || invoice.customer.state) && (
                           <div style={{ fontWeight:600, color:"var(--inv-tx)", fontSize:11 }}>
-                            Place of Supply : {invoice.customer.state}
+                            Place of Supply : {invoice.placeOfSupply || invoice.customer.state}
                           </div>
                         )}
                         {invoice.customer.gstin && (
@@ -1028,9 +1028,9 @@ export default function InvoiceDetailPage() {
                         </div>
                       )}
                       <div style={{ marginTop:6, borderTop:"1px solid var(--inv-bd)", paddingTop:5 }}>
-                        {invoice.customer.state && (
+                        {(invoice.placeOfSupply || invoice.customer.state) && (
                           <div style={{ fontWeight:600, color:"var(--inv-tx)", fontSize:11 }}>
-                            Place of Supply : {invoice.customer.state}
+                            Place of Supply : {invoice.placeOfSupply || invoice.customer.state}
                           </div>
                         )}
                         {invoice.customer.gstin && (

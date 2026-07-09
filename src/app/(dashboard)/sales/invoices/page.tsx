@@ -20,9 +20,9 @@ interface Invoice {
   id: string;
   invoiceNumber: string;
   date: string;
+  dueDate: string | null;
   createdAt: string;
   customer: { name: string };
-  createdBy?: { id: string; name: string };
   total: number;
   paidAmount: number;
   status: string;
@@ -31,11 +31,42 @@ interface Invoice {
 type StatusFilter = "All" | "unpaid" | "partial" | "paid";
 const STATUS_TABS: StatusFilter[] = ["All", "unpaid", "partial", "paid"];
 
+type SortOption = "newest" | "oldest" | "customer_az" | "customer_za" | "amount_high" | "amount_low" | "balance_high";
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+  { value: "customer_az", label: "Customer (A–Z)" },
+  { value: "customer_za", label: "Customer (Z–A)" },
+  { value: "amount_high", label: "Amount (High–Low)" },
+  { value: "amount_low", label: "Amount (Low–High)" },
+  { value: "balance_high", label: "Balance Due (High–Low)" },
+];
+
+function sortInvoices(list: Invoice[], sort: SortOption): Invoice[] {
+  const arr = [...list];
+  switch (sort) {
+    case "oldest":
+      return arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    case "customer_az":
+      return arr.sort((a, b) => (a.customer?.name ?? "").localeCompare(b.customer?.name ?? ""));
+    case "customer_za":
+      return arr.sort((a, b) => (b.customer?.name ?? "").localeCompare(a.customer?.name ?? ""));
+    case "amount_high":
+      return arr.sort((a, b) => b.total - a.total);
+    case "amount_low":
+      return arr.sort((a, b) => a.total - b.total);
+    case "balance_high":
+      return arr.sort((a, b) => (b.total - b.paidAmount) - (a.total - a.paidAmount));
+    case "newest":
+    default:
+      return arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+}
+
 const COLUMNS: Column[] = [
   { label: "Invoice No.", mobile: "full+label" },
   { label: "Date",        mobile: "label" },
   { label: "Customer",    mobile: "label" },
-  { label: "Created By",  mobile: "label" },
   { label: "Total",       cls: "table-th-right", mobile: "label" },
   { label: "Paid",        cls: "table-th-right", mobile: "label" },
   { label: "Balance",     cls: "table-th-right", mobile: "label" },
@@ -43,9 +74,12 @@ const COLUMNS: Column[] = [
   { label: "Actions",     mobile: "full+label" },
 ];
 
+const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export default function InvoicesPage() {
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [pdfLoading, setPdfLoading] = useState<string | null>(null);
@@ -55,6 +89,7 @@ export default function InvoicesPage() {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewInvoice, setPdfPreviewInvoice] = useState<{ number: string; customer: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
+  const [deletingInvoice, setDeletingInvoice] = useState(false);
   const [pdfDialogInvoice, setPdfDialogInvoice] = useState<Invoice | null>(null);
   const [pdfDialogLoading, setPdfDialogLoading] = useState(false);
   const [openingEditId, setOpeningEditId] = useState<string | null>(null);
@@ -138,35 +173,42 @@ export default function InvoicesPage() {
         const q = search.toLowerCase();
         return (
           inv.invoiceNumber.toLowerCase().includes(q) ||
-          inv.customer?.name?.toLowerCase().includes(q) ||
-          inv.createdBy?.name?.toLowerCase().includes(q)
+          inv.customer?.name?.toLowerCase().includes(q)
         );
       })
     : invoices;
 
-  const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const sorted = sortInvoices(filtered, sort);
+
+  const maxPage = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const clampedPage = Math.min(page, maxPage);
 
-  const { visible } = usePagination(filtered, clampedPage, showAll);
+  const { visible } = usePagination(sorted, clampedPage, showAll);
+
+  // Summary stats
+  const totalInvoiced = invoices.reduce((s, inv) => s + inv.total, 0);
+  const totalPaid     = invoices.reduce((s, inv) => s + inv.paidAmount, 0);
+  const totalPending  = totalInvoiced - totalPaid;
+  const overdue       = invoices.filter(inv => inv.status !== "paid" && inv.dueDate && new Date(inv.dueDate) < new Date()).length;
 
   async function handleDelete() {
     if (!deleteTarget) return;
     const target = deleteTarget;
-    const previous = invoices;
-    patchData((prev) => (prev ?? []).filter((inv) => inv.id !== target.id));
-    setDeleteTarget(null);
+    setDeletingInvoice(true);
     try {
       const res = await fetch(`/api/invoices/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
+        patchData((prev) => (prev ?? []).filter((inv) => inv.id !== target.id));
         toast({ type: "success", title: "Moved to bin", message: `${target.invoiceNumber} moved to bin. You can restore it within 30 days.` });
       } else {
-        patchData(() => previous);
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete invoice." });
       }
     } catch {
-      patchData(() => previous);
       toast({ type: "error", title: "Delete failed", message: "Network error." });
+    } finally {
+      setDeletingInvoice(false);
+      setDeleteTarget(null);
     }
   }
 
@@ -178,6 +220,7 @@ export default function InvoicesPage() {
       message={`Move invoice ${deleteTarget?.invoiceNumber} to bin? You can restore it within 30 days.`}
       confirmLabel="Move to Bin"
       variant="danger"
+      loading={deletingInvoice}
       onConfirm={handleDelete}
       onCancel={() => setDeleteTarget(null)}
     />
@@ -212,6 +255,23 @@ export default function InvoicesPage() {
         <Button variant="primary" href="/sales/invoices/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>
       </div>
 
+      {/* Dashboard cards */}
+      {!loading && invoices.length > 0 && (
+        <div className={styles.statsGrid}>
+          {[
+            { label: "Total Invoiced",  value: `₹${fmt(totalInvoiced)}`, cls: styles.statTotal },
+            { label: "Paid",            value: `₹${fmt(totalPaid)}`,     cls: styles.statPaid },
+            { label: "Pending",         value: `₹${fmt(totalPending)}`,  cls: styles.statPending },
+            { label: "Overdue Invoices", value: String(overdue),         cls: overdue > 0 ? styles.statOverdueActive : styles.statOverdue },
+          ].map(card => (
+            <div key={card.label} className={`card ${styles.statCard}`}>
+              <div className={styles.statLabel}>{card.label}</div>
+              <div className={`${styles.statValue} ${card.cls}`}>{card.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Status filter tabs */}
       <div className="filter-tabs-row">
         <div className="filter-tabs">
@@ -229,14 +289,26 @@ export default function InvoicesPage() {
 
       <div className="card">
         <div className="card-toolbar">
-          <input
-            type="search"
-            aria-label="Search invoices"
-            placeholder="Search by invoice no., customer or staff name…"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className={["search-input", styles.searchInput].join(" ")}
-          />
+          <div className="toolbar-left">
+            <input
+              type="search"
+              aria-label="Search invoices"
+              placeholder="Search by invoice no. or customer…"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              className={["search-input", styles.searchInput].join(" ")}
+            />
+            <select
+              aria-label="Sort invoices"
+              value={sort}
+              onChange={(e) => { setSort(e.target.value as SortOption); setPage(1); }}
+              className={["search-input", styles.sortSelect].join(" ")}
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
@@ -269,12 +341,11 @@ export default function InvoicesPage() {
                     </div>
                   </Cell>
                   <Cell col={COLUMNS[2]} className={styles.customerCell}>{inv.customer?.name}</Cell>
-                  <Cell col={COLUMNS[3]} className={styles.createdByCell}>{inv.createdBy?.name ?? "—"}</Cell>
-                  <Cell col={COLUMNS[4]} className={styles.totalCell}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Cell>
-                  <Cell col={COLUMNS[5]} className={styles.paidCell}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Cell>
-                  <Cell col={COLUMNS[6]} className={styles.balanceCell}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Cell>
-                  <Cell col={COLUMNS[7]}><StatusBadge status={inv.status} /></Cell>
-                  <Cell col={COLUMNS[8]}>
+                  <Cell col={COLUMNS[3]} className={styles.totalCell}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Cell>
+                  <Cell col={COLUMNS[4]} className={styles.paidCell}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Cell>
+                  <Cell col={COLUMNS[5]} className={styles.balanceCell}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Cell>
+                  <Cell col={COLUMNS[6]}><StatusBadge status={inv.status} /></Cell>
+                  <Cell col={COLUMNS[7]}>
                     <div className={["table-actions", styles.actionsWrap].join(" ")}>
                         {/* 1. View → opens PDF preview modal (same on desktop and mobile) */}
                       <Button variant="viewOutline" size="sm" onClick={async () => {

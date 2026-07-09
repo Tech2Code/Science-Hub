@@ -101,7 +101,7 @@ export default function NewProductPage() {
               {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
             </Select>
           </FormField>
-          <FormField label="Price (₹)" required error={fieldErrors.price}>
+          <FormField label="Selling Price (₹)" required error={fieldErrors.price}>
             <Input name="price" type="number" min="0" step="0.01" value={form.price} onChange={handleChange} placeholder="0.00" />
           </FormField>
           <FormField label="GST Rate">

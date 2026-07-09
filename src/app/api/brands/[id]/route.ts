@@ -4,6 +4,41 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireSession } from "@/lib/apiAuth";
 
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
+    const { id } = await params;
+    const brand = await prisma.brand.findUnique({
+      where: { id },
+      include: {
+        products: {
+          where: { deletedAt: null },
+          select: { id: true, name: true, sku: true, price: true, stock: true, minStock: true },
+          orderBy: { name: "asc" },
+        },
+      },
+    });
+    if (!brand) return NextResponse.json({ error: "Brand not found" }, { status: 404 });
+
+    const log = await prisma.activityLog.findFirst({
+      where: { entityId: id, action: "add_brand" },
+      select: { createdAt: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return NextResponse.json({
+      ...brand,
+      createdBy: log?.user.name ?? null,
+      createdAt: brand.createdAt ?? log?.createdAt ?? null,
+    });
+  } catch (error) {
+    console.error("GET /api/brands/[id] error:", error);
+    return NextResponse.json({ error: "Failed to fetch brand" }, { status: 500 });
+  }
+}
+
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireSession();
@@ -11,7 +46,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
     const { id } = await params;
 
-    const brand = await prisma.brand.findUnique({ where: { id }, select: { name: true, _count: { select: { products: true } } } });
+    const brand = await prisma.brand.findUnique({ where: { id }, select: { name: true, _count: { select: { products: { where: { deletedAt: null } } } } } });
     if (!brand) return NextResponse.json({ error: "Brand not found" }, { status: 404 });
 
     const invoiceItemCount = await prisma.invoiceItem.count({ where: { product: { brandId: id } } });

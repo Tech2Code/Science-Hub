@@ -30,11 +30,14 @@ export async function POST(request: NextRequest) {
     const user = auth.session.user;
 
     const body = await request.json();
-    const { items, notes, dueDate, isInterState, customCustomer } = body;
+    const { items, notes, dueDate, isInterState, placeOfSupply, reverseCharge, customCustomer } = body;
     let { customerId } = body;
 
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "At least one item is required" }, { status: 400 });
+    }
+    if (!placeOfSupply || !String(placeOfSupply).trim()) {
+      return NextResponse.json({ error: "Place of supply is required" }, { status: 400 });
     }
     for (const item of items as { quantity?: number; qty?: number; price: number; gstRate?: number }[]) {
       const quantity = parseFloat(String(item.quantity ?? item.qty ?? 1));
@@ -166,6 +169,8 @@ export async function POST(request: NextRequest) {
             notes: notes || null,
             dueDate: dueDate ? new Date(dueDate) : null,
             isInterState: Boolean(isInterState),
+            placeOfSupply: String(placeOfSupply).trim(),
+            reverseCharge: Boolean(reverseCharge),
             items: { create: invoiceItems },
           },
           include: { customer: true, items: true },

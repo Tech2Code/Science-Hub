@@ -1,0 +1,111 @@
+.headerCard { padding: 1.5rem; }
+
+.headerTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.headerLeft { display: flex; gap: 1rem; align-items: center; }
+
+.avatar {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, #3b82f6, #2dd4bf);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.125rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.headerActions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.renameRow { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+@media (max-width: 640px) { .statsGrid { grid-template-columns: 1fr; } }
+
+.cardPadSm { padding: 1rem; }
+
+.statLabel {
+  font-size: 0.75rem;
+  color: var(--c-text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.statValue {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--c-text);
+}
+
+.negative { color: var(--c-red); }
+
+.sectionHeader { padding: 1rem 1.25rem; border-bottom: 1px solid var(--c-border); }
+
+.sectionTitle {
+  font-weight: 600;
+  color: var(--c-text);
+  font-size: 0.875rem;
+}
+
+.emptyCell {
+  text-align: center;
+  padding: 2.5rem;
+  color: var(--c-text-4);
+}
+
+.productLink {
+  font-weight: 500;
+  color: var(--c-blue);
+  text-decoration: none;
+}
+
+.mutedCell { color: var(--c-text-3); }
+
+.stockLow { color: var(--c-red); font-weight: 500; }
+
+.pageStack { max-width: 56rem; }
+
+.errorCenter { color: var(--c-red); }
+
+.skRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.skLeftRow { display: flex; align-items: center; gap: 1rem; }
+
+.skCol { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.skActions { display: flex; gap: 0.5rem; }
+
+.skStatCard { padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+
+.skTableHead { padding: 1rem 1.25rem; border-bottom: 1px solid var(--c-border); }
+
+.skeletonBlock {
+  border-radius: 6px;
+  background: var(--c-border);
+  animation: skPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}

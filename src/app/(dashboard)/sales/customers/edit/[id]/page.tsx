@@ -12,6 +12,12 @@ import { useToast } from "@/components/ui/Toast";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
 import styles from "./customerEdit.module.css";
 
+function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
+  return (
+    <div className={styles.skeletonBlock} style={{ width: w, height: h, borderRadius: r } as React.CSSProperties} />
+  );
+}
+
 const INDIA_STATES = [
   "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat",
   "Haryana","Himachal Pradesh","Jharkhand","Karnataka","Kerala","Madhya Pradesh",
@@ -88,7 +94,35 @@ export default function EditCustomerPage() {
     setErrors({}); setConfirmOpen(true);
   }
 
-  if (loading) return <div className="loading-center">Loading customer…</div>;
+  if (loading) return (
+    <>
+      <OverlayLoader text="Loading customer…" />
+      <div className={`page-stack ${styles.pageStack}`}>
+        <Sk w={160} h={13} />
+        <div className={styles.skRow}>
+          <div className={styles.skFieldStack}>
+            <Sk w={180} h={20} />
+            <Sk w={140} h={14} />
+          </div>
+          <Sk w={110} h={32} r={8} />
+        </div>
+        <div className="form-card">
+          <div className={styles.skFieldStack}><Sk w={110} h={12} /><Sk h={38} r={8} /></div>
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
+          </div>
+          <div className={styles.skFieldStack}><Sk w={80} h={12} /><Sk h={60} r={8} /></div>
+          <div className="form-grid-3">
+            <div className={styles.skFieldStack}><Sk w={40} h={12} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={40} h={12} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
+          </div>
+          <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
+        </div>
+      </div>
+    </>
+  );
 
   return (
     <>

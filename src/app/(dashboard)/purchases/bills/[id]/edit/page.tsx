@@ -52,6 +52,12 @@ function calcItem(item: LineItem) {
   return { subtotal, gstAmount, total: subtotal + gstAmount };
 }
 
+function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
+  return (
+    <div className={styles.skeletonBlock} style={{ width: w, height: h, borderRadius: r } as React.CSSProperties} />
+  );
+}
+
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className={styles.statCard}>
@@ -188,12 +194,36 @@ export default function EditPurchaseBillPage() {
   }
 
   const handleItemChange = useCallback((idx: number, field: keyof LineItem, value: string) => {
+    // Typing a name that exactly matches an existing catalog product (and
+    // this row isn't already linked) auto-links it — otherwise the item
+    // stays unlinked even though it's the same product, which both skips
+    // its stock update and risks creating a duplicate catalog entry.
+    if (field === "name" && !items[idx]?.productId) {
+      const match = products.find(p => p.name.trim().toLowerCase() === value.trim().toLowerCase());
+      if (match) {
+        const rate = match.purchasePrice ?? match.price;
+        setItems(prev => {
+          const next = [...prev];
+          next[idx] = {
+            ...next[idx],
+            name: value,
+            productId: match.id,
+            unit: match.unit,
+            purchasePrice: rate != null ? String(rate) : next[idx].purchasePrice,
+            gstRate: String(match.gstRate),
+          };
+          return next;
+        });
+        toast({ type: "success", title: "Linked to catalog", message: `Matched existing product "${match.name}".` });
+        return;
+      }
+    }
     setItems(prev => {
       const next = [...prev];
       next[idx] = { ...next[idx], [field]: value };
       return next;
     });
-  }, []);
+  }, [items, products, toast]);
 
   const handleProductSelect = useCallback((idx: number, productId: string) => {
     const product = products.find(p => p.id === productId);
@@ -278,7 +308,37 @@ export default function EditPurchaseBillPage() {
     setSaving(false);
   }
 
-  if (loading) return <div className="loading-center">Loading bill…</div>;
+  if (loading) return (
+    <>
+      <OverlayLoader text="Loading bill…" />
+      <div className={`page-stack ${styles.pageStack}`}>
+        <Sk w={160} h={13} />
+        <Sk w={200} h={20} />
+        <div className="form-card">
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={70} h={12} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={70} h={12} /><Sk h={38} r={8} /></div>
+          </div>
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={70} h={12} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={70} h={12} /><Sk h={38} r={8} /></div>
+          </div>
+        </div>
+        <div className="form-card">
+          <Sk w={100} h={14} />
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className={styles.skItemRow}>
+              <Sk h={36} r={8} />
+              <Sk h={36} r={8} />
+              <Sk h={36} r={8} />
+              <Sk h={36} r={8} />
+              <Sk w={28} h={28} r={6} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
   if (loadErr)  return <div className={`error-banner ${styles.loadErr}`}>{loadErr}</div>;
 
   // Fully paid/cancelled bills have nothing left to edit — reachable directly
@@ -431,7 +491,7 @@ export default function EditPurchaseBillPage() {
                         <Input sz="sm" type="number" min="1" step="1" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} />
                       </td>
                       <td className={styles.itemsTd}>
-                        <Input sz="sm" type="number" min="0" step="0.01" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value)} placeholder="0.00" />
+                        <Input sz="sm" type="text" inputMode="decimal" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value)} placeholder="0.00" />
                       </td>
                       <td className={styles.itemsTd}>
                         <Select sz="sm" value={item.gstRate} onChange={e => handleItemChange(idx, "gstRate", e.target.value)}>

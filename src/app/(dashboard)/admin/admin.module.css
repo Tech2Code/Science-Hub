@@ -120,6 +120,10 @@
   gap: 0.75rem;
   flex-wrap: wrap;
 }
+.logsHeaderActions { display: flex; align-items: center; gap: 0.5rem; }
+.colLogActions { width: 60px; }
+.clearLogsConfirm { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+.clearLogsConfirm label { font-size: 0.8125rem; color: var(--c-text-4); }
 .sectionTitle { font-weight: 600; font-size: 0.9375rem; color: var(--c-text); }
 .sectionSub { font-size: 0.8125rem; color: var(--c-text-4); margin-top: 0.125rem; }
 .sectionBody { padding: 1.25rem; }

@@ -11,6 +11,7 @@ import styles from "./new.module.css";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validateForm, hasErrors } from "@/lib/validation";
+import { INDIA_STATES } from "@/lib/states";
 
 interface Customer { id: string; name: string; city: string; state: string; gstin: string; }
 interface Product { id: string; name: string; unit: string; price: number; gstRate: number; stock: number; }
@@ -31,6 +32,9 @@ export default function NewInvoicePage() {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [customCustomer, setCustomCustomer] = useState({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
   const [isInterState, setIsInterState] = useState(false);
+  const [placeOfSupply, setPlaceOfSupply] = useState("");
+  const [businessState, setBusinessState] = useState("");
+  const [reverseCharge, setReverseCharge] = useState(false);
   const [items, setItems] = useState<LineItem[]>([]);
   const [productSearch, setProductSearch] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
@@ -55,6 +59,7 @@ export default function NewInvoicePage() {
       }
     }).catch(() => {});
     fetch("/api/products", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then(setProducts).catch(() => {});
+    fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((s) => setBusinessState(s?.state ?? "")).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount prefill from the initial URL, not meant to re-run on searchParams changes
   }, []);
 
@@ -62,11 +67,18 @@ export default function NewInvoicePage() {
   const filteredProducts = products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase()));
   const selectedCustomer = customers.find((c) => c.id === customerId);
 
+  function applyPlaceOfSupply(state: string) {
+    setPlaceOfSupply(state);
+    if (state && businessState) setIsInterState(state !== businessState);
+  }
+
   const handleCustomerSelect = useCallback((c: Customer) => {
     setCustomerId(c.id);
     setCustomerSearch(c.name);
     setShowCustomerDropdown(false);
-  }, []);
+    setPlaceOfSupply(c.state ?? "");
+    if (c.state && businessState) setIsInterState(c.state !== businessState);
+  }, [businessState]);
 
   function addProduct(p: Product) {
     setItems((prev) => [...prev, { productId: p.id, productName: p.name, unit: p.unit, qty: 1, price: p.price, gstRate: p.gstRate }]);
@@ -101,6 +113,7 @@ export default function NewInvoicePage() {
       setCustomErrors({});
     }
     if (items.length === 0) { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
+    if (!placeOfSupply) { toast({ type: "error", title: "Check form", message: "Select place of supply." }); return; }
 
     // Check stock before submitting
     const outOfStock = items.flatMap(item => {
@@ -121,6 +134,8 @@ export default function NewInvoicePage() {
     setSaving(true);
     const body: Record<string, unknown> = {
       isInterState,
+      placeOfSupply,
+      reverseCharge,
       items: items.map((i) => ({ productId: i.productId, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit })),
       notes, dueDate: dueDate || undefined,
     };
@@ -230,7 +245,7 @@ export default function NewInvoicePage() {
                     <button
                       key={mode}
                       type="button"
-                      onClick={() => { setCustomerMode(mode); setCustomerId(""); setCustomerSearch(""); setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" }); }}
+                      onClick={() => { setCustomerMode(mode); setCustomerId(""); setCustomerSearch(""); setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" }); setPlaceOfSupply(""); }}
                       className={`${styles.modeToggleBtn} ${customerMode === mode ? styles.modeToggleBtnActive : ""}`}
                     >
                       {mode === "existing" ? "Search" : "Custom"}
@@ -313,7 +328,11 @@ export default function NewInvoicePage() {
                     <input type="text" placeholder="City" value={customCustomer.city}
                       onChange={(e) => setCustomCustomer((p) => ({ ...p, city: e.target.value }))} className={styles.input} />
                     <input type="text" placeholder="State" value={customCustomer.state}
-                      onChange={(e) => setCustomCustomer((p) => ({ ...p, state: e.target.value }))}
+                      onChange={(e) => {
+                        const state = e.target.value;
+                        setCustomCustomer((p) => ({ ...p, state }));
+                        applyPlaceOfSupply(state);
+                      }}
                       className={styles.input} />
                     <div>
                       <input type="text" placeholder="Pincode" value={customCustomer.pincode}
@@ -335,9 +354,20 @@ export default function NewInvoicePage() {
               )}
             </div>
 
-            {/* Inter-state toggle + due date */}
+            {/* Place of supply + inter-state toggle + due date */}
             <div className={`card ${styles.cardPad}`}>
               <div className={styles.toggleRow}>
+                <div className={styles.dueDateRow}>
+                  <label className={styles.dueDateLabel}>Place of supply *</label>
+                  <select
+                    value={placeOfSupply}
+                    onChange={(e) => applyPlaceOfSupply(e.target.value)}
+                    className={styles.dueDateInput}
+                  >
+                    <option value="">Select state…</option>
+                    {INDIA_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
                 <label className={styles.switchLabel}>
                   <div
                     role="switch"
@@ -348,6 +378,17 @@ export default function NewInvoicePage() {
                     <span className={`${styles.switchThumb} ${isInterState ? styles.switchThumbOn : ""}`} />
                   </div>
                   <span className={styles.switchText}>Inter-state supply (IGST)</span>
+                </label>
+                <label className={styles.switchLabel}>
+                  <div
+                    role="switch"
+                    aria-checked={reverseCharge}
+                    onClick={() => setReverseCharge((v) => !v)}
+                    className={`${styles.switchTrack} ${reverseCharge ? styles.switchTrackOn : ""}`}
+                  >
+                    <span className={`${styles.switchThumb} ${reverseCharge ? styles.switchThumbOn : ""}`} />
+                  </div>
+                  <span className={styles.switchText}>Reverse charge applicable</span>
                 </label>
                 <div className={styles.dueDateRow}>
                   <label className={styles.dueDateLabel}>Due date</label>
@@ -433,7 +474,7 @@ export default function NewInvoicePage() {
                             </td>
                             <td className={styles.tdRight}>
                               <input
-                                type="number" min="0" step="0.01" value={item.price}
+                                type="text" inputMode="decimal" value={item.price}
                                 onChange={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
                                 className={styles.priceInput}
                               />
@@ -513,11 +554,12 @@ export default function NewInvoicePage() {
                   <span>₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
-              {((customerMode === "existing" ? !customerId : (!customCustomer.name.trim() || !customCustomer.phone.trim())) || items.length === 0) && (
+              {((customerMode === "existing" ? !customerId : (!customCustomer.name.trim() || !customCustomer.phone.trim())) || items.length === 0 || !placeOfSupply) && (
                 <div className={styles.warningList}>
                   {customerMode === "existing" && !customerId && <p className={styles.warningItem}>• Select a customer from dropdown</p>}
                   {customerMode === "custom" && !customCustomer.name.trim() && <p className={styles.warningItem}>• Enter customer name</p>}
                   {customerMode === "custom" && customCustomer.name.trim() && !customCustomer.phone.trim() && <p className={styles.warningItem}>• Enter customer phone number</p>}
+                  {!placeOfSupply && <p className={styles.warningItem}>• Select place of supply</p>}
                   {items.length === 0 && <p className={styles.warningItem}>• Add at least one item</p>}
                 </div>
               )}
@@ -526,7 +568,7 @@ export default function NewInvoicePage() {
                   type="submit"
                   variant="primary"
                   size="full"
-                  disabled={saving || items.length === 0 || (customerMode === "existing" ? !customerId : (!customCustomer.name.trim() || !customCustomer.phone.trim()))}
+                  disabled={saving || items.length === 0 || !placeOfSupply || (customerMode === "existing" ? !customerId : (!customCustomer.name.trim() || !customCustomer.phone.trim()))}
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Create Invoice
                 </Button>

@@ -35,7 +35,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { items, notes, dueDate, isInterState, status } = body;
+    const { items, notes, dueDate, isInterState, placeOfSupply, reverseCharge, status } = body;
 
     // Simple status/notes-only update (from payment flow)
     if (!items) {
@@ -46,6 +46,10 @@ export async function PUT(
       revalidateTag("invoices", { expire: 0 });
       revalidateTag("reports", { expire: 0 });
       return NextResponse.json(invoice);
+    }
+
+    if (!placeOfSupply || !String(placeOfSupply).trim()) {
+      return NextResponse.json({ error: "Place of supply is required" }, { status: 400 });
     }
 
     const existing = await prisma.invoice.findUnique({
@@ -152,6 +156,8 @@ export async function PUT(
         where: { id },
         data: {
           isInterState: inter,
+          placeOfSupply: String(placeOfSupply).trim(),
+          reverseCharge: Boolean(reverseCharge),
           dueDate: dueDate ? new Date(dueDate) : null,
           notes: notes ?? null,
           subtotal,

@@ -45,6 +45,7 @@ export default function CustomersPage() {
     title: string; message: string; onConfirm: () => void;
   } | null>(null);
   const [openingEditId, setOpeningEditId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const toast = useToast();
   const router = useRouter();
 
@@ -53,18 +54,15 @@ export default function CustomersPage() {
       title: "Delete Customer",
       message: `Delete "${name}"? All associated data will be permanently removed.`,
       onConfirm: async () => {
-        // Remove it from the list immediately — don't make the user wait on
-        // the round-trip to see the row disappear. Roll back via a real
-        // refetch only if the delete actually fails server-side.
-        const previous = customers;
-        patchData((prev) => (prev ?? []).filter((c) => c.id !== id));
-        setConfirmState(null);
+        setDeleting(true);
         const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
         const resBody = await res.json().catch(() => ({}));
+        setDeleting(false);
+        setConfirmState(null);
         if (res.ok) {
+          patchData((prev) => (prev ?? []).filter((c) => c.id !== id));
           toast({ type: "success", title: "Customer deleted", message: `"${name}" removed.` });
         } else {
-          patchData(() => previous);
           toast({ type: "error", title: "Delete failed", message: resBody.error ?? "Could not delete customer." });
         }
       },
@@ -96,6 +94,7 @@ export default function CustomersPage() {
         message={confirmState?.message ?? ""}
         confirmLabel="Delete"
         variant="danger"
+        loading={deleting}
         onConfirm={confirmState?.onConfirm ?? (() => {})}
         onCancel={() => setConfirmState(null)}
       />

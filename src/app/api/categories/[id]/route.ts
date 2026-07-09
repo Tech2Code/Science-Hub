@@ -5,6 +5,30 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireSession } from "@/lib/apiAuth";
 
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
+    const { id } = await params;
+    const category = await prisma.category.findUnique({
+      where: { id },
+      include: {
+        products: {
+          where: { deletedAt: null },
+          select: { id: true, name: true, sku: true, price: true, stock: true, minStock: true },
+          orderBy: { name: "asc" },
+        },
+      },
+    });
+    if (!category) return NextResponse.json({ error: "Category not found" }, { status: 404 });
+    return NextResponse.json(category);
+  } catch (error) {
+    console.error("GET /api/categories/[id] error:", error);
+    return NextResponse.json({ error: "Failed to fetch category" }, { status: 500 });
+  }
+}
+
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireSession();
@@ -42,7 +66,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
     const { id } = await params;
 
-    const category = await prisma.category.findUnique({ where: { id }, select: { name: true, _count: { select: { products: true } } } });
+    const category = await prisma.category.findUnique({ where: { id }, select: { name: true, _count: { select: { products: { where: { deletedAt: null } } } } } });
     if (!category) return NextResponse.json({ error: "Category not found" }, { status: 404 });
 
     const invoiceItemCount = await prisma.invoiceItem.count({ where: { product: { categoryId: id } } });

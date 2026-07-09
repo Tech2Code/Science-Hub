@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -26,6 +27,7 @@ const COLUMNS: Column[] = [
 ];
 
 export default function CategoriesPage() {
+  const router = useRouter();
   const { data, loading, patchData } = useFetch<Category[]>("/api/categories");
   const categories = data ?? [];
   const [search, setSearch] = useState("");
@@ -36,7 +38,9 @@ export default function CategoriesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [renaming, setRenaming] = useState(false);
+  const [openingView, setOpeningView] = useState(false);
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
@@ -85,6 +89,7 @@ export default function CategoriesPage() {
       setEditingId(null);
       patchData((prev) => (prev ?? []).map((c) => (c.id === id ? { ...c, name } : c)));
       toast({ type: "success", title: "Category renamed", message: `Renamed to "${name}".` });
+      router.push(`/categories/${id}`);
     } else {
       toast({ type: "error", title: "Rename failed", message: d.error ?? "Could not rename category." });
     }
@@ -95,15 +100,15 @@ export default function CategoriesPage() {
       title: "Delete Category",
       message: `Move "${name}" to bin?`,
       onConfirm: async () => {
-        const previous = categories;
-        patchData((prev) => (prev ?? []).filter((c) => c.id !== id));
-        setConfirmState(null);
+        setDeleting(true);
         const res = await fetch(`/api/categories/${id}`, { method: "DELETE" });
         const d = await res.json().catch(() => ({}));
+        setDeleting(false);
+        setConfirmState(null);
         if (res.ok) {
+          patchData((prev) => (prev ?? []).filter((c) => c.id !== id));
           toast({ type: "success", title: "Category deleted", message: `"${name}" moved to bin.` });
         } else {
-          patchData(() => previous);
           toast({ type: "error", title: "Cannot delete category", message: d.error ?? "Could not delete category." });
         }
       },
@@ -117,9 +122,16 @@ export default function CategoriesPage() {
   const { visible } = usePagination(filtered, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
 
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clamps page back into range after a delete shrinks the list
+    if (page > totalPages) setPage(totalPages);
+  }, [filtered.length, page]);
+
   return (
     <>
     {(saving || renaming) && <OverlayLoader text={renaming ? "Renaming…" : "Adding…"} />}
+    {openingView && <OverlayLoader text="Opening…" />}
     <div className="page-stack">
       <ConfirmDialog
         open={!!confirmState}
@@ -127,6 +139,7 @@ export default function CategoriesPage() {
         message={confirmState?.message ?? ""}
         confirmLabel="Delete"
         variant="danger"
+        loading={deleting}
         onConfirm={confirmState?.onConfirm ?? (() => {})}
         onCancel={() => setConfirmState(null)}
       />
@@ -213,6 +226,9 @@ export default function CategoriesPage() {
                   <Cell col={COLUMNS[3]}>
                     {editingId !== c.id && (
                       <div className="table-actions">
+                        <Button variant="viewOutline" size="sm" onClick={() => { setOpeningView(true); router.push(`/categories/${c.id}`); }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View
+                        </Button>
                         <Button variant="editOutline" size="sm" onClick={() => startRename(c)}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Rename
                         </Button>

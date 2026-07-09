@@ -13,7 +13,7 @@ export async function GET() {
     const brands = await prisma.brand.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },
-      include: { _count: { select: { products: true } } },
+      include: { _count: { select: { products: { where: { deletedAt: null } } } } },
     });
     const ids = brands.map((b) => b.id);
     const logs = await prisma.activityLog.findMany({
@@ -27,7 +27,7 @@ export async function GET() {
       return {
         ...b,
         createdBy: log?.user.name ?? null,
-        createdAt: (b as unknown as { createdAt?: Date | null }).createdAt ?? log?.createdAt ?? null,
+        createdAt: b.createdAt ?? log?.createdAt ?? null,
       };
     });
     return NextResponse.json(result);

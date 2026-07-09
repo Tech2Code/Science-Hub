@@ -599,6 +599,20 @@ input, textarea, select {
   .card-toolbar .search-input { max-width: 100%; }
 }
 
+/* ── Toolbar left group (search + sort, kept together so the
+   right-hand toggle appearing/disappearing on load never shifts them) ── */
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+@media (max-width: 640px) {
+  .toolbar-left { width: 100%; flex-direction: column; align-items: stretch; }
+}
+
 /* ── Summary action stack (invoice form) ───── */
 .summary-actions {
   display: flex;

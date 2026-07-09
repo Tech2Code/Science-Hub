@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -29,14 +30,17 @@ const COLUMNS: Column[] = [
 ];
 
 export default function BrandsPage() {
+  const router = useRouter();
   const { data, loading, patchData } = useFetch<Brand[]>("/api/brands");
   const brands = data ?? [];
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [openingView, setOpeningView] = useState(false);
   const [newName, setNewName] = useState("");
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
@@ -69,15 +73,15 @@ export default function BrandsPage() {
       title: "Delete Brand",
       message: `Move "${name}" to bin?`,
       onConfirm: async () => {
-        const previous = brands;
-        patchData((prev) => (prev ?? []).filter((b) => b.id !== id));
-        setConfirmState(null);
+        setDeleting(true);
         const res = await fetch(`/api/brands/${id}`, { method: "DELETE" });
         const d = await res.json().catch(() => ({}));
+        setDeleting(false);
+        setConfirmState(null);
         if (res.ok) {
+          patchData((prev) => (prev ?? []).filter((b) => b.id !== id));
           toast({ type: "success", title: "Brand deleted", message: `"${name}" moved to bin.` });
         } else {
-          patchData(() => previous);
           toast({ type: "error", title: "Cannot delete brand", message: d.error ?? "Could not delete brand." });
         }
       },
@@ -91,9 +95,16 @@ export default function BrandsPage() {
   const { visible } = usePagination(filtered, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
 
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clamps page back into range after a delete shrinks the list
+    if (page > totalPages) setPage(totalPages);
+  }, [filtered.length, page]);
+
   return (
     <>
     {saving && <OverlayLoader text="Adding…" />}
+    {openingView && <OverlayLoader text="Opening…" />}
     <div className="page-stack">
       <ConfirmDialog
         open={!!confirmState}
@@ -101,6 +112,7 @@ export default function BrandsPage() {
         message={confirmState?.message ?? ""}
         confirmLabel="Delete"
         variant="danger"
+        loading={deleting}
         onConfirm={confirmState?.onConfirm ?? (() => {})}
         onCancel={() => setConfirmState(null)}
       />
@@ -176,6 +188,9 @@ export default function BrandsPage() {
                   </Cell>
                   <Cell col={COLUMNS[5]}>
                     <div className="table-actions">
+                      <Button variant="viewOutline" size="sm" onClick={() => { setOpeningView(true); router.push(`/brands/${b.id}`); }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View
+                      </Button>
                       <Button
                         variant="dangerOutline"
                         size="sm"

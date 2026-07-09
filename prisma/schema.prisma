@@ -124,6 +124,8 @@ model Invoice {
   paidAmount    Float         @default(0)
   notes         String?
   isInterState  Boolean       @default(false)
+  placeOfSupply String?
+  reverseCharge Boolean       @default(false)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?

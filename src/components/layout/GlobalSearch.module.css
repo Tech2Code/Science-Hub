@@ -1,0 +1,116 @@
+.wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  max-width: 28rem;
+}
+
+.inputWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 0.625rem;
+  color: var(--c-text-4);
+  pointer-events: none;
+}
+
+.input {
+  width: 100%;
+  height: 2.125rem;
+  padding: 0 0.75rem 0 2rem;
+  border-radius: var(--c-radius-sm);
+  border: 1px solid var(--c-border-md);
+  background: var(--c-bg-input);
+  color: var(--c-text);
+  font-size: 0.8125rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input::placeholder { color: var(--c-text-4); }
+.input:focus {
+  border-color: var(--c-blue);
+  box-shadow: 0 0 0 3px var(--c-blue-bg);
+}
+.input::-webkit-search-cancel-button { display: none; }
+
+.spinner {
+  position: absolute;
+  right: 0.625rem;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+  border: 2px solid var(--c-border-md);
+  border-top-color: var(--c-blue);
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.panel {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  left: 0;
+  right: 0;
+  max-height: 24rem;
+  overflow-y: auto;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border-md);
+  border-radius: var(--c-radius-sm);
+  box-shadow: var(--c-shadow-lg);
+  z-index: 30;
+}
+
+.empty {
+  padding: 1rem 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--c-text-3);
+  text-align: center;
+}
+
+.group + .group {
+  border-top: 1px solid var(--c-border);
+}
+
+.groupLabel {
+  padding: 0.5rem 0.875rem 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--c-text-4);
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.0625rem;
+  width: 100%;
+  padding: 0.4375rem 0.875rem;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.item:hover, .item:focus-visible {
+  background: var(--c-bg-hover);
+  outline: none;
+}
+.item:last-child { padding-bottom: 0.625rem; }
+
+.itemTitle {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--c-text);
+}
+.itemSubtitle {
+  font-size: 0.75rem;
+  color: var(--c-text-3);
+}
+
+@media (max-width: 767px) {
+  .wrap { max-width: none; }
+}

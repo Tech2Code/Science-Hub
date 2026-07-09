@@ -24,10 +24,43 @@ interface PurchaseBill {
   attachmentName: string | null;
   vendor: { id: string; name: string; company: string | null };
   createdBy: { id: string; name: string };
+  items: { name: string; product: { name: string } | null }[];
 }
 
 type StatusFilter = "All" | "unpaid" | "partial" | "paid" | "cancelled";
 const STATUS_TABS: StatusFilter[] = ["All", "unpaid", "partial", "paid", "cancelled"];
+
+type SortOption = "newest" | "oldest" | "vendor_az" | "vendor_za" | "amount_high" | "amount_low" | "balance_high";
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+  { value: "vendor_az", label: "Vendor (A–Z)" },
+  { value: "vendor_za", label: "Vendor (Z–A)" },
+  { value: "amount_high", label: "Amount (High–Low)" },
+  { value: "amount_low", label: "Amount (Low–High)" },
+  { value: "balance_high", label: "Balance Due (High–Low)" },
+];
+
+function sortBills(list: PurchaseBill[], sort: SortOption): PurchaseBill[] {
+  const arr = [...list];
+  switch (sort) {
+    case "oldest":
+      return arr.sort((a, b) => new Date(a.billDate).getTime() - new Date(b.billDate).getTime());
+    case "vendor_az":
+      return arr.sort((a, b) => a.vendor.name.localeCompare(b.vendor.name));
+    case "vendor_za":
+      return arr.sort((a, b) => b.vendor.name.localeCompare(a.vendor.name));
+    case "amount_high":
+      return arr.sort((a, b) => b.total - a.total);
+    case "amount_low":
+      return arr.sort((a, b) => a.total - b.total);
+    case "balance_high":
+      return arr.sort((a, b) => (b.total - b.paidAmount) - (a.total - a.paidAmount));
+    case "newest":
+    default:
+      return arr.sort((a, b) => new Date(b.billDate).getTime() - new Date(a.billDate).getTime());
+  }
+}
 
 const COLUMNS: Column[] = [
   { label: "Bill No.",  mobile: "full+label" },
@@ -46,9 +79,11 @@ const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2,
 export default function PurchasesPage() {
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PurchaseBill | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const toast = useToast();
 
   const apiUrl = filter === "All" ? "/api/purchase-bills" : `/api/purchase-bills?status=${filter}`;
@@ -63,14 +98,17 @@ export default function PurchasesPage() {
           b.vendor.name.toLowerCase().includes(q) ||
           (b.vendor.company ?? "").toLowerCase().includes(q) ||
           (b.category ?? "").toLowerCase().includes(q) ||
-          b.createdBy.name.toLowerCase().includes(q)
+          b.createdBy.name.toLowerCase().includes(q) ||
+          b.items.some((i) => i.name.toLowerCase().includes(q) || (i.product?.name ?? "").toLowerCase().includes(q))
         );
       })
     : bills;
 
-  const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const sorted = sortBills(filtered, sort);
+
+  const maxPage = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const clampedPage = Math.min(page, maxPage);
-  const { visible } = usePagination(filtered, clampedPage, showAll);
+  const { visible } = usePagination(sorted, clampedPage, showAll);
 
   // Summary stats
   const totalPurchase = bills.reduce((s, b) => s + b.total, 0);
@@ -81,21 +119,21 @@ export default function PurchasesPage() {
   async function handleDelete() {
     if (!deleteTarget) return;
     const target = deleteTarget;
-    const previous = bills;
-    patchData((prev) => (prev ?? []).filter((b) => b.id !== target.id));
-    setDeleteTarget(null);
+    setDeleting(true);
     try {
       const res = await fetch(`/api/purchase-bills/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
+        patchData((prev) => (prev ?? []).filter((b) => b.id !== target.id));
         toast({ type: "success", title: "Bill deleted", message: `${target.billNumber} removed.` });
       } else {
-        patchData(() => previous);
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete bill." });
       }
     } catch {
-      patchData(() => previous);
       toast({ type: "error", title: "Delete failed", message: "Network error." });
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
     }
   }
 
@@ -107,6 +145,7 @@ export default function PurchasesPage() {
       message={`Delete purchase bill ${deleteTarget?.billNumber}? This cannot be undone.`}
       confirmLabel="Delete"
       variant="danger"
+      loading={deleting}
       onConfirm={handleDelete}
       onCancel={() => setDeleteTarget(null)}
     />
@@ -159,14 +198,26 @@ export default function PurchasesPage() {
 
       <div className="card">
         <div className="card-toolbar">
-          <input
-            type="search"
-            aria-label="Search purchase bills"
-            placeholder="Search by bill no., vendor, category or staff…"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
-            className={`search-input ${styles.searchInput}`}
-          />
+          <div className="toolbar-left">
+            <input
+              type="search"
+              aria-label="Search purchase bills"
+              placeholder="Search by bill no., vendor, product, category or staff…"
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+              className={`search-input ${styles.searchInput}`}
+            />
+            <select
+              aria-label="Sort purchase bills"
+              value={sort}
+              onChange={e => { setSort(e.target.value as SortOption); setPage(1); }}
+              className={`search-input ${styles.sortSelect}`}
+            >
+              {SORT_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />
           )}

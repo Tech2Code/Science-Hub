@@ -1,5 +1,60 @@
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.875rem;
+}
+
+.statCard {
+  padding: 1rem 1.25rem;
+}
+
+.statLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--c-text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.statValue {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--stat-color, var(--c-text));
+  margin-top: 0.25rem;
+}
+
+.statTotal {
+  --stat-color: var(--c-text);
+}
+
+.statPaid {
+  --stat-color: var(--c-green-text);
+}
+
+.statPending {
+  --stat-color: var(--c-amber);
+}
+
+.statOverdue {
+  --stat-color: var(--c-text-4);
+}
+
+.statOverdueActive {
+  --stat-color: var(--c-red);
+}
+
 .searchInput {
   flex: 1;
+}
+
+.sortSelect {
+  flex: none;
+  width: auto;
+  min-width: 12rem;
+  cursor: pointer;
+}
+@media (max-width: 640px) {
+  .sortSelect { flex: 1 1 auto; min-width: 0; }
 }
 
 .invoiceLink {
@@ -24,11 +79,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.createdByCell {
-  color: var(--c-text-3);
-  font-size: 0.8125rem;
 }
 
 .totalCell {

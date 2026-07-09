@@ -15,6 +15,7 @@ interface Vendor { id: string; name: string; company: string | null; gstin: stri
 interface Product { id: string; name: string; sku: string | null; unit: string; price: number; purchasePrice: number | null; gstRate: number; }
 
 interface LineItem {
+  key: string;
   productId: string;
   name: string;
   unit: string;
@@ -24,11 +25,20 @@ interface LineItem {
 }
 
 type InlineVendorForm = { name: string; phone: string; email: string; gstin: string; address: string };
-const BLANK_ITEM: LineItem = { productId: "", name: "", unit: "Pcs", quantity: "1", purchasePrice: "", gstRate: "18" };
+// A stable per-row id, separate from array index — the catalogSalePrice/
+// catalogMarginPct/catalogSaving state below is keyed by this so removing a
+// row can't silently misapply another row's saved margin/price after the
+// array shifts.
+let itemKeySeq = 0;
+function makeBlankItem(): LineItem {
+  itemKeySeq += 1;
+  return { key: `item-${itemKeySeq}`, productId: "", name: "", unit: "Pcs", quantity: "1", purchasePrice: "", gstRate: "18" };
+}
 const UNITS = ["Pcs", "Box", "Set", "Kg", "Ltr", "Mtr", "Dozen", "Pack", "Pair"];
 const GST_RATES = ["0", "5", "12", "18", "28"];
 const CATEGORIES = ["Raw Materials", "Lab Chemicals", "Lab Equipment", "Office Supplies", "Packaging", "Services", "Other"];
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
+const MARGIN_PRESETS = ["10", "15", "20", "25", "30", "40", "50"];
 
 function toNum(s: string) { const n = parseFloat(s); return isNaN(n) ? 0 : n; }
 const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -62,8 +72,15 @@ export default function NewPurchaseBillPage() {
   const [ivError,   setIvError]   = useState("");
   const [ivFieldErrors, setIvFieldErrors] = useState<FormErrors<InlineVendorForm>>({});
 
-  // Catalog save state: set of item indices currently being saved
-  const [catalogSaving, setCatalogSaving] = useState<Set<number>>(new Set());
+  // Catalog save state: set of item keys currently being saved
+  const [catalogSaving, setCatalogSaving] = useState<Set<string>>(new Set());
+  // Selling price entered per unmatched-item row before "Save to catalog" —
+  // without this the product would be created with sale price == purchase
+  // price (zero margin), since the purchase-bill form never asks for one.
+  const [catalogSalePrice, setCatalogSalePrice] = useState<Record<string, string>>({});
+  // Margin % preset per row — picking one derives the sale price from cost;
+  // typing the sale price directly clears this back to "Custom".
+  const [catalogMarginPct, setCatalogMarginPct] = useState<Record<string, string>>({});
 
   const [vendorId,  setVendorId]  = useState("");
   const [billDate,  setBillDate]  = useState(() => new Date().toISOString().slice(0, 10));
@@ -71,7 +88,7 @@ export default function NewPurchaseBillPage() {
   const [category,  setCategory]  = useState("");
   const [discount,  setDiscount]  = useState("0");
   const [notes,     setNotes]     = useState("");
-  const [items,     setItems]     = useState<LineItem[]>([{ ...BLANK_ITEM }]);
+  const [items,     setItems]     = useState<LineItem[]>(() => [makeBlankItem()]);
   const [attachmentUrl,  setAttachmentUrl]  = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
@@ -128,10 +145,22 @@ export default function NewPurchaseBillPage() {
     setIvSaving(false);
   }
 
+  function handleCatalogSalePriceChange(key: string, value: string) {
+    setCatalogSalePrice(prev => ({ ...prev, [key]: value }));
+    setCatalogMarginPct(prev => ({ ...prev, [key]: "" }));
+  }
+
+  function handleCatalogMarginChange(key: string, cost: string, pct: string) {
+    setCatalogMarginPct(prev => ({ ...prev, [key]: pct }));
+    if (pct === "") return;
+    setCatalogSalePrice(prev => ({ ...prev, [key]: (toNum(cost) * (1 + toNum(pct) / 100)).toFixed(2) }));
+  }
+
   async function handleAddToCatalog(idx: number) {
     const item = items[idx];
     if (!item.name.trim()) return;
-    setCatalogSaving(prev => new Set(prev).add(idx));
+    const salePrice = toNum(catalogSalePrice[item.key] ?? item.purchasePrice);
+    setCatalogSaving(prev => new Set(prev).add(item.key));
     try {
       const res = await fetch("/api/products", {
         method: "POST",
@@ -139,7 +168,7 @@ export default function NewPurchaseBillPage() {
         body: JSON.stringify({
           name:          item.name.trim(),
           unit:          item.unit,
-          price:         toNum(item.purchasePrice),
+          price:         salePrice,
           purchasePrice: toNum(item.purchasePrice),
           gstRate:       toNum(item.gstRate),
           stock:    0,
@@ -151,7 +180,8 @@ export default function NewPurchaseBillPage() {
         setProducts(prev => [...prev, data]);
         setItems(prev => {
           const next = [...prev];
-          next[idx] = { ...next[idx], productId: data.id };
+          const i = next.findIndex(x => x.key === item.key);
+          if (i !== -1) next[i] = { ...next[i], productId: data.id };
           return next;
         });
         bustCache("/api/products");
@@ -162,7 +192,7 @@ export default function NewPurchaseBillPage() {
     } catch {
       toast({ type: "error", title: "Error", message: "Network error — please try again." });
     }
-    setCatalogSaving(prev => { const s = new Set(prev); s.delete(idx); return s; });
+    setCatalogSaving(prev => { const s = new Set(prev); s.delete(item.key); return s; });
   }
 
   const subtotal   = items.reduce((s, i) => s + calcItem(i).subtotal, 0);
@@ -171,12 +201,45 @@ export default function NewPurchaseBillPage() {
   const grandTotal = subtotal + taxTotal - disc;
 
   const handleItemChange = useCallback((idx: number, field: keyof LineItem, value: string) => {
+    // Typing a name that exactly matches an existing catalog product (and
+    // this row isn't already linked) auto-links it — otherwise the item
+    // stays unlinked even though it's the same product, which both skips
+    // its stock update and risks creating a duplicate catalog entry via
+    // "Save to catalog" below.
+    if (field === "name" && !items[idx]?.productId) {
+      const match = products.find(p => p.name.trim().toLowerCase() === value.trim().toLowerCase());
+      if (match) {
+        const rate = match.purchasePrice ?? match.price;
+        setItems(prev => {
+          const next = [...prev];
+          next[idx] = {
+            ...next[idx],
+            name: value,
+            productId: match.id,
+            unit: match.unit,
+            purchasePrice: rate != null ? String(rate) : next[idx].purchasePrice,
+            gstRate: String(match.gstRate),
+          };
+          return next;
+        });
+        toast({ type: "success", title: "Linked to catalog", message: `Matched existing product "${match.name}".` });
+        return;
+      }
+    }
     setItems(prev => {
       const next = [...prev];
       next[idx] = { ...next[idx], [field]: value };
       return next;
     });
-  }, []);
+    // Rate changed after a margin % was already picked for this row's
+    // "save to catalog" card — re-derive the sale price from the new cost
+    // instead of leaving it stale from whatever the rate was before.
+    const key = items[idx]?.key;
+    if (field === "purchasePrice" && key && catalogMarginPct[key]) {
+      const pct = catalogMarginPct[key];
+      setCatalogSalePrice(prev => ({ ...prev, [key]: (toNum(value) * (1 + toNum(pct) / 100)).toFixed(2) }));
+    }
+  }, [items, products, toast, catalogMarginPct]);
 
   const handleProductSelect = useCallback((idx: number, productId: string) => {
     const product = products.find(p => p.id === productId);
@@ -237,8 +300,16 @@ export default function NewPurchaseBillPage() {
     setAttachmentName(null);
   }
 
-  function addItem() { setItems(prev => [...prev, { ...BLANK_ITEM }]); }
-  function removeItem(idx: number) { setItems(prev => prev.filter((_, i) => i !== idx)); }
+  function addItem() { setItems(prev => [...prev, makeBlankItem()]); }
+  function removeItem(idx: number) {
+    const key = items[idx]?.key;
+    setItems(prev => prev.filter((_, i) => i !== idx));
+    if (key) {
+      setCatalogSalePrice(prev => { const next = { ...prev }; delete next[key]; return next; });
+      setCatalogMarginPct(prev => { const next = { ...prev }; delete next[key]; return next; });
+      setCatalogSaving(prev => { if (!prev.has(key)) return prev; const s = new Set(prev); s.delete(key); return s; });
+    }
+  }
 
   // Items from scan that are not linked to any product
   const unmatchedItems = items
@@ -477,14 +548,14 @@ export default function NewPurchaseBillPage() {
                 {items.map((item, idx) => {
                   const { total } = calcItem(item);
                   return (
-                    <tr key={idx} className={styles.itemRow}>
-                      <td className={styles.tdSelect}>
+                    <tr key={item.key} className={styles.itemRow}>
+                      <td className={styles.tdProduct}>
                         <Select sz="sm" value={item.productId} onChange={e => handleProductSelect(idx, e.target.value)}>
                           <option value="">— Select —</option>
                           {products.map(p => <option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ""}</option>)}
                         </Select>
                       </td>
-                      <td className={styles.tdSelect}>
+                      <td className={styles.tdName}>
                         <Input sz="sm" value={item.name} onChange={e => handleItemChange(idx, "name", e.target.value)} placeholder="Item name" required />
                       </td>
                       <td className={styles.tdUnit}>
@@ -496,7 +567,7 @@ export default function NewPurchaseBillPage() {
                         <Input sz="sm" type="number" min="1" step="1" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} className={styles.numInputRight} />
                       </td>
                       <td className={styles.tdRate}>
-                        <Input sz="sm" type="number" min="0" step="0.01" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value)} placeholder="0.00" className={styles.numInputRight} />
+                        <Input sz="sm" type="text" inputMode="decimal" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value)} placeholder="0.00" className={styles.numInputRight} />
                       </td>
                       <td className={styles.tdGst}>
                         <Select sz="sm" value={item.gstRate} onChange={e => handleItemChange(idx, "gstRate", e.target.value)}>
@@ -531,20 +602,45 @@ export default function NewPurchaseBillPage() {
               </div>
               <div className={styles.unmatchedList}>
                 {unmatchedItems.map(({ item, idx }) => (
-                  <div key={idx} className={styles.unmatchedRow}>
-                    <div>
-                      <div className={styles.unmatchedName}>{item.name}</div>
+                  <div key={item.key} className={styles.unmatchedRow}>
+                    <div className={styles.unmatchedInfo}>
+                      <div className={styles.unmatchedName} title={item.name}>{item.name}</div>
                       <div className={styles.unmatchedMeta}>
-                        {item.unit} · ₹{fmt(toNum(item.purchasePrice))} · GST {item.gstRate}%
+                        {item.unit} · Purchased at ₹{fmt(toNum(item.purchasePrice))} · GST {item.gstRate}%
                       </div>
+                    </div>
+                    <div className={styles.unmatchedSaleField}>
+                      <label className={styles.unmatchedSaleLabel} htmlFor={`margin-pct-${item.key}`}>Margin %</label>
+                      <Select
+                        id={`margin-pct-${item.key}`}
+                        sz="sm"
+                        value={catalogMarginPct[item.key] ?? ""}
+                        onChange={(e) => handleCatalogMarginChange(item.key, item.purchasePrice, e.target.value)}
+                      >
+                        <option value="">Custom</option>
+                        {MARGIN_PRESETS.map((p) => <option key={p} value={p}>{p}%</option>)}
+                      </Select>
+                    </div>
+                    <div className={styles.unmatchedSaleField}>
+                      <label className={styles.unmatchedSaleLabel} htmlFor={`sale-price-${item.key}`}>Sale Price (₹)</label>
+                      <Input
+                        id={`sale-price-${item.key}`}
+                        sz="sm"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={catalogSalePrice[item.key] ?? item.purchasePrice}
+                        onChange={(e) => handleCatalogSalePriceChange(item.key, e.target.value)}
+                        placeholder="0.00"
+                      />
                     </div>
                     <button
                       type="button"
-                      disabled={catalogSaving.has(idx)}
+                      disabled={catalogSaving.has(item.key)}
                       onClick={() => handleAddToCatalog(idx)}
-                      className={catalogSaving.has(idx) ? styles.saveToCatalogBtnSaving : styles.saveToCatalogBtn}
+                      className={catalogSaving.has(item.key) ? styles.saveToCatalogBtnSaving : styles.saveToCatalogBtn}
                     >
-                      {catalogSaving.has(idx) ? (
+                      {catalogSaving.has(item.key) ? (
                         <svg className={styles.spinIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" d="M12 2a10 10 0 0 1 10 10"/></svg>
                       ) : (
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>

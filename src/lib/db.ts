@@ -22,7 +22,6 @@ export async function getInvoices(status?: string | null, customerId?: string | 
     orderBy: { date: "desc" },
     include: {
       customer: { select: { id: true, name: true } },
-      createdBy: { select: { id: true, name: true } },
     },
   });
 }
@@ -34,7 +33,6 @@ export async function getInvoice(id: string) {
       customer: true,
       items: { include: { product: true } },
       payments: { orderBy: { date: "desc" } },
-      createdBy: { select: { id: true, name: true, email: true } },
     },
   });
 }

@@ -7,6 +7,7 @@ import Image from "next/image";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTheme } from "@/lib/theme";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { GlobalSearch } from "./GlobalSearch";
 import styles from "./DashboardShell.module.css";
 
 const NavIcons: Record<string, React.FC<{ className?: string }>> = {
@@ -262,27 +263,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
       <aside className={[styles.sidebar, sidebarOpen ? styles.sidebarOpen : styles.sidebarClosed].join(" ")}>
         <div className={[styles.sidebarLogo, (!mobile && !sidebarOpen) ? styles.sidebarLogoCollapsed : ""].join(" ")}>
-          {!mobile && (
-            <button
-              onClick={() => setSidebarOpen((v) => !v)}
-              title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-              aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-              className={styles.sidebarCollapseBtn}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="16" rx="2" />
-                <line x1="9.5" y1="4" x2="9.5" y2="20" />
-              </svg>
-            </button>
-          )}
+          <Image src="/logo.png" alt="Science Hub" width={36} height={36} loading="eager" className={styles.logoIcon} />
           {(mobile || sidebarOpen) && (
-            <>
-              <Image src="/logo.png" alt="Science Hub" width={36} height={36} loading="eager" className={styles.logoIcon} />
-              <div className={styles.logoText}>
-                <div className={styles.logoName}>Science Hub</div>
-                <div className={styles.logoSub}>Billing &amp; Inventory</div>
-              </div>
-            </>
+            <div className={styles.logoText}>
+              <div className={styles.logoName}>Science Hub</div>
+              <div className={styles.logoSub}>Billing &amp; Inventory</div>
+            </div>
           )}
           {mobile && sidebarOpen && (
             <button
@@ -347,22 +333,39 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </Link>
 
         <div className={styles.userBlock}>
-          <Link href="/admin" onClick={handleNavClick} className={styles.plainLink}>
-            <div className={[styles.userRow, styles.userRowLink].join(" ")}>
-              <div className={styles.avatarWrap}>
-                <div className={[styles.userAvatar, session?.user?.role === "admin" ? styles.roleAdmin : styles.roleStaff].join(" ")}>
-                  {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
+          <div className={[styles.userBlockRow, (!mobile && !sidebarOpen) ? styles.userBlockRowCollapsed : ""].join(" ")}>
+            <Link href="/admin" onClick={handleNavClick} className={[styles.plainLink, styles.userBlockLink].join(" ")}>
+              <div className={[styles.userRow, styles.userRowLink].join(" ")}>
+                <div className={styles.avatarWrap}>
+                  <div className={[styles.userAvatar, session?.user?.role === "admin" ? styles.roleAdmin : styles.roleStaff].join(" ")}>
+                    {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
+                  </div>
+                  <div className={[styles.statusDot, session?.user?.role === "admin" ? styles.roleAdmin : styles.roleStaff].join(" ")}>
+                    {session?.user?.role === "admin" ? "★" : "·"}
+                  </div>
                 </div>
-                <div className={[styles.statusDot, session?.user?.role === "admin" ? styles.roleAdmin : styles.roleStaff].join(" ")}>
-                  {session?.user?.role === "admin" ? "★" : "·"}
-                </div>
+                {(mobile || sidebarOpen) && (
+                  <div className={styles.userInfo}>
+                    <div className={styles.userName}>{session?.user?.name ?? "User"}</div>
+                    <div className={styles.userEmail}>{session?.user?.email}</div>
+                  </div>
+                )}
               </div>
-              <div className={styles.userInfo}>
-                <div className={styles.userName}>{session?.user?.name ?? "User"}</div>
-                <div className={styles.userEmail}>{session?.user?.email}</div>
-              </div>
-            </div>
-          </Link>
+            </Link>
+            {!mobile && (
+              <button
+                onClick={() => setSidebarOpen((v) => !v)}
+                title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+                aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+                className={styles.sidebarCollapseBtn}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <line x1="9.5" y1="4" x2="9.5" y2="20" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -383,13 +386,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 </svg>
               </button>
             )}
-            {/* <div className={styles.divider} /> */}
             {currentNav && (() => {
               const Icon = NavIcons[currentNav.iconKey];
               return <Icon className={styles.pageIcon} />;
             })()}
             <span className={styles.pageLabel}>{currentNav?.label ?? "Dashboard"}</span>
           </div>
+
+          <GlobalSearch />
 
           <div className={styles.topbarRight}>
             <ThemeToggle />
@@ -410,12 +414,22 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               onClick={() => setConfirmSignOut(true)}
               className={styles.signOutBtn}
               disabled={loggingOut}
+              title="Sign out"
             >
               {loggingOut ? (
                 <svg className={styles.signOutSpinner} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" d="M12 2a10 10 0 0 1 10 10" />
                 </svg>
-              ) : "Sign out"}
+              ) : (
+                <>
+                  <svg className={styles.signOutIcon} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                  <span className={styles.signOutText}>Sign out</span>
+                </>
+              )}
             </button>
           </div>
         </header>

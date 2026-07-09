@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
@@ -19,6 +20,7 @@ interface BinItem {
   deletedAt: string;
   daysLeft: number;
   deletedBy?: string;
+  protectedReason?: string;
 }
 
 const TYPE_META: Record<BinType, { plural: string; pillCls: string }> = {
@@ -105,8 +107,11 @@ function TypeSection({
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
-                  <Cell col={BIN_COLUMNS[0]} className={styles.nameCell}>
+                  <Cell col={BIN_COLUMNS[0]} className={[styles.nameCell, item.protectedReason ? styles.nameCellProtected : ""].join(" ")}>
                     {item.name}
+                    {item.protectedReason && (
+                      <span className={styles.protectedBadge} title={item.protectedReason}>Protected</span>
+                    )}
                   </Cell>
                   <Cell col={BIN_COLUMNS[1]} className={styles.detailsCell}>
                     {item.meta || <span className={styles.emptyValue}>—</span>}
@@ -125,7 +130,15 @@ function TypeSection({
                   <Cell col={BIN_COLUMNS[5]}>
                     <div className="table-actions">
                       <Button variant="editOutline" size="sm" onClick={() => onRestore(item)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>Restore</Button>
-                      <Button variant="dangerOutline" size="sm" onClick={() => onDeleteForever(item)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>Delete Forever</Button>
+                      <Button
+                        variant="dangerOutline"
+                        size="sm"
+                        disabled={!!item.protectedReason}
+                        title={item.protectedReason}
+                        onClick={() => onDeleteForever(item)}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>Delete Forever
+                      </Button>
                     </div>
                   </Cell>
                 </tr>
@@ -138,16 +151,25 @@ function TypeSection({
   );
 }
 
+const EMPTY_BIN_PHRASE = "DELETE ALL";
+
 export default function BinPage() {
   const { data, loading, mutate } = useFetch<BinItem[]>("/api/bin");
   const items = useMemo(() => data ?? [], [data]);
   const toast = useToast();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
 
   const [search, setSearch] = useState("");
   const [confirmState, setConfirmState] = useState<{
-    title: string; message: string; confirmLabel: string; variant: "default" | "danger"; onConfirm: () => void;
+    title: string; message: string; confirmLabel: string; variant: "default" | "danger";
+    onConfirm: () => void;
   } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+
+  const [emptyBinOpen, setEmptyBinOpen] = useState(false);
+  const [emptyBinInput, setEmptyBinInput] = useState("");
+  const [emptyBinLoading, setEmptyBinLoading] = useState(false);
 
   function handleRestore(item: BinItem) {
     setConfirmState({
@@ -205,6 +227,36 @@ export default function BinPage() {
     });
   }
 
+  function handleEmptyBin() {
+    setEmptyBinInput("");
+    setEmptyBinOpen(true);
+  }
+
+  async function confirmEmptyBin() {
+    if (emptyBinInput !== EMPTY_BIN_PHRASE) return;
+    setEmptyBinLoading(true);
+    try {
+      const res = await fetch("/api/bin/empty", { method: "DELETE" });
+      const d = await res.json().catch(() => ({}));
+      setEmptyBinLoading(false);
+      setEmptyBinOpen(false);
+      if (res.ok) {
+        mutate();
+        toast({
+          type: "success",
+          title: "Bin emptied",
+          message: `${d.deleted ?? 0} item(s) permanently deleted${d.skipped ? `, ${d.skipped} skipped (still referenced elsewhere).` : "."}`,
+        });
+      } else {
+        toast({ type: "error", title: "Failed", message: d.error ?? "Could not empty bin." });
+      }
+    } catch {
+      setEmptyBinLoading(false);
+      setEmptyBinOpen(false);
+      toast({ type: "error", title: "Failed", message: "Network error." });
+    }
+  }
+
   const filteredItems = useMemo(() => {
     if (!search.trim()) return items;
     const q = search.toLowerCase().trim();
@@ -241,6 +293,35 @@ export default function BinPage() {
         onCancel={() => { if (!confirmLoading) setConfirmState(null); }}
       />
 
+      <ConfirmDialog
+        open={emptyBinOpen}
+        title="Empty Recycle Bin"
+        message={`Permanently delete all ${items.length} item(s) currently in the bin? This cannot be undone.`}
+        confirmLabel="Empty Bin"
+        variant="danger"
+        loading={emptyBinLoading}
+        confirmDisabled={emptyBinInput !== EMPTY_BIN_PHRASE}
+        detail={
+          <div className={styles.typeToConfirm}>
+            <label htmlFor="empty-bin-confirm">
+              Type <strong>{EMPTY_BIN_PHRASE}</strong> to confirm
+            </label>
+            <input
+              id="empty-bin-confirm"
+              type="text"
+              autoComplete="off"
+              autoFocus
+              className="search-input"
+              value={emptyBinInput}
+              onChange={(e) => setEmptyBinInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && emptyBinInput === EMPTY_BIN_PHRASE) confirmEmptyBin(); }}
+            />
+          </div>
+        }
+        onConfirm={confirmEmptyBin}
+        onCancel={() => { if (!emptyBinLoading) setEmptyBinOpen(false); }}
+      />
+
       <div className="page-header">
         <div>
           <h1 className="page-title">Recycle Bin</h1>
@@ -254,6 +335,12 @@ export default function BinPage() {
               : `${totalCount} item${totalCount !== 1 ? "s" : ""} — auto-purged after 30 days`}
           </p>
         </div>
+        {isAdmin && !loading && totalCount > 0 && (
+          <Button variant="dangerOutline" size="sm" onClick={handleEmptyBin}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+            Empty Recycle Bin
+          </Button>
+        )}
       </div>
 
       {!loading && totalCount > 0 && (

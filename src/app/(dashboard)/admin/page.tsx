@@ -61,6 +61,8 @@ const ACTION_META: Record<string, { label: string; color: string; bg: string; bo
   update_purchase_bill:   { label: "Purchase Bill Updated",  color: "var(--c-blue)",        bg: "var(--c-blue-bg)",   border: "var(--c-blue-border)" },
   delete_purchase_bill:   { label: "Purchase Bill Deleted",  color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
   record_purchase_payment:{ label: "Purchase Payment",       color: "var(--c-green-text)",  bg: "var(--c-green-bg)",  border: "var(--c-green-border)" },
+  empty_bin:              { label: "Bin Emptied",            color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
+  clear_activity_log:     { label: "Activity Log Cleared",   color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -177,7 +179,13 @@ export default function AdminPage() {
   const [logsPage, setLogsPage] = useState(1);
   const [logsFilter, setLogsFilter] = useState(""); // filter by userId
   const [logsSearch, setLogsSearch] = useState(""); // text search
+  const [logDeleteConfirm, setLogDeleteConfirm] = useState<ActivityLog | null>(null);
+  const [logDeleteLoading, setLogDeleteLoading] = useState(false);
+  const [clearLogsConfirm, setClearLogsConfirm] = useState(false);
+  const [clearLogsLoading, setClearLogsLoading] = useState(false);
+  const [clearLogsInput, setClearLogsInput] = useState("");
   const LOGS_LIMIT = 20;
+  const CLEAR_LOGS_PHRASE = "DELETE ALL";
 
   const loadLogs = useCallback(async (page: number, userId: string) => {
     setLogsLoading(true);
@@ -239,8 +247,7 @@ export default function AdminPage() {
     }
     // Real-time confirm password check
     if (field === "confirmPassword" || field === "password") {
-      const pw = field === "password" ? value : addForm.password;
-      const conf = field === "confirmPassword" ? value : addForm.confirmPassword;
+      const { password: pw, confirmPassword: conf } = updated;
       if (conf && pw !== conf) {
         setAddFieldErrors(prev => ({ ...prev, confirmPassword: "Passwords do not match." }));
       } else {
@@ -266,7 +273,6 @@ export default function AdminPage() {
         }
       }, 400);
     }
-    void updated;
   }
 
   async function addUser(e: React.FormEvent) {
@@ -323,6 +329,52 @@ export default function AdminPage() {
     }
   }
 
+  async function deleteLog() {
+    if (!logDeleteConfirm) return;
+    const target = logDeleteConfirm;
+    setLogDeleteLoading(true);
+    try {
+      const res = await fetch(`/api/admin/activity/${target.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      setLogDeleteLoading(false);
+      setLogDeleteConfirm(null);
+      if (!res.ok) {
+        toast({ type: "error", title: "Delete failed", message: data.error ?? "Could not delete log entry." });
+        return;
+      }
+      setLogs(prev => prev.filter(l => l.id !== target.id));
+      setLogsTotal(t => Math.max(0, t - 1));
+      toast({ type: "success", title: "Log entry deleted", message: "Removed from activity log." });
+    } catch {
+      setLogDeleteLoading(false);
+      setLogDeleteConfirm(null);
+      toast({ type: "error", title: "Delete failed", message: "Network error. Please try again." });
+    }
+  }
+
+  async function clearAllLogs() {
+    if (clearLogsInput !== CLEAR_LOGS_PHRASE) return;
+    setClearLogsLoading(true);
+    try {
+      const res = await fetch("/api/admin/activity", { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      setClearLogsLoading(false);
+      setClearLogsConfirm(false);
+      if (!res.ok) {
+        toast({ type: "error", title: "Failed", message: data.error ?? "Could not clear activity log." });
+        return;
+      }
+      setLogs([]);
+      setLogsTotal(0);
+      setLogsPage(1);
+      toast({ type: "success", title: "Activity log cleared", message: `${data.deleted ?? 0} log entries removed.` });
+    } catch {
+      setClearLogsLoading(false);
+      setClearLogsConfirm(false);
+      toast({ type: "error", title: "Failed", message: "Network error. Please try again." });
+    }
+  }
+
   const selfId = session?.user?.id;
 
   const logsTotalPages = Math.max(1, Math.ceil(logsTotal / LOGS_LIMIT));
@@ -358,6 +410,41 @@ export default function AdminPage() {
         message={`Delete "${deleteConfirm?.name}"? This cannot be undone.`}
         confirmLabel="Delete" variant="danger" loading={deleteLoading}
         onConfirm={deleteUser} onCancel={() => setDeleteConfirm(null)}
+      />
+
+      <ConfirmDialog
+        open={!!logDeleteConfirm}
+        title="Delete Log Entry"
+        message="Delete this activity log entry? This cannot be undone."
+        confirmLabel="Delete" variant="danger" loading={logDeleteLoading}
+        onConfirm={deleteLog} onCancel={() => setLogDeleteConfirm(null)}
+      />
+
+      <ConfirmDialog
+        open={clearLogsConfirm}
+        title="Delete Entire Activity Log"
+        message={`Permanently delete all ${logsTotal} activity log entries? This cannot be undone.`}
+        confirmLabel="Delete All" variant="danger" loading={clearLogsLoading}
+        confirmDisabled={clearLogsInput !== CLEAR_LOGS_PHRASE}
+        detail={
+          <div className={styles.clearLogsConfirm}>
+            <label htmlFor="clear-logs-confirm">
+              Type <strong>{CLEAR_LOGS_PHRASE}</strong> to confirm
+            </label>
+            <input
+              id="clear-logs-confirm"
+              type="text"
+              autoComplete="off"
+              autoFocus
+              className={styles.inp}
+              value={clearLogsInput}
+              onChange={e => setClearLogsInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && clearLogsInput === CLEAR_LOGS_PHRASE) clearAllLogs(); }}
+            />
+          </div>
+        }
+        onConfirm={clearAllLogs}
+        onCancel={() => { if (!clearLogsLoading) { setClearLogsConfirm(false); setClearLogsInput(""); } }}
       />
 
       <div className="page-header">
@@ -642,10 +729,18 @@ export default function AdminPage() {
             <h2 className={styles.sectionTitle}>Activity Log</h2>
             <p className={styles.sectionSub}>{logsTotal} total actions recorded</p>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => loadLogs(logsPage, logsFilter)}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-            Refresh
-          </Button>
+          <div className={styles.logsHeaderActions}>
+            <Button variant="secondary" size="sm" onClick={() => loadLogs(logsPage, logsFilter)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+              Refresh
+            </Button>
+            {logsTotal > 0 && (
+              <Button variant="dangerOutline" size="sm" onClick={() => { setClearLogsInput(""); setClearLogsConfirm(true); }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                Delete All
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Filters */}
@@ -676,6 +771,7 @@ export default function AdminPage() {
               <col className={styles.colAction} />
               <col />
               <col className={styles.colTime} />
+              <col className={styles.colLogActions} />
             </colgroup>
             <thead>
               <tr>
@@ -683,6 +779,7 @@ export default function AdminPage() {
                 <th>Action</th>
                 <th>Details</th>
                 <th>Time</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -698,10 +795,11 @@ export default function AdminPage() {
                     <td><div className={styles.skLogActionPill} style={{ width: [100, 120, 95, 130, 108, 118, 100, 125][i % 8] }} /></td>
                     <td><div className={styles.skLogDetails} /></td>
                     <td><div className={styles.skLogTime} /></td>
+                    <td></td>
                   </tr>
                 ))
               ) : visibleLogs.length === 0 ? (
-                <tr><td colSpan={4} className="table-empty-cell">
+                <tr><td colSpan={5} className="table-empty-cell">
                   {logsSearch || logsFilter ? "No matching activity found." : "No activity recorded yet. Actions will appear here as staff use the app."}
                 </td></tr>
               ) : visibleLogs.map(log => (
@@ -718,6 +816,11 @@ export default function AdminPage() {
                   <td data-label="Action"><ActionBadge action={log.action} /></td>
                   <td data-mobile-full data-label="Details" className={styles.logDetails}>{log.details}</td>
                   <td data-label="Time" className={styles.logTime}>{fmtTime(log.createdAt)}</td>
+                  <td data-label="Actions">
+                    <Button variant="dangerOutline" size="sm" onClick={() => setLogDeleteConfirm(log)}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>

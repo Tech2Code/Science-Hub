@@ -38,6 +38,9 @@
   background-position: right 0.75rem center;
   background-size: 1rem;
   padding-right: 2.5rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .mono {

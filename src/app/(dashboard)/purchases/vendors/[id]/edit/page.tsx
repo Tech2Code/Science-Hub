@@ -13,6 +13,12 @@ import styles from "./vendorEdit.module.css";
 
 type StrForm = { name: string; company: string; gstin: string; phone: string; email: string; };
 
+function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
+  return (
+    <div className={styles.skeletonBlock} style={{ width: w, height: h, borderRadius: r } as React.CSSProperties} />
+  );
+}
+
 export default function EditVendorPage() {
   const router = useRouter();
   const toast = useToast();
@@ -77,7 +83,28 @@ export default function EditVendorPage() {
 
   const hasChanges = initialForm !== null && JSON.stringify(form) !== JSON.stringify(initialForm);
 
-  if (loading) return <div className="loading-center">Loading vendor…</div>;
+  if (loading) return (
+    <>
+      <OverlayLoader text="Loading vendor…" />
+      <div className={`page-stack ${styles.pageStack}`}>
+        <Sk w={160} h={13} />
+        <Sk w={180} h={20} />
+        <div className="form-card">
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={100} h={12} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={140} h={12} /><Sk h={38} r={8} /></div>
+          </div>
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
+          </div>
+          <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
+          <div className={styles.skFieldStack}><Sk w={80} h={12} /><Sk h={60} r={8} /></div>
+          <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={60} r={8} /></div>
+        </div>
+      </div>
+    </>
+  );
 
   return (
     <>

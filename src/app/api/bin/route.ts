@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { deleteAttachmentBlob } from "@/lib/blobStorage";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
 
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    // Auto-purge items older than 30 days
-    // Invoices (cascade handles items/payments)
+    // Auto-purge items older than 30 days. Invoices and purchase bills go
+    // first (cascade handles their items/payments) so a product/customer/
+    // vendor blocked only by a to-be-purged invoice or bill gets freed up
+    // in this same pass, matching /api/bin/empty's ordering.
     const oldInvoices = await prisma.invoice.findMany({
       where: { deletedAt: { not: null, lt: cutoff } },
       select: { id: true },
@@ -21,11 +23,45 @@ export async function GET() {
       await prisma.invoice.deleteMany({ where: { id: { in: oldInvoices.map((i) => i.id) } } });
     }
 
-    // Products
-    await prisma.product.deleteMany({ where: { deletedAt: { not: null, lt: cutoff } } });
+    const oldPurchaseBills = await prisma.purchaseBill.findMany({
+      where: { deletedAt: { not: null, lt: cutoff } },
+      select: { id: true, attachmentUrl: true },
+    });
+    if (oldPurchaseBills.length > 0) {
+      await prisma.purchaseBill.deleteMany({ where: { id: { in: oldPurchaseBills.map((b) => b.id) } } });
+      await Promise.all(oldPurchaseBills.map((b) => deleteAttachmentBlob(b.attachmentUrl)));
+    }
 
-    // Customers
-    await prisma.customer.deleteMany({ where: { deletedAt: { not: null, lt: cutoff } } });
+    // Products — only purge if not referenced by invoice items, purchase
+    // items, or stock movements (matches the manual permanent-delete rule;
+    // an unguarded deleteMany would throw on the FK constraint and crash
+    // this whole request)
+    const oldProducts = await prisma.product.findMany({
+      where: { deletedAt: { not: null, lt: cutoff } },
+      select: { id: true },
+    });
+    for (const product of oldProducts) {
+      const [itemCount, purchaseItemCount, movementCount] = await Promise.all([
+        prisma.invoiceItem.count({ where: { productId: product.id } }),
+        prisma.purchaseBillItem.count({ where: { productId: product.id } }),
+        prisma.stockMovement.count({ where: { productId: product.id } }),
+      ]);
+      if (itemCount === 0 && purchaseItemCount === 0 && movementCount === 0) {
+        await prisma.product.delete({ where: { id: product.id } });
+      }
+    }
+
+    // Customers — only purge if no invoices reference them at all
+    const oldCustomers = await prisma.customer.findMany({
+      where: { deletedAt: { not: null, lt: cutoff } },
+      select: { id: true },
+    });
+    for (const customer of oldCustomers) {
+      const invoiceCount = await prisma.invoice.count({ where: { customerId: customer.id } });
+      if (invoiceCount === 0) {
+        await prisma.customer.delete({ where: { id: customer.id } });
+      }
+    }
 
     // Brands — unassign products first
     const oldBrands = await prisma.brand.findMany({
@@ -51,16 +87,6 @@ export async function GET() {
       await prisma.category.deleteMany({ where: { id: { in: oldCategories.map((c) => c.id) } } });
     }
 
-    // Purchase bills (cascade handles items/payments)
-    const oldPurchaseBills = await prisma.purchaseBill.findMany({
-      where: { deletedAt: { not: null, lt: cutoff } },
-      select: { id: true, attachmentUrl: true },
-    });
-    if (oldPurchaseBills.length > 0) {
-      await prisma.purchaseBill.deleteMany({ where: { id: { in: oldPurchaseBills.map((b) => b.id) } } });
-      await Promise.all(oldPurchaseBills.map((b) => deleteAttachmentBlob(b.attachmentUrl)));
-    }
-
     // Vendors — only purge if no purchase bills reference them at all
     const oldVendors = await prisma.vendor.findMany({
       where: { deletedAt: { not: null, lt: cutoff } },
@@ -71,6 +97,17 @@ export async function GET() {
       if (billCount === 0) {
         await prisma.vendor.delete({ where: { id: vendor.id } });
       }
+    }
+
+    const purged = oldInvoices.length + oldPurchaseBills.length + oldProducts.length
+      + oldCustomers.length + oldBrands.length + oldCategories.length + oldVendors.length;
+    if (purged > 0) {
+      revalidateTag("invoices", { expire: 0 });
+      revalidateTag("customers", { expire: 0 });
+      revalidateTag("products", { expire: 0 });
+      revalidateTag("vendors", { expire: 0 });
+      revalidateTag("purchase-bills", { expire: 0 });
+      revalidateTag("reports", { expire: 0 });
     }
 
     // Fetch remaining soft-deleted items
@@ -114,6 +151,35 @@ export async function GET() {
       }),
     ]);
 
+    // Figure out which items are protected from permanent deletion by an FK
+    // reference, so the UI can explain why "Delete Forever" won't work
+    // instead of letting the user find out via a failed request.
+    const [customerBlocks, productBlocks, vendorBlocks] = await Promise.all([
+      Promise.all(customers.map(async (c) => {
+        const invoiceCount = await prisma.invoice.count({ where: { customerId: c.id } });
+        return [c.id, invoiceCount > 0 ? `Has ${invoiceCount} invoice(s) on record (including any in the bin)` : undefined] as const;
+      })),
+      Promise.all(products.map(async (p) => {
+        const [itemCount, purchaseItemCount, movementCount] = await Promise.all([
+          prisma.invoiceItem.count({ where: { productId: p.id } }),
+          prisma.purchaseBillItem.count({ where: { productId: p.id } }),
+          prisma.stockMovement.count({ where: { productId: p.id } }),
+        ]);
+        let reason: string | undefined;
+        if (itemCount > 0) reason = `Used in ${itemCount} invoice line item(s) (including any in the bin)`;
+        else if (purchaseItemCount > 0) reason = `Used in ${purchaseItemCount} purchase bill line item(s) (including any in the bin)`;
+        else if (movementCount > 0) reason = `Has ${movementCount} stock movement record(s) in its history`;
+        return [p.id, reason] as const;
+      })),
+      Promise.all(vendors.map(async (v) => {
+        const billCount = await prisma.purchaseBill.count({ where: { vendorId: v.id } });
+        return [v.id, billCount > 0 ? `Has ${billCount} purchase bill(s) on record (including any in the bin)` : undefined] as const;
+      })),
+    ]);
+    const customerBlockMap = new Map(customerBlocks);
+    const productBlockMap = new Map(productBlocks);
+    const vendorBlockMap = new Map(vendorBlocks);
+
     // Look up who deleted each item from ActivityLog (batch, no schema change needed)
     const allIds = [
       ...invoices.map(i => i.id),
@@ -145,6 +211,7 @@ export async function GET() {
       deletedAt: string;
       daysLeft: number;
       deletedBy?: string;
+      protectedReason?: string;
     };
 
     const items: BinItem[] = [
@@ -170,6 +237,7 @@ export async function GET() {
           deletedAt: (c.deletedAt as Date).toISOString(),
           daysLeft: Math.max(0, 30 - daysSince),
           deletedBy: deletedByMap.get(c.id),
+          protectedReason: customerBlockMap.get(c.id),
         };
       }),
       ...products.map((p) => {
@@ -182,6 +250,7 @@ export async function GET() {
           deletedAt: (p.deletedAt as Date).toISOString(),
           daysLeft: Math.max(0, 30 - daysSince),
           deletedBy: deletedByMap.get(p.id),
+          protectedReason: productBlockMap.get(p.id),
         };
       }),
       ...brands.map((b) => {
@@ -218,6 +287,7 @@ export async function GET() {
           deletedAt: (v.deletedAt as Date).toISOString(),
           daysLeft: Math.max(0, 30 - daysSince),
           deletedBy: deletedByMap.get(v.id),
+          protectedReason: vendorBlockMap.get(v.id),
         };
       }),
       ...purchaseBills.map((b) => {

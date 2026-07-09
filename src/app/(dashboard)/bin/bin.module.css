@@ -2,6 +2,36 @@
   overflow: hidden;
 }
 
+.typeToConfirm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.typeToConfirm label {
+  font-size: 0.8125rem;
+  color: var(--c-text-muted);
+}
+
+.protectedBadge {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.0625rem 0.4375rem;
+  border-radius: 9999px;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: var(--c-amber-bg);
+  color: var(--c-amber);
+  border: 1px solid var(--c-amber-border, #fde68a);
+  cursor: help;
+}
+
 .sectionToggle {
   display: flex;
   align-items: center;
@@ -117,8 +147,13 @@
 }
 
 .nameCell {
+  position: relative;
   font-weight: 500;
   color: var(--c-text);
+}
+
+.nameCellProtected {
+  padding-right: 4.5rem;
 }
 
 .detailsCell {

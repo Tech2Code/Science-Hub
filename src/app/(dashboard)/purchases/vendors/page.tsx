@@ -41,6 +41,7 @@ export default function VendorsPage() {
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [openingEditId, setOpeningEditId] = useState<string | null>(null);
   const router = useRouter();
 
@@ -64,21 +65,21 @@ export default function VendorsPage() {
   async function handleDelete() {
     if (!deleteTarget) return;
     const target = deleteTarget;
-    const previous = vendors;
-    patchData((prev) => (prev ?? []).filter((v) => v.id !== target.id));
-    setDeleteTarget(null);
+    setDeleting(true);
     try {
       const res = await fetch(`/api/vendors/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
+        patchData((prev) => (prev ?? []).filter((v) => v.id !== target.id));
         toast({ type: "success", title: "Vendor deleted", message: `"${target.name}" removed.` });
       } else {
-        patchData(() => previous);
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete vendor." });
       }
     } catch {
-      patchData(() => previous);
       toast({ type: "error", title: "Delete failed", message: "Network error." });
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
     }
   }
 
@@ -91,6 +92,7 @@ export default function VendorsPage() {
       message={`Delete "${deleteTarget?.name}"? This cannot be undone.`}
       confirmLabel="Delete"
       variant="danger"
+      loading={deleting}
       onConfirm={handleDelete}
       onCancel={() => setDeleteTarget(null)}
     />

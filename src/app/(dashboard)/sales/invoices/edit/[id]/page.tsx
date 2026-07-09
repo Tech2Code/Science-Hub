@@ -10,6 +10,7 @@ import { fetchCached, bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { INDIA_STATES } from "@/lib/states";
 import styles from "./edit.module.css";
 
 
@@ -24,7 +25,7 @@ interface LineItem {
 
 interface InvoiceData {
   id: string; invoiceNumber: string; status: string;
-  isInterState: boolean; dueDate?: string; notes?: string;
+  isInterState: boolean; placeOfSupply?: string; reverseCharge?: boolean; dueDate?: string; notes?: string;
   customer: { id: string; name: string; city: string; state: string; gstin: string; };
   items: Array<{ productId: string; name: string; unit: string; quantity: number; price: number; gstRate: number; }>;
 }
@@ -36,8 +37,11 @@ export default function EditInvoicePage() {
   const [invoice, setInvoice] = useState<InvoiceData | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [isInterState, setIsInterState] = useState(false);
+  const [placeOfSupply, setPlaceOfSupply] = useState("");
+  const [businessState, setBusinessState] = useState("");
+  const [reverseCharge, setReverseCharge] = useState(false);
   const [items, setItems] = useState<LineItem[]>([]);
-  const [initialState, setInitialState] = useState<{ isInterState: boolean; items: LineItem[]; notes: string; dueDate: string } | null>(null);
+  const [initialState, setInitialState] = useState<{ isInterState: boolean; placeOfSupply: string; reverseCharge: boolean; items: LineItem[]; notes: string; dueDate: string } | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [notes, setNotes] = useState("");
@@ -52,12 +56,15 @@ export default function EditInvoicePage() {
     Promise.all([
       fetchCached(`/api/invoices/${id}`),
       fetchCached("/api/products").catch(() => []),
-    ]).then(([inv, prods]) => {
+      fetchCached("/api/settings").catch(() => null),
+    ]).then(([inv, prods, settings]) => {
       const invoice = inv as InvoiceData;
       const products = prods as Product[];
       setInvoice(invoice);
       setProducts(products);
+      setBusinessState((settings as { state?: string } | null)?.state ?? "");
       const inter = invoice.isInterState ?? false;
+      const pos = invoice.placeOfSupply ?? invoice.customer.state ?? "";
       const notesVal = invoice.notes ?? "";
       const dueDateVal = invoice.dueDate ? invoice.dueDate.split("T")[0] : "";
       const lineItems: LineItem[] = invoice.items.map((item: InvoiceData["items"][0]) => ({
@@ -68,11 +75,14 @@ export default function EditInvoicePage() {
         price: item.price,
         gstRate: item.gstRate,
       }));
+      const rc = invoice.reverseCharge ?? false;
       setIsInterState(inter);
+      setPlaceOfSupply(pos);
+      setReverseCharge(rc);
       setNotes(notesVal);
       setDueDate(dueDateVal);
       setItems(lineItems);
-      setInitialState({ isInterState: inter, items: lineItems, notes: notesVal, dueDate: dueDateVal });
+      setInitialState({ isInterState: inter, placeOfSupply: pos, reverseCharge: rc, items: lineItems, notes: notesVal, dueDate: dueDateVal });
       setLoading(false);
     }).catch(() => { setError("Failed to load invoice."); setLoading(false); });
   }, [id]);
@@ -105,6 +115,7 @@ export default function EditInvoicePage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (items.length === 0) { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
+    if (!placeOfSupply) { toast({ type: "error", title: "Check form", message: "Select place of supply." }); return; }
     for (const item of items) {
       const qtyErr   = validate(String(item.qty),   rules.positiveNumber("Item quantity must be greater than 0."));
       const priceErr = validate(String(item.price), rules.nonNegativeNumber("Item price cannot be negative."));
@@ -139,6 +150,8 @@ export default function EditInvoicePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         isInterState,
+        placeOfSupply,
+        reverseCharge,
         items: items.map((i) => ({ productId: i.productId, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit })),
         notes,
         dueDate: dueDate || undefined,
@@ -256,9 +269,24 @@ export default function EditInvoicePage() {
               </div>
             </div>
 
-            {/* Inter-state + due date */}
+            {/* Place of supply + inter-state + due date */}
             <div className={`card ${styles.sectionCard}`}>
               <div className={styles.optionsRow}>
+                <div className={styles.dueDateGroup}>
+                  <label className={styles.dueDateLabel}>Place of supply *</label>
+                  <select
+                    value={placeOfSupply}
+                    onChange={(e) => {
+                      const state = e.target.value;
+                      setPlaceOfSupply(state);
+                      if (state && businessState) setIsInterState(state !== businessState);
+                    }}
+                    className={styles.dueDateInput}
+                  >
+                    <option value="">Select state…</option>
+                    {INDIA_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
                 <label className={styles.switchLabel}>
                   <div
                     role="switch"
@@ -269,6 +297,17 @@ export default function EditInvoicePage() {
                     <span className={`${styles.switchThumb} ${isInterState ? styles.switchThumbOn : ""}`} />
                   </div>
                   <span className={styles.switchText}>Inter-state supply (IGST)</span>
+                </label>
+                <label className={styles.switchLabel}>
+                  <div
+                    role="switch"
+                    aria-checked={reverseCharge}
+                    onClick={() => setReverseCharge((v) => !v)}
+                    className={`${styles.switchTrack} ${reverseCharge ? styles.switchTrackOn : ""}`}
+                  >
+                    <span className={`${styles.switchThumb} ${reverseCharge ? styles.switchThumbOn : ""}`} />
+                  </div>
+                  <span className={styles.switchText}>Reverse charge applicable</span>
                 </label>
                 <div className={styles.dueDateGroup}>
                   <label className={styles.dueDateLabel}>Due date</label>
@@ -331,7 +370,7 @@ export default function EditInvoicePage() {
                             />
                           </td>
                           <td className={styles.itemsTd}>
-                            <input type="number" min="0" step="0.01" value={item.price}
+                            <input type="text" inputMode="decimal" value={item.price}
                               onChange={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
                               className={styles.priceInput}
                             />
@@ -404,9 +443,14 @@ export default function EditInvoicePage() {
               {items.length === 0 && (
                 <p className={styles.summaryHint}>• Add at least one item</p>
               )}
+              {!placeOfSupply && items.length > 0 && (
+                <p className={styles.summaryHint}>• Select place of supply</p>
+              )}
               {(() => {
                 const hasChanges = initialState === null || (
                   isInterState !== initialState.isInterState ||
+                  placeOfSupply !== initialState.placeOfSupply ||
+                  reverseCharge !== initialState.reverseCharge ||
                   notes !== initialState.notes ||
                   dueDate !== initialState.dueDate ||
                   JSON.stringify(items) !== JSON.stringify(initialState.items)
@@ -417,7 +461,7 @@ export default function EditInvoicePage() {
                       type="submit"
                       variant="primary"
                       size="full"
-                      disabled={saving || items.length === 0 || !hasChanges}
+                      disabled={saving || items.length === 0 || !placeOfSupply || !hasChanges}
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Invoice
                     </Button>
