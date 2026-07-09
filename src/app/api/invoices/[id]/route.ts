@@ -54,17 +54,29 @@ export async function PUT(
 
     const existing = await prisma.invoice.findUnique({
       where: { id },
-      select: { paidAmount: true, status: true, invoiceNumber: true },
+      select: { paidAmount: true, status: true, invoiceNumber: true, date: true },
     });
     if (!existing) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     if (existing.status === "paid") {
       return NextResponse.json({ error: "A fully paid invoice cannot be edited" }, { status: 400 });
     }
 
-    for (const item of items as { qty?: number; quantity?: number; price: number; gstRate?: number }[]) {
+    if (dueDate) {
+      const parsedDueDate = new Date(dueDate);
+      if (isNaN(parsedDueDate.getTime())) {
+        return NextResponse.json({ error: "Invalid due date" }, { status: 400 });
+      }
+      const invoiceDate = new Date(existing.date); invoiceDate.setHours(0, 0, 0, 0);
+      if (parsedDueDate < invoiceDate) {
+        return NextResponse.json({ error: "Due date cannot be before the invoice date" }, { status: 400 });
+      }
+    }
+
+    for (const item of items as { qty?: number; quantity?: number; price: number; gstRate?: number; discountPercent?: number }[]) {
       const quantity = parseFloat(String(item.qty ?? item.quantity ?? 1));
       const price = parseFloat(String(item.price));
       const gstRate = parseFloat(String(item.gstRate ?? 0));
+      const discountPercent = parseFloat(String(item.discountPercent ?? 0));
       if (!(quantity > 0)) {
         return NextResponse.json({ error: "Item quantity must be greater than 0" }, { status: 400 });
       }
@@ -73,6 +85,9 @@ export async function PUT(
       }
       if (!(gstRate >= 0)) {
         return NextResponse.json({ error: "Item GST rate cannot be negative" }, { status: 400 });
+      }
+      if (!(discountPercent >= 0 && discountPercent <= 100)) {
+        return NextResponse.json({ error: "Item discount must be between 0 and 100%" }, { status: 400 });
       }
     }
 
@@ -86,22 +101,28 @@ export async function PUT(
 
     const invoiceItems = items.map((item: {
       productId: string; qty?: number; quantity?: number;
-      price: number; gstRate: number; unit?: string;
+      price: number; gstRate: number; unit?: string; hsn?: string; discountPercent?: number;
     }) => {
       const product = productMap.get(item.productId);
       const quantity = parseFloat(String(item.qty ?? item.quantity ?? 1));
       const price = parseFloat(String(item.price));
       const gstRate = parseFloat(String(item.gstRate ?? product?.gstRate ?? 18));
-      const itemSubtotal = price * quantity;
+      const discountPercent = parseFloat(String(item.discountPercent ?? 0));
+      const grossAmount = price * quantity;
+      const discountAmount = (grossAmount * discountPercent) / 100;
+      const itemSubtotal = grossAmount - discountAmount;
       const gstAmount = (itemSubtotal * gstRate) / 100;
       subtotal += itemSubtotal;
       totalGst += gstAmount;
       return {
         productId: item.productId,
         name: product?.name ?? "Unknown Product",
+        hsn: (item.hsn ?? product?.hsn ?? "").trim(),
         quantity,
         unit: item.unit ?? product?.unit ?? "Nos",
         price,
+        discountPercent,
+        discountAmount,
         gstRate,
         gstAmount,
         total: itemSubtotal + gstAmount,

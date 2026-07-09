@@ -39,10 +39,21 @@ export async function POST(request: NextRequest) {
     if (!placeOfSupply || !String(placeOfSupply).trim()) {
       return NextResponse.json({ error: "Place of supply is required" }, { status: 400 });
     }
-    for (const item of items as { quantity?: number; qty?: number; price: number; gstRate?: number }[]) {
+    if (dueDate) {
+      const parsedDueDate = new Date(dueDate);
+      if (isNaN(parsedDueDate.getTime())) {
+        return NextResponse.json({ error: "Invalid due date" }, { status: 400 });
+      }
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      if (parsedDueDate < today) {
+        return NextResponse.json({ error: "Due date cannot be in the past" }, { status: 400 });
+      }
+    }
+    for (const item of items as { quantity?: number; qty?: number; price: number; gstRate?: number; discountPercent?: number }[]) {
       const quantity = parseFloat(String(item.quantity ?? item.qty ?? 1));
       const price = parseFloat(String(item.price));
       const gstRate = parseFloat(String(item.gstRate ?? 0));
+      const discountPercent = parseFloat(String(item.discountPercent ?? 0));
       if (!(quantity > 0)) {
         return NextResponse.json({ error: "Item quantity must be greater than 0" }, { status: 400 });
       }
@@ -51,6 +62,9 @@ export async function POST(request: NextRequest) {
       }
       if (!(gstRate >= 0)) {
         return NextResponse.json({ error: "Item GST rate cannot be negative" }, { status: 400 });
+      }
+      if (!(discountPercent >= 0 && discountPercent <= 100)) {
+        return NextResponse.json({ error: "Item discount must be between 0 and 100%" }, { status: 400 });
       }
     }
 
@@ -99,12 +113,17 @@ export async function POST(request: NextRequest) {
       qty?: number;
       price: number;
       gstRate: number;
+      hsn?: string;
+      discountPercent?: number;
     }) => {
       const product = productMap.get(item.productId);
       const quantity = parseFloat(String(item.quantity ?? item.qty ?? 1));
       const price = parseFloat(String(item.price));
       const gstRate = parseFloat(String(item.gstRate ?? product?.gstRate ?? 18));
-      const itemSubtotal = price * quantity;
+      const discountPercent = parseFloat(String(item.discountPercent ?? 0));
+      const grossAmount = price * quantity;
+      const discountAmount = (grossAmount * discountPercent) / 100;
+      const itemSubtotal = grossAmount - discountAmount;
       const gstAmount = (itemSubtotal * gstRate) / 100;
       const itemTotal = itemSubtotal + gstAmount;
 
@@ -114,9 +133,12 @@ export async function POST(request: NextRequest) {
       return {
         productId: item.productId,
         name: product?.name ?? "Unknown Product",
+        hsn: (item.hsn ?? product?.hsn ?? "").trim(),
         quantity,
         unit: product?.unit ?? "Nos",
         price,
+        discountPercent,
+        discountAmount,
         gstRate,
         gstAmount,
         total: itemTotal,

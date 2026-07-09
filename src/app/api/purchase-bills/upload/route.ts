@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { put } from "@vercel/blob";
-import { deleteAttachmentBlob } from "@/lib/blobStorage";
+import { deleteAttachmentBlob, isPurchaseBillBlobUrl } from "@/lib/blobStorage";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"];
@@ -27,22 +27,6 @@ function matchesDeclaredType(bytes: Uint8Array, type: string): boolean {
       return hex(4) === "66" && hex(5) === "74" && hex(6) === "79" && hex(7) === "70";
     default:
       return false;
-  }
-}
-
-// Confines deletable blobs to this feature's own storage path — otherwise
-// any authenticated user could pass an arbitrary https URL and delete
-// unrelated blobs in the same Vercel Blob store.
-function isPurchaseBillBlobUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return (
-      parsed.protocol === "https:" &&
-      parsed.hostname.endsWith(".public.blob.vercel-storage.com") &&
-      parsed.pathname.startsWith("/purchase-bills/")
-    );
-  } catch {
-    return false;
   }
 }
 

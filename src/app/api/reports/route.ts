@@ -247,6 +247,12 @@ export async function GET(request: NextRequest) {
     if (!type) {
       return NextResponse.json({ error: "Query parameter 'type' is required" }, { status: 400 });
     }
+    if (startDate && isNaN(new Date(startDate).getTime())) {
+      return NextResponse.json({ error: "Invalid startDate" }, { status: 400 });
+    }
+    if (endDate && isNaN(new Date(endDate).getTime())) {
+      return NextResponse.json({ error: "Invalid endDate" }, { status: 400 });
+    }
 
     if (type === "summary")            return NextResponse.json(await getReportSummary());
     if (type === "outstanding")        return NextResponse.json(await getReportOutstanding(startDate, endDate));

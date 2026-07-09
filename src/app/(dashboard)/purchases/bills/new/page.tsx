@@ -328,6 +328,7 @@ export default function NewPurchaseBillPage() {
     if (items.some(i => !i.name.trim()))             { validationToast("All items must have a name."); return; }
     if (items.some(i => toNum(i.quantity) <= 0))     { validationToast("All quantities must be greater than 0."); return; }
     if (items.some(i => !i.purchasePrice.trim() || toNum(i.purchasePrice) <= 0)) { validationToast("All item prices must be greater than 0."); return; }
+    if (dueDate && dueDate < billDate)               { validationToast("Due date cannot be before the bill date."); return; }
 
     const billItems = items.map(i => ({
       productId:     i.productId || null,
@@ -463,7 +464,7 @@ export default function NewPurchaseBillPage() {
                     <Input value={ivGstin} onChange={e => { setIvGstin(e.target.value); setIvFieldErrors(p => ({ ...p, gstin: undefined })); }} placeholder="22AAAAA0000A1Z5" maxLength={15} mono />
                   </FormField>
                   <FormField label="Phone" required error={ivFieldErrors.phone}>
-                    <Input type="tel" inputMode="numeric" value={ivPhone} onChange={e => { setIvPhone(e.target.value); setIvFieldErrors(p => ({ ...p, phone: undefined })); }} placeholder="10-digit mobile" maxLength={10} />
+                    <Input type="tel" inputMode="numeric" value={ivPhone} onChange={e => { setIvPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); setIvFieldErrors(p => ({ ...p, phone: undefined })); }} placeholder="10-digit mobile" maxLength={10} />
                   </FormField>
                   <FormField label="Email" error={ivFieldErrors.email}>
                     <Input type="email" value={ivEmail} onChange={e => { setIvEmail(e.target.value); setIvFieldErrors(p => ({ ...p, email: undefined })); }} placeholder="vendor@example.com" />
@@ -567,7 +568,7 @@ export default function NewPurchaseBillPage() {
                         <Input sz="sm" type="number" min="1" step="1" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} className={styles.numInputRight} />
                       </td>
                       <td className={styles.tdRate}>
-                        <Input sz="sm" type="text" inputMode="decimal" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value)} placeholder="0.00" className={styles.numInputRight} />
+                        <Input sz="sm" type="text" inputMode="decimal" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" className={styles.numInputRight} />
                       </td>
                       <td className={styles.tdGst}>
                         <Select sz="sm" value={item.gstRate} onChange={e => handleItemChange(idx, "gstRate", e.target.value)}>

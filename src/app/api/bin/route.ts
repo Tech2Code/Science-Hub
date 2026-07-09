@@ -32,21 +32,21 @@ export async function GET() {
       await Promise.all(oldPurchaseBills.map((b) => deleteAttachmentBlob(b.attachmentUrl)));
     }
 
-    // Products — only purge if not referenced by invoice items, purchase
-    // items, or stock movements (matches the manual permanent-delete rule;
-    // an unguarded deleteMany would throw on the FK constraint and crash
-    // this whole request)
+    // Products — only purge if not referenced by invoice items or purchase
+    // items (matches the manual permanent-delete rule; an unguarded
+    // deleteMany would throw on the FK constraint and crash this whole
+    // request). Stock movements no longer block deletion — the product
+    // relation on StockMovement is nullable and set to SetNull on delete.
     const oldProducts = await prisma.product.findMany({
       where: { deletedAt: { not: null, lt: cutoff } },
       select: { id: true },
     });
     for (const product of oldProducts) {
-      const [itemCount, purchaseItemCount, movementCount] = await Promise.all([
+      const [itemCount, purchaseItemCount] = await Promise.all([
         prisma.invoiceItem.count({ where: { productId: product.id } }),
         prisma.purchaseBillItem.count({ where: { productId: product.id } }),
-        prisma.stockMovement.count({ where: { productId: product.id } }),
       ]);
-      if (itemCount === 0 && purchaseItemCount === 0 && movementCount === 0) {
+      if (itemCount === 0 && purchaseItemCount === 0) {
         await prisma.product.delete({ where: { id: product.id } });
       }
     }
@@ -160,15 +160,13 @@ export async function GET() {
         return [c.id, invoiceCount > 0 ? `Has ${invoiceCount} invoice(s) on record (including any in the bin)` : undefined] as const;
       })),
       Promise.all(products.map(async (p) => {
-        const [itemCount, purchaseItemCount, movementCount] = await Promise.all([
+        const [itemCount, purchaseItemCount] = await Promise.all([
           prisma.invoiceItem.count({ where: { productId: p.id } }),
           prisma.purchaseBillItem.count({ where: { productId: p.id } }),
-          prisma.stockMovement.count({ where: { productId: p.id } }),
         ]);
         let reason: string | undefined;
         if (itemCount > 0) reason = `Used in ${itemCount} invoice line item(s) (including any in the bin)`;
         else if (purchaseItemCount > 0) reason = `Used in ${purchaseItemCount} purchase bill line item(s) (including any in the bin)`;
-        else if (movementCount > 0) reason = `Has ${movementCount} stock movement record(s) in its history`;
         return [p.id, reason] as const;
       })),
       Promise.all(vendors.map(async (v) => {

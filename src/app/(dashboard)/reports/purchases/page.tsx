@@ -17,6 +17,10 @@ interface OutstandingBill {
   total: number; paidAmount: number; balance: number; status: string; aging: string;
 }
 interface CategoryRow { category: string; count: number; totalSpend: number; pct: number; }
+interface LedgerRow {
+  id: string; productId: string | null; productName: string; type: string; quantity: number;
+  balanceAfter: number; reference: string | null; notes: string | null; billNumber: string | null; createdAt: string;
+}
 
 const AGING_COLORS: Record<string, string> = {
   "Current": "var(--c-green-text)",
@@ -52,6 +56,19 @@ const CAT_COLS: Column[] = [
   { label: "% of Total",  cls: "table-th-right", mobile: "full+label" },
 ];
 
+const LEDGER_COLS: Column[] = [
+  { label: "Date",       mobile: "label" },
+  { label: "Product",    mobile: "label" },
+  { label: "Type",       mobile: "label" },
+  { label: "Qty",        cls: "table-th-right", mobile: "label" },
+  { label: "Balance",    cls: "table-th-right", mobile: "label" },
+  { label: "Reference",  mobile: "full+label" },
+];
+
+const LEDGER_TYPE_LABEL: Record<string, string> = {
+  purchase: "Purchase", sale: "Sale", adjustment: "Adjustment", return: "Return", manual: "Manual",
+};
+
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 function toCsv(headers: string[], rows: (string | number)[][]) {
@@ -79,7 +96,7 @@ function downloadCsv(filename: string, csv: string) {
   URL.revokeObjectURL(url);
 }
 
-type Tab = "summary" | "outstanding" | "category";
+type Tab = "summary" | "outstanding" | "category" | "ledger";
 
 export default function PurchaseReportsPage() {
   const [tab, setTab] = useState<Tab>("outstanding");
@@ -90,10 +107,27 @@ export default function PurchaseReportsPage() {
   const { data: summaryData, loading: loadingSummary } = useFetch<SummaryRow[]>("/api/purchase-reports?type=summary");
   const { data: outstandingData, loading: loadingOut } = useFetch<OutstandingBill[]>(`/api/purchase-reports?type=outstanding${dateQuery}`);
   const { data: categoryData, loading: loadingCat } = useFetch<CategoryRow[]>("/api/purchase-reports?type=category");
+  const { data: ledgerData, loading: loadingLedger } = useFetch<LedgerRow[]>("/api/purchase-reports?type=stock-ledger");
 
   const summaryRows = summaryData ?? [];
   const outstanding = outstandingData ?? [];
   const categoryRows = categoryData ?? [];
+  const ledgerRows = ledgerData ?? [];
+
+  const [ledgerSearch, setLedgerSearch] = useState("");
+  const filteredLedger = ledgerRows.filter((m) => {
+    const q = ledgerSearch.toLowerCase();
+    if (!q) return true;
+    return (
+      m.productName.toLowerCase().includes(q) ||
+      m.type.toLowerCase().includes(q) ||
+      m.reference?.toLowerCase().includes(q) ||
+      m.billNumber?.toLowerCase().includes(q)
+    );
+  });
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const [ledgerShowAll, setLedgerShowAll] = useState(false);
+  const { visible: visibleLedger } = usePagination(filteredLedger, ledgerPage, ledgerShowAll);
 
   function exportOutstandingCsv() {
     const csv = toCsv(
@@ -160,9 +194,9 @@ export default function PurchaseReportsPage() {
       {/* Tabs */}
       <div className={`card ${styles.tabsCard}`}>
         <div className={styles.tabsRow}>
-          {(["outstanding", "summary", "category"] as Tab[]).map((t) => (
+          {(["outstanding", "summary", "category", "ledger"] as Tab[]).map((t) => (
             <button key={t} className={`${styles.tabBtn} ${tab === t ? styles.active : ""}`} onClick={() => setTab(t)}>
-              {t === "outstanding" ? "Outstanding" : t === "summary" ? "Monthly Summary" : "By Category"}
+              {t === "outstanding" ? "Outstanding" : t === "summary" ? "Monthly Summary" : t === "category" ? "By Category" : "Stock Ledger"}
             </button>
           ))}
         </div>
@@ -286,11 +320,11 @@ export default function PurchaseReportsPage() {
                 {summaryRows.length > 0 && (
                   <tfoot>
                     <tr className={styles.footerRow}>
-                      <td className={styles.footerCell}>Total</td>
-                      <td className={styles.footerCellRight}>{summaryRows.reduce((s, r) => s + r.count, 0)}</td>
-                      <td className={styles.footerCellRightBold}>{fmt(summaryRows.reduce((s, r) => s + r.totalSpend, 0))}</td>
-                      <td className={styles.footerCellGreen}>{fmt(summaryRows.reduce((s, r) => s + r.paid, 0))}</td>
-                      <td className={styles.footerCellAmber}>{fmt(summaryRows.reduce((s, r) => s + r.payable, 0))}</td>
+                      <Cell col={SUMMARY_COLS[0]} className={styles.footerCell}>Total</Cell>
+                      <Cell col={SUMMARY_COLS[1]} className={styles.footerCellRight}>{summaryRows.reduce((s, r) => s + r.count, 0)}</Cell>
+                      <Cell col={SUMMARY_COLS[2]} className={styles.footerCellRightBold}>{fmt(summaryRows.reduce((s, r) => s + r.totalSpend, 0))}</Cell>
+                      <Cell col={SUMMARY_COLS[3]} className={styles.footerCellGreen}>{fmt(summaryRows.reduce((s, r) => s + r.paid, 0))}</Cell>
+                      <Cell col={SUMMARY_COLS[4]} className={styles.footerCellAmber}>{fmt(summaryRows.reduce((s, r) => s + r.payable, 0))}</Cell>
                     </tr>
                   </tfoot>
                 )}
@@ -335,6 +369,68 @@ export default function PurchaseReportsPage() {
                 </tbody>
               </table>
             </div>
+          </>
+        )}
+
+        {/* Stock Ledger tab */}
+        {tab === "ledger" && (
+          <>
+            <div className="card-header">
+              <div>
+                <h2 className="card-header-title">Stock Movement Ledger</h2>
+                <p className="card-header-sub">
+                  Full history of stock changes (purchase, sale, adjustment, return) — most recent 500. Records for deleted
+                  products remain here permanently for audit purposes.
+                </p>
+              </div>
+              {!loadingLedger && (
+                <ShowAllToggle total={filteredLedger.length} showAll={ledgerShowAll} onToggle={() => { setLedgerShowAll((v) => !v); setLedgerPage(1); }} />
+              )}
+            </div>
+            <div className={styles.dateFilterRow}>
+              <input
+                type="search"
+                aria-label="Search stock ledger"
+                placeholder="Search by product, type, or reference…"
+                value={ledgerSearch}
+                onChange={(e) => { setLedgerSearch(e.target.value); setLedgerPage(1); }}
+                className="search-input"
+              />
+            </div>
+            <div className="table-wrap">
+              <table className="table-base">
+                <thead><tr>{LEDGER_COLS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr></thead>
+                <tbody>
+                  {loadingLedger ? <TableSkeleton cols={LEDGER_COLS.length} /> : filteredLedger.length === 0 ? (
+                    <tr><td colSpan={LEDGER_COLS.length} className="table-empty-cell">{ledgerSearch ? "No stock movements match your search." : "No stock movements recorded."}</td></tr>
+                  ) : visibleLedger.map((m) => (
+                    <tr key={m.id}>
+                      <Cell col={LEDGER_COLS[0]} className={styles.textMuted3}>
+                        {new Date(m.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                      </Cell>
+                      <Cell col={LEDGER_COLS[1]} className={styles.rowFontMedium}>
+                        {m.productId ? (
+                          <Link href={`/products/${m.productId}`} className="table-link">{m.productName}</Link>
+                        ) : (
+                          <span className={styles.textMuted4}>{m.productName} (deleted)</span>
+                        )}
+                      </Cell>
+                      <Cell col={LEDGER_COLS[2]} className={styles.textMuted3}>{LEDGER_TYPE_LABEL[m.type] ?? m.type}</Cell>
+                      <Cell col={LEDGER_COLS[3]} className={m.quantity >= 0 ? styles.paidGreen : styles.balanceAmount}>
+                        {m.quantity >= 0 ? `+${m.quantity}` : m.quantity}
+                      </Cell>
+                      <Cell col={LEDGER_COLS[4]} className={styles.textMuted2}>{m.balanceAfter}</Cell>
+                      <Cell col={LEDGER_COLS[5]} className={styles.textMuted4}>
+                        {m.billNumber ?? m.reference ?? "—"}
+                      </Cell>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!loadingLedger && filteredLedger.length > 0 && (
+              <Pagination total={filteredLedger.length} page={ledgerPage} showAll={ledgerShowAll} onPage={setLedgerPage} label="movements" />
+            )}
           </>
         )}
       </div>

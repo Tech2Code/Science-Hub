@@ -24,7 +24,8 @@ export default function NewVendorPage() {
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
     const { name, value, type } = e.target;
-    setForm(prev => ({ ...prev, [name]: type === "checkbox" ? (e.target as HTMLInputElement).checked : value }));
+    const nextValue = name === "phone" ? value.replace(/\D/g, "").slice(0, 10) : value;
+    setForm(prev => ({ ...prev, [name]: type === "checkbox" ? (e.target as HTMLInputElement).checked : nextValue }));
     setErrors(prev => ({ ...prev, [name]: undefined }));
   }
 

@@ -27,7 +27,7 @@ export default function NewProductPage() {
     price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: "5",
     brandId: "", categoryId: "",
   });
-  const [fieldErrors, setFieldErrors] = useState<{ name?: string; price?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; price?: string; purchasePrice?: string; stock?: string; minStock?: string }>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -38,14 +38,20 @@ export default function NewProductPage() {
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
-    if (name === "name" || name === "price") setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
+    if (name in fieldErrors) setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const nameErr  = validate(form.name,  rules.required("Product name is required."));
-    const priceErr = validate(form.price, rules.required("Price is required."), rules.positiveNumber("Price must be greater than 0."));
-    if (nameErr || priceErr) { setFieldErrors({ name: nameErr ?? undefined, price: priceErr ?? undefined }); return; }
+    const nameErr          = validate(form.name,  rules.required("Product name is required."));
+    const priceErr         = validate(form.price, rules.required("Price is required."), rules.positiveNumber("Price must be greater than 0."));
+    const purchasePriceErr = form.purchasePrice.trim() ? validate(form.purchasePrice, rules.nonNegativeNumber("Purchase price cannot be negative.")) : null;
+    const stockErr         = validate(form.stock, rules.required("Stock is required."), rules.nonNegativeNumber("Stock cannot be negative."));
+    const minStockErr      = validate(form.minStock, rules.required("Minimum stock is required."), rules.nonNegativeNumber("Minimum stock cannot be negative."));
+    if (nameErr || priceErr || purchasePriceErr || stockErr || minStockErr) {
+      setFieldErrors({ name: nameErr ?? undefined, price: priceErr ?? undefined, purchasePrice: purchasePriceErr ?? undefined, stock: stockErr ?? undefined, minStock: minStockErr ?? undefined });
+      return;
+    }
     setFieldErrors({}); setSaving(true);
     const res = await fetch("/api/products", {
       method: "POST",
@@ -112,16 +118,16 @@ export default function NewProductPage() {
         </div>
 
         <div className="form-grid-2">
-          <FormField label="Purchase Price (₹)" hint="Used to auto-fill the rate on Purchase Bills.">
+          <FormField label="Purchase Price (₹)" hint="Used to auto-fill the rate on Purchase Bills." error={fieldErrors.purchasePrice}>
             <Input name="purchasePrice" type="number" min="0" step="0.01" value={form.purchasePrice} onChange={handleChange} placeholder="0.00" />
           </FormField>
         </div>
 
         <div className="form-grid-2">
-          <FormField label="Opening Stock">
+          <FormField label="Opening Stock" error={fieldErrors.stock}>
             <Input name="stock" type="number" min="0" value={form.stock} onChange={handleChange} />
           </FormField>
-          <FormField label="Minimum Stock" hint="Alert triggers when stock drops to or below this.">
+          <FormField label="Minimum Stock" hint="Alert triggers when stock drops to or below this." error={fieldErrors.minStock}>
             <Input name="minStock" type="number" min="0" value={form.minStock} onChange={handleChange} />
           </FormField>
         </div>

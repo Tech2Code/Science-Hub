@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { StatusBadge } from "@/components/ui/Badge";
 import { OverlayLoader } from "@/components/ui/Spinner";
+import { Sk } from "@/components/ui/Skeleton";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { bustCache } from "@/lib/useCache";
@@ -86,6 +87,8 @@ export default function PurchaseBillDetailPage() {
   const [updatingStatus] = useState(false);
   const [confirmCancel,  setConfirmCancel]  = useState(false);
   const [cancelling,     setCancelling]     = useState(false);
+  const [confirmDelete,  setConfirmDelete]  = useState(false);
+  const [deleting,       setDeleting]       = useState(false);
 
   function load() {
     setLoading(true);
@@ -171,11 +174,99 @@ export default function PurchaseBillDetailPage() {
     setConfirmCancel(false);
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/purchase-bills/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        bustCache("/api/purchase-bills");
+        toast({ type: "success", title: "Deleted", message: "Purchase bill moved to bin." });
+        router.push("/purchases/bills");
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete purchase bill." });
+      }
+    } catch {
+      toast({ type: "error", title: "Delete failed", message: "Network error." });
+    }
+    setDeleting(false);
+    setConfirmDelete(false);
+  }
+
   if (loading) return (
     <div className={`page-stack ${styles.pageStack}`}>
-      {[120, 80, 200, 300].map((h, i) => (
-        <div key={i} className={styles.skeletonBlock} style={{ height: h }} />
-      ))}
+      {/* Toolbar */}
+      <div className={styles.toolbarRow}>
+        <div>
+          <Sk w={160} h={12} r={3} />
+          <div className={styles.titleRow}>
+            <Sk w={140} h={22} r={4} />
+            <Sk w={70} h={20} r={9999} />
+          </div>
+        </div>
+        <div className={styles.toolbarActions}>
+          <Sk w={110} h={30} r={6} />
+          <Sk w={70} h={30} r={6} />
+          <Sk w={140} h={30} r={6} />
+          <Sk w={100} h={30} r={6} />
+          <Sk w={80} h={30} r={6} />
+        </div>
+      </div>
+
+      {/* KPI stat strip */}
+      <div className={styles.statStrip}>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className={styles.statCard}>
+            <Sk w={60} h={10} r={3} />
+            <Sk w={80} h={18} r={3} />
+          </div>
+        ))}
+      </div>
+
+      {/* Info cards: Vendor | Bill Meta */}
+      <div className={styles.infoGrid}>
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="card">
+            <Sk w={60} h={10} r={3} />
+            <Sk w={140} h={16} r={3} />
+            {Array.from({ length: 3 }).map((_, j) => (
+              <div key={j} className={styles.infoRow}>
+                <Sk w={70} h={11} r={3} />
+                <Sk w={100} h={11} r={3} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* Items table */}
+      <div className="card">
+        <Sk w={80} h={14} r={3} />
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className={styles.tfootRow} style={{ display: "flex", gap: "1rem", padding: "0.625rem 0" }}>
+            <Sk w={20} h={12} r={3} />
+            <Sk w="35%" h={12} r={3} />
+            <Sk w="10%" h={12} r={3} />
+            <Sk w="12%" h={12} r={3} />
+            <Sk w="10%" h={12} r={3} />
+            <Sk w="12%" h={12} r={3} />
+            <Sk w="12%" h={12} r={3} />
+          </div>
+        ))}
+      </div>
+
+      {/* Payment history table */}
+      <div className="card">
+        <Sk w={140} h={14} r={3} />
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} style={{ display: "flex", gap: "1rem", padding: "0.625rem 0" }}>
+            <Sk w="20%" h={12} r={3} />
+            <Sk w="20%" h={12} r={3} />
+            <Sk w="30%" h={12} r={3} />
+            <Sk w="15%" h={12} r={3} />
+          </div>
+        ))}
+      </div>
     </div>
   );
   if (error || !bill) return <div className={`error-banner ${styles.errorBanner}`}>{error || "Bill not found."}</div>;
@@ -186,6 +277,7 @@ export default function PurchaseBillDetailPage() {
   return (
     <>
     {(submitting || updatingStatus || cancelling) && <OverlayLoader text="Saving…" />}
+    {deleting && <OverlayLoader text="Deleting…" />}
     {openingEdit && <OverlayLoader text="Opening editor…" />}
     {pdfDownloading && <OverlayLoader text="Generating PDF…" />}
 
@@ -250,25 +342,30 @@ export default function PurchaseBillDetailPage() {
             </tr>
           ))}
         </tbody>
-        <tfoot>
-          <tr>
-            <td colSpan={5} style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right", fontWeight: 700 }}>Grand Total</td>
-            <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right", fontWeight: 700 }}>{fmt(bill.total)}</td>
-          </tr>
-        </tfoot>
       </table>
 
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-        <table style={{ fontSize: 11, minWidth: 220 }}>
-          <tbody>
-            <tr><td style={{ padding: "2px 8px", color: "var(--bp-tx3)" }}>Subtotal</td><td style={{ padding: "2px 8px", textAlign: "right" }}>₹{fmt(bill.subtotal)}</td></tr>
-            <tr><td style={{ padding: "2px 8px", color: "var(--bp-tx3)" }}>GST</td><td style={{ padding: "2px 8px", textAlign: "right" }}>₹{fmt(bill.taxAmount)}</td></tr>
-            {bill.discount > 0 && <tr><td style={{ padding: "2px 8px", color: "var(--bp-tx3)" }}>Discount</td><td style={{ padding: "2px 8px", textAlign: "right" }}>−₹{fmt(bill.discount)}</td></tr>}
-            <tr><td style={{ padding: "4px 8px", fontWeight: 700, borderTop: `1px solid var(--bp-bd)` }}>Total</td><td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 700, borderTop: `1px solid var(--bp-bd)` }}>₹{fmt(bill.total)}</td></tr>
-            <tr><td style={{ padding: "2px 8px", color: "var(--bp-tx3)" }}>Paid</td><td style={{ padding: "2px 8px", textAlign: "right" }}>₹{fmt(bill.paidAmount)}</td></tr>
-            <tr><td style={{ padding: "2px 8px", fontWeight: 700 }}>Balance Due</td><td style={{ padding: "2px 8px", textAlign: "right", fontWeight: 700 }}>₹{fmt(balance)}</td></tr>
-          </tbody>
-        </table>
+        {(() => {
+          const bd = `1px solid var(--bp-bd)`;
+          const row = (label: string, value: string, opts?: { bold?: boolean; muted?: boolean }) => (
+            <tr key={label}>
+              <td style={{ border: bd, padding: "4px 8px", fontWeight: opts?.bold ? 700 : undefined, color: opts?.muted ? "var(--bp-tx3)" : undefined }}>{label}</td>
+              <td style={{ border: bd, padding: "4px 8px", textAlign: "right", fontWeight: opts?.bold ? 700 : undefined }}>{value}</td>
+            </tr>
+          );
+          return (
+            <table style={{ fontSize: 11, minWidth: 220, borderCollapse: "collapse" }}>
+              <tbody>
+                {row("Subtotal", `₹${fmt(bill.subtotal)}`, { muted: true })}
+                {row("GST", `₹${fmt(bill.taxAmount)}`, { muted: true })}
+                {bill.discount > 0 && row("Discount", `−₹${fmt(bill.discount)}`, { muted: true })}
+                {row("Total", `₹${fmt(bill.total)}`, { bold: true })}
+                {row("Paid", `₹${fmt(bill.paidAmount)}`, { muted: true })}
+                {row("Balance Due", `₹${fmt(balance)}`, { bold: true })}
+              </tbody>
+            </table>
+          );
+        })()}
       </div>
 
       <div style={{ marginTop: 8, fontSize: 10.5, fontStyle: "italic", color: "var(--bp-tx3)", textAlign: "right" }}>
@@ -291,6 +388,17 @@ export default function PurchaseBillDetailPage() {
       loading={cancelling}
       onConfirm={handleCancel}
       onCancel={() => { if (!cancelling) setConfirmCancel(false); }}
+    />
+
+    <ConfirmDialog
+      open={confirmDelete}
+      title="Delete Purchase Bill"
+      message={`Move bill ${bill.billNumber} to bin? You can restore it within 30 days.`}
+      confirmLabel="Delete"
+      variant="danger"
+      loading={deleting}
+      onConfirm={handleDelete}
+      onCancel={() => { if (!deleting) setConfirmDelete(false); }}
     />
 
     <div className={`page-stack ${styles.pageStack}`}>
@@ -333,6 +441,10 @@ export default function PurchaseBillDetailPage() {
           {bill.status !== "cancelled" && (
             <Button variant="dangerOutline" size="sm" onClick={() => setConfirmCancel(true)}>Cancel Bill</Button>
           )}
+          <Button variant="dangerOutline" size="sm" onClick={() => setConfirmDelete(true)}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+            Delete
+          </Button>
         </div>
       </div>
 
@@ -486,16 +598,16 @@ export default function PurchaseBillDetailPage() {
             <tbody>
               {bill.items.map((item, idx) => (
                 <tr key={item.id}>
-                  <td className={styles.textMuted}>{idx + 1}</td>
-                  <td>
+                  <td data-mobile-hide className={styles.textMuted}>{idx + 1}</td>
+                  <td data-mobile-full>
                     <div className={styles.itemName}>{item.name}</div>
                     <div className={styles.itemUnit}>{item.unit}</div>
                   </td>
-                  <td className={styles.qtyCell}>{item.quantity}</td>
-                  <td className={styles.textRight}>₹{fmt(item.purchasePrice)}</td>
-                  <td className={`${styles.textRight} ${styles.textMuted}`}>{item.gstRate}%</td>
-                  <td className={styles.gstAmtCell}>₹{fmt(item.gstAmount)}</td>
-                  <td className={styles.totalCell}>₹{fmt(item.total)}</td>
+                  <td data-label="Qty" className={styles.qtyCell}>{item.quantity}</td>
+                  <td data-label="Rate" className={styles.textRight}>₹{fmt(item.purchasePrice)}</td>
+                  <td data-label="GST %" className={`${styles.textRight} ${styles.textMuted}`}>{item.gstRate}%</td>
+                  <td data-label="GST Amt" className={styles.gstAmtCell}>₹{fmt(item.gstAmount)}</td>
+                  <td data-label="Total" className={styles.totalCell}>₹{fmt(item.total)}</td>
                 </tr>
               ))}
             </tbody>
@@ -560,14 +672,14 @@ export default function PurchaseBillDetailPage() {
               <tbody>
                 {bill.payments.map(p => (
                   <tr key={p.id}>
-                    <td className={styles.paymentDateCell}>{fmtDate(p.date)}</td>
-                    <td>
+                    <td data-label="Date" className={styles.paymentDateCell}>{fmtDate(p.date)}</td>
+                    <td data-label="Method">
                       <span className={styles.methodPill}>
                         {p.method}
                       </span>
                     </td>
-                    <td className={styles.referenceCell}>{p.reference || "—"}</td>
-                    <td className={styles.paymentAmountCell}>₹{fmt(p.amount)}</td>
+                    <td data-label="Reference" className={styles.referenceCell}>{p.reference || "—"}</td>
+                    <td data-label="Amount" className={styles.paymentAmountCell}>₹{fmt(p.amount)}</td>
                   </tr>
                 ))}
               </tbody>

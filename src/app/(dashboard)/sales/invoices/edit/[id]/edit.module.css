@@ -4,7 +4,7 @@
   gap: 1.25rem;
 }
 
-.leftCol { display: flex; flex-direction: column; gap: 1rem; flex: 1; }
+.leftCol { display: flex; flex-direction: column; gap: 1rem; flex: 1; min-width: 0; }
 
 .rightCol { width: 100%; }
 
@@ -95,19 +95,42 @@
 .tableScroll { overflow-x: auto; }
 .itemsTable { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 .itemsTable tr { border-bottom: 1px solid var(--c-border); }
+.itemsTable tbody td { vertical-align: middle; }
 .itemsTh { padding: 0.375rem 0.5rem; text-align: left; font-size: 0.75rem; font-weight: 600; color: var(--c-text-4); text-transform: uppercase; letter-spacing: 0.05em; }
 .itemsThRight { text-align: right; }
+.itemsThCenter { text-align: center; }
 .itemsTd { padding: 0.5rem; }
+.itemsTdNum { padding: 0.5rem; text-align: right; }
 .itemsTdName { padding: 0.5rem; font-weight: 500; color: var(--c-text); }
 .itemsTdUnit { padding: 0.5rem; color: var(--c-text-3); font-size: 0.75rem; }
 .itemsTdRight { padding: 0.5rem; text-align: right; font-size: 0.75rem; color: var(--c-text-3); }
+.itemsTdCenter { padding: 0.5rem; text-align: center; }
 .itemsTdAmount { padding: 0.5rem; text-align: right; font-weight: 500; font-size: 0.75rem; color: var(--c-text); }
 .qtyInput {
+  box-sizing: border-box; height: 1.75rem;
   width: 4rem; padding: 0.25rem 0.375rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
   background: var(--c-bg-input); color: var(--c-text); font-size: 0.75rem; text-align: right;
 }
 .priceInput {
+  box-sizing: border-box; height: 1.75rem;
   width: 5.5rem; padding: 0.25rem 0.375rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
+  background: var(--c-bg-input); color: var(--c-text); font-size: 0.75rem; text-align: right;
+}
+.hsnInput {
+  box-sizing: border-box; height: 1.75rem;
+  width: 5rem; padding: 0.25rem 0.375rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
+  background: var(--c-bg-input); color: var(--c-text); font-size: 0.75rem; text-align: left;
+}
+.discountSelect {
+  box-sizing: border-box; height: 1.75rem;
+  width: 4rem; padding: 0.25rem 0.25rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
+  background: var(--c-bg-input); color: var(--c-text); font-size: 0.75rem; cursor: pointer;
+}
+.discountCell { composes: itemsTdCenter; }
+.discountStack { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
+.discountAmountInput {
+  box-sizing: border-box; height: 1.75rem;
+  width: 4rem; padding: 0.25rem 0.375rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
   background: var(--c-bg-input); color: var(--c-text); font-size: 0.75rem; text-align: right;
 }
 .removeBtn {

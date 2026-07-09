@@ -15,19 +15,31 @@ import styles from "./edit.module.css";
 
 
 interface Product {
-  id: string; name: string; unit: string; price: number; gstRate: number; stock: number;
+  id: string; name: string; unit: string; price: number; gstRate: number; stock: number; hsn?: string | null;
 }
 
 interface LineItem {
   productId: string; productName: string; unit: string;
   qty: number; price: number; gstRate: number;
+  hsn: string; discountPercent: number;
 }
 
 interface InvoiceData {
-  id: string; invoiceNumber: string; status: string;
+  id: string; invoiceNumber: string; status: string; date: string;
   isInterState: boolean; placeOfSupply?: string; reverseCharge?: boolean; dueDate?: string; notes?: string;
   customer: { id: string; name: string; city: string; state: string; gstin: string; };
-  items: Array<{ productId: string; name: string; unit: string; quantity: number; price: number; gstRate: number; }>;
+  items: Array<{ productId: string; name: string; unit: string; quantity: number; price: number; gstRate: number; hsn?: string; discountPercent?: number; }>;
+}
+
+const DISCOUNT_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 40, 50];
+
+// A custom typed amount rarely lands on a preset % exactly — inject it into
+// the option list (rounded to 2dp) so the select actually shows/highlights
+// it instead of falling back to blank.
+function discountOptionsFor(percent: number) {
+  const rounded = Math.round(percent * 100) / 100;
+  if (DISCOUNT_OPTIONS.includes(rounded)) return DISCOUNT_OPTIONS;
+  return [...DISCOUNT_OPTIONS, rounded].sort((a, b) => a - b);
 }
 
 export default function EditInvoicePage() {
@@ -46,6 +58,7 @@ export default function EditInvoicePage() {
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -74,6 +87,8 @@ export default function EditInvoicePage() {
         qty: item.quantity,
         price: item.price,
         gstRate: item.gstRate,
+        hsn: item.hsn ?? "",
+        discountPercent: item.discountPercent ?? 0,
       }));
       const rc = invoice.reverseCharge ?? false;
       setIsInterState(inter);
@@ -81,6 +96,7 @@ export default function EditInvoicePage() {
       setReverseCharge(rc);
       setNotes(notesVal);
       setDueDate(dueDateVal);
+      setInvoiceDate(invoice.date ? invoice.date.split("T")[0] : "");
       setItems(lineItems);
       setInitialState({ isInterState: inter, placeOfSupply: pos, reverseCharge: rc, items: lineItems, notes: notesVal, dueDate: dueDateVal });
       setLoading(false);
@@ -92,7 +108,13 @@ export default function EditInvoicePage() {
   );
 
   const addProduct = useCallback((p: Product) => {
-    setItems((prev) => [...prev, { productId: p.id, productName: p.name, unit: p.unit, qty: 1, price: p.price, gstRate: p.gstRate }]);
+    setItems((prev) => {
+      const existingIdx = prev.findIndex((i) => i.productId === p.id);
+      if (existingIdx !== -1) {
+        return prev.map((item, i) => (i === existingIdx ? { ...item, qty: item.qty + 1 } : item));
+      }
+      return [...prev, { productId: p.id, productName: p.name, unit: p.unit, qty: 1, price: p.price, gstRate: p.gstRate, hsn: p.hsn ?? "", discountPercent: 0 }];
+    });
     setProductSearch("");
     setShowProductDropdown(false);
   }, []);
@@ -102,11 +124,33 @@ export default function EditInvoicePage() {
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
   }
 
-  const subtotal = items.reduce((sum, item) => sum + item.qty * item.price, 0);
+  // Typing a flat ₹ amount is just another way to set discountPercent — it's
+  // converted against that line's gross (qty × rate) so the stored value stays
+  // a percentage, same as picking one from the dropdown.
+  function setDiscountAmount(idx: number, amountStr: string) {
+    const amount = parseFloat(amountStr) || 0;
+    setItems((prev) => prev.map((item, i) => {
+      if (i !== idx) return item;
+      const gross = item.qty * item.price;
+      const discountPercent = gross > 0 ? Math.min(100, Math.max(0, (amount / gross) * 100)) : 0;
+      return { ...item, discountPercent };
+    }));
+  }
+
+  // Discount is applied to the line's gross amount (qty × rate) before GST —
+  // taxable value = gross - discount, and GST is computed on that taxable value.
+  const lineBreakdown = (item: LineItem) => {
+    const gross = item.qty * item.price;
+    const discountAmount = (gross * item.discountPercent) / 100;
+    const taxable = gross - discountAmount;
+    const gstAmt = (taxable * item.gstRate) / 100;
+    return { gross, discountAmount, taxable, gstAmt, total: taxable + gstAmt };
+  };
+
+  const subtotal = items.reduce((sum, item) => sum + lineBreakdown(item).taxable, 0);
   const taxBreakdown = items.reduce((acc, item) => {
-    const taxable = item.qty * item.price;
-    const taxAmt = (taxable * item.gstRate) / 100;
-    acc[item.gstRate] = (acc[item.gstRate] ?? 0) + taxAmt;
+    const { gstAmt } = lineBreakdown(item);
+    acc[item.gstRate] = (acc[item.gstRate] ?? 0) + gstAmt;
     return acc;
   }, {} as Record<number, number>);
   const totalTax = Object.values(taxBreakdown).reduce((a, b) => a + b, 0);
@@ -116,6 +160,7 @@ export default function EditInvoicePage() {
     e.preventDefault();
     if (items.length === 0) { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
     if (!placeOfSupply) { toast({ type: "error", title: "Check form", message: "Select place of supply." }); return; }
+    if (dueDate && invoiceDate && dueDate < invoiceDate) { toast({ type: "error", title: "Check form", message: "Due date cannot be before the invoice date." }); return; }
     for (const item of items) {
       const qtyErr   = validate(String(item.qty),   rules.positiveNumber("Item quantity must be greater than 0."));
       const priceErr = validate(String(item.price), rules.nonNegativeNumber("Item price cannot be negative."));
@@ -152,7 +197,7 @@ export default function EditInvoicePage() {
         isInterState,
         placeOfSupply,
         reverseCharge,
-        items: items.map((i) => ({ productId: i.productId, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit })),
+        items: items.map((i) => ({ productId: i.productId, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent })),
         notes,
         dueDate: dueDate || undefined,
       }),
@@ -314,6 +359,7 @@ export default function EditInvoicePage() {
                   <input
                     type="date"
                     value={dueDate}
+                    min={invoiceDate || undefined}
                     onChange={(e) => setDueDate(e.target.value)}
                     className={styles.dueDateInput}
                   />
@@ -353,37 +399,72 @@ export default function EditInvoicePage() {
                   <table className={styles.itemsTable}>
                     <thead>
                       <tr>
-                        {["Product", "Unit", "Qty", "Rate", "GST%", "Amount", ""].map((h, i) => (
-                          <th key={i} className={`${styles.itemsTh} ${i >= 2 && i < 6 ? styles.itemsThRight : ""}`}>{h}</th>
-                        ))}
+                        <th className={styles.itemsTh}>Product</th>
+                        <th className={styles.itemsThCenter}>HSN/SAC</th>
+                        <th className={styles.itemsTh}>Unit</th>
+                        <th className={styles.itemsThRight}>Qty</th>
+                        <th className={styles.itemsThRight}>List Price (₹)</th>
+                        <th className={styles.itemsThCenter}>Discount</th>
+                        <th className={styles.itemsThRight}>GST%</th>
+                        <th className={styles.itemsThRight}>Total (₹)</th>
+                        <th className={styles.itemsTh} />
                       </tr>
                     </thead>
                     <tbody>
-                      {items.map((item, idx) => (
+                      {items.map((item, idx) => {
+                        const { discountAmount, total: lineTotal } = lineBreakdown(item);
+                        return (
                         <tr key={idx}>
-                          <td className={styles.itemsTdName}>{item.productName}</td>
+                          <td className={styles.itemsTdName} title={item.productName}>{item.productName}</td>
+                          <td className={styles.itemsTdCenter}>
+                            <input type="text" value={item.hsn}
+                              onChange={(e) => updateItem(idx, "hsn", e.target.value)}
+                              placeholder="HSN/SAC"
+                              className={styles.hsnInput}
+                            />
+                          </td>
                           <td className={styles.itemsTdUnit}>{item.unit}</td>
-                          <td className={styles.itemsTd}>
+                          <td className={styles.itemsTdNum}>
                             <input type="number" min="1" value={item.qty}
                               onChange={(e) => updateItem(idx, "qty", parseFloat(e.target.value) || 1)}
                               className={styles.qtyInput}
                             />
                           </td>
-                          <td className={styles.itemsTd}>
+                          <td className={styles.itemsTdNum}>
                             <input type="text" inputMode="decimal" value={item.price}
                               onChange={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
                               className={styles.priceInput}
                             />
                           </td>
+                          <td className={styles.discountCell}>
+                            <div className={styles.discountStack}>
+                              <select
+                                value={Math.round(item.discountPercent * 100) / 100}
+                                onChange={(e) => updateItem(idx, "discountPercent", parseFloat(e.target.value) || 0)}
+                                className={styles.discountSelect}
+                              >
+                                {discountOptionsFor(item.discountPercent).map((d) => <option key={d} value={d}>{d}%</option>)}
+                              </select>
+                              <input
+                                type="text" inputMode="decimal"
+                                value={discountAmount > 0 ? Math.round(discountAmount * 100) / 100 : ""}
+                                onChange={(e) => setDiscountAmount(idx, e.target.value)}
+                                placeholder="₹0"
+                                title="Flat discount amount"
+                                className={styles.discountAmountInput}
+                              />
+                            </div>
+                          </td>
                           <td className={styles.itemsTdRight}>{item.gstRate}%</td>
-                          <td className={styles.itemsTdAmount}>₹{(item.qty * item.price).toLocaleString("en-IN")}</td>
+                          <td className={styles.itemsTdAmount}>₹{lineTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           <td className={styles.itemsTd}>
                             <button type="button" onClick={() => removeItem(idx)} aria-label="Remove"
                               className={styles.removeBtn}
                             >×</button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

@@ -4,6 +4,7 @@ import { getBusinessSettings } from "@/lib/db";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
 import { rateLimit, getClientIp } from "@/lib/rateLimit";
+import { escapeHtml } from "@/lib/html";
 
 // Always resolves to the same generic response, whether or not the email is
 // registered — the caller must not be able to distinguish the two cases.
@@ -68,6 +69,9 @@ export async function POST(req: NextRequest) {
     // registered vs. unregistered email is distinguishable purely from how
     // long the request takes (this branch awaits an SMTP round-trip, the
     // "unregistered" branch above returns immediately).
+    const safeBizName = escapeHtml(biz.name);
+    const safeUserName = escapeHtml(user.name);
+
     after(() =>
       transporter.sendMail({
         from: `"${biz.name}" <${gmailUser}>`,
@@ -75,8 +79,8 @@ export async function POST(req: NextRequest) {
         subject: `Reset your ${biz.name} password`,
         html: `
           <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-            <h2 style="color:#1e3a8a">${biz.name}</h2>
-            <p>Hi ${user.name},</p>
+            <h2 style="color:#1e3a8a">${safeBizName}</h2>
+            <p>Hi ${safeUserName},</p>
             <p>We received a request to reset your password. Click the button below — this link is valid for <strong>1 hour</strong>.</p>
             <div style="text-align:center;margin:2rem 0">
               <a href="${resetUrl}"
@@ -90,7 +94,7 @@ export async function POST(req: NextRequest) {
             </p>
             <p style="color:#64748b;font-size:0.85rem">If you didn't request a password reset, you can safely ignore this email.</p>
             <hr style="border:none;border-top:1px solid #e2e8f0;margin:1.5rem 0"/>
-            <p style="color:#94a3b8;font-size:0.8rem">${biz.name}</p>
+            <p style="color:#94a3b8;font-size:0.8rem">${safeBizName}</p>
           </div>
         `,
       }).catch(err => console.error("forgot-password: sendMail failed:", err))

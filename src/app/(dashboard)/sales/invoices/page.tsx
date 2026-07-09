@@ -26,6 +26,7 @@ interface Invoice {
   total: number;
   paidAmount: number;
   status: string;
+  items: { name: string; product: { name: string; brand: { name: string } | null; category: { name: string } | null } | null }[];
 }
 
 type StatusFilter = "All" | "unpaid" | "partial" | "paid";
@@ -173,7 +174,13 @@ export default function InvoicesPage() {
         const q = search.toLowerCase();
         return (
           inv.invoiceNumber.toLowerCase().includes(q) ||
-          inv.customer?.name?.toLowerCase().includes(q)
+          inv.customer?.name?.toLowerCase().includes(q) ||
+          inv.items?.some((i) =>
+            i.name.toLowerCase().includes(q) ||
+            i.product?.name?.toLowerCase().includes(q) ||
+            i.product?.brand?.name?.toLowerCase().includes(q) ||
+            i.product?.category?.name?.toLowerCase().includes(q)
+          )
         );
       })
     : invoices;
@@ -293,7 +300,7 @@ export default function InvoicesPage() {
             <input
               type="search"
               aria-label="Search invoices"
-              placeholder="Search by invoice no. or customer…"
+              placeholder="Search by invoice no., customer, product, brand or category…"
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               className={["search-input", styles.searchInput].join(" ")}

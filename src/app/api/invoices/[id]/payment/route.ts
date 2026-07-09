@@ -16,7 +16,8 @@ export async function POST(
     const body = await request.json();
     const { amount, method, reference, notes } = body;
 
-    if (!amount || parseFloat(amount) <= 0) {
+    const amountStr = (typeof amount === "string" || typeof amount === "number") ? String(amount).trim() : "";
+    if (!/^\d+(\.\d+)?$/.test(amountStr) || parseFloat(amountStr) <= 0) {
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
     }
 

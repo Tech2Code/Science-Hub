@@ -4,7 +4,7 @@
   gap: 1.25rem;
 }
 
-.leftCol { display: flex; flex-direction: column; gap: 1rem; flex: 1; }
+.leftCol { display: flex; flex-direction: column; gap: 1rem; flex: 1; min-width: 0; }
 
 .rightCol { width: 100%; }
 
@@ -233,6 +233,7 @@
 }
 
 .itemsTable thead tr { background: var(--c-bg-sub); }
+.itemsTable tbody td { vertical-align: top; }
 
 .th {
   padding: 0.625rem 0.875rem;
@@ -300,6 +301,45 @@
   width: 6rem;
   text-align: right;
 }
+
+.hsnInput {
+  composes: qtyInput;
+  width: 5.5rem;
+  text-align: left;
+  font-weight: 500;
+}
+
+.discountSelect {
+  width: 4.5rem;
+  padding: 0.375rem 0.375rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--c-blue-border);
+  background: var(--c-bg-input);
+  color: var(--c-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+}
+
+.discountCell {
+  composes: tdCenter;
+}
+
+.discountStack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.discountAmountInput {
+  composes: qtyInput;
+  width: 4.5rem;
+  text-align: right;
+  font-weight: 500;
+}
+.discountAmountInput::placeholder { font-weight: 400; }
 
 .removeBtn {
   display: inline-flex;

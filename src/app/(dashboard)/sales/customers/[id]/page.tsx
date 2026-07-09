@@ -187,7 +187,7 @@ export default function CustomerViewPage() {
                     </div>
                   </td>
                   <td data-label="Total" className={`table-td-right ${styles.totalCell}`}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td data-mobile-hide className={`table-td-right ${styles.paidCell}`}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td data-label="Paid" className={`table-td-right ${styles.paidCell}`}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td data-label="Balance" className={`table-td-right ${styles.balanceCell}`}>₹{(inv.total - inv.paidAmount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td data-label="Status"><StatusBadge status={inv.status} /></td>
                 </tr>

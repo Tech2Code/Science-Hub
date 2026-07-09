@@ -137,18 +137,21 @@ model Invoice {
 }
 
 model InvoiceItem {
-  id        String  @id @default(cuid())
-  invoiceId String
-  productId String
-  name      String
-  quantity  Float
-  unit      String
-  price     Float
-  gstRate   Float
-  gstAmount Float
-  total     Float
-  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  product   Product @relation(fields: [productId], references: [id])
+  id                String  @id @default(cuid())
+  invoiceId         String
+  productId         String
+  name              String
+  hsn               String  @default("")
+  quantity          Float
+  unit              String
+  price             Float
+  discountPercent   Float   @default(0)
+  discountAmount    Float   @default(0)
+  gstRate           Float
+  gstAmount         Float
+  total             Float
+  invoice           Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product           Product @relation(fields: [productId], references: [id])
 }
 
 model Payment {
@@ -195,8 +198,15 @@ model BusinessSettings {
   state           String   @default("")
   pincode         String   @default("")
   gstin           String   @default("")
+  pan             String   @default("")
   gmailUser       String   @default("")
   gmailAppPassword String  @default("")
+  bankName        String   @default("")
+  bankAccountName String   @default("")
+  bankAccountNumber String @default("")
+  bankIfsc        String   @default("")
+  bankBranch      String   @default("")
+  termsAndConditions String @default("Interest @ 24%p.a would be charged after 45 days of Invoice\nMaterial sold strictly for lab use only\nWe are not responsible for any loss in transit.\nSubject to 'Delhi' Jurisdiction only.")
   updatedAt       DateTime @updatedAt
 }
 
@@ -286,8 +296,9 @@ model PurchasePayment {
 
 model StockMovement {
   id             String        @id @default(cuid())
-  productId      String
-  product        Product       @relation(fields: [productId], references: [id])
+  productId      String?
+  product        Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName    String        @default("")
   type           String        // purchase | sale | adjustment | return | manual
   quantity       Float         // positive = stock in, negative = stock out
   balanceAfter   Float

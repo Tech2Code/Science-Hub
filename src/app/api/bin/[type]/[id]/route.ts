@@ -214,11 +214,13 @@ export async function DELETE(
       case "product": {
         // Check every FK that references this product without cascading —
         // any of these would otherwise crash the delete with a raw,
-        // unexplained 500 instead of a clear message.
-        const [itemCount, purchaseItemCount, movementCount] = await Promise.all([
+        // unexplained 500 instead of a clear message. StockMovement is not
+        // checked here — its product relation is nullable with onDelete:
+        // SetNull, so those ledger rows survive (with a productName
+        // snapshot) instead of blocking the delete.
+        const [itemCount, purchaseItemCount] = await Promise.all([
           prisma.invoiceItem.count({ where: { productId: id } }),
           prisma.purchaseBillItem.count({ where: { productId: id } }),
-          prisma.stockMovement.count({ where: { productId: id } }),
         ]);
         if (itemCount > 0) {
           return NextResponse.json(
@@ -229,12 +231,6 @@ export async function DELETE(
         if (purchaseItemCount > 0) {
           return NextResponse.json(
             { error: `Cannot permanently delete "${name}" — it appears in ${purchaseItemCount} purchase bill line item(s) (including any in the bin).` },
-            { status: 400 }
-          );
-        }
-        if (movementCount > 0) {
-          return NextResponse.json(
-            { error: `Cannot permanently delete "${name}" — it has ${movementCount} stock movement record(s) in its history.` },
             { status: 400 }
           );
         }

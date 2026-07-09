@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { logActivity } from "@/lib/activity";
+import { validateUserInput } from "@/lib/validation";
 
 const USER_SELECT = {
   id: true,
@@ -85,12 +86,8 @@ export async function PUT(
       );
     }
 
-    if (role !== undefined && role !== "admin" && role !== "staff") {
-      return NextResponse.json(
-        { error: 'role must be "admin" or "staff"' },
-        { status: 400 }
-      );
-    }
+    const shapeErr = validateUserInput({ name, role });
+    if (shapeErr) return NextResponse.json({ error: shapeErr }, { status: 400 });
 
     const targetUser = await prisma.user.findUnique({ where: { id } });
     if (!targetUser) {
@@ -100,12 +97,8 @@ export async function PUT(
     // Password change logic
     let hashedPassword: string | undefined;
     if (newPassword !== undefined) {
-      if (newPassword.length < 8) {
-        return NextResponse.json(
-          { error: "New password must be at least 8 characters" },
-          { status: 400 }
-        );
-      }
+      const pwErr = validateUserInput({ password: newPassword }, { passwordLabel: "New password" });
+      if (pwErr) return NextResponse.json({ error: pwErr }, { status: 400 });
 
       // If admin is editing another user, skip current-password check.
       // If editing own account (or non-admin editing self), require currentPassword.
@@ -131,6 +124,10 @@ export async function PUT(
     // Email uniqueness check (against other users) — normalized the same
     // way login does, so case-variant duplicates can't be created here.
     const normalizedEmail = email !== undefined ? email.trim().toLowerCase() : undefined;
+    if (normalizedEmail !== undefined) {
+      const emailErr = validateUserInput({ email: normalizedEmail });
+      if (emailErr) return NextResponse.json({ error: emailErr }, { status: 400 });
+    }
     if (normalizedEmail !== undefined && normalizedEmail !== targetUser.email) {
       const conflict = await prisma.user.findUnique({ where: { email: normalizedEmail } });
       if (conflict) {

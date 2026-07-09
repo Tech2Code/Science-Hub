@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { logActivity } from "@/lib/activity";
+import { rules, validate } from "@/lib/validation";
 
 const USER_SELECT = {
   id: true,
@@ -72,9 +73,20 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    if (name !== undefined && (name.trim().length === 0 || name.length > 200)) {
+      return NextResponse.json(
+        { error: "Name must be between 1 and 200 characters" },
+        { status: 400 }
+      );
+    }
+
     // Email uniqueness check (against other users) — normalized the same
     // way login does, so case-variant duplicates can't be created here.
     const normalizedEmail = email !== undefined ? email.trim().toLowerCase() : undefined;
+    if (normalizedEmail !== undefined) {
+      const emailErr = validate(normalizedEmail, rules.required("Email is required."), rules.email());
+      if (emailErr) return NextResponse.json({ error: emailErr }, { status: 400 });
+    }
     if (normalizedEmail !== undefined && normalizedEmail !== currentUser.email) {
       const conflict = await prisma.user.findUnique({ where: { email: normalizedEmail } });
       if (conflict) {

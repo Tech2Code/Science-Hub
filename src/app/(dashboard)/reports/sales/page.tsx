@@ -286,12 +286,12 @@ export default function SalesReportsPage() {
                 {gstRows.length > 0 && (
                   <tfoot>
                     <tr className={styles.gstFootRow}>
-                      <td className={styles.gstFootTotalLabel}>Total</td>
-                      <td className={styles.gstFootTotalValue}>{fmt(gstRows.reduce((s, r) => s + r.taxableValue, 0))}</td>
-                      <td className={styles.gstFootCellRight}>{fmt(gstRows.reduce((s, r) => s + r.cgst, 0))}</td>
-                      <td className={styles.gstFootCellRight}>{fmt(gstRows.reduce((s, r) => s + r.sgst, 0))}</td>
-                      <td className={styles.gstFootCellRight}>{fmt(gstRows.reduce((s, r) => s + r.igst, 0))}</td>
-                      <td className={styles.gstFootGrandTotal}>{fmt(totalGst)}</td>
+                      <Cell col={GST_COLUMNS[0]} className={styles.gstFootTotalLabel}>Total</Cell>
+                      <Cell col={GST_COLUMNS[1]} className={styles.gstFootTotalValue}>{fmt(gstRows.reduce((s, r) => s + r.taxableValue, 0))}</Cell>
+                      <Cell col={GST_COLUMNS[2]} className={styles.gstFootCellRight}>{fmt(gstRows.reduce((s, r) => s + r.cgst, 0))}</Cell>
+                      <Cell col={GST_COLUMNS[3]} className={styles.gstFootCellRight}>{fmt(gstRows.reduce((s, r) => s + r.sgst, 0))}</Cell>
+                      <Cell col={GST_COLUMNS[4]} className={styles.gstFootCellRight}>{fmt(gstRows.reduce((s, r) => s + r.igst, 0))}</Cell>
+                      <Cell col={GST_COLUMNS[5]} className={styles.gstFootGrandTotal}>{fmt(totalGst)}</Cell>
                     </tr>
                   </tfoot>
                 )}

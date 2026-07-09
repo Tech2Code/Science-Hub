@@ -13,10 +13,12 @@ interface RecordStockMovementInput {
   createdByUserId?: string;
 }
 
-export function recordStockMovement(tx: TxClient, input: RecordStockMovementInput) {
+export async function recordStockMovement(tx: TxClient, input: RecordStockMovementInput) {
+  const product = await tx.product.findUnique({ where: { id: input.productId }, select: { name: true } });
   return tx.stockMovement.create({
     data: {
       productId: input.productId,
+      productName: product?.name ?? "",
       type: input.type,
       quantity: input.quantity,
       balanceAfter: input.balanceAfter,

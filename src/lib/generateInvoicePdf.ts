@@ -66,6 +66,17 @@ export async function generateInvoicePdfBlob(
     const theadTop = theadRowEl ? Math.round((theadRowEl.getBoundingClientRect().top - elTop) * SCALE) : 0;
     const theadH   = theadRowEl ? Math.round(theadRowEl.getBoundingClientRect().height * SCALE) : 0;
 
+    // "Page No. X of Y" marker inside the banner — its position is measured
+    // once here (identical across pages/copies, since the flex layout around
+    // it never changes width), then the baked-in text is painted over per
+    // page in stampPageMarker() below with the real page number for that page.
+    const pageMarkerEl = el.querySelector<HTMLElement>("#invoice-page-marker");
+    const pmRect = pageMarkerEl?.getBoundingClientRect();
+    const pmLeftPx   = pmRect ? Math.round((pmRect.left - elLeft) * SCALE) : 0;
+    const pmTopPx    = pmRect ? Math.round((pmRect.top  - elTop)  * SCALE) : 0;
+    const pmWidthPx  = pmRect ? Math.round(pmRect.width  * SCALE) : 0;
+    const pmHeightPx = pmRect ? Math.round(pmRect.height * SCALE) : 0;
+
     // Measure footer row (tfoot) — appended at bottom of every non-last page
     const tfootRowEl = el.querySelector("tfoot tr") as HTMLElement | null;
     const tfootTop = tfootRowEl ? Math.round((tfootRowEl.getBoundingClientRect().top - elTop) * SCALE) : 0;
@@ -111,6 +122,13 @@ export async function generateInvoicePdfBlob(
             } else {
               badge.style.display = "none";
             }
+          }
+
+          // Receiver Signature block — only the Duplicate Copy (the seller's
+          // own retained copy) needs the recipient to sign it as proof of receipt.
+          const receiverSignature = printEl.querySelector<HTMLElement>("#invoice-receiver-signature");
+          if (receiverSignature) {
+            receiverSignature.style.display = copyLabel === "DUPLICATE COPY" ? "block" : "none";
           }
 
           // Replace Next.js optimized img src with a plain data URL so
@@ -206,8 +224,24 @@ export async function generateInvoicePdfBlob(
       const pageHeightPx = Math.floor(contentH / mmPerPx);
       const page2HeightPx = pageHeightPx - theadH; // pages 2+ have the TAX INVOICE banner
 
+      // Overwrites the baked-in "Page No. 1 of 1" text with the real page
+      // number for this page — the banner image itself is a pixel copy from
+      // a single html2canvas capture, so this is the only way to vary that
+      // text per page instead of it repeating the same value everywhere.
+      const stampPageMarker = (ctx: CanvasRenderingContext2D, pageNum: number, totalPages: number) => {
+        if (!pmWidthPx || !pmHeightPx) return;
+        const y = pmTopPx - theadTop;
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(pmLeftPx, y, pmWidthPx, pmHeightPx);
+        ctx.fillStyle = BD;
+        ctx.font = `${9 * SCALE}px Arial, sans-serif`;
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "left";
+        ctx.fillText(`Page No. ${pageNum} of ${totalPages}`, pmLeftPx, y + pmHeightPx / 2);
+      };
+
       // Slice a strip from the canvas. Optionally prepend header and/or append footer.
-      const slicePage = (startPx: number, endPx: number, withHeader: boolean, appendFooter: boolean) => {
+      const slicePage = (startPx: number, endPx: number, withHeader: boolean, appendFooter: boolean, pageNum: number, totalPages: number) => {
         const sliceH = endPx - startPx;
         const hdrH  = withHeader   ? theadH : 0;
         const ftrH  = appendFooter ? tfootH : 0;
@@ -228,6 +262,7 @@ export async function generateInvoicePdfBlob(
         if (appendFooter && tfootH > 0) {
           ctx.drawImage(canvas, 0, tfootTop, canvas.width, tfootH, 0, y, canvas.width, tfootH);
         }
+        if (totalPages > 1) stampPageMarker(ctx, pageNum, totalPages);
         return { dataUrl: pc.toDataURL("image/jpeg", 0.95), totalH };
       };
 
@@ -235,7 +270,7 @@ export async function generateInvoicePdfBlob(
       // bottom instead of floating directly under the last content row —
       // used only for the actual last page, and only when its content
       // doesn't already reach the bottom of the page on its own.
-      const slicePagePinned = (startPx: number, endPx: number, withHeader: boolean) => {
+      const slicePagePinned = (startPx: number, endPx: number, withHeader: boolean, pageNum: number, totalPages: number) => {
         const pc = document.createElement("canvas");
         pc.width = canvas.width;
         pc.height = pageHeightPx;
@@ -301,6 +336,7 @@ export async function generateInvoicePdfBlob(
           ctx.lineTo(tableRightPx, footerTop + 0.5);
           ctx.stroke();
         }
+        if (totalPages > 1) stampPageMarker(ctx, pageNum, totalPages);
         return { dataUrl: pc.toDataURL("image/jpeg", 0.95), totalH: pageHeightPx };
       };
 
@@ -312,8 +348,8 @@ export async function generateInvoicePdfBlob(
       if (canvas.height <= pageHeightPx) {
         addPageBreakIfNeeded();
         const { dataUrl, totalH } = tfootH > 0 && canvas.height < pageHeightPx
-          ? slicePagePinned(0, canvas.height, false)
-          : slicePage(0, canvas.height, false, false);
+          ? slicePagePinned(0, canvas.height, false, 1, 1)
+          : slicePage(0, canvas.height, false, false, 1, 1);
         pdf.addImage(dataUrl, "JPEG", M, M, contentW, totalH * mmPerPx);
       } else {
         // Pass 1: compute split points, reserving tfootH on every non-last page
@@ -354,9 +390,9 @@ export async function generateInvoicePdfBlob(
           addPageBreakIfNeeded();
           let dataUrl: string, totalH: number;
           if (isLast && tfootH > 0 && splitAt - start < availPx) {
-            ({ dataUrl, totalH } = slicePagePinned(start, splitAt, withHeader));
+            ({ dataUrl, totalH } = slicePagePinned(start, splitAt, withHeader, i + 1, pageSplits.length));
           } else {
-            ({ dataUrl, totalH } = slicePage(start, splitAt, withHeader, !isLast && tfootH > 0));
+            ({ dataUrl, totalH } = slicePage(start, splitAt, withHeader, !isLast && tfootH > 0, i + 1, pageSplits.length));
           }
           pdf.addImage(dataUrl, "JPEG", M, M, contentW, totalH * mmPerPx);
           start = splitAt;

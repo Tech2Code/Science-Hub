@@ -22,6 +22,15 @@ export const rules = {
   gstin: (msg = "GSTIN must be 15 alphanumeric characters."): Validator =>
     (v) => !v.trim() || /^[0-9A-Z]{15}$/i.test(v.trim()) ? null : msg,
 
+  pan: (msg = "Enter a valid 10-character PAN (e.g. AAAAA0000A)."): Validator =>
+    (v) => !v.trim() || /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(v.trim()) ? null : msg,
+
+  ifsc: (msg = "Enter a valid 11-character IFSC code."): Validator =>
+    (v) => !v.trim() || /^[A-Z]{4}0[A-Z0-9]{6}$/i.test(v.trim()) ? null : msg,
+
+  accountNumber: (msg = "Enter a valid account number (9-18 digits)."): Validator =>
+    (v) => !v.trim() || /^\d{9,18}$/.test(v.trim()) ? null : msg,
+
   pincode: (msg = "Enter a valid 6-digit pincode."): Validator =>
     (v) => !v.trim() || /^\d{6}$/.test(v.trim()) ? null : msg,
 
@@ -33,6 +42,10 @@ export const rules = {
 
   passwordMatch: (other: string, msg = "Passwords do not match."): Validator =>
     (v) => v === other ? null : msg,
+
+  // Looser than phone10 — allows an optional country code/format like "+91-9968597044".
+  phoneFlexible: (msg = "Enter a valid phone number."): Validator =>
+    (v) => !v.trim() || /^\+?[\d\s-]{7,20}$/.test(v.trim()) ? null : msg,
 };
 
 // Run a list of validators in order, return the first error or null.
@@ -79,6 +92,91 @@ export function validateCustomerInput(input: {
     validate(input.email ?? "", rules.email()) ||
     validate(input.pincode ?? "", rules.pincode()) ||
     validate(input.gstin ?? "", rules.gstin()) ||
+    null
+  );
+}
+
+// Generic numeric field check shared by product create/update routes —
+// mirrors the shape of a single `rules.*` validator but works on an
+// already-parsed number instead of a raw string.
+export function validateNumericField(
+  key: string,
+  value: number,
+  opts: { min?: number; max?: number; integer?: boolean } = {}
+): string | null {
+  const { min = -Infinity, max = Infinity, integer = false } = opts;
+  if (Number.isNaN(value)) return `${key} must be a valid number`;
+  if (value < min || value > max) {
+    return `${key} must be between ${min === -Infinity ? "-∞" : min} and ${max === Infinity ? "∞" : max}`;
+  }
+  if (integer && !Number.isInteger(value)) return `${key} must be a whole number`;
+  return null;
+}
+
+// Server-side counterpart to the product form's client-side validation —
+// only covers the non-numeric "core" fields; numeric fields are checked
+// with `validateNumericField` since routes parse them differently
+// (create applies defaults, update validates only supplied fields).
+export function validateProductInput(
+  input: { name?: string; price?: unknown },
+  requireCore = false
+): string | null {
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  if (requireCore) {
+    if (!name || input.price === undefined) return "Name and price are required.";
+  } else if (input.name !== undefined && !name) {
+    return "Name cannot be blank";
+  }
+  return null;
+}
+
+// Server-side counterpart to the admin user form's client-side validation —
+// each field is checked only when present in `input`, so the same function
+// covers both full create and partial update.
+export function validateUserInput(
+  input: { name?: string; email?: string; password?: string; role?: string },
+  opts: { requireAll?: boolean; passwordLabel?: string } = {}
+): string | null {
+  const { requireAll = false, passwordLabel = "Password" } = opts;
+  if (requireAll && (!input.name || !input.email || !input.password || !input.role)) {
+    return "name, email, password, and role are required";
+  }
+  if (input.name !== undefined && (input.name.trim().length === 0 || input.name.length > 200)) {
+    return "Name must be between 1 and 200 characters";
+  }
+  if (input.email !== undefined) {
+    const err = validate(input.email, rules.required("Email is required."), rules.email());
+    if (err) return err;
+  }
+  if (input.password !== undefined && input.password.length < 8) {
+    return `${passwordLabel} must be at least 8 characters`;
+  }
+  if (input.role !== undefined && input.role !== "admin" && input.role !== "staff") {
+    return 'role must be "admin" or "staff"';
+  }
+  return null;
+}
+
+// Server-side counterpart to the settings form's client-side validation.
+export function validateSettingsInput(input: {
+  pan?: string; termsAndConditions?: string; phone?: string; pincode?: string; gstin?: string;
+  bankName?: string; bankAccountNumber?: string; bankIfsc?: string; bankBranch?: string;
+}): string | null {
+  const bankConfigured = Boolean(
+    input.bankName || input.bankAccountNumber || input.bankIfsc || input.bankBranch
+  );
+  return (
+    validate(input.pan ?? "", rules.maxLength(10), rules.pan()) ||
+    validate(input.termsAndConditions ?? "", rules.maxLength(2000)) ||
+    validate(input.phone ?? "", rules.phoneFlexible()) ||
+    validate(input.pincode ?? "", rules.pincode()) ||
+    validate(input.gstin ?? "", rules.maxLength(15), rules.gstin()) ||
+    (bankConfigured
+      ? validate(input.bankName ?? "", rules.required("Bank name is required.")) ||
+        validate(input.bankBranch ?? "", rules.required("Branch is required.")) ||
+        validate(input.bankAccountNumber ?? "", rules.required("Account number is required."), rules.accountNumber()) ||
+        validate(input.bankIfsc ?? "", rules.required("IFSC code is required."), rules.ifsc())
+      : null) ||
     null
   );
 }

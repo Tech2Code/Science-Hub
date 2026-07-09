@@ -10,6 +10,7 @@ export async function getBusinessSettings() {
   return {
     ...settings,
     gmailAppPassword: settings.gmailAppPassword ? decrypt(settings.gmailAppPassword) : settings.gmailAppPassword,
+    bankAccountNumber: settings.bankAccountNumber ? decrypt(settings.bankAccountNumber) : settings.bankAccountNumber,
   };
 }
 
@@ -22,6 +23,20 @@ export async function getInvoices(status?: string | null, customerId?: string | 
     orderBy: { date: "desc" },
     include: {
       customer: { select: { id: true, name: true } },
+      // Selected for client-side search-by-product/brand/category on the
+      // invoice list page — not displayed as columns there.
+      items: {
+        select: {
+          name: true,
+          product: {
+            select: {
+              name: true,
+              brand: { select: { name: true } },
+              category: { select: { name: true } },
+            },
+          },
+        },
+      },
     },
   });
 }

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { logActivity } from "@/lib/activity";
+import { validateUserInput } from "@/lib/validation";
 
 const USER_SELECT = {
   id: true,
@@ -55,31 +56,17 @@ export async function POST(request: NextRequest) {
       role?: string;
     };
 
-    if (!name || !email || !password || !role) {
-      return NextResponse.json(
-        { error: "name, email, password, and role are required" },
-        { status: 400 }
-      );
+    const validationError = validateUserInput({ name, email, password, role }, { requireAll: true });
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
     }
-
-    if (password.length < 8) {
-      return NextResponse.json(
-        { error: "Password must be at least 8 characters" },
-        { status: 400 }
-      );
-    }
-
-    if (role !== "admin" && role !== "staff") {
-      return NextResponse.json(
-        { error: 'role must be "admin" or "staff"' },
-        { status: 400 }
-      );
-    }
+    // `requireAll` above guarantees all four are non-empty strings.
+    const validName = name as string, validRole = role as string;
 
     // Normalize case the same way login does (auth.ts lowercases the
     // submitted email before lookup) — otherwise "Foo@x.com" and "foo@x.com"
     // are treated as distinct accounts here but collide at login.
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = (email as string).trim().toLowerCase();
 
     const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existing) {
@@ -89,15 +76,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const hashedPassword = await bcrypt.hash(password as string, 12);
 
     const user = await prisma.user.create({
-      data: { name, email: normalizedEmail, password: hashedPassword, role },
+      data: { name: validName, email: normalizedEmail, password: hashedPassword, role: validRole },
       select: USER_SELECT,
     });
 
     const { session } = auth;
-    await logActivity(session.user.id, "add_user", `Created user "${name}" | Role: ${role} | Email: ${normalizedEmail}`, user.id, "user");
+    await logActivity(session.user.id, "add_user", `Created user "${validName}" | Role: ${validRole} | Email: ${normalizedEmail}`, user.id, "user");
     return NextResponse.json(user, { status: 201 });
   } catch (error) {
     console.error("POST /api/admin/users error:", error);

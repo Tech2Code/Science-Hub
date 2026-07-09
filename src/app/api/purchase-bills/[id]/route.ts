@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { recordStockMovement } from "@/lib/stockMovement";
-import { deleteAttachmentBlob } from "@/lib/blobStorage";
+import { deleteAttachmentBlob, isPurchaseBillBlobUrl } from "@/lib/blobStorage";
 
 const BILL_INCLUDE = {
   vendor: { select: { id: true, name: true, company: true, phone: true, email: true, gstin: true, address: true } },
@@ -35,6 +35,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const body = await req.json();
     const { vendorId, billDate, dueDate, discount, notes, category, status, items, attachmentUrl, attachmentName } = body;
 
+    if (attachmentUrl && !isPurchaseBillBlobUrl(attachmentUrl)) {
+      return NextResponse.json({ error: "Invalid attachment URL" }, { status: 400 });
+    }
+
     const existing = await prisma.purchaseBill.findFirst({ where: { id, deletedAt: null } });
     if (!existing) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
 
@@ -43,6 +47,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         { error: `Items on a ${existing.status} bill cannot be edited.` },
         { status: 400 }
       );
+    }
+
+    if (dueDate) {
+      const parsedDueDate = new Date(dueDate);
+      if (isNaN(parsedDueDate.getTime())) {
+        return NextResponse.json({ error: "Invalid due date" }, { status: 400 });
+      }
+      const effectiveBillDate = billDate ? new Date(billDate) : existing.billDate;
+      if (parsedDueDate < effectiveBillDate) {
+        return NextResponse.json({ error: "Due date cannot be before the bill date" }, { status: 400 });
+      }
     }
 
     let subtotal: number | undefined;

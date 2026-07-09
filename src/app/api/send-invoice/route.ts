@@ -4,18 +4,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getBusinessSettings } from "@/lib/db";
 import { rateLimit } from "@/lib/rateLimit";
+import { escapeHtml } from "@/lib/html";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10MB
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);

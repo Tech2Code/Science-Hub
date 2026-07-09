@@ -220,10 +220,10 @@ export default function DashboardPage() {
                   <tr><td colSpan={4} className="table-empty-cell">No invoices yet. <Link href="/sales/invoices/new" className={styles.emptyLink}>Create one →</Link></td></tr>
                 ) : (data?.sales.recentInvoices ?? []).map((inv) => (
                   <tr key={inv.id}>
-                    <td><Link href={`/sales/invoices/${inv.id}`} className={styles.linkCell}>{inv.invoiceNumber}</Link></td>
-                    <td className={styles.customerCell}>{inv.customerName}</td>
-                    <td className={styles.totalCell}>₹{inv.total.toLocaleString("en-IN")}</td>
-                    <td><StatusBadge status={inv.status} /></td>
+                    <td data-mobile-full><Link href={`/sales/invoices/${inv.id}`} className={styles.linkCell}>{inv.invoiceNumber}</Link></td>
+                    <td data-label="Customer" className={styles.customerCell}>{inv.customerName}</td>
+                    <td data-label="Total" className={styles.totalCell}>₹{inv.total.toLocaleString("en-IN")}</td>
+                    <td data-label="Status"><StatusBadge status={inv.status} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -246,10 +246,10 @@ export default function DashboardPage() {
                   <tr><td colSpan={4} className="table-empty-cell">No bills yet. <Link href="/purchases/bills/new" className={styles.emptyLink}>Create one →</Link></td></tr>
                 ) : (data?.purchases.recentBills ?? []).map((b) => (
                   <tr key={b.id}>
-                    <td><Link href={`/purchases/bills/${b.id}`} className={styles.linkCell}>{b.billNumber}</Link></td>
-                    <td className={styles.customerCell}>{b.vendorName}</td>
-                    <td className={styles.totalCell}>₹{b.total.toLocaleString("en-IN")}</td>
-                    <td><StatusBadge status={b.status} /></td>
+                    <td data-mobile-full><Link href={`/purchases/bills/${b.id}`} className={styles.linkCell}>{b.billNumber}</Link></td>
+                    <td data-label="Vendor" className={styles.customerCell}>{b.vendorName}</td>
+                    <td data-label="Total" className={styles.totalCell}>₹{b.total.toLocaleString("en-IN")}</td>
+                    <td data-label="Status"><StatusBadge status={b.status} /></td>
                   </tr>
                 ))}
               </tbody>

@@ -163,6 +163,16 @@ input, textarea, select {
   font-size: 0.875rem;
 }
 
+/* Every select in the app manages its own focus/border styling per
+   component — suppress the browser's native focus ring (Chrome's blue
+   halo, Firefox's dotted inset outline) so it doesn't fight that. */
+select:focus, select:focus-visible {
+  outline: none;
+}
+select::-moz-focus-inner {
+  border: 0;
+}
+
 /* ─────────────────────────────────────────────
    Keyframe animations (used by components)
 ───────────────────────────────────────────── */
@@ -317,13 +327,15 @@ input, textarea, select {
   .table-wrap { overflow-x: unset; }
   .table-base { display: block; }
   .table-base thead { display: none; }
-  .table-base tbody {
+  .table-base tbody,
+  .table-base tfoot {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
     padding: 0.75rem;
   }
-  .table-base tbody tr {
+  .table-base tbody tr,
+  .table-base tfoot tr {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.5rem 1rem;
@@ -334,7 +346,8 @@ input, textarea, select {
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
   .table-base tbody tr:hover td { background: transparent; }
-  .table-base tbody td {
+  .table-base tbody td,
+  .table-base tfoot td {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -346,7 +359,8 @@ input, textarea, select {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .table-base tbody td[data-label]::before {
+  .table-base tbody td[data-label]::before,
+  .table-base tfoot td[data-label]::before {
     content: attr(data-label);
     display: block;
     font-size: 0.625rem;
@@ -361,10 +375,14 @@ input, textarea, select {
     width: 100%;
     flex-wrap: wrap;
   }
-  .table-base tbody td[data-mobile-hide] { display: none; }
-  .table-base tbody td[data-mobile-full] { grid-column: 1 / -1; }
-  .table-base tbody td[colspan] { grid-column: 1 / -1; }
-  .table-base tbody td.table-td-right { text-align: left; }
+  .table-base tbody td[data-mobile-hide],
+  .table-base tfoot td[data-mobile-hide] { display: none; }
+  .table-base tbody td[data-mobile-full],
+  .table-base tfoot td[data-mobile-full] { grid-column: 1 / -1; }
+  .table-base tbody td[colspan],
+  .table-base tfoot td[colspan] { grid-column: 1 / -1; }
+  .table-base tbody td.table-td-right,
+  .table-base tfoot td.table-td-right { text-align: left; }
   /* On mobile, clip text to prevent overflow in card cells */
   .table-cell-clip { max-width: 100%; }
 }

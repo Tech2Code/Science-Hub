@@ -17,8 +17,9 @@ import { amountInWordsINR } from "@/lib/numberToWords";
 import styles from "./invoiceDetail.module.css";
 
 interface InvoiceItem {
-  id: string; productId: string; name: string; unit: string;
-  quantity: number; price: number; gstRate: number; gstAmount: number; total: number;
+  id: string; productId: string; name: string; unit: string; hsn?: string;
+  quantity: number; price: number; discountPercent?: number; discountAmount?: number;
+  gstRate: number; gstAmount: number; total: number;
 }
 interface Payment {
   id: string; date: string; amount: number; method: string; reference: string;
@@ -42,16 +43,13 @@ interface Invoice {
 
 interface BusinessSettings {
   name: string; tagline: string; email: string; phone: string;
-  address: string; city: string; state: string; pincode: string; gstin: string;
+  address: string; city: string; state: string; pincode: string; gstin: string; pan?: string;
+  termsAndConditions?: string;
+  bankName?: string; bankAccountName?: string; bankAccountNumber?: string; bankIfsc?: string; bankBranch?: string;
 }
 
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
 const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-// Derives the effective tax rate from the amount rather than trusting a single
-// stored rate, since items on the same invoice can carry different GST rates.
-const taxRatePct = (taxAmount: number, subtotal: number) =>
-  subtotal > 0 ? Math.round((taxAmount / subtotal) * 10000) / 100 : 0;
-
 // Use createdAt (always a full server timestamp) for display rather than date
 // (which is a user-picked date-only value stored as UTC midnight).
 function parseDate(d: string) {
@@ -132,7 +130,7 @@ function InvoiceSkeleton() {
 
           {/* Items table header */}
           <div className={styles.skTableHeader}>
-            {Array.from({ length: 10 }).map((_, i) => <Sk key={i} w="75%" h={10} r={3} />)}
+            {Array.from({ length: 14 }).map((_, i) => <Sk key={i} w="75%" h={10} r={3} />)}
           </div>
 
           {/* Item rows */}
@@ -147,6 +145,10 @@ function InvoiceSkeleton() {
               <Sk w="60%" h={12} r={3} />
               <Sk w="75%" h={12} r={3} />
               <Sk w="75%" h={12} r={3} />
+              <Sk w="85%" h={12} r={3} />
+              <Sk w="60%" h={12} r={3} />
+              <Sk w="80%" h={12} r={3} />
+              <Sk w="60%" h={12} r={3} />
               <Sk w="85%" h={12} r={3} />
             </div>
           ))}
@@ -239,7 +241,7 @@ export default function InvoiceDetailPage() {
         if (!Array.isArray(data)) { setReturns([]); return; }
         setReturns([...data].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [id]);
 
   // Set page title to invoice number so browser Ctrl+P / Save as PDF uses the right filename
@@ -617,7 +619,7 @@ export default function InvoiceDetailPage() {
           <Breadcrumb items={[{ label: "Invoices", href: "/sales/invoices" }, { label: invoice.invoiceNumber }]} />
           <div className={styles.toolbarActions}>
             <StatusBadge status={invoice.status} />
-            <Button variant="editOutline" size="sm" onClick={() => { setOpeningEdit(true); router.push(`/sales/invoices/edit/${id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit Invoice</Button>
+            <Button variant="editOutline" size="sm" onClick={() => { setOpeningEdit(true); router.push(`/sales/invoices/edit/${id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>Edit Invoice</Button>
             {balance > 0 && (
               <Button
                 variant="greenPrimary"
@@ -627,7 +629,7 @@ export default function InvoiceDetailPage() {
                   setShowPaymentForm(true);
                 }}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>
                 Record Payment
               </Button>
             )}
@@ -636,26 +638,26 @@ export default function InvoiceDetailPage() {
                 invoice.paidAmount <= 0
                   ? "No payment received yet — pay first to enable returns"
                   : allItemsReturned
-                  ? "All items on this invoice have already been returned"
-                  : undefined
+                    ? "All items on this invoice have already been returned"
+                    : undefined
               }
               className={styles.inlineFlex}
             >
               <Button variant="secondary" size="sm" disabled={invoice.paidAmount <= 0 || allItemsReturned} onClick={openReturnForm}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 102.13-9.36L1 10" /></svg>
                 {allItemsReturned ? "All Items Returned" : "Record Return"}
               </Button>
             </span>
             <Button variant="secondary" size="sm" onClick={handleDownloadClick}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
               Download PDF
             </Button>
             <Button variant="secondary" size="sm" onClick={handlePrint}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
               Print
             </Button>
             <Button variant="dangerOutline" size="sm" disabled={deleting} onClick={() => setDeleteConfirm(true)}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
               Delete
             </Button>
             {/* Share PDF button */}
@@ -676,7 +678,7 @@ export default function InvoiceDetailPage() {
                   return next;
                 });
               }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.shareIconMargin}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.shareIconMargin}><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg>
                 Share PDF
               </Button>
               {shareOpen && (
@@ -687,17 +689,17 @@ export default function InvoiceDetailPage() {
                     {([
                       typeof navigator !== "undefined" && "share" in navigator ? {
                         key: "native", label: "Share / Send File",
-                        icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>,
+                        icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" /><polyline points="16 6 12 2 8 6" /><line x1="12" y1="2" x2="12" y2="15" /></svg>,
                         color: "var(--c-blue)",
                       } : null,
                       {
                         key: "whatsapp", label: "WhatsApp",
-                        icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>,
+                        icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" /></svg>,
                         color: "#25d366",
                       },
                       {
                         key: "email", label: "Email",
-                        icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
+                        icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>,
                         color: "var(--c-text-2)",
                       },
                     ] as const).filter(Boolean).map((opt) => (
@@ -729,7 +731,7 @@ export default function InvoiceDetailPage() {
                       type="text"
                       inputMode="decimal"
                       value={paymentForm.amount}
-                      onChange={(e) => { setPaymentForm((p) => ({ ...p, amount: e.target.value })); }}
+                      onChange={(e) => { setPaymentForm((p) => ({ ...p, amount: e.target.value.replace(/[^\d.]/g, "") })); }}
                       placeholder={`e.g. ${balance.toFixed(2)}`}
                       sz="sm"
                       className={styles.paymentAmountInput}
@@ -765,7 +767,7 @@ export default function InvoiceDetailPage() {
                 </FormField>
                 <div className={styles.paymentFormBtnRow}>
                   <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment} loading={addingPayment}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
                     Save Payment
                   </Button>
                   <Button type="button" variant="secondary" size="sm" onClick={() => { setShowPaymentForm(false); }} disabled={addingPayment}>Cancel</Button>
@@ -787,7 +789,7 @@ export default function InvoiceDetailPage() {
                 {/* Modal header */}
                 <div className={styles.returnModalHeader}>
                   <div className={styles.returnModalHeaderLeft}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 102.13-9.36L1 10" /></svg>
                     <h3 className={styles.returnModalTitle}>Record Return</h3>
                   </div>
                   <button
@@ -796,7 +798,7 @@ export default function InvoiceDetailPage() {
                     disabled={addingReturn}
                     className={styles.returnModalCloseBtn}
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                   </button>
                 </div>
                 {/* Meta row (pinned, outside the scrollable body) */}
@@ -865,7 +867,7 @@ export default function InvoiceDetailPage() {
                 {/* Modal footer (pinned, outside the scrollable body) */}
                 <div className={styles.returnModalFooter}>
                   <Button type="submit" variant="primary" size="sm" disabled={addingReturn || returnItems.length === 0} loading={addingReturn}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
                     Save Return
                   </Button>
                   <Button type="button" variant="secondary" size="sm" onClick={() => { if (!addingReturn) setShowReturnForm(false); }} disabled={addingReturn}>Cancel</Button>
@@ -879,46 +881,75 @@ export default function InvoiceDetailPage() {
         <div id="invoice-print-area"
           style={{ background: "var(--inv-bg)", color: "var(--inv-tx)", borderRadius: "0.75rem", boxShadow: "var(--c-shadow-sm)" }}>
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10.5 }}>
               {/* ── Letterhead header ── */}
               <thead>
                 <tr>
-                  <th colSpan={invoice.isInterState ? 9 : 10}
-                    style={{ position:"relative", border:"1px solid var(--inv-bd)", padding:"14px 20px",
-                      textAlign:"center", background:"var(--inv-bg)", fontWeight:"normal" }}>
-                    {/* Populated + shown only during PDF generation / printing.
-                        data-role survives node cloning (ids get stripped there). */}
-                    <div id="invoice-copy-badge" data-role="copy-badge" style={{ display:"none", position:"absolute", top:10, right:14,
-                      fontSize:9, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase",
-                      color:"var(--inv-tx2)", border:"1px solid var(--inv-bd)", borderRadius:4, padding:"3px 9px" }} />
-                    <div style={{ fontSize:10, textDecoration:"underline", letterSpacing:"0.2em",
-                      textTransform:"uppercase", color:"var(--inv-tx3)", marginBottom:5 }}>
-                      Tax Invoice
+                  <th colSpan={invoice.isInterState ? 12 : 14}
+                    style={{ padding: 0, border: "1px solid var(--inv-bd)", background: "var(--inv-bg)", fontWeight: "normal" }}>
+                    {/* Thin top bar: page marker · TAX INVOICE · copy label */}
+                    <div style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      padding: "4px 14px", borderBottom: "1px solid var(--inv-bd)",
+                      fontSize: 9, color: "var(--inv-tx3)"
+                    }}>
+                      {/* Baked into the captured banner image once, then overwritten
+                          per page with the real page number — see stampPageMarker()
+                          in generateInvoicePdf.ts. */}
+                      <span id="invoice-page-marker" data-role="page-marker" style={{ flex: 1, textAlign: "left" }}>Page No. 1 of 1</span>
+                      <span style={{
+                        flex: 1, textAlign: "center", fontSize: 10, fontWeight: 700,
+                        letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--inv-tx2)"
+                      }}>
+                        Tax Invoice
+                      </span>
+                      {/* "Original Copy" by default on screen; overwritten to
+                          "ORIGINAL COPY"/"DUPLICATE COPY" per pass during PDF
+                          generation / printing — data-role survives node cloning
+                          (ids get stripped there). */}
+                      <span id="invoice-copy-badge" data-role="copy-badge" style={{
+                        flex: 1, textAlign: "right",
+                        fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--inv-tx2)"
+                      }}>
+                        Original Copy
+                      </span>
                     </div>
-                    <div style={{ fontSize:20, fontWeight:800, letterSpacing:"0.04em",
-                      textTransform:"uppercase", color:"var(--inv-tx)", marginBottom:4, lineHeight:1.2 }}>
-                      {settings?.name}
+                    {/* Logo + company block */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 20px" }}>
+                      <div style={{ flexShrink: 0, width: 60, height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element -- html2canvas needs a plain <img>, swapped to a data URL during PDF/print generation */}
+                        <img src="/logo.png" alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                      </div>
+                      <div style={{ flex: 1, textAlign: "center" }}>
+                        <div style={{
+                          fontSize: 17, fontWeight: 800, letterSpacing: "0.02em",
+                          color: "var(--inv-tx)", marginBottom: 3, lineHeight: 1.2
+                        }}>
+                          {settings?.name}
+                        </div>
+                        {(settings?.address || settings?.city || settings?.state || settings?.pincode) && (
+                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", marginBottom: 2 }}>
+                            {[settings?.address, settings?.city, settings?.state, settings?.pincode].filter(Boolean).join(", ")}
+                          </div>
+                        )}
+                        {settings?.tagline && (
+                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", marginBottom: 2 }}>{settings.tagline}</div>
+                        )}
+                        {(settings?.phone || settings?.email) && (
+                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", marginBottom: 2 }}>
+                            {[settings?.phone && `Mobile: ${settings.phone}`, settings?.email && `Email: ${settings.email}`]
+                              .filter(Boolean).join("  |  ")}
+                          </div>
+                        )}
+                        {(settings?.gstin || settings?.pan) && (
+                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", fontFamily: "monospace" }}>
+                            {[settings?.gstin && `GSTIN - ${settings.gstin}`, settings?.pan && `PAN - ${settings.pan}`]
+                              .filter(Boolean).join("  |  ")}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ flexShrink: 0, width: 60 }} aria-hidden="true" />
                     </div>
-                    {(settings?.address || settings?.city || settings?.state || settings?.pincode) && (
-                      <div style={{ fontSize:11, color:"var(--inv-tx2)", marginBottom:2 }}>
-                        {[settings?.address, settings?.city, settings?.state, settings?.pincode].filter(Boolean).join(", ")}
-                      </div>
-                    )}
-                    {settings?.tagline && (
-                      <div style={{ fontSize:11, color:"var(--inv-tx2)", marginBottom:2 }}>{settings.tagline}</div>
-                    )}
-                    {(settings?.phone || settings?.email) && (
-                      <div style={{ fontSize:11, color:"var(--inv-tx2)", display:"flex",
-                        justifyContent:"center", gap:24, flexWrap:"wrap", marginBottom:2 }}>
-                        {settings?.phone && <span>Tel. : {settings.phone}</span>}
-                        {settings?.email && <span>email : {settings.email}</span>}
-                      </div>
-                    )}
-                    {settings?.gstin && (
-                      <div style={{ fontSize:11, color:"var(--inv-tx2)", fontFamily:"monospace" }}>
-                        GSTIN : {settings.gstin}
-                      </div>
-                    )}
                   </th>
                 </tr>
               </thead>
@@ -926,115 +957,121 @@ export default function InvoiceDetailPage() {
               <tbody>
                 {/* ── Invoice meta ── */}
                 <tr>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,whiteSpace:"nowrap",background:"var(--inv-bg2)" }}>Invoice No.</td>
-                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",fontWeight:700,color:"var(--inv-tx)" }}>{invoice.invoiceNumber}</td>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,whiteSpace:"nowrap",background:"var(--inv-bg2)" }}>Invoice Date</td>
-                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
-                    {new Date(invoice.createdAt).toLocaleString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:true})}
+                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Invoice No.</td>
+                  <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", fontWeight: 700, color: "var(--inv-tx)" }}>{invoice.invoiceNumber}</td>
+                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Invoice Date</td>
+                  <td colSpan={5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)" }}>
+                    {new Date(invoice.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,whiteSpace:"nowrap",background:"var(--inv-bg2)" }}>Due Date</td>
-                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
-                    {invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "—"}
+                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Due Date</td>
+                  <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)" }}>
+                    {invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                   </td>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,whiteSpace:"nowrap",background:"var(--inv-bg2)" }}>Place of Supply</td>
-                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)" }}>
+                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Place of Supply</td>
+                  <td colSpan={5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)" }}>
                     {invoice.placeOfSupply || invoice.customer.state || "—"}
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Supply Type</td>
-                  <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",
-                    color:invoice.isInterState ? "var(--inv-blue)" : "var(--inv-green)", fontWeight:600 }}>
+                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, background: "var(--inv-bg2)" }}>Supply Type</td>
+                  <td colSpan={invoice.isInterState ? 4 : 5} style={{
+                    border: "1px solid var(--inv-bd)", padding: "8px 14px",
+                    color: invoice.isInterState ? "var(--inv-blue)" : "var(--inv-green)", fontWeight: 600
+                  }}>
                     {invoice.isInterState ? "Inter-state (IGST)" : "Intra-state (CGST+SGST)"}
                   </td>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx3)",fontWeight:600,background:"var(--inv-bg2)" }}>Reverse Charge</td>
-                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",fontWeight:600 }}>
+                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, background: "var(--inv-bg2)" }}>Reverse Charge</td>
+                  <td colSpan={5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)", fontWeight: 600 }}>
                     {invoice.reverseCharge ? "Yes" : "No"}
                   </td>
                 </tr>
 
                 {/* ── Buyer: Bill To / Ship To ── */}
                 <tr>
-                  <td colSpan={5}
-                    style={{ border:"1px solid var(--inv-bd)", padding:0, verticalAlign:"top" }}>
-                    <div style={{ background:"var(--inv-bg3)", padding:"5px 14px", fontSize:11, fontWeight:700,
-                      color:"var(--inv-tx2)", borderBottom:"1px solid var(--inv-bd)" }}>
+                  <td colSpan={invoice.isInterState ? 6 : 7}
+                    style={{ border: "1px solid var(--inv-bd)", padding: 0, verticalAlign: "top" }}>
+                    <div style={{
+                      background: "var(--inv-bg3)", padding: "5px 14px", fontSize: 10, fontWeight: 700,
+                      color: "var(--inv-tx2)", borderBottom: "1px solid var(--inv-bd)"
+                    }}>
                       Buyer (Bill to)
                     </div>
-                    <div style={{ padding:"10px 14px", lineHeight:1.75, fontSize:12 }}>
-                      <div style={{ fontWeight:700, fontSize:13, color:"var(--inv-tx)", marginBottom:2 }}>
+                    <div style={{ padding: "10px 14px", lineHeight: 1.75, fontSize: 10.5 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: "var(--inv-tx)", marginBottom: 2 }}>
                         {invoice.customer.name}
                       </div>
                       {invoice.customer.address && (
-                        <div style={{ color:"var(--inv-tx2)" }}>{invoice.customer.address}</div>
+                        <div style={{ color: "var(--inv-tx2)" }}>{invoice.customer.address}</div>
                       )}
                       {(invoice.customer.city || invoice.customer.state) && (
-                        <div style={{ color:"var(--inv-tx2)" }}>
+                        <div style={{ color: "var(--inv-tx2)" }}>
                           {[invoice.customer.city, invoice.customer.state].filter(Boolean).join(", ")}
                         </div>
                       )}
                       {invoice.customer.pincode && (
-                        <div style={{ color:"var(--inv-tx2)" }}>{invoice.customer.pincode}</div>
+                        <div style={{ color: "var(--inv-tx2)" }}>{invoice.customer.pincode}</div>
                       )}
                       {(invoice.customer.phone || invoice.customer.email) && (
-                        <div style={{ color:"var(--inv-tx3)", marginTop:2 }}>
+                        <div style={{ color: "var(--inv-tx3)", marginTop: 2 }}>
                           {[invoice.customer.phone && `Ph: ${invoice.customer.phone}`,
-                            invoice.customer.email && `Email: ${invoice.customer.email}`]
+                          invoice.customer.email && `Email: ${invoice.customer.email}`]
                             .filter(Boolean).join("  |  ")}
                         </div>
                       )}
-                      <div style={{ marginTop:6, borderTop:"1px solid var(--inv-bd)", paddingTop:5 }}>
+                      <div style={{ marginTop: 6, borderTop: "1px solid var(--inv-bd)", paddingTop: 5 }}>
                         {(invoice.placeOfSupply || invoice.customer.state) && (
-                          <div style={{ fontWeight:600, color:"var(--inv-tx)", fontSize:11 }}>
+                          <div style={{ fontWeight: 600, color: "var(--inv-tx)", fontSize: 10 }}>
                             Place of Supply : {invoice.placeOfSupply || invoice.customer.state}
                           </div>
                         )}
                         {invoice.customer.gstin && (
-                          <div style={{ fontWeight:600, color:"var(--inv-tx)", fontSize:11 }}>
+                          <div style={{ fontWeight: 600, color: "var(--inv-tx)", fontSize: 10 }}>
                             GST Number : {invoice.customer.gstin}
                           </div>
                         )}
                       </div>
                     </div>
                   </td>
-                  <td colSpan={invoice.isInterState ? 4 : 5}
-                    style={{ border:"1px solid var(--inv-bd)", padding:0, verticalAlign:"top" }}>
-                    <div style={{ background:"var(--inv-bg3)", padding:"5px 14px", fontSize:11, fontWeight:700,
-                      color:"var(--inv-tx2)", borderBottom:"1px solid var(--inv-bd)" }}>
+                  <td colSpan={invoice.isInterState ? 6 : 7}
+                    style={{ border: "1px solid var(--inv-bd)", padding: 0, verticalAlign: "top" }}>
+                    <div style={{
+                      background: "var(--inv-bg3)", padding: "5px 14px", fontSize: 10, fontWeight: 700,
+                      color: "var(--inv-tx2)", borderBottom: "1px solid var(--inv-bd)"
+                    }}>
                       Buyer (Ship to)
                     </div>
-                    <div style={{ padding:"10px 14px", lineHeight:1.75, fontSize:12 }}>
-                      <div style={{ fontWeight:700, fontSize:13, color:"var(--inv-tx)", marginBottom:2 }}>
+                    <div style={{ padding: "10px 14px", lineHeight: 1.75, fontSize: 10.5 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: "var(--inv-tx)", marginBottom: 2 }}>
                         {invoice.customer.name}
                       </div>
                       {invoice.customer.address && (
-                        <div style={{ color:"var(--inv-tx2)" }}>{invoice.customer.address}</div>
+                        <div style={{ color: "var(--inv-tx2)" }}>{invoice.customer.address}</div>
                       )}
                       {(invoice.customer.city || invoice.customer.state) && (
-                        <div style={{ color:"var(--inv-tx2)" }}>
+                        <div style={{ color: "var(--inv-tx2)" }}>
                           {[invoice.customer.city, invoice.customer.state].filter(Boolean).join(", ")}
                         </div>
                       )}
                       {invoice.customer.pincode && (
-                        <div style={{ color:"var(--inv-tx2)" }}>{invoice.customer.pincode}</div>
+                        <div style={{ color: "var(--inv-tx2)" }}>{invoice.customer.pincode}</div>
                       )}
                       {(invoice.customer.phone || invoice.customer.email) && (
-                        <div style={{ color:"var(--inv-tx3)", marginTop:2 }}>
+                        <div style={{ color: "var(--inv-tx3)", marginTop: 2 }}>
                           {[invoice.customer.phone && `Ph: ${invoice.customer.phone}`,
-                            invoice.customer.email && `Email: ${invoice.customer.email}`]
+                          invoice.customer.email && `Email: ${invoice.customer.email}`]
                             .filter(Boolean).join("  |  ")}
                         </div>
                       )}
-                      <div style={{ marginTop:6, borderTop:"1px solid var(--inv-bd)", paddingTop:5 }}>
+                      <div style={{ marginTop: 6, borderTop: "1px solid var(--inv-bd)", paddingTop: 5 }}>
                         {(invoice.placeOfSupply || invoice.customer.state) && (
-                          <div style={{ fontWeight:600, color:"var(--inv-tx)", fontSize:11 }}>
+                          <div style={{ fontWeight: 600, color: "var(--inv-tx)", fontSize: 10 }}>
                             Place of Supply : {invoice.placeOfSupply || invoice.customer.state}
                           </div>
                         )}
                         {invoice.customer.gstin && (
-                          <div style={{ fontWeight:600, color:"var(--inv-tx)", fontSize:11 }}>
+                          <div style={{ fontWeight: 600, color: "var(--inv-tx)", fontSize: 10 }}>
                             GST Number : {invoice.customer.gstin}
                           </div>
                         )}
@@ -1043,114 +1080,180 @@ export default function InvoiceDetailPage() {
                   </td>
                 </tr>
 
-                {/* Items header */}
-                <tr id="invoice-col-header" style={{ background:"var(--inv-bg3)",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:"0.05em",color:"var(--inv-tx2)" }}>
-                  {[
-                    ["#","center","3%"],["Description","left","25%"],
-                    ["Qty","center","5%"],["Unit","center","5%"],["Rate (₹)","right","9%"],
-                    ["Taxable (₹)","right","9%"],["GST%","center","5%"],
-                  ].map(([label, align, width]) => (
-                    <td key={label} style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:align as "left"|"right"|"center",width,whiteSpace:"nowrap" }}>{label}</td>
-                  ))}
-                  {invoice.isInterState
-                    ? <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"10%",whiteSpace:"nowrap" }}>IGST (₹)</td>
-                    : <>
-                        <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"9%",whiteSpace:"nowrap" }}>CGST (₹)</td>
-                        <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"9%",whiteSpace:"nowrap" }}>SGST (₹)</td>
-                      </>
-                  }
-                  <td style={{ border:"1px solid var(--inv-bd)",padding:"8px 8px",textAlign:"right",width:"10%",whiteSpace:"nowrap" }}>Total (₹)</td>
-                </tr>
+                {/* Items header — a single real row (no rowSpan anywhere): html2canvas
+                    doesn't compute rowSpan cell heights correctly, which cut off/hid
+                    borders in the generated PDF even though it rendered fine on
+                    screen. The CGST/SGST/IGST group cells still colSpan the same 2
+                    underlying data columns below them (colSpan renders fine), but
+                    their Rate/Amount sub-labels are nested inline via flex instead of
+                    living in a second table row. */}
+                {(() => {
+                  const taxGroup = (label: string, width: string) => (
+                    <td key={label} colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", width, whiteSpace: "nowrap" }}>
+                      <div style={{ textAlign: "center" }}>{label}</div>
+                      <div style={{ display: "flex", fontSize: 8, gap: 6, margin: "5px -4px 0", borderTop: "1px solid var(--inv-bd)", padding: "5px 5px 0 5px" }}>
+                        <div style={{ flex: "1.3", textAlign: "left" }}>Rate</div>
+                        <div style={{ flex: 1, textAlign: "left" }}>Amount</div>
+                      </div>
+                    </td>
+                  );
+                  return (
+                    <tr id="invoice-col-header" style={{ background: "var(--inv-bg3)", fontWeight: 700, fontSize: 9.5, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--inv-tx2)" }}>
+                      {[
+                        ["#", "center", "3%"], ["Description", "left", "16%"], ["HSN/SAC", "center", "6%"],
+                        ["Qty", "center", "5%"], ["Unit", "center", "5%"],
+                      ].map(([label, align, width]) => (
+                        <td key={label} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align as "left" | "right" | "center", width, whiteSpace: "nowrap", verticalAlign: "middle" }}>{label}</td>
+                      ))}
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "7%", verticalAlign: "middle" }}>
+                        <div>List</div><div>Price(₹)</div>
+                      </td>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "7%", verticalAlign: "middle" }}>
+                        <div>Total</div><div>Value (₹)</div>
+                      </td>
+                      {[
+                        ["Discount", "center", "6%"], ["Taxable (₹)", "right", "7%"],
+                      ].map(([label, align, width]) => (
+                        <td key={label} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align as "left" | "right" | "center", width, whiteSpace: "nowrap", verticalAlign: "middle" }}>{label}</td>
+                      ))}
+                      {invoice.isInterState
+                        ? taxGroup("IGST", "10%")
+                        : <>{taxGroup("CGST", "9%")}{taxGroup("SGST", "9%")}</>
+                      }
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "8%", whiteSpace: "nowrap", verticalAlign: "middle" }}>Total (₹)</td>
+                    </tr>
+                  );
+                })()}
 
                 {/* Item rows */}
                 {invoice.items.map((item, idx) => {
-                  const taxable = item.quantity * item.price;
+                  const discountAmount = item.discountAmount ?? 0;
+                  const grossValue = item.quantity * item.price;
+                  const taxable = grossValue - discountAmount;
                   const halfGst = item.gstAmount / 2;
+                  const halfRate = item.gstRate / 2;
                   const rowBg = idx % 2 === 1 ? "var(--inv-bg2)" : "var(--inv-bg)";
-                  const c = (content: React.ReactNode, align: "left"|"right"|"center" = "center", bold = false) => (
-                    <td style={{ border:"1px solid var(--inv-bd)",padding:"7px 8px",textAlign:align,
-                      fontWeight:bold?700:undefined,background:rowBg,color:bold?"var(--inv-tx)":"var(--inv-tx2)" }}>
+                  const c = (content: React.ReactNode, align: "left" | "right" | "center" = "center", bold = false, width?: string) => (
+                    <td style={{
+                      border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align, width,
+                      fontWeight: bold ? 700 : undefined, background: rowBg, color: bold ? "var(--inv-tx)" : "var(--inv-tx2)"
+                    }}>
                       {content}
                     </td>
                   );
                   return (
                     <tr key={item.id}>
                       {c(idx + 1)}
-                      <td style={{ border:"1px solid var(--inv-bd)",padding:"7px 10px",background:rowBg,fontWeight:600,color:"var(--inv-tx)",wordBreak:"break-word" }}>{item.name}</td>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 6px", background: rowBg, fontWeight: 600, color: "var(--inv-tx)", wordBreak: "break-word" }}>{item.name}</td>
+                      {c(item.hsn || "—")}
                       {c(item.quantity)}{c(item.unit)}
-                      {c(fmt(item.price),"right")}
-                      {c(fmt(taxable),"right")}
-                      {c(`${item.gstRate}%`)}
+                      {c(fmt(item.price))}
+                      {c(fmt(grossValue))}
+                      {c(discountAmount > 0 ? `₹${fmt(discountAmount)}` : "—")}
+                      {c(fmt(taxable), "right")}
                       {invoice.isInterState
-                        ? c(fmt(item.gstAmount),"right")
-                        : <>{c(fmt(halfGst),"right")}{c(fmt(halfGst),"right")}</>}
-                      {c(fmt(item.total),"right",true)}
+                        ? <>{c(`${item.gstRate}%`, "center", false, "4.5%")}{c(fmt(item.gstAmount), "right")}</>
+                        : <>{c(`${halfRate}%`, "center", false, "4.5%")}{c(fmt(halfGst), "right")}{c(`${halfRate}%`, "center", false, "4.5%")}{c(fmt(halfGst), "right")}</>}
+                      {c(fmt(item.total), "right", true)}
                     </tr>
                   );
                 })}
 
                 {/* Notes + Totals */}
                 <tr>
-                  <td colSpan={5} rowSpan={invoice.isInterState ? 7 : 8}
-                    style={{ border:"1px solid var(--inv-bd)",padding:"14px 16px",verticalAlign:"top",color:"var(--inv-tx3)" }}>
-                    <div style={{ display:"flex",flexDirection:"column",height:"100%",minHeight:120 }}>
-                      <div style={{ marginTop:"auto" }}>
-                        <div style={{ marginBottom:10 }}>
-                          <div style={{ fontWeight:700,textTransform:"uppercase",fontSize:11,marginBottom:4,color:"var(--inv-tx2)" }}>Terms &amp; Conditions</div>
-                          <ol style={{ margin:0,paddingLeft:14,fontSize:10.5,lineHeight:1.5 }}>
-                            <li>Interest @ 24%p.a would be charged after 45 days of Invoice</li>
-                            <li>Material sold strictly for lab use only</li>
-                            <li>We are not responsible for any loss in transit.</li>
-                            <li>Subject to &apos;Delhi&apos; Jurisdiction only.</li>
-                          </ol>
+                  <td colSpan={8} rowSpan={invoice.isInterState ? 7 : 8}
+                    style={{ border: "1px solid var(--inv-bd)", padding: "14px 16px", verticalAlign: "top", color: "var(--inv-tx3)" }}>
+                    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 120 }}>
+                      <div style={{ marginTop: "auto" }}>
+                        <div style={{ display: "flex", gap: 16, marginBottom: 10 }}>
+                          {settings?.termsAndConditions?.trim() && (
+                            <div style={{ flex: 1.7, minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10, marginBottom: 4, color: "var(--inv-tx2)" }}>Terms &amp; Conditions</div>
+                              <ol style={{ margin: 0, paddingLeft: 14, fontSize: 9.5, lineHeight: 1.5 }}>
+                                {settings.termsAndConditions.split("\n").map((line, i) => line.trim() && <li key={i}>{line.trim()}</li>)}
+                              </ol>
+                            </div>
+                          )}
+                          {(settings?.bankName || settings?.bankAccountNumber) && (() => {
+                            const bankRow = (label: string, value?: string) => value && (
+                              <div>
+                                <span style={{ fontWeight: 600, color: "var(--inv-tx2)" }}>{label} : </span>
+                                <span>{value}</span>
+                              </div>
+                            );
+                            const hasTerms = Boolean(settings?.termsAndConditions?.trim());
+                            return (
+                              <div style={{ flex: 1, minWidth: 0, ...(hasTerms ? { borderLeft: "1px solid var(--inv-bd2)", paddingLeft: 14 } : {}) }}>
+                                <div style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10.5, marginBottom: 5, color: "var(--inv-tx2)" }}>Bank Details</div>
+                                <div style={{ fontSize: 10.5, lineHeight: 1.75, color: "var(--inv-tx)" }}>
+                                  {bankRow("Bank", settings.bankName)}
+                                  {bankRow("A/C Name", settings.bankAccountName)}
+                                  {bankRow("A/C No", settings.bankAccountNumber)}
+                                  {bankRow("IFSC", settings.bankIfsc)}
+                                  {bankRow("Branch", settings.bankBranch)}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
                         {invoice.notes && (
-                          <><div style={{ fontWeight:700,textTransform:"uppercase",fontSize:11,marginBottom:4,color:"var(--inv-tx2)" }}>Notes</div><p>{invoice.notes}</p></>
+                          <><div style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10, marginBottom: 4, color: "var(--inv-tx2)" }}>Notes</div><p>{invoice.notes}</p></>
                         )}
-                        <p style={{ marginTop:10,fontSize:11,opacity:0.55 }}>This is a computer-generated invoice.</p>
-                        <div style={{ marginTop:16,borderTop:"1px solid var(--inv-bd2)",paddingTop:8 }}>
-                          <div style={{ fontSize:11,fontWeight:600,color:"var(--inv-tx2)",marginBottom:20 }}>For {settings?.name}</div>
-                          <div style={{ fontSize:10,color:"var(--inv-tx3)" }}>Authorised Signatory</div>
+                        <p style={{ marginTop: 10, fontSize: 9.5, opacity: 0.55 }}>This is a computer-generated invoice.</p>
+                        <div style={{ marginTop: 16, borderTop: "1px solid var(--inv-bd2)", paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 16 }}>
+                          <div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: "var(--inv-tx2)", marginBottom: 20 }}>For {settings?.name}</div>
+                            <div style={{ fontSize: 9, color: "var(--inv-tx3)" }}>Authorised Signatory</div>
+                          </div>
+                          {/* Shown only on the Duplicate Copy pass — toggled in
+                              generateInvoicePdf.ts's onclone, same mechanism as
+                              #invoice-copy-badge. Original/no-label copies never show it. */}
+                          <div id="invoice-receiver-signature" data-role="receiver-signature" style={{ display: "none", textAlign: "right" }}>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: "var(--inv-tx2)", marginBottom: 20 }}>&nbsp;</div>
+                            <div style={{ fontSize: 9, color: "var(--inv-tx3)" }}>Receiver Signature</div>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </td>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>Subtotal</td>
-                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.subtotal)}</td>
+                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Subtotal</td>
+                  <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.subtotal)}</td>
                 </tr>
                 {invoice.isInterState ? (
                   <tr>
-                    <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>IGST ({taxRatePct(invoice.igst, invoice.subtotal)}%)</td>
-                    <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.igst)}</td>
+                    <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total IGST</td>
+                    <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.igst)}</td>
                   </tr>
                 ) : (
                   <>
                     <tr>
-                      <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>CGST ({taxRatePct(invoice.cgst, invoice.subtotal)}%)</td>
-                      <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.cgst)}</td>
+                      <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total CGST</td>
+                      <td colSpan={4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.cgst)}</td>
                     </tr>
                     <tr>
-                      <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>SGST ({taxRatePct(invoice.sgst, invoice.subtotal)}%)</td>
-                      <td colSpan={3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)" }}>₹{fmt(invoice.sgst)}</td>
+                      <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total SGST</td>
+                      <td colSpan={4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.sgst)}</td>
                     </tr>
                   </>
                 )}
                 <tr>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",fontWeight:700,color:"var(--inv-tx)",background:"var(--inv-bg4)",fontSize:13 }}>Grand Total</td>
-                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",textAlign:"right",fontWeight:700,color:"var(--inv-tx)",background:"var(--inv-bg4)",fontSize:13 }}>₹{fmt(invoice.total)}</td>
+                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", fontWeight: 700, color: "var(--inv-tx)", background: "var(--inv-bg4)", fontSize: 12 }}>Grand Total</td>
+                  <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", fontWeight: 700, color: "var(--inv-tx)", background: "var(--inv-bg4)", fontSize: 12 }}>₹{fmt(invoice.total)}</td>
                 </tr>
                 <tr>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"7px 14px",color:"var(--inv-tx3)",background:"var(--inv-bg2)",fontSize:10.5,fontStyle:"italic" }}>Amount in Words</td>
-                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"7px 14px",textAlign:"right",color:"var(--inv-tx2)",background:"var(--inv-bg2)",fontSize:10.5,fontStyle:"italic" }}>{amountInWordsINR(invoice.total)}</td>
+                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx3)", background: "var(--inv-bg2)", fontSize: 9.5, fontStyle: "italic" }}>Amount in Words</td>
+                  <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)", fontSize: 9.5, fontStyle: "italic" }}>{amountInWordsINR(invoice.total)}</td>
                 </tr>
                 <tr>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",color:"var(--inv-green)",background:"var(--inv-bg2)" }}>Paid</td>
-                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"8px 14px",textAlign:"right",color:"var(--inv-green)",fontWeight:600,background:"var(--inv-bg2)" }}>₹{fmt(invoice.paidAmount)}</td>
+                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-green)", background: "var(--inv-bg2)" }}>Paid</td>
+                  <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-green)", fontWeight: 600, background: "var(--inv-bg2)" }}>₹{fmt(invoice.paidAmount)}</td>
                 </tr>
                 <tr>
-                  <td colSpan={2} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",fontWeight:700,color:"var(--inv-tx)",background:"var(--inv-bg3)" }}>Balance Due</td>
-                  <td colSpan={invoice.isInterState ? 2 : 3} style={{ border:"1px solid var(--inv-bd)",padding:"9px 14px",textAlign:"right",fontWeight:700,fontSize:14,background:"var(--inv-bg3)",
-                    color: balance > 0 ? "var(--inv-red)" : "var(--inv-green)" }}>₹{fmt(balance)}</td>
+                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", fontWeight: 700, color: "var(--inv-tx)", background: "var(--inv-bg3)" }}>Balance Due</td>
+                  <td colSpan={invoice.isInterState ? 2 : 4} style={{
+                    border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", fontWeight: 700, fontSize: 12.5, background: "var(--inv-bg3)",
+                    color: balance > 0 ? "var(--inv-red)" : "var(--inv-green)"
+                  }}>₹{fmt(balance)}</td>
                 </tr>
 
               </tbody>
@@ -1158,21 +1261,22 @@ export default function InvoiceDetailPage() {
               {/* PDF payment history — direct rows in main table to avoid double borders */}
               {showPaymentInPdf && invoice.payments.length > 0 && (() => {
                 const sorted = [...invoice.payments].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-                const allCols = invoice.isInterState ? 9 : 10;
+                const allCols = invoice.isInterState ? 12 : 14;
                 // Reference/UTR and Amount columns are sized so the divider between
                 // them lands on the same underlying column boundary as the Grand
                 // Total / Balance Due label|value divider above — the notes cell
-                // (colSpan 5, fixed for both supply types) plus the label (colSpan 2)
-                // always puts that divider after 7 real columns, so Date+Method+Ref
-                // must also total 7 in both states; Amount absorbs the 1-column
-                // difference between inter-state (9 total) and intra-state (10).
-                const refCols = 3;
-                const amountCols = invoice.isInterState ? 2 : 3;
-                const bd: React.CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 10px", fontSize: 11 };
+                // (colSpan 8, fixed for both supply types) plus the label (colSpan 2)
+                // always puts that divider after 10 real columns, so Date+Method+Ref
+                // must also total 10 in both states; Amount absorbs the difference
+                // between inter-state (12 total) and intra-state (14, since CGST/SGST
+                // each carry their own Rate+Amount sub-columns).
+                const refCols = 6;
+                const amountCols = invoice.isInterState ? 2 : 4;
+                const bd: React.CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 10px", fontSize: 10 };
                 return (
                   <tbody>
                     <tr>
-                      <td colSpan={allCols} style={{ ...bd, padding: "7px 14px", background: "var(--inv-bg3)", color: "var(--inv-tx)", fontWeight: 700, fontSize: 12 }}>
+                      <td colSpan={allCols} style={{ ...bd, padding: "7px 14px", background: "var(--inv-bg3)", color: "var(--inv-tx)", fontWeight: 700, fontSize: 10.5 }}>
                         Payment History
                       </td>
                     </tr>
@@ -1197,28 +1301,28 @@ export default function InvoiceDetailPage() {
               })()}
 
               {showReturnInPdf && returns.length > 0 && (() => {
-                const allCols = invoice.isInterState ? 9 : 10;
+                const allCols = invoice.isInterState ? 12 : 14;
                 // Column widths are tuned so two dividers line up with the tables
                 // above: Item|Qty×Rate lands on the same column boundary as the
                 // Grand Total/Balance Due label|value split (the notes cell is now
-                // always colSpan 5), and Qty×Rate|Amount lands on the same boundary
+                // always colSpan 8), and Qty×Rate|Amount lands on the same boundary
                 // as Payment History's Reference|Amount divider (also now fixed,
                 // since both boundaries above are fixed for both supply types).
-                const itemCols = 3;
+                const itemCols = 6;
                 const qtyRateCols = 2;
-                const amountCols = invoice.isInterState ? 2 : 3;
-                const bd: React.CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 10px", fontSize: 11 };
+                const amountCols = invoice.isInterState ? 2 : 4;
+                const bd: React.CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 10px", fontSize: 10 };
                 return (
                   <tbody>
                     <tr>
-                      <td colSpan={allCols} style={{ ...bd, padding: "7px 14px", background: "var(--inv-bg3)", color: "var(--inv-tx)", fontWeight: 700, fontSize: 12 }}>
+                      <td colSpan={allCols} style={{ ...bd, padding: "7px 14px", background: "var(--inv-bg3)", color: "var(--inv-tx)", fontWeight: 700, fontSize: 10.5 }}>
                         Return History
                       </td>
                     </tr>
                     <tr>
                       <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date &amp; Time</td>
                       <td colSpan={itemCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Item</td>
-                      <td colSpan={qtyRateCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Qty × Rate</td>
+                      <td colSpan={qtyRateCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Qty × List Price</td>
                       <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
                     </tr>
                     {returns.map((ret) =>
@@ -1248,8 +1352,8 @@ export default function InvoiceDetailPage() {
 
               <tfoot>
                 <tr>
-                  <td colSpan={invoice.isInterState ? 9 : 10}
-                    style={{ border:"1px solid var(--inv-bd)",padding:"8px 16px",textAlign:"center",fontSize:11,color:"var(--inv-tx3)",background:"var(--inv-bg2)" }}>
+                  <td colSpan={invoice.isInterState ? 12 : 14}
+                    style={{ border: "1px solid var(--inv-bd)", padding: "8px 16px", textAlign: "center", fontSize: 9.5, color: "var(--inv-tx3)", background: "var(--inv-bg2)" }}>
                     Thank you for your business · {settings?.name}{settings?.email ? ` · ${settings.email}` : ""}{settings?.phone ? ` · ${settings.phone}` : ""}
                   </td>
                 </tr>
@@ -1262,13 +1366,13 @@ export default function InvoiceDetailPage() {
         {/* Payment history */}
         {invoice.payments.length > 0 && (() => {
           const METHOD_STYLE: Record<string, { bg: string; color: string; border: string }> = {
-            Cash:    { bg:"var(--c-green-bg)",   color:"var(--c-green-text)",  border:"var(--c-green-border)" },
-            UPI:     { bg:"#f3e8ff",              color:"#7c3aed",              border:"#ddd6fe" },
-            NEFT:    { bg:"var(--c-blue-bg)",     color:"var(--c-blue)",        border:"var(--c-blue-border)" },
-            RTGS:    { bg:"var(--c-blue-bg)",     color:"var(--c-blue)",        border:"var(--c-blue-border)" },
-            Cheque:  { bg:"var(--c-amber-bg)",    color:"var(--c-amber)",       border:"var(--c-amber-border)" },
-            Card:    { bg:"#ede9fe",              color:"#5b21b6",              border:"#c4b5fd" },
-            Other:   { bg:"var(--c-bg-sub)",      color:"var(--c-text-3)",      border:"var(--c-border)" },
+            Cash: { bg: "var(--c-green-bg)", color: "var(--c-green-text)", border: "var(--c-green-border)" },
+            UPI: { bg: "#f3e8ff", color: "#7c3aed", border: "#ddd6fe" },
+            NEFT: { bg: "var(--c-blue-bg)", color: "var(--c-blue)", border: "var(--c-blue-border)" },
+            RTGS: { bg: "var(--c-blue-bg)", color: "var(--c-blue)", border: "var(--c-blue-border)" },
+            Cheque: { bg: "var(--c-amber-bg)", color: "var(--c-amber)", border: "var(--c-amber-border)" },
+            Card: { bg: "#ede9fe", color: "#5b21b6", border: "#c4b5fd" },
+            Other: { bg: "var(--c-bg-sub)", color: "var(--c-text-3)", border: "var(--c-border)" },
           };
           const paidTotal = invoice.payments.reduce((s, p) => s + p.amount, 0);
           const totalReturned = returns.reduce((s, r) => s + r.items.reduce((ss, ri) => ss + ri.total, 0), 0);
@@ -1296,12 +1400,12 @@ export default function InvoiceDetailPage() {
                   >
                     {showPaymentInPdf ? (
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                       </svg>
                     ) : (
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
                       </svg>
                     )}
                     {showPaymentInPdf ? "Remove Payment History from PDF" : "Add Payment History to PDF"}
@@ -1360,10 +1464,10 @@ export default function InvoiceDetailPage() {
                           <tr key={p.id}>
                             <td className={styles.payIdxCell}>{idx + 1}</td>
                             <td data-label="Date & Time" className={styles.payDateCell}>
-                              {new Date(p.date).toLocaleString("en-IN", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", hour12:true })}
+                              {new Date(p.date).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
                             </td>
                             <td data-label="Method">
-                              <span className={styles.methodBadge} style={{ background:ms.bg, color:ms.color, border:`1px solid ${ms.border}` }}>{p.method}</span>
+                              <span className={styles.methodBadge} style={{ background: ms.bg, color: ms.color, border: `1px solid ${ms.border}` }}>{p.method}</span>
                             </td>
                             <td data-label="Reference" className={styles.payReferenceCell}>
                               {p.reference || "—"}
@@ -1373,7 +1477,7 @@ export default function InvoiceDetailPage() {
                             </td>
                           </tr>
                         );
-                    })}
+                      })}
                   </tbody>
                 </table>
               </div>
@@ -1388,7 +1492,7 @@ export default function InvoiceDetailPage() {
             <div className={`card ${styles.returnsHistoryCard}`}>
               <div className={styles.returnsHistoryHeader}>
                 <div className={styles.returnsHistoryHeaderLeft}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 102.13-9.36L1 10" /></svg>
                   <span className={styles.returnsHistoryTitle}>Return History</span>
                   <span className={styles.returnsCountBadge}>{returns.length}</span>
                 </div>
@@ -1400,12 +1504,12 @@ export default function InvoiceDetailPage() {
                   >
                     {showReturnInPdf ? (
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                       </svg>
                     ) : (
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
                       </svg>
                     )}
                     {showReturnInPdf ? "Remove Return History from PDF" : "Add Return History to PDF"}
@@ -1419,7 +1523,7 @@ export default function InvoiceDetailPage() {
                     <div className={styles.returnEntryHead}>
                       <div className={styles.returnEntryHeadLeft}>
                         <span className={styles.returnEntryDate}>
-                          {parseDate(ret.createdAt).toLocaleString("en-IN", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", hour12:true })}
+                          {parseDate(ret.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
                         </span>
                         {ret.notes && <span className={styles.returnEntryNotes}>— {ret.notes}</span>}
                       </div>

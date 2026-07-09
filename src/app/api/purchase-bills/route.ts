@@ -6,11 +6,22 @@ import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { logActivity } from "@/lib/activity";
 import { recordStockMovement } from "@/lib/stockMovement";
+import { isPurchaseBillBlobUrl } from "@/lib/blobStorage";
 
 const BILL_INCLUDE = {
   vendor: { select: { id: true, name: true, company: true } },
   createdBy: { select: { id: true, name: true } },
-  items: { include: { product: { select: { id: true, name: true, unit: true } } } },
+  items: {
+    include: {
+      product: {
+        select: {
+          id: true, name: true, unit: true,
+          brand: { select: { name: true } },
+          category: { select: { name: true } },
+        },
+      },
+    },
+  },
   payments: { orderBy: { date: "desc" as const } },
 };
 
@@ -49,9 +60,23 @@ export async function POST(req: NextRequest) {
 
     if (!vendorId) return NextResponse.json({ error: "Vendor is required." }, { status: 400 });
     if (!Array.isArray(items) || items.length === 0) return NextResponse.json({ error: "At least one item is required." }, { status: 400 });
+    if (attachmentUrl && !isPurchaseBillBlobUrl(attachmentUrl)) {
+      return NextResponse.json({ error: "Invalid attachment URL" }, { status: 400 });
+    }
 
     const vendor = await prisma.vendor.findFirst({ where: { id: vendorId, deletedAt: null } });
     if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 400 });
+
+    if (dueDate) {
+      const parsedDueDate = new Date(dueDate);
+      if (isNaN(parsedDueDate.getTime())) {
+        return NextResponse.json({ error: "Invalid due date" }, { status: 400 });
+      }
+      const parsedBillDate = new Date(billDate ?? Date.now());
+      if (parsedDueDate < parsedBillDate) {
+        return NextResponse.json({ error: "Due date cannot be before the bill date" }, { status: 400 });
+      }
+    }
 
     for (const item of items as { quantity: number; purchasePrice: number }[]) {
       const quantity = parseFloat(String(item.quantity));

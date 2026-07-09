@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getBusinessSettings } from "@/lib/db";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAdmin } from "@/lib/apiAuth";
-import { encrypt } from "@/lib/crypto";
+import { encrypt, decrypt } from "@/lib/crypto";
+import { validateSettingsInput } from "@/lib/validation";
 
 export async function GET() {
   try {
@@ -29,17 +30,33 @@ export async function PUT(request: NextRequest) {
     const auth = await requireAdmin();
     if (!auth.ok) return auth.response;
     const body = await request.json();
-    const { name, tagline, email, phone, address, city, state, pincode, gstin, gmailUser, gmailAppPassword } = body;
-    const updateData: Record<string, string> = { name, tagline, email, phone, address, city, state, pincode, gstin, gmailUser: gmailUser ?? "" };
+    const {
+      name, tagline, email, phone, address, city, state, pincode, gstin, pan, gmailUser, gmailAppPassword,
+      bankName, bankAccountName, bankAccountNumber, bankIfsc, bankBranch, termsAndConditions,
+    } = body;
+    const validationError = validateSettingsInput({
+      pan, termsAndConditions, phone, pincode, gstin, bankName, bankAccountNumber, bankIfsc, bankBranch,
+    });
+    if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+    const updateData: Record<string, string> = {
+      name, tagline, email, phone, address, city, state, pincode, gstin, pan: (pan ?? "").toUpperCase(), gmailUser: gmailUser ?? "",
+      bankName: bankName ?? "", bankAccountName: bankAccountName ?? "", bankIfsc: bankIfsc ?? "", bankBranch: bankBranch ?? "",
+      termsAndConditions: termsAndConditions ?? "",
+    };
     // Save password when explicitly provided; if gmailUser is being cleared, clear password too
     if (gmailAppPassword) updateData.gmailAppPassword = encrypt(gmailAppPassword);
     else if (!gmailUser) updateData.gmailAppPassword = "";
-    const { gmailAppPassword: storedPassword, ...settings } = await prisma.businessSettings.upsert({
+    updateData.bankAccountNumber = bankAccountNumber ? encrypt(bankAccountNumber) : "";
+    const { gmailAppPassword: storedPassword, bankAccountNumber: storedAccountNumber, ...settings } = await prisma.businessSettings.upsert({
       where: { id: "singleton" },
       create: { id: "singleton", ...updateData },
       update: updateData,
     });
-    return NextResponse.json({ ...settings, gmailAppPasswordSet: Boolean(storedPassword) });
+    return NextResponse.json({
+      ...settings,
+      gmailAppPasswordSet: Boolean(storedPassword),
+      bankAccountNumber: storedAccountNumber ? decrypt(storedAccountNumber) : "",
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Failed to update settings" }, { status: 500 });

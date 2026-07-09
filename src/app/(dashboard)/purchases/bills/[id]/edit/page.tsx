@@ -266,6 +266,7 @@ export default function EditPurchaseBillPage() {
     if (items.some(i => !i.name.trim()))          { toast({ type: "error", title: "Check form", message: "All items must have a name." }); return; }
     if (items.some(i => toNum(i.quantity) <= 0))  { toast({ type: "error", title: "Check form", message: "All quantities must be greater than 0." }); return; }
     if (items.some(i => !i.purchasePrice.trim() || toNum(i.purchasePrice) <= 0)) { toast({ type: "error", title: "Check form", message: "All item prices must be greater than 0." }); return; }
+    if (dueDate && dueDate < billDate) { toast({ type: "error", title: "Check form", message: "Due date cannot be before the bill date." }); return; }
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
@@ -491,7 +492,7 @@ export default function EditPurchaseBillPage() {
                         <Input sz="sm" type="number" min="1" step="1" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} />
                       </td>
                       <td className={styles.itemsTd}>
-                        <Input sz="sm" type="text" inputMode="decimal" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value)} placeholder="0.00" />
+                        <Input sz="sm" type="text" inputMode="decimal" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" />
                       </td>
                       <td className={styles.itemsTd}>
                         <Select sz="sm" value={item.gstRate} onChange={e => handleItemChange(idx, "gstRate", e.target.value)}>

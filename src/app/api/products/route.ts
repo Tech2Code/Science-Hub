@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getProducts } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { requireSession } from "@/lib/apiAuth";
+import { validateProductInput, validateNumericField } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,31 +37,22 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { name, description, sku, unit, price, purchasePrice, gstRate, stock, minStock, categoryId, brandId } = body;
-    const trimmedName = typeof name === "string" ? name.trim() : "";
-
-    if (!trimmedName || price === undefined) {
-      return NextResponse.json({ error: "Name and price are required" }, { status: 400 });
-    }
+    const coreErr = validateProductInput({ name, price }, true);
+    if (coreErr) return NextResponse.json({ error: coreErr }, { status: 400 });
+    const trimmedName = (name as string).trim();
 
     const parsedPrice = parseFloat(price);
     const parsedPurchasePrice = purchasePrice !== undefined && purchasePrice !== null && purchasePrice !== "" ? parseFloat(purchasePrice) : null;
     const parsedGstRate = gstRate !== undefined ? parseFloat(gstRate) : 18;
     const parsedStock = stock !== undefined ? parseFloat(stock) : 0;
     const parsedMinStock = minStock !== undefined ? parseFloat(minStock) : 5;
-    if ([parsedPrice, parsedGstRate, parsedStock, parsedMinStock].some((n) => Number.isNaN(n))) {
-      return NextResponse.json({ error: "Price, GST rate, stock, and min stock must be valid numbers" }, { status: 400 });
-    }
-    if (parsedPurchasePrice !== null && Number.isNaN(parsedPurchasePrice)) {
-      return NextResponse.json({ error: "Purchase price must be a valid number" }, { status: 400 });
-    }
-    if (parsedPrice < 0) return NextResponse.json({ error: "Price cannot be negative" }, { status: 400 });
-    if (parsedPurchasePrice !== null && parsedPurchasePrice < 0) return NextResponse.json({ error: "Purchase price cannot be negative" }, { status: 400 });
-    if (parsedGstRate < 0 || parsedGstRate > 100) return NextResponse.json({ error: "GST rate must be between 0 and 100" }, { status: 400 });
-    if (parsedStock < 0) return NextResponse.json({ error: "Stock cannot be negative" }, { status: 400 });
-    if (parsedMinStock < 0) return NextResponse.json({ error: "Min stock cannot be negative" }, { status: 400 });
-    if (!Number.isInteger(parsedStock) || !Number.isInteger(parsedMinStock)) {
-      return NextResponse.json({ error: "Stock and min stock must be whole numbers" }, { status: 400 });
-    }
+    const numericErr =
+      validateNumericField("price", parsedPrice, { min: 0 }) ||
+      validateNumericField("gstRate", parsedGstRate, { min: 0, max: 100 }) ||
+      validateNumericField("stock", parsedStock, { min: 0, integer: true }) ||
+      validateNumericField("minStock", parsedMinStock, { min: 0, integer: true }) ||
+      (parsedPurchasePrice !== null ? validateNumericField("purchasePrice", parsedPurchasePrice, { min: 0 }) : null);
+    if (numericErr) return NextResponse.json({ error: numericErr }, { status: 400 });
 
     const trimmedSku = typeof sku === "string" ? sku.trim() || null : null;
 

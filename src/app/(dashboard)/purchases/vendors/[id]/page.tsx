@@ -180,18 +180,18 @@ export default function VendorDetailPage() {
                 <tr><td colSpan={6} className={styles.emptyCell}>No bills yet.</td></tr>
               ) : vendor.purchaseBills.map((b) => (
                 <tr key={b.id}>
-                  <td>
+                  <td data-mobile-full>
                     <Link href={`/purchases/bills/${b.id}`} className={styles.billLink}>
                       {b.billNumber}
                     </Link>
                   </td>
-                  <td className={styles.dateCell}>
+                  <td data-label="Date" className={styles.dateCell}>
                     {new Date(b.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                   </td>
-                  <td className={`table-td-right ${styles.totalCell}`}>{fmt(b.total)}</td>
-                  <td className={`table-td-right ${styles.paidCell}`}>{fmt(b.paidAmount)}</td>
-                  <td className={`table-td-right ${styles.balanceCell}`}>{fmt(b.total - b.paidAmount)}</td>
-                  <td><StatusBadge status={b.status} /></td>
+                  <td data-label="Total" className={`table-td-right ${styles.totalCell}`}>{fmt(b.total)}</td>
+                  <td data-label="Paid" className={`table-td-right ${styles.paidCell}`}>{fmt(b.paidAmount)}</td>
+                  <td data-label="Balance" className={`table-td-right ${styles.balanceCell}`}>{fmt(b.total - b.paidAmount)}</td>
+                  <td data-label="Status"><StatusBadge status={b.status} /></td>
                 </tr>
               ))}
             </tbody>

@@ -84,6 +84,31 @@ async function getPurchaseByCategory() {
     .sort((a, b) => b.totalSpend - a.totalSpend);
 }
 
+async function getStockLedger() {
+  const movements = await prisma.stockMovement.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 500,
+    select: {
+      id: true, productId: true, productName: true, type: true, quantity: true,
+      balanceAfter: true, reference: true, notes: true, createdAt: true,
+      purchaseBill: { select: { billNumber: true } },
+    },
+  });
+
+  return movements.map((m) => ({
+    id: m.id,
+    productId: m.productId,
+    productName: m.productName || "(deleted product)",
+    type: m.type,
+    quantity: m.quantity,
+    balanceAfter: m.balanceAfter,
+    reference: m.reference,
+    notes: m.notes,
+    billNumber: m.purchaseBill?.billNumber ?? null,
+    createdAt: m.createdAt,
+  }));
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireSession();
@@ -93,10 +118,17 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get("type");
     const startDate = searchParams.get("startDate") || undefined;
     const endDate = searchParams.get("endDate") || undefined;
+    if (startDate && isNaN(new Date(startDate).getTime())) {
+      return NextResponse.json({ error: "Invalid startDate" }, { status: 400 });
+    }
+    if (endDate && isNaN(new Date(endDate).getTime())) {
+      return NextResponse.json({ error: "Invalid endDate" }, { status: 400 });
+    }
 
-    if (type === "summary")     return NextResponse.json(await getPurchaseSummary());
-    if (type === "outstanding") return NextResponse.json(await getPurchaseOutstanding(startDate, endDate));
-    if (type === "category")    return NextResponse.json(await getPurchaseByCategory());
+    if (type === "summary")      return NextResponse.json(await getPurchaseSummary());
+    if (type === "outstanding")  return NextResponse.json(await getPurchaseOutstanding(startDate, endDate));
+    if (type === "category")     return NextResponse.json(await getPurchaseByCategory());
+    if (type === "stock-ledger") return NextResponse.json(await getStockLedger());
 
     return NextResponse.json({ error: `Unknown type: ${type}` }, { status: 400 });
   } catch (error) {

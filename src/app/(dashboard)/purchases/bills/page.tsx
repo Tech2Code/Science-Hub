@@ -1,10 +1,13 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useFetch } from "@/lib/useCache";
+import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
+import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -24,7 +27,7 @@ interface PurchaseBill {
   attachmentName: string | null;
   vendor: { id: string; name: string; company: string | null };
   createdBy: { id: string; name: string };
-  items: { name: string; product: { name: string } | null }[];
+  items: { name: string; product: { name: string; brand: { name: string } | null; category: { name: string } | null } | null }[];
 }
 
 type StatusFilter = "All" | "unpaid" | "partial" | "paid" | "cancelled";
@@ -84,7 +87,58 @@ export default function PurchasesPage() {
   const [showAll, setShowAll] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PurchaseBill | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState<string | null>(null);
+  // Ref-based lock (synchronous, unlike React state) — guards against duplicate
+  // touch+click event synthesis on mobile/touch devices firing the handler twice.
+  const pdfBusyRef = useRef(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [pdfPreviewBill, setPdfPreviewBill] = useState<{ number: string; vendor: string } | null>(null);
   const toast = useToast();
+
+  function closePdfPreview() {
+    setPdfPreviewUrl(null);
+    setPdfPreviewBill(null);
+  }
+
+  // Revokes the previous blob URL whenever it's replaced (including by a
+  // second preview opened without closing the first) or on unmount.
+  useEffect(() => {
+    return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
+  }, [pdfPreviewUrl]);
+
+  // Loads the bill detail page into a hidden iframe (to render its full
+  // #bill-print-area, which this list page doesn't have the data for) and
+  // generates a PDF blob from it.
+  function generatePdfViaIframe(billId: string): Promise<Blob | null> {
+    return new Promise((resolve) => {
+      const iframe = document.createElement("iframe");
+      Object.assign(iframe.style, { position: "fixed", width: "850px", height: "1200px", top: "-9999px", left: "-9999px", border: "none", opacity: "0", pointerEvents: "none" });
+      const cleanup = () => { try { document.body.removeChild(iframe); } catch {} };
+      const safetyTimer = setTimeout(() => { cleanup(); resolve(null); }, 45000);
+      iframe.onload = async () => {
+        const el = await new Promise<HTMLElement | null>(resolveEl => {
+          let tries = 0;
+          const check = () => {
+            const area = iframe.contentDocument?.getElementById("bill-print-area");
+            if (area?.querySelector("tbody tr")) { resolveEl(area); return; }
+            if (++tries > 40) { resolveEl(null); return; }
+            setTimeout(check, 250);
+          };
+          setTimeout(check, 250);
+        });
+        if (!el) { clearTimeout(safetyTimer); cleanup(); resolve(null); return; }
+        await new Promise(r => setTimeout(r, 400));
+        let blob: Blob | null = null;
+        try {
+          blob = await generateInvoicePdfBlob(el);
+        } catch { /* resolved as null below */ }
+        clearTimeout(safetyTimer); cleanup();
+        resolve(blob);
+      };
+      document.body.appendChild(iframe);
+      iframe.src = `/purchases/bills/${billId}`;
+    });
+  }
 
   const apiUrl = filter === "All" ? "/api/purchase-bills" : `/api/purchase-bills?status=${filter}`;
   const { data, loading, patchData } = useFetch<PurchaseBill[]>(apiUrl);
@@ -99,7 +153,12 @@ export default function PurchasesPage() {
           (b.vendor.company ?? "").toLowerCase().includes(q) ||
           (b.category ?? "").toLowerCase().includes(q) ||
           b.createdBy.name.toLowerCase().includes(q) ||
-          b.items.some((i) => i.name.toLowerCase().includes(q) || (i.product?.name ?? "").toLowerCase().includes(q))
+          b.items.some((i) =>
+            i.name.toLowerCase().includes(q) ||
+            i.product?.name?.toLowerCase().includes(q) ||
+            i.product?.brand?.name?.toLowerCase().includes(q) ||
+            i.product?.category?.name?.toLowerCase().includes(q)
+          )
         );
       })
     : bills;
@@ -149,6 +208,17 @@ export default function PurchasesPage() {
       onConfirm={handleDelete}
       onCancel={() => setDeleteTarget(null)}
     />
+    {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
+
+    {pdfPreviewUrl && pdfPreviewBill && (
+      <PdfPreviewModal
+        url={pdfPreviewUrl}
+        fileName={pdfPreviewBill.number}
+        title={pdfPreviewBill.number}
+        subtitle={pdfPreviewBill.vendor}
+        onClose={closePdfPreview}
+      />
+    )}
 
     <div className="page-stack">
       <div className="page-header">
@@ -202,7 +272,7 @@ export default function PurchasesPage() {
             <input
               type="search"
               aria-label="Search purchase bills"
-              placeholder="Search by bill no., vendor, product, category or staff…"
+              placeholder="Search by bill no., vendor, product, brand, category or staff…"
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
               className={`search-input ${styles.searchInput}`}
@@ -270,7 +340,27 @@ export default function PurchasesPage() {
                   <Cell col={COLUMNS[7]}><StatusBadge status={b.status} /></Cell>
                   <Cell col={COLUMNS[8]}>
                     <div className="table-actions">
-                      <Button variant="viewOutline" size="sm" href={`/purchases/bills/${b.id}`}>View</Button>
+                      <Button variant="viewOutline" size="sm" onClick={async () => {
+                        if (pdfBusyRef.current) return;
+                        pdfBusyRef.current = true;
+                        setPdfLoading(b.id);
+                        try {
+                          const blob = await generatePdfViaIframe(b.id);
+                          if (blob) {
+                            const url = URL.createObjectURL(blob);
+                            setPdfPreviewUrl(url);
+                            setPdfPreviewBill({ number: b.billNumber, vendor: b.vendor?.name ?? "" });
+                          } else {
+                            toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
+                          }
+                        } finally {
+                          setPdfLoading(null);
+                          pdfBusyRef.current = false;
+                        }
+                      }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        View
+                      </Button>
                       <Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(b)}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
                         Delete

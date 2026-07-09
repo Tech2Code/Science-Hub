@@ -49,15 +49,16 @@ export async function DELETE() {
       deleted++;
     }
 
-    // Products — skip any still referenced by invoice items, purchase items,
-    // or stock movements
+    // Products — skip any still referenced by invoice items or purchase
+    // items. Stock movements are not checked — the product relation on
+    // StockMovement is nullable with onDelete: SetNull, so those ledger
+    // rows survive (with a productName snapshot) instead of blocking this.
     for (const p of products) {
-      const [itemCount, purchaseItemCount, movementCount] = await Promise.all([
+      const [itemCount, purchaseItemCount] = await Promise.all([
         prisma.invoiceItem.count({ where: { productId: p.id } }),
         prisma.purchaseBillItem.count({ where: { productId: p.id } }),
-        prisma.stockMovement.count({ where: { productId: p.id } }),
       ]);
-      if (itemCount > 0 || purchaseItemCount > 0 || movementCount > 0) { skipped++; continue; }
+      if (itemCount > 0 || purchaseItemCount > 0) { skipped++; continue; }
       await prisma.product.delete({ where: { id: p.id } });
       deleted++;
     }

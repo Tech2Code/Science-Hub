@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireSession } from "@/lib/apiAuth";
+import { validateProductInput, validateNumericField } from "@/lib/validation";
 
 export async function GET(
   request: NextRequest,
@@ -47,9 +48,9 @@ export async function PUT(
     const { name, description, sku, unit, price, purchasePrice, gstRate, stock, minStock, categoryId, brandId } = body;
     const data: Record<string, unknown> = {};
     if (name !== undefined) {
-      const trimmedName = typeof name === "string" ? name.trim() : "";
-      if (!trimmedName) return NextResponse.json({ error: "Name cannot be blank" }, { status: 400 });
-      data.name = trimmedName;
+      const coreErr = validateProductInput({ name });
+      if (coreErr) return NextResponse.json({ error: coreErr }, { status: 400 });
+      data.name = (name as string).trim();
     }
     if (description !== undefined) data.description = description;
     if (sku !== undefined) data.sku = typeof sku === "string" ? sku.trim() || null : null;
@@ -59,8 +60,8 @@ export async function PUT(
         data.purchasePrice = null;
       } else {
         const parsed = parseFloat(purchasePrice as string);
-        if (Number.isNaN(parsed)) return NextResponse.json({ error: "purchasePrice must be a valid number" }, { status: 400 });
-        if (parsed < 0) return NextResponse.json({ error: "purchasePrice must be between 0 and ∞" }, { status: 400 });
+        const err = validateNumericField("purchasePrice", parsed, { min: 0 });
+        if (err) return NextResponse.json({ error: err }, { status: 400 });
         data.purchasePrice = parsed;
       }
     }
@@ -73,15 +74,8 @@ export async function PUT(
     for (const [key, value, min, max, mustBeInteger] of numericFields) {
       if (value === undefined) continue;
       const parsed = parseFloat(value as string);
-      if (Number.isNaN(parsed)) {
-        return NextResponse.json({ error: `${key} must be a valid number` }, { status: 400 });
-      }
-      if (parsed < min || parsed > max) {
-        return NextResponse.json({ error: `${key} must be between ${min} and ${max === Infinity ? "∞" : max}` }, { status: 400 });
-      }
-      if (mustBeInteger && !Number.isInteger(parsed)) {
-        return NextResponse.json({ error: `${key} must be a whole number` }, { status: 400 });
-      }
+      const err = validateNumericField(key, parsed, { min, max, integer: mustBeInteger });
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
       data[key] = parsed;
     }
     if (categoryId !== undefined) data.categoryId = categoryId || null;
