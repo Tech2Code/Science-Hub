@@ -14,7 +14,7 @@ import styles from "./edit.module.css";
 
 interface BillItem {
   id: string; name: string; quantity: number; unit: string;
-  purchasePrice: number; gstRate: number; gstAmount: number; total: number;
+  purchasePrice: number; discountPercent: number; gstRate: number; gstAmount: number; total: number;
   product: { id: string; name: string } | null;
 }
 interface PurchaseBill {
@@ -35,21 +35,37 @@ interface LineItem {
   quantity: string;
   purchasePrice: string;
   gstRate: string;
+  discountPercent: string;
 }
 
 const CATEGORIES = ["Raw Materials", "Lab Chemicals", "Lab Equipment", "Office Supplies", "Packaging", "Services", "Other"];
-const UNITS = ["Pcs", "Box", "Set", "Kg", "Ltr", "Mtr", "Dozen", "Pack", "Pair"];
+const UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pack", "Set", "Mtr", "Dozen", "Pair"];
 const GST_RATES = ["0", "5", "12", "18", "28"];
+const DISCOUNT_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 40, 50];
 const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const toNum = (s: string) => { const n = parseFloat(s); return isNaN(n) ? 0 : n; };
 
+// A custom typed amount rarely lands on a preset % exactly — inject it into
+// the option list (rounded to 2dp) so the select actually shows/highlights
+// it instead of falling back to blank.
+function discountOptionsFor(percent: number) {
+  const rounded = Math.round(percent * 100) / 100;
+  if (DISCOUNT_OPTIONS.includes(rounded)) return DISCOUNT_OPTIONS;
+  return [...DISCOUNT_OPTIONS, rounded].sort((a, b) => a - b);
+}
+
+// Discount is applied to the line's gross amount (qty × rate) before GST —
+// taxable value = gross - discount, and GST is computed on that taxable value.
 function calcItem(item: LineItem) {
-  const qty   = toNum(item.quantity);
-  const price = toNum(item.purchasePrice);
-  const rate  = toNum(item.gstRate);
-  const subtotal  = qty * price;
+  const qty     = toNum(item.quantity);
+  const price   = toNum(item.purchasePrice);
+  const rate    = toNum(item.gstRate);
+  const percent = toNum(item.discountPercent);
+  const gross           = qty * price;
+  const discountAmount  = gross * percent / 100;
+  const subtotal  = gross - discountAmount;
   const gstAmount = subtotal * rate / 100;
-  return { subtotal, gstAmount, total: subtotal + gstAmount };
+  return { gross, discountAmount, subtotal, gstAmount, total: subtotal + gstAmount };
 }
 
 function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
@@ -122,6 +138,7 @@ export default function EditPurchaseBillPage() {
         quantity: String(item.quantity),
         purchasePrice: String(item.purchasePrice),
         gstRate: String(item.gstRate),
+        discountPercent: String(item.discountPercent ?? 0),
       })));
       setAttachmentUrl(b.attachmentUrl ?? null);
       setAttachmentName(b.attachmentName ?? null);
@@ -143,6 +160,7 @@ export default function EditPurchaseBillPage() {
           quantity: String(item.quantity),
           purchasePrice: String(item.purchasePrice),
           gstRate: String(item.gstRate),
+          discountPercent: String(item.discountPercent ?? 0),
         })),
         attachmentUrl: b.attachmentUrl ?? null,
         attachmentName: b.attachmentName ?? null,
@@ -225,6 +243,19 @@ export default function EditPurchaseBillPage() {
     });
   }, [items, products, toast]);
 
+  // Typing a flat ₹ amount is just another way to set discountPercent — it's
+  // converted against that line's gross (qty × rate) so the stored value
+  // stays a percentage, same as the sales invoice form.
+  function setItemDiscountAmount(idx: number, amountStr: string) {
+    const amount = toNum(amountStr);
+    setItems(prev => prev.map((item, i) => {
+      if (i !== idx) return item;
+      const gross = toNum(item.quantity) * toNum(item.purchasePrice);
+      const discountPercent = gross > 0 ? Math.min(100, Math.max(0, (amount / gross) * 100)) : 0;
+      return { ...item, discountPercent: String(discountPercent) };
+    }));
+  }
+
   const handleProductSelect = useCallback((idx: number, productId: string) => {
     const product = products.find(p => p.id === productId);
     setItems(prev => {
@@ -246,9 +277,11 @@ export default function EditPurchaseBillPage() {
     });
   }, [products]);
 
-  function addItem() { setItems(prev => [...prev, { productId: "", name: "", unit: "Pcs", quantity: "1", purchasePrice: "", gstRate: "18" }]); }
+  function addItem() { setItems(prev => [...prev, { productId: "", name: "", unit: "Pcs", quantity: "1", purchasePrice: "", gstRate: "18", discountPercent: "0" }]); }
   function removeItem(idx: number) { setItems(prev => prev.filter((_, i) => i !== idx)); }
 
+  const grossTotal = items.reduce((s, i) => s + calcItem(i).gross, 0);
+  const itemDiscountTotal = items.reduce((s, i) => s + calcItem(i).discountAmount, 0);
   const subtotal   = items.reduce((s, i) => s + calcItem(i).subtotal, 0);
   const taxTotal   = items.reduce((s, i) => s + calcItem(i).gstAmount, 0);
   const computedTotal = subtotal + taxTotal - toNum(discount);
@@ -279,14 +312,16 @@ export default function EditPurchaseBillPage() {
         attachmentUrl,
         attachmentName,
         items: items.map(i => ({
-          productId:     i.productId || null,
-          name:          i.name.trim(),
-          unit:          i.unit,
-          quantity:      toNum(i.quantity),
-          purchasePrice: toNum(i.purchasePrice),
-          gstRate:       toNum(i.gstRate),
-          gstAmount:     calcItem(i).gstAmount,
-          total:         calcItem(i).total,
+          productId:       i.productId || null,
+          name:            i.name.trim(),
+          unit:            i.unit,
+          quantity:        toNum(i.quantity),
+          purchasePrice:   toNum(i.purchasePrice),
+          discountPercent: toNum(i.discountPercent),
+          gstRate:         toNum(i.gstRate),
+          discountAmount:  calcItem(i).discountAmount,
+          gstAmount:       calcItem(i).gstAmount,
+          total:           calcItem(i).total,
         })),
       };
       const res = await fetch(`/api/purchase-bills/${id}`, {
@@ -385,7 +420,8 @@ export default function EditPurchaseBillPage() {
       {/* Summary stats */}
       {bill && (
         <div className={styles.statGrid}>
-          <StatCard label="Subtotal"    value={`₹${fmt(subtotal)}`} />
+          <StatCard label="Subtotal"    value={`₹${fmt(grossTotal)}`} />
+          {itemDiscountTotal > 0 && <StatCard label="Item Discount" value={`−₹${fmt(itemDiscountTotal)}`} />}
           <StatCard label="GST"         value={`₹${fmt(taxTotal)}`} />
           <StatCard label="Paid"        value={`₹${fmt(bill.paidAmount)}`} />
           <StatCard label="Outstanding" value={`₹${fmt(outstanding)}`} sub={outstanding <= 0 ? "Cleared" : undefined} />
@@ -464,14 +500,14 @@ export default function EditPurchaseBillPage() {
             <table className={styles.itemsTable}>
               <thead>
                 <tr>
-                  {["Product (optional)", "Item Name", "Unit", "Qty", "Rate (₹)", "GST %", "Amount", ""].map(h => (
+                  {["Product (optional)", "Item Name", "Unit", "Qty", "Rate (₹)", "Discount", "GST %", "Amount", ""].map(h => (
                     <th key={h} className={h === "Amount" ? styles.itemsThRight : styles.itemsTh}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {items.map((item, idx) => {
-                  const { total } = calcItem(item);
+                  const { discountAmount, total } = calcItem(item);
                   return (
                     <tr key={idx} className={styles.itemsRow}>
                       <td className={styles.itemsTdName}>
@@ -480,10 +516,10 @@ export default function EditPurchaseBillPage() {
                           {products.map(p => <option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ""}</option>)}
                         </Select>
                       </td>
-                      <td className={styles.itemsTdName}>
+                      <td className={styles.itemsTdItemName}>
                         <Input sz="sm" value={item.name} onChange={e => handleItemChange(idx, "name", e.target.value)} placeholder="Item name" required />
                       </td>
-                      <td className={styles.itemsTd}>
+                      <td className={styles.itemsTdUnit}>
                         <Select sz="sm" value={item.unit} onChange={e => handleItemChange(idx, "unit", e.target.value)}>
                           {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                         </Select>
@@ -494,7 +530,21 @@ export default function EditPurchaseBillPage() {
                       <td className={styles.itemsTd}>
                         <Input sz="sm" type="text" inputMode="decimal" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" />
                       </td>
-                      <td className={styles.itemsTd}>
+                      <td className={styles.discountTd}>
+                        <div className={styles.discountStack}>
+                          <Select sz="sm" value={Math.round(toNum(item.discountPercent) * 100) / 100} onChange={e => handleItemChange(idx, "discountPercent", e.target.value)}>
+                            {discountOptionsFor(toNum(item.discountPercent)).map(d => <option key={d} value={d}>{d}%</option>)}
+                          </Select>
+                          <Input
+                            sz="sm" type="text" inputMode="decimal"
+                            value={discountAmount > 0 ? Math.round(discountAmount * 100) / 100 : ""}
+                            onChange={e => setItemDiscountAmount(idx, e.target.value)}
+                            placeholder="₹0"
+                            title="Flat discount amount"
+                          />
+                        </div>
+                      </td>
+                      <td className={styles.itemsTdGst}>
                         <Select sz="sm" value={item.gstRate} onChange={e => handleItemChange(idx, "gstRate", e.target.value)}>
                           {GST_RATES.map(r => <option key={r} value={r}>{r}%</option>)}
                         </Select>

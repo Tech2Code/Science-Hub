@@ -267,13 +267,15 @@ model PurchaseBillItem {
   purchaseBill   PurchaseBill @relation(fields: [purchaseBillId], references: [id], onDelete: Cascade)
   productId      String?
   product        Product?     @relation(fields: [productId], references: [id])
-  name           String
-  quantity       Float
-  unit           String       @default("Nos")
-  purchasePrice  Float
-  gstRate        Float        @default(0)
-  gstAmount      Float        @default(0)
-  total          Float
+  name             String
+  quantity         Float
+  unit             String       @default("Nos")
+  purchasePrice    Float
+  discountPercent  Float        @default(0)
+  discountAmount   Float        @default(0)
+  gstRate          Float        @default(0)
+  gstAmount        Float        @default(0)
+  total            Float
 }
 
 // ── Purchase Payments ─────────────────────────────────────────────────────────

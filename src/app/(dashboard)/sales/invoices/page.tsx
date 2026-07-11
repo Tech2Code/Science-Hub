@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { SortSelect } from "@/components/ui/SortSelect";
 import { useFetch } from "@/lib/useCache";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
@@ -305,16 +306,12 @@ export default function InvoicesPage() {
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               className={["search-input", styles.searchInput].join(" ")}
             />
-            <select
-              aria-label="Sort invoices"
+            <SortSelect
+              ariaLabel="Sort invoices"
               value={sort}
-              onChange={(e) => { setSort(e.target.value as SortOption); setPage(1); }}
-              className={["search-input", styles.sortSelect].join(" ")}
-            >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+              onChange={(v) => { setSort(v); setPage(1); }}
+              options={SORT_OPTIONS}
+            />
           </div>
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />

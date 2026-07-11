@@ -308,18 +308,33 @@
 
 .itemsTable {
   min-width: 520px;
+  table-layout: fixed;
 }
 
 .paymentsTable {
   min-width: 400px;
 }
 
-.colNum {
-  width: 2.5rem;
-}
+/* Explicit widths on <col>, shared by the header and every body row, so a
+   column's <th> and <td> always resolve to the exact same box — table-layout:
+   auto let each row size its own cells independently, which is what let the
+   header and values drift out of alignment. */
+.colNum       { width: 4%; }
+.colItem      { width: 30%; }
+.colQty       { width: 8%; }
+.colRate      { width: 12%; }
+.colDiscount  { width: 12%; }
+.colGstRate   { width: 8%; }
+.colGstAmt    { width: 12%; }
+.colTotal     { width: 14%; }
 
+/* !important is required here: global `.table-base th { text-align: left; }`
+   is a class+element selector (specificity 0,1,1), which beats this single
+   class selector (0,1,0) regardless of source order — so on <th> elements
+   the global left-align silently wins unless this overrides it explicitly.
+   (On <td> there's no competing rule, so it isn't needed there.) */
 .textRight {
-  text-align: right;
+  text-align: right !important;
 }
 
 .textMuted {

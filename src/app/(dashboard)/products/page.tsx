@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { SortSelect } from "@/components/ui/SortSelect";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -13,6 +15,32 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import styles from "./productsList.module.css";
 
 type StockFilter = "all" | "low" | "out";
+type SortOption = "name_az" | "name_za" | "price_high" | "price_low" | "stock_high" | "stock_low" | "newest" | "oldest";
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "name_az",    label: "Name (A–Z)" },
+  { value: "name_za",    label: "Name (Z–A)" },
+  { value: "price_high", label: "Price (High–Low)" },
+  { value: "price_low",  label: "Price (Low–High)" },
+  { value: "stock_high", label: "Stock (High–Low)" },
+  { value: "stock_low",  label: "Stock (Low–High)" },
+  { value: "newest",     label: "Newest first" },
+  { value: "oldest",     label: "Oldest first" },
+];
+
+function sortProducts(list: Product[], sort: SortOption): Product[] {
+  const arr = [...list];
+  switch (sort) {
+    case "name_za":    return arr.sort((a, b) => b.name.localeCompare(a.name));
+    case "price_high": return arr.sort((a, b) => b.price - a.price);
+    case "price_low":  return arr.sort((a, b) => a.price - b.price);
+    case "stock_high": return arr.sort((a, b) => b.stock - a.stock);
+    case "stock_low":  return arr.sort((a, b) => a.stock - b.stock);
+    case "oldest":     return arr.sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
+    case "newest":     return arr.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+    case "name_az":
+    default:           return arr.sort((a, b) => a.name.localeCompare(b.name));
+  }
+}
 
 interface Product {
   id: string;
@@ -49,6 +77,7 @@ export default function ProductsPage() {
   const products = data ?? [];
   const [search, setSearch] = useState("");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
+  const [sort, setSort] = useState<SortOption>("name_az");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [confirmState, setConfirmState] = useState<{
@@ -95,12 +124,14 @@ export default function ProductsPage() {
     return true;
   });
 
-  useEffect(() => {
-    const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-    if (page > maxPage) setPage(maxPage); // eslint-disable-line react-hooks/set-state-in-effect -- clamps page back into range when filtering shrinks the result set
-  }, [filtered.length, page]);
+  const sorted = sortProducts(filtered, sort);
 
-  const { visible } = usePagination(filtered, page, showAll);
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+    if (page > maxPage) setPage(maxPage); // eslint-disable-line react-hooks/set-state-in-effect -- clamps page back into range when filtering shrinks the result set
+  }, [sorted.length, page]);
+
+  const { visible } = usePagination(sorted, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
   const handleStockFilter = (f: StockFilter) => { setStockFilter(f); setPage(1); };
 
@@ -129,14 +160,17 @@ export default function ProductsPage() {
 
       <div className="card">
         <div className={`card-toolbar ${styles.toolbar}`}>
-          <input
-            type="search"
-            aria-label="Search products"
-            placeholder="Search by name, SKU, brand, or category…"
-            value={search}
-            onChange={(e) => handleSearch(e.target.value)}
-            className={`search-input ${styles.searchInput}`}
-          />
+          <div className="toolbar-left">
+            <input
+              type="search"
+              aria-label="Search products"
+              placeholder="Search by name, SKU, brand, or category…"
+              value={search}
+              onChange={(e) => handleSearch(e.target.value)}
+              className={`search-input ${styles.searchInput}`}
+            />
+            <SortSelect ariaLabel="Sort products" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
+          </div>
           <div className={styles.filterRow}>
             {/* Stock filter tabs */}
             <div className="filter-tabs">
@@ -188,7 +222,7 @@ export default function ProductsPage() {
                 return (
                   <tr key={p.id}>
                     <Cell col={COLUMNS[0]}>
-                      <div className={styles.nameCell}>{p.name}</div>
+                      <Link href={`/products/${p.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`}>{p.name}</Link>
                       {p.sku && <div className={styles.skuCell}>{p.sku}</div>}
                     </Cell>
                     <Cell col={COLUMNS[1]} className={styles.mutedCell}>{p.brand?.name ?? "—"}</Cell>

@@ -123,14 +123,14 @@
 }
 .discountSelect {
   box-sizing: border-box; height: 1.75rem;
-  width: 4rem; padding: 0.25rem 0.25rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
+  width: 3.6rem; padding: 0.25rem 0.25rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
   background: var(--c-bg-input); color: var(--c-text); font-size: 0.75rem; cursor: pointer;
 }
 .discountCell { composes: itemsTdCenter; }
 .discountStack { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
 .discountAmountInput {
   box-sizing: border-box; height: 1.75rem;
-  width: 4rem; padding: 0.25rem 0.375rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
+  width: 3.6rem; padding: 0.25rem 0.375rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
   background: var(--c-bg-input); color: var(--c-text); font-size: 0.75rem; text-align: right;
 }
 .removeBtn {
@@ -163,4 +163,5 @@
   justify-content: space-between; font-weight: 700; font-size: 1rem; color: var(--c-text);
 }
 .summaryHint { margin-top: 0.75rem; font-size: 0.75rem; color: var(--c-amber-text); }
+.discountValue { color: var(--c-amber-text); }
 .noChangesHint { font-size: 0.75rem; color: var(--c-text-4); text-align: center; margin: 0; }

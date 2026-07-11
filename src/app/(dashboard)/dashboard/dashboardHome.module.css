@@ -389,8 +389,11 @@
   overflow-x: auto;
 }
 
+/* !important needed: global `.table-base th { text-align: left; }` (0,1,1)
+   outranks this single class selector (0,1,0) on <th>, so it silently wins
+   without this override. Not needed on <td> — no competing rule there. */
 .textRight {
-  text-align: right;
+  text-align: right !important;
 }
 
 .customerCell {

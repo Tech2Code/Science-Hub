@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { SortSelect } from "@/components/ui/SortSelect";
 import styles from "./billsList.module.css";
 
 interface PurchaseBill {
@@ -277,16 +278,12 @@ export default function PurchasesPage() {
               onChange={e => { setSearch(e.target.value); setPage(1); }}
               className={`search-input ${styles.searchInput}`}
             />
-            <select
-              aria-label="Sort purchase bills"
+            <SortSelect
+              ariaLabel="Sort purchase bills"
               value={sort}
-              onChange={e => { setSort(e.target.value as SortOption); setPage(1); }}
-              className={`search-input ${styles.sortSelect}`}
-            >
-              {SORT_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+              onChange={(v) => { setSort(v); setPage(1); }}
+              options={SORT_OPTIONS}
+            />
           </div>
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />

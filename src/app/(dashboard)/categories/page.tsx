@@ -2,12 +2,14 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { SortSelect } from "@/components/ui/SortSelect";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -17,6 +19,25 @@ interface Category {
   id: string;
   name: string;
   _count: { products: number };
+}
+
+type SortOption = "name_az" | "name_za" | "products_high" | "products_low";
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "name_az",       label: "Name (A–Z)" },
+  { value: "name_za",       label: "Name (Z–A)" },
+  { value: "products_high", label: "Products (High–Low)" },
+  { value: "products_low",  label: "Products (Low–High)" },
+];
+
+function sortCategories(list: Category[], sort: SortOption): Category[] {
+  const arr = [...list];
+  switch (sort) {
+    case "name_za":       return arr.sort((a, b) => b.name.localeCompare(a.name));
+    case "products_high": return arr.sort((a, b) => b._count.products - a._count.products);
+    case "products_low":  return arr.sort((a, b) => a._count.products - b._count.products);
+    case "name_az":
+    default:              return arr.sort((a, b) => a.name.localeCompare(b.name));
+  }
 }
 
 const COLUMNS: Column[] = [
@@ -31,6 +52,7 @@ export default function CategoriesPage() {
   const { data, loading, patchData } = useFetch<Category[]>("/api/categories");
   const categories = data ?? [];
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortOption>("name_az");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -119,14 +141,15 @@ export default function CategoriesPage() {
     c.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const { visible } = usePagination(filtered, page, showAll);
+  const sorted = sortCategories(filtered, sort);
+  const { visible } = usePagination(sorted, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
     // eslint-disable-next-line react-hooks/set-state-in-effect -- clamps page back into range after a delete shrinks the list
     if (page > totalPages) setPage(totalPages);
-  }, [filtered.length, page]);
+  }, [sorted.length, page]);
 
   return (
     <>
@@ -174,14 +197,17 @@ export default function CategoriesPage() {
       {/* Categories list */}
       <div className="card">
         <div className="card-toolbar">
-          <input
-            type="search"
-            aria-label="Search categories"
-            placeholder="Search categories…"
-            value={search}
-            onChange={(e) => handleSearch(e.target.value)}
-            className={`search-input ${styles.searchInput}`}
-          />
+          <div className="toolbar-left">
+            <input
+              type="search"
+              aria-label="Search categories"
+              placeholder="Search categories…"
+              value={search}
+              onChange={(e) => handleSearch(e.target.value)}
+              className={`search-input ${styles.searchInput}`}
+            />
+            <SortSelect ariaLabel="Sort categories" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
+          </div>
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
@@ -203,7 +229,7 @@ export default function CategoriesPage() {
               ) : visible.map((c, i) => (
                 <tr key={c.id}>
                   <Cell col={COLUMNS[0]} className={styles.indexCell}>{i + 1}</Cell>
-                  <Cell col={COLUMNS[1]} className={styles.nameCell}>
+                  <Cell col={COLUMNS[1]}>
                     {editingId === c.id ? (
                       <div className={styles.editingRow}>
                         <Input
@@ -216,7 +242,9 @@ export default function CategoriesPage() {
                         <Button size="sm" variant="primary" onClick={() => handleRename(c.id)} disabled={!editingName.trim() || renaming}>Save</Button>
                         <Button size="sm" variant="secondary" onClick={() => setEditingId(null)} disabled={renaming}>Cancel</Button>
                       </div>
-                    ) : c.name}
+                    ) : (
+                      <Link href={`/categories/${c.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`}>{c.name}</Link>
+                    )}
                   </Cell>
                   <Cell col={COLUMNS[2]}>
                     <span className={`${styles.productsBadge} ${c._count.products > 0 ? styles.productsBadgeActive : ""}`}>

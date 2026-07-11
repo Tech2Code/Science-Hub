@@ -22,6 +22,7 @@ interface LineItem {
 }
 
 const DISCOUNT_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 40, 50];
+const QUICK_ADD_UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pack", "Set", "Mtr", "Dozen"];
 
 // A custom typed amount rarely lands on a preset % exactly — inject it into
 // the option list (rounded to 2dp) so the select actually shows/highlights
@@ -50,6 +51,10 @@ export default function NewInvoicePage() {
   const [items, setItems] = useState<LineItem[]>([]);
   const [productSearch, setProductSearch] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
+  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "Nos", price: "", gstRate: "18" });
+  const [quickAddErrors, setQuickAddErrors] = useState<Partial<Record<"name" | "price" | "gstRate", string>>>({});
+  const [quickAddSaving, setQuickAddSaving] = useState(false);
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
@@ -103,6 +108,48 @@ export default function NewInvoicePage() {
     });
     setProductSearch(""); setShowProductDropdown(false);
   }
+  function openQuickAddProduct() {
+    setQuickAddProduct({ name: productSearch, unit: "Nos", price: "", gstRate: "18" });
+    setQuickAddErrors({});
+    setShowQuickAddProduct(true);
+  }
+
+  async function handleQuickAddProduct() {
+    const errs: Partial<Record<"name" | "price" | "gstRate", string>> = {
+      name: validate(quickAddProduct.name, rules.required("Product name is required.")) ?? undefined,
+      price: validate(quickAddProduct.price, rules.required("Price is required."), rules.nonNegativeNumber()) ?? undefined,
+      gstRate: validate(quickAddProduct.gstRate, rules.nonNegativeNumber()) ?? undefined,
+    };
+    if (Object.values(errs).some(Boolean)) { setQuickAddErrors(errs); return; }
+    setQuickAddErrors({});
+    setQuickAddSaving(true);
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: quickAddProduct.name.trim(),
+          unit: quickAddProduct.unit.trim() || "Nos",
+          price: quickAddProduct.price,
+          gstRate: quickAddProduct.gstRate,
+          stock: 0,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      setQuickAddSaving(false);
+      if (!res.ok) { toast({ type: "error", title: "Failed", message: d?.error ?? "Could not add product." }); return; }
+      bustCache("/api/products");
+      setProducts((prev) => [...prev, d]);
+      addProduct(d);
+      setShowQuickAddProduct(false);
+      setShowProductDropdown(false);
+      toast({ type: "success", title: "Product added", message: `"${d.name}" was created and added to this invoice.` });
+    } catch {
+      setQuickAddSaving(false);
+      toast({ type: "error", title: "Failed", message: "Network error." });
+    }
+  }
+
   function removeItem(idx: number) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
   function updateItem(idx: number, field: keyof LineItem, value: string | number) {
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
@@ -131,6 +178,8 @@ export default function NewInvoicePage() {
     return { gross, discountAmount, taxable, gstAmt, total: taxable + gstAmt };
   };
 
+  const grossTotal = items.reduce((sum, item) => sum + lineBreakdown(item).gross, 0);
+  const discountTotal = items.reduce((sum, item) => sum + lineBreakdown(item).discountAmount, 0);
   const subtotal = items.reduce((sum, item) => sum + lineBreakdown(item).taxable, 0);
   const taxBreakdown = items.reduce((acc, item) => {
     const { gstAmt } = lineBreakdown(item);
@@ -445,6 +494,7 @@ export default function NewInvoicePage() {
                     value={dueDate}
                     min={todayStr}
                     onChange={(e) => setDueDate(e.target.value)}
+                    onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
                     className={styles.dueDateInput}
                   />
                 </div>
@@ -475,12 +525,67 @@ export default function NewInvoicePage() {
                       </button>
                     )) : (
                       <div className={styles.dropdownEmpty}>
-                        No product found.
+                        No product found.{" "}
+                        <button type="button" className={styles.dropdownEmptyLink} onMouseDown={(e) => e.preventDefault()} onClick={openQuickAddProduct}>
+                          Add new product →
+                        </button>
                       </div>
                     )}
                   </div>
                 )}
               </div>
+
+              {showQuickAddProduct && (
+                <div className={styles.customForm}>
+                  <div>
+                    <input
+                      type="text" placeholder="Product name *"
+                      value={quickAddProduct.name}
+                      onChange={(e) => { setQuickAddProduct((p) => ({ ...p, name: e.target.value })); setQuickAddErrors((p) => ({ ...p, name: undefined })); }}
+                      className={quickAddErrors.name ? styles.inputError : styles.input}
+                    />
+                    {quickAddErrors.name && <p className={styles.errMsg}>{quickAddErrors.name}</p>}
+                  </div>
+                  <div className={styles.grid3}>
+                    <select
+                      value={quickAddProduct.unit}
+                      onChange={(e) => setQuickAddProduct((p) => ({ ...p, unit: e.target.value }))}
+                      className={styles.input}
+                    >
+                      {QUICK_ADD_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                    <div>
+                      <input
+                        type="text" inputMode="decimal" placeholder="Price (₹) *"
+                        value={quickAddProduct.price}
+                        onChange={(e) => { setQuickAddProduct((p) => ({ ...p, price: e.target.value })); setQuickAddErrors((p) => ({ ...p, price: undefined })); }}
+                        className={quickAddErrors.price ? styles.inputError : styles.input}
+                      />
+                      {quickAddErrors.price && <p className={styles.errMsg}>{quickAddErrors.price}</p>}
+                    </div>
+                    <div>
+                      <input
+                        type="text" inputMode="decimal" placeholder="GST %"
+                        value={quickAddProduct.gstRate}
+                        onChange={(e) => { setQuickAddProduct((p) => ({ ...p, gstRate: e.target.value })); setQuickAddErrors((p) => ({ ...p, gstRate: undefined })); }}
+                        className={quickAddErrors.gstRate ? styles.inputError : styles.input}
+                      />
+                      {quickAddErrors.gstRate && <p className={styles.errMsg}>{quickAddErrors.gstRate}</p>}
+                    </div>
+                  </div>
+                  <div className={styles.grid2}>
+                    <Button type="button" variant="primary" size="sm" onClick={handleQuickAddProduct} disabled={quickAddSaving}>
+                      {quickAddSaving ? "Adding…" : "Add & use product"}
+                    </Button>
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setShowQuickAddProduct(false)} disabled={quickAddSaving}>
+                      Cancel
+                    </Button>
+                  </div>
+                  <p className={styles.customFormHint}>
+                    This product will be saved to your catalog and added to this invoice.
+                  </p>
+                </div>
+              )}
 
               {items.length > 0 ? (
                 <div className={styles.itemsTableWrap}>
@@ -604,8 +709,14 @@ export default function NewInvoicePage() {
               <div className={styles.summaryList}>
                 <div className={styles.summaryLine}>
                   <span>Subtotal</span>
-                  <span>₹{subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span>₹{grossTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
+                {discountTotal > 0 && (
+                  <div className={styles.summaryLine}>
+                    <span>Discount</span>
+                    <span className={styles.warningItem}>−₹{discountTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                )}
                 {Object.entries(taxBreakdown).map(([rate, amt]) =>
                   isInterState ? (
                     <div key={rate} className={styles.summaryLine}>

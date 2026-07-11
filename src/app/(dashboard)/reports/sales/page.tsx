@@ -36,6 +36,10 @@ const GST_COLUMNS: Column[] = [
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+// Floors the date pickers so scrolling the native year spinner can't wander
+// off into 1800s nonsense — no business data predates this.
+const MIN_REPORT_DATE = "2015-01-01";
+
 type Tab = "summary" | "outstanding" | "gst";
 
 function toCsv(headers: string[], rows: (string | number)[][]) {
@@ -65,6 +69,7 @@ function downloadCsv(filename: string, csv: string) {
 
 export default function SalesReportsPage() {
   const [tab, setTab] = useState<Tab>("outstanding");
+  const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const dateQuery = startDate || endDate ? `&startDate=${startDate}&endDate=${endDate}` : "";
@@ -151,11 +156,25 @@ export default function SalesReportsPage() {
           <div className={styles.dateFilterRow}>
             <label className={styles.dateFilterLabel}>
               From
-              <input type="date" aria-label="Start date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={styles.dateInput} />
+              <input
+                type="date" aria-label="Start date" value={startDate} min={MIN_REPORT_DATE} max={endDate || todayStr}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setStartDate(v);
+                  if (endDate && v > endDate) setEndDate(v);
+                }}
+                onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
+                className={styles.dateInput}
+              />
             </label>
             <label className={styles.dateFilterLabel}>
               To
-              <input type="date" aria-label="End date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={styles.dateInput} />
+              <input
+                type="date" aria-label="End date" value={endDate} min={startDate || MIN_REPORT_DATE} max={todayStr}
+                onChange={(e) => setEndDate(e.target.value)}
+                onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
+                className={styles.dateInput}
+              />
             </label>
             {(startDate || endDate) && (
               <Button variant="secondary" size="sm" onClick={() => { setStartDate(""); setEndDate(""); }}>Clear</Button>

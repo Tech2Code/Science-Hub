@@ -18,7 +18,7 @@ import styles from "./billDetail.module.css";
 
 interface PurchaseBillItem {
   id: string; name: string; unit: string; quantity: number;
-  purchasePrice: number; gstRate: number; gstAmount: number; total: number;
+  purchasePrice: number; discountPercent: number; gstRate: number; gstAmount: number; total: number;
   product: { id: string; name: string } | null;
 }
 interface PurchasePayment {
@@ -223,10 +223,10 @@ export default function PurchaseBillDetailPage() {
         ))}
       </div>
 
-      {/* Info cards: Vendor | Bill Meta */}
+      {/* Info cards: Vendor | Bill Meta — matches the real `card infoCard` padding */}
       <div className={styles.infoGrid}>
         {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="card">
+          <div key={i} className={`card ${styles.infoCard}`}>
             <Sk w={60} h={10} r={3} />
             <Sk w={140} h={16} r={3} />
             {Array.from({ length: 3 }).map((_, j) => (
@@ -239,27 +239,34 @@ export default function PurchaseBillDetailPage() {
         ))}
       </div>
 
-      {/* Items table */}
+      {/* Items table — mirrors the #/Item/Qty/Rate/Discount/GST %/GST Amt/Total columns below.
+          Header uses the real sectionHeaderRow (1rem/1.25rem padding + divider); rows use the
+          same 0.75rem/1rem padding as the real table's <td>, so nothing sits flush on the card edge. */}
       <div className="card">
-        <Sk w={80} h={14} r={3} />
+        <div className={styles.sectionHeaderRow}>
+          <Sk w={80} h={14} r={3} />
+        </div>
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className={styles.tfootRow} style={{ display: "flex", gap: "1rem", padding: "0.625rem 0" }}>
+          <div key={i} style={{ display: "flex", gap: "1rem", padding: "0.75rem 1rem" }}>
             <Sk w={20} h={12} r={3} />
-            <Sk w="35%" h={12} r={3} />
+            <Sk w="24%" h={12} r={3} />
+            <Sk w="8%" h={12} r={3} />
             <Sk w="10%" h={12} r={3} />
-            <Sk w="12%" h={12} r={3} />
             <Sk w="10%" h={12} r={3} />
-            <Sk w="12%" h={12} r={3} />
-            <Sk w="12%" h={12} r={3} />
+            <Sk w="8%" h={12} r={3} />
+            <Sk w="10%" h={12} r={3} />
+            <Sk w="10%" h={12} r={3} />
           </div>
         ))}
       </div>
 
       {/* Payment history table */}
       <div className="card">
-        <Sk w={140} h={14} r={3} />
+        <div className={styles.sectionHeaderRow}>
+          <Sk w={140} h={14} r={3} />
+        </div>
         {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} style={{ display: "flex", gap: "1rem", padding: "0.625rem 0" }}>
+          <div key={i} style={{ display: "flex", gap: "1rem", padding: "0.75rem 1rem" }}>
             <Sk w="20%" h={12} r={3} />
             <Sk w="20%" h={12} r={3} />
             <Sk w="30%" h={12} r={3} />
@@ -326,6 +333,7 @@ export default function PurchaseBillDetailPage() {
             <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "left" }}>Item</th>
             <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>Qty</th>
             <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>Rate</th>
+            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>Discount</th>
             <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>GST %</th>
             <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>Total</th>
           </tr>
@@ -337,6 +345,7 @@ export default function PurchaseBillDetailPage() {
               <td style={{ border: `1px solid var(--bp-bd)`, padding: 6 }}>{item.name} <span style={{ color: "var(--bp-tx3)" }}>({item.unit})</span></td>
               <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{item.quantity}</td>
               <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{fmt(item.purchasePrice)}</td>
+              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{item.discountPercent > 0 ? `${item.discountPercent}%` : "—"}</td>
               <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{item.gstRate}%</td>
               <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{fmt(item.total)}</td>
             </tr>
@@ -584,12 +593,23 @@ export default function PurchaseBillDetailPage() {
         </div>
         <div className={styles.tableScroll}>
           <table className={`table-base ${styles.itemsTable}`}>
+            <colgroup>
+              <col className={styles.colNum} />
+              <col className={styles.colItem} />
+              <col className={styles.colQty} />
+              <col className={styles.colRate} />
+              <col className={styles.colDiscount} />
+              <col className={styles.colGstRate} />
+              <col className={styles.colGstAmt} />
+              <col className={styles.colTotal} />
+            </colgroup>
             <thead>
               <tr>
-                <th className={styles.colNum}>#</th>
+                <th>#</th>
                 <th>Item</th>
                 <th className={styles.textRight}>Qty</th>
                 <th className={styles.textRight}>Rate</th>
+                <th className={styles.textRight}>Discount</th>
                 <th className={styles.textRight}>GST %</th>
                 <th className={styles.textRight}>GST Amt</th>
                 <th className={styles.textRight}>Total</th>
@@ -605,6 +625,7 @@ export default function PurchaseBillDetailPage() {
                   </td>
                   <td data-label="Qty" className={styles.qtyCell}>{item.quantity}</td>
                   <td data-label="Rate" className={styles.textRight}>₹{fmt(item.purchasePrice)}</td>
+                  <td data-label="Discount" className={`${styles.textRight} ${styles.textMuted}`}>{item.discountPercent > 0 ? `${item.discountPercent}%` : "—"}</td>
                   <td data-label="GST %" className={`${styles.textRight} ${styles.textMuted}`}>{item.gstRate}%</td>
                   <td data-label="GST Amt" className={styles.gstAmtCell}>₹{fmt(item.gstAmount)}</td>
                   <td data-label="Total" className={styles.totalCell}>₹{fmt(item.total)}</td>
@@ -613,7 +634,7 @@ export default function PurchaseBillDetailPage() {
             </tbody>
             <tfoot>
               <tr className={styles.tfootRow}>
-                <td colSpan={6} className={styles.tfootLabelCell}>Grand Total</td>
+                <td colSpan={7} className={styles.tfootLabelCell}>Grand Total</td>
                 <td className={styles.tfootValueCell}>₹{fmt(bill.total)}</td>
               </tr>
               <tr>

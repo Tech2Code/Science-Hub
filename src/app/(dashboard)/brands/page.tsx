@@ -2,11 +2,13 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { SortSelect } from "@/components/ui/SortSelect";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -18,6 +20,29 @@ interface Brand {
   createdAt?: string;
   _count: { products: number };
   createdBy?: string | null;
+}
+
+type SortOption = "name_az" | "name_za" | "products_high" | "products_low" | "newest" | "oldest";
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "name_az",       label: "Name (A–Z)" },
+  { value: "name_za",       label: "Name (Z–A)" },
+  { value: "products_high", label: "Products (High–Low)" },
+  { value: "products_low",  label: "Products (Low–High)" },
+  { value: "newest",        label: "Newest first" },
+  { value: "oldest",        label: "Oldest first" },
+];
+
+function sortBrands(list: Brand[], sort: SortOption): Brand[] {
+  const arr = [...list];
+  switch (sort) {
+    case "name_za":       return arr.sort((a, b) => b.name.localeCompare(a.name));
+    case "products_high": return arr.sort((a, b) => b._count.products - a._count.products);
+    case "products_low":  return arr.sort((a, b) => a._count.products - b._count.products);
+    case "oldest":        return arr.sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
+    case "newest":        return arr.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+    case "name_az":
+    default:              return arr.sort((a, b) => a.name.localeCompare(b.name));
+  }
 }
 
 const COLUMNS: Column[] = [
@@ -34,6 +59,7 @@ export default function BrandsPage() {
   const { data, loading, patchData } = useFetch<Brand[]>("/api/brands");
   const brands = data ?? [];
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortOption>("name_az");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -92,14 +118,15 @@ export default function BrandsPage() {
     b.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const { visible } = usePagination(filtered, page, showAll);
+  const sorted = sortBrands(filtered, sort);
+  const { visible } = usePagination(sorted, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
     // eslint-disable-next-line react-hooks/set-state-in-effect -- clamps page back into range after a delete shrinks the list
     if (page > totalPages) setPage(totalPages);
-  }, [filtered.length, page]);
+  }, [sorted.length, page]);
 
   return (
     <>
@@ -147,14 +174,17 @@ export default function BrandsPage() {
       {/* Brands list */}
       <div className="card">
         <div className="card-toolbar">
-          <input
-            type="search"
-            aria-label="Search brands"
-            placeholder="Search brands…"
-            value={search}
-            onChange={(e) => handleSearch(e.target.value)}
-            className={`search-input ${styles.searchInput}`}
-          />
+          <div className="toolbar-left">
+            <input
+              type="search"
+              aria-label="Search brands"
+              placeholder="Search brands…"
+              value={search}
+              onChange={(e) => handleSearch(e.target.value)}
+              className={`search-input ${styles.searchInput}`}
+            />
+            <SortSelect ariaLabel="Sort brands" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
+          </div>
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
@@ -176,7 +206,9 @@ export default function BrandsPage() {
               ) : visible.map((b, i) => (
                 <tr key={b.id}>
                   <Cell col={COLUMNS[0]} className={styles.indexCell}>{i + 1}</Cell>
-                  <Cell col={COLUMNS[1]} className={styles.nameCell}>{b.name}</Cell>
+                  <Cell col={COLUMNS[1]}>
+                    <Link href={`/brands/${b.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`}>{b.name}</Link>
+                  </Cell>
                   <Cell col={COLUMNS[2]} className={styles.mutedCell}>{b.createdBy ?? "—"}</Cell>
                   <Cell col={COLUMNS[3]} className={styles.mutedCell}>
                     {b.createdAt ? new Date(b.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—"}

@@ -198,16 +198,18 @@
 
 .itemRow { border-bottom: 1px solid var(--c-border-light, var(--c-border)); }
 
-.tdProduct { padding: 0.4rem 0.5rem; width: 22%; }
-.tdName { padding: 0.4rem 0.5rem; width: 24%; }
-.tdUnit { padding: 0.4rem 0.5rem; width: 13%; }
-.tdQty { padding: 0.4rem 0.5rem; width: 12%; }
-.tdRate { padding: 0.4rem 0.5rem; width: 10%; }
+.tdProduct { padding: 0.4rem 0.5rem; width: 14%; }
+.tdName { padding: 0.4rem 0.5rem; width: 14%; }
+.tdUnit { padding: 0.4rem 0.5rem; width: 12%; }
+.tdQty { padding: 0.4rem 0.5rem; width: 9%; }
+.tdRate { padding: 0.4rem 0.5rem; width: 9%; }
+.tdDiscount { padding: 0.4rem 0.5rem; width: 11%; }
 .tdGst { padding: 0.4rem 0.5rem; width: 12%; }
-.tdAmount { padding: 0.4rem 0.5rem; text-align: right; font-weight: 500; white-space: nowrap; width: 12%; }
+.tdAmount { padding: 0.4rem 0.5rem; text-align: right; font-weight: 500; white-space: nowrap; width: 11%; }
 .tdAction { padding: 0.4rem 0.25rem; width: 1.25rem; }
 
 .numInputRight { text-align: right; }
+.discountStack { display: flex; flex-direction: column; gap: 0.25rem; }
 
 .removeItemBtn {
   background: none;
@@ -347,6 +349,8 @@
   gap: 0.5rem;
 }
 
+.itemDiscountValue { color: var(--c-amber); }
+
 .discountInput { width: 90px; text-align: right; }
 
 .totalsGrandLine {
@@ -383,4 +387,37 @@
   border-radius: 0.625rem;
   border: 1px solid var(--c-border);
   background: var(--c-bg-sub);
+}
+
+.marginBottom1 {
+  margin-bottom: 1rem;
+}
+
+.amountRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.amountInput {
+  flex: 1;
+}
+
+.payFullBtn {
+  flex-shrink: 0;
+  padding: 0 0.75rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--c-amber);
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--c-amber);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.payFullBtn:hover {
+  background: rgba(245, 158, 11, 0.2);
 }

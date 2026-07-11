@@ -15,7 +15,11 @@
 
 .noResults {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--c-amber-text);
+  background: var(--c-amber-bg);
+  border: 1px solid var(--c-amber-border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
   text-align: center;
 }
 

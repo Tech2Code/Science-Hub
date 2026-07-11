@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
+import { SortSelect } from "@/components/ui/SortSelect";
 import { useFetch } from "@/lib/useCache";
 import { Cell, type Column } from "@/components/ui/Table";
 import styles from "./salesPayments.module.css";
@@ -20,6 +21,29 @@ interface Payment {
     total: number;
     customer: { name: string };
   };
+}
+
+type SortOption = "newest" | "oldest" | "amount_high" | "amount_low" | "customer_az" | "customer_za";
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "newest",      label: "Newest first" },
+  { value: "oldest",      label: "Oldest first" },
+  { value: "amount_high", label: "Amount (High–Low)" },
+  { value: "amount_low",  label: "Amount (Low–High)" },
+  { value: "customer_az", label: "Customer (A–Z)" },
+  { value: "customer_za", label: "Customer (Z–A)" },
+];
+
+function sortPayments(list: Payment[], sort: SortOption): Payment[] {
+  const arr = [...list];
+  switch (sort) {
+    case "oldest":      return arr.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    case "amount_high": return arr.sort((a, b) => b.amount - a.amount);
+    case "amount_low":  return arr.sort((a, b) => a.amount - b.amount);
+    case "customer_az": return arr.sort((a, b) => a.invoice.customer.name.localeCompare(b.invoice.customer.name));
+    case "customer_za": return arr.sort((a, b) => b.invoice.customer.name.localeCompare(a.invoice.customer.name));
+    case "newest":
+    default:            return arr.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }
 }
 
 const METHOD_CLASS: Record<string, string> = {
@@ -45,6 +69,7 @@ export default function PaymentsPage() {
   const { data, loading } = useFetch<Payment[]>("/api/payments");
   const payments = data ?? [];
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
 
@@ -55,7 +80,8 @@ export default function PaymentsPage() {
     (p.reference ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const { visible } = usePagination(filtered, page, showAll);
+  const sorted = sortPayments(filtered, sort);
+  const { visible } = usePagination(sorted, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
 
   const totalCollected = payments.reduce((s, p) => s + p.amount, 0);
@@ -73,14 +99,17 @@ export default function PaymentsPage() {
 
       <div className="card">
         <div className="card-toolbar">
-          <input
-            type="search"
-            aria-label="Search payments"
-            placeholder="Search by customer, invoice no, method or reference…"
-            value={search}
-            onChange={(e) => handleSearch(e.target.value)}
-            className={`search-input ${styles.searchInput}`}
-          />
+          <div className="toolbar-left">
+            <input
+              type="search"
+              aria-label="Search payments"
+              placeholder="Search by customer, invoice no, method or reference…"
+              value={search}
+              onChange={(e) => handleSearch(e.target.value)}
+              className={`search-input ${styles.searchInput}`}
+            />
+            <SortSelect ariaLabel="Sort payments" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
+          </div>
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}

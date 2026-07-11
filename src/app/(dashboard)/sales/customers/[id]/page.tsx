@@ -6,10 +6,12 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import styles from "./view.module.css";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { fetchCached } from "@/lib/useCache";
+import { fetchCached, bustCache } from "@/lib/useCache";
+import { useToast } from "@/components/ui/Toast";
 
 interface Invoice {
   id: string; invoiceNumber: string; date: string; createdAt: string;
@@ -33,16 +35,41 @@ function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?
 export default function CustomerViewPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const toast = useToast();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openingEdit, setOpeningEdit] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchCached(`/api/customers/${id}`)
       .then((d) => { setCustomer(d as typeof customer); setLoading(false); })
       .catch(() => { setError("Customer not found."); setLoading(false); });
   }, [id]);
+
+  async function handleDelete() {
+    if (!customer) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      setDeleting(false);
+      setConfirmOpen(false);
+      if (res.ok) {
+        bustCache("/api/customers");
+        toast({ type: "success", title: "Customer deleted", message: `"${customer.name}" moved to bin.` });
+        router.push("/sales/customers");
+      } else {
+        toast({ type: "error", title: "Delete failed", message: data.error ?? "Could not delete customer." });
+      }
+    } catch {
+      setDeleting(false);
+      setConfirmOpen(false);
+      toast({ type: "error", title: "Delete failed", message: "Network error." });
+    }
+  }
 
   if (loading) return (
     <div className={`page-stack ${styles.pageStack}`}>
@@ -99,6 +126,16 @@ export default function CustomerViewPage() {
   return (
     <div className={`page-stack ${styles.pageStack}`}>
       {openingEdit && <OverlayLoader text="Opening editor…" />}
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Delete Customer"
+        message={`Move "${customer.name}" to bin?`}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => { if (!deleting) setConfirmOpen(false); }}
+      />
       <Breadcrumb items={[{ label: "Customers", href: "/sales/customers" }, { label: customer.name }]} />
 
       {/* Header */}
@@ -123,6 +160,7 @@ export default function CustomerViewPage() {
           <div className={styles.headerActions}>
             <Button variant="secondary" onClick={() => { setOpeningEdit(true); router.push(`/sales/customers/edit/${id}`); }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</Button>
             <Button variant="primary" href={`/sales/invoices/new?customerId=${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>
+            <Button variant="danger" onClick={() => setConfirmOpen(true)}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete</Button>
           </div>
         </div>
         {customer.address && (

@@ -78,26 +78,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    for (const item of items as { quantity: number; purchasePrice: number }[]) {
+    for (const item of items as { quantity: number; purchasePrice: number; discountPercent?: number }[]) {
       const quantity = parseFloat(String(item.quantity));
       const purchasePrice = parseFloat(String(item.purchasePrice));
+      const discountPercent = parseFloat(String(item.discountPercent ?? 0));
       if (!(quantity > 0)) return NextResponse.json({ error: "Item quantity must be greater than 0" }, { status: 400 });
       if (!(purchasePrice >= 0)) return NextResponse.json({ error: "Item price cannot be negative" }, { status: 400 });
+      if (Number.isNaN(discountPercent) || discountPercent < 0 || discountPercent > 100) {
+        return NextResponse.json({ error: "Item discount must be between 0 and 100%" }, { status: 400 });
+      }
     }
 
     // Recompute every item's GST/total server-side from quantity × price × rate —
     // mirrors the invoices route, so a stale or tampered client-sent total/GST
-    // can never get persisted as the bill's authoritative amount.
+    // can never get persisted as the bill's authoritative amount. Discount is
+    // applied to the line's gross amount before GST, same as sales invoices:
+    // taxable value = gross - discount, GST computed on that taxable value.
     const computedItems = (items as {
       productId?: string; name: string; quantity: number;
-      unit?: string; purchasePrice: number; gstRate?: number;
+      unit?: string; purchasePrice: number; gstRate?: number; discountPercent?: number;
     }[]).map((item) => {
       const quantity = parseFloat(String(item.quantity));
       const purchasePrice = parseFloat(String(item.purchasePrice));
       const gstRate = parseFloat(String(item.gstRate ?? 0));
-      const itemSubtotal = quantity * purchasePrice;
+      const discountPercent = parseFloat(String(item.discountPercent ?? 0));
+      const gross = quantity * purchasePrice;
+      const discountAmount = gross * discountPercent / 100;
+      const itemSubtotal = gross - discountAmount;
       const gstAmount = itemSubtotal * gstRate / 100;
-      return { ...item, quantity, purchasePrice, gstRate, gstAmount, total: itemSubtotal + gstAmount, itemSubtotal };
+      return { ...item, quantity, purchasePrice, gstRate, discountPercent, discountAmount, gstAmount, total: itemSubtotal + gstAmount, itemSubtotal };
     });
     const subtotal = computedItems.reduce((s, i) => s + i.itemSubtotal, 0);
     const taxAmount = computedItems.reduce((s, i) => s + i.gstAmount, 0);
@@ -150,6 +159,8 @@ export async function POST(req: NextRequest) {
                 quantity: item.quantity,
                 unit: item.unit ?? "Nos",
                 purchasePrice: item.purchasePrice,
+                discountPercent: item.discountPercent,
+                discountAmount: item.discountAmount,
                 gstRate: item.gstRate,
                 gstAmount: item.gstAmount,
                 total: item.total,

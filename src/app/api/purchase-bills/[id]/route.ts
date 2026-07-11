@@ -68,30 +68,40 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // when the caller actually sent a new set.
     let computedItems: Array<{
       productId?: string; name: string; quantity: number;
-      unit?: string; purchasePrice: number; gstRate: number; gstAmount: number; total: number;
+      unit?: string; purchasePrice: number; gstRate: number;
+      discountPercent: number; discountAmount: number; gstAmount: number; total: number; itemSubtotal: number;
     }> | undefined;
     if (items !== undefined) {
       if (!Array.isArray(items) || items.length === 0) {
         return NextResponse.json({ error: "At least one item is required." }, { status: 400 });
       }
-      for (const item of items as { quantity: number; purchasePrice: number }[]) {
+      for (const item of items as { quantity: number; purchasePrice: number; discountPercent?: number }[]) {
         const quantity = parseFloat(String(item.quantity));
         const purchasePrice = parseFloat(String(item.purchasePrice));
+        const discountPercent = parseFloat(String(item.discountPercent ?? 0));
         if (!(quantity > 0)) return NextResponse.json({ error: "Item quantity must be greater than 0" }, { status: 400 });
         if (!(purchasePrice >= 0)) return NextResponse.json({ error: "Item price cannot be negative" }, { status: 400 });
+        if (Number.isNaN(discountPercent) || discountPercent < 0 || discountPercent > 100) {
+          return NextResponse.json({ error: "Item discount must be between 0 and 100%" }, { status: 400 });
+        }
       }
+      // Discount is applied to the line's gross amount before GST, same as
+      // sales invoices and the POST route above.
       computedItems = (items as {
         productId?: string; name: string; quantity: number;
-        unit?: string; purchasePrice: number; gstRate?: number;
+        unit?: string; purchasePrice: number; gstRate?: number; discountPercent?: number;
       }[]).map((item) => {
         const quantity = parseFloat(String(item.quantity));
         const purchasePrice = parseFloat(String(item.purchasePrice));
         const gstRate = parseFloat(String(item.gstRate ?? 0));
-        const itemSubtotal = quantity * purchasePrice;
+        const discountPercent = parseFloat(String(item.discountPercent ?? 0));
+        const gross = quantity * purchasePrice;
+        const discountAmount = gross * discountPercent / 100;
+        const itemSubtotal = gross - discountAmount;
         const gstAmount = itemSubtotal * gstRate / 100;
-        return { ...item, quantity, purchasePrice, gstRate, gstAmount, total: itemSubtotal + gstAmount };
+        return { ...item, quantity, purchasePrice, gstRate, discountPercent, discountAmount, gstAmount, total: itemSubtotal + gstAmount, itemSubtotal };
       });
-      subtotal = computedItems.reduce((s, i) => s + i.quantity * i.purchasePrice, 0);
+      subtotal = computedItems.reduce((s, i) => s + i.itemSubtotal, 0);
       taxAmount = computedItems.reduce((s, i) => s + i.gstAmount, 0);
     }
 
@@ -181,6 +191,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
                 quantity: item.quantity,
                 unit: item.unit ?? "Nos",
                 purchasePrice: item.purchasePrice,
+                discountPercent: item.discountPercent,
+                discountAmount: item.discountAmount,
                 gstRate: item.gstRate,
                 gstAmount: item.gstAmount,
                 total: item.total,

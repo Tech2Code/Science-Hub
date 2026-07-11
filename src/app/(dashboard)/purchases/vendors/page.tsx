@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { SortSelect } from "@/components/ui/SortSelect";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -23,6 +25,25 @@ interface Vendor {
   _count: { purchaseBills: number };
 }
 
+type SortOption = "name_az" | "name_za" | "bills_high" | "bills_low";
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "name_az",    label: "Name (A–Z)" },
+  { value: "name_za",    label: "Name (Z–A)" },
+  { value: "bills_high", label: "Bills (High–Low)" },
+  { value: "bills_low",  label: "Bills (Low–High)" },
+];
+
+function sortVendors(list: Vendor[], sort: SortOption): Vendor[] {
+  const arr = [...list];
+  switch (sort) {
+    case "name_za":    return arr.sort((a, b) => b.name.localeCompare(a.name));
+    case "bills_high": return arr.sort((a, b) => b._count.purchaseBills - a._count.purchaseBills);
+    case "bills_low":  return arr.sort((a, b) => a._count.purchaseBills - b._count.purchaseBills);
+    case "name_az":
+    default:           return arr.sort((a, b) => a.name.localeCompare(b.name));
+  }
+}
+
 const COLUMNS: Column[] = [
   { label: "Vendor",  mobile: "full+label" },
   { label: "GSTIN",   mobile: "label" },
@@ -38,6 +59,7 @@ export default function VendorsPage() {
   const vendors = data ?? [];
   const toast = useToast();
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortOption>("name_az");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null);
@@ -58,9 +80,10 @@ export default function VendorsPage() {
       })
     : vendors;
 
-  const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const sorted = sortVendors(filtered, sort);
+  const maxPage = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const clampedPage = Math.min(page, maxPage);
-  const { visible } = usePagination(filtered, clampedPage, showAll);
+  const { visible } = usePagination(sorted, clampedPage, showAll);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -113,14 +136,17 @@ export default function VendorsPage() {
 
       <div className="card">
         <div className="card-toolbar">
-          <input
-            type="search"
-            aria-label="Search vendors"
-            placeholder="Search by name, company, GSTIN, phone or email…"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
-            className={`search-input ${styles.searchInput}`}
-          />
+          <div className="toolbar-left">
+            <input
+              type="search"
+              aria-label="Search vendors"
+              placeholder="Search by name, company, GSTIN, phone or email…"
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+              className={`search-input ${styles.searchInput}`}
+            />
+            <SortSelect ariaLabel="Sort vendors" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
+          </div>
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />
           )}
@@ -140,7 +166,7 @@ export default function VendorsPage() {
               ) : visible.map(v => (
                 <tr key={v.id}>
                   <Cell col={COLUMNS[0]}>
-                    <div className={styles.nameCell}>{v.name}</div>
+                    <Link href={`/purchases/vendors/${v.id}`} className={`${styles.nameCell} table-link`}>{v.name}</Link>
                     {v.company && <div className={styles.companySub}>{v.company}</div>}
                   </Cell>
                   <Cell col={COLUMNS[1]} className={styles.gstinCell}>

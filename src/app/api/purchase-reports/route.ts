@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/apiAuth";
+import { requireSession, requireAdmin } from "@/lib/apiAuth";
+import { logActivity } from "@/lib/activity";
 
 async function getPurchaseSummary() {
   const now = new Date();
@@ -134,5 +135,30 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("GET /api/purchase-reports error:", error);
     return NextResponse.json({ error: "Failed to generate purchase report" }, { status: 500 });
+  }
+}
+
+// Admin-only bulk clear of the stock movement ledger — a temporary escape
+// hatch for wiping historical/test movement rows; does not touch product
+// stock quantities themselves.
+export async function DELETE(request: NextRequest) {
+  try {
+    const auth = await requireAdmin();
+    if (!auth.ok) return auth.response;
+
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get("type");
+    if (type !== "stock-ledger") {
+      return NextResponse.json({ error: `Unknown type: ${type}` }, { status: 400 });
+    }
+
+    const { count } = await prisma.stockMovement.deleteMany({});
+
+    await logActivity(auth.session.user.id, "empty_stock_ledger", `Cleared stock movement ledger: ${count} record(s) permanently deleted`);
+
+    return NextResponse.json({ deleted: count });
+  } catch (error) {
+    console.error("DELETE /api/purchase-reports error:", error);
+    return NextResponse.json({ error: "Failed to clear stock ledger" }, { status: 500 });
   }
 }

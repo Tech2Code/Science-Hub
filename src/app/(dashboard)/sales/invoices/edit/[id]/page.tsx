@@ -147,6 +147,8 @@ export default function EditInvoicePage() {
     return { gross, discountAmount, taxable, gstAmt, total: taxable + gstAmt };
   };
 
+  const grossTotal = items.reduce((sum, item) => sum + lineBreakdown(item).gross, 0);
+  const discountTotal = items.reduce((sum, item) => sum + lineBreakdown(item).discountAmount, 0);
   const subtotal = items.reduce((sum, item) => sum + lineBreakdown(item).taxable, 0);
   const taxBreakdown = items.reduce((acc, item) => {
     const { gstAmt } = lineBreakdown(item);
@@ -361,6 +363,7 @@ export default function EditInvoicePage() {
                     value={dueDate}
                     min={invoiceDate || undefined}
                     onChange={(e) => setDueDate(e.target.value)}
+                    onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
                     className={styles.dueDateInput}
                   />
                 </div>
@@ -495,8 +498,14 @@ export default function EditInvoicePage() {
               <div className={styles.summaryList}>
                 <div className={styles.summaryRow}>
                   <span>Subtotal</span>
-                  <span>₹{subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span>₹{grossTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
+                {discountTotal > 0 && (
+                  <div className={styles.summaryRow}>
+                    <span>Discount</span>
+                    <span className={styles.discountValue}>−₹{discountTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                )}
                 {Object.entries(taxBreakdown).map(([rate, amt]) =>
                   isInterState ? (
                     <div key={rate} className={styles.summaryRow}>

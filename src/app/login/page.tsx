@@ -8,6 +8,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import styles from "./login.module.css";
+import { rules, validate } from "@/lib/validation";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,6 +19,10 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const emailErr = validate(email, rules.required("Email is required."), rules.email());
+    const passwordErr = validate(password, rules.required("Password is required."));
+    const err = emailErr || passwordErr;
+    if (err) { setError(err); return; }
     setError("");
     setLoading(true);
     const result = await signIn("credentials", { email, password, redirect: false });
