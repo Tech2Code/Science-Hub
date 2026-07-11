@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
@@ -76,8 +76,12 @@ const COLUMNS: Column[] = [
 export default function ProductsPage() {
   const { data, loading, patchData } = useFetch<Product[]>("/api/products");
   const products = data ?? [];
+  const searchParams = useSearchParams();
+  const urlFilter = searchParams.get("filter");
   const [search, setSearch] = useState("");
-  const [stockFilter, setStockFilter] = useState<StockFilter>("all");
+  const [stockFilter, setStockFilter] = useState<StockFilter>(
+    urlFilter === "low" || urlFilter === "out" ? urlFilter : "all"
+  );
   const [sort, setSort] = useState<SortOption>("name_az");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
@@ -131,6 +135,11 @@ export default function ProductsPage() {
     const maxPage = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
     if (page > maxPage) setPage(maxPage); // eslint-disable-line react-hooks/set-state-in-effect -- clamps page back into range when filtering shrinks the result set
   }, [sorted.length, page]);
+
+  useEffect(() => {
+    setStockFilter(urlFilter === "low" || urlFilter === "out" ? urlFilter : "all"); // eslint-disable-line react-hooks/set-state-in-effect -- re-syncs the filter when the URL's ?filter param changes while already mounted (e.g. clicking a dashboard link while /products is already open)
+    setPage(1);
+  }, [urlFilter]);
 
   const { visible } = usePagination(sorted, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };

@@ -271,7 +271,7 @@ export default function DashboardPage() {
             </div>
             <div className={styles.lowStockSub}>Review and restock to avoid stockouts</div>
           </div>
-          <Button variant="secondary" size="sm" href="/products">View Products →</Button>
+          <Button variant="secondary" size="sm" href="/products?filter=low">View Products →</Button>
         </div>
       )}
     </div>
