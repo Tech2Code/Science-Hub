@@ -15,6 +15,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
 import { useToast } from "@/components/ui/Toast";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./invoicesList.module.css";
 
 interface Invoice {
@@ -132,9 +133,13 @@ export default function InvoicesPage() {
         });
         if (!el) { clearTimeout(safetyTimer); cleanup(); resolve(null); return; }
         await new Promise(r => setTimeout(r, 400));
+        // Read the logo's already-resolved src straight from the iframe's DOM
+        // (either the business's uploaded logo or the default fallback) so the
+        // synthetic continuation-page header stamps match what page 1 shows.
+        const logoUrl = el.querySelector<HTMLImageElement>('img[alt="Logo"]')?.src || undefined;
         let blob: Blob | null = null;
         try {
-          blob = await generateInvoicePdfBlob(el, copyLabels ? { copyLabels } : undefined);
+          blob = await generateInvoicePdfBlob(el, { ...(copyLabels ? { copyLabels } : {}), logoUrl });
         } catch { /* resolved as null below */ }
         clearTimeout(safetyTimer); cleanup();
         resolve(blob);
@@ -265,7 +270,7 @@ export default function InvoicesPage() {
 
       {/* Dashboard cards */}
       {!loading && invoices.length > 0 && (
-        <div className={styles.statsGrid}>
+        <div {...animateSection(0, styles.statsGrid)}>
           {[
             { label: "Total Invoiced",  value: `₹${fmt(totalInvoiced)}`, cls: styles.statTotal },
             { label: "Paid",            value: `₹${fmt(totalPaid)}`,     cls: styles.statPaid },
@@ -281,7 +286,7 @@ export default function InvoicesPage() {
       )}
 
       {/* Status filter tabs */}
-      <div className="filter-tabs-row">
+      <div {...animateSection(1, "filter-tabs-row")}>
         <div className="filter-tabs">
           {STATUS_TABS.map((tab) => (
             <button
@@ -295,7 +300,7 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      <div className="card">
+      <div {...animateSection(2, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
             <input

@@ -9,15 +9,10 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./vendorEdit.module.css";
 
 type StrForm = { name: string; company: string; gstin: string; phone: string; email: string; };
-
-function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
-  return (
-    <div className={styles.skeletonBlock} style={{ width: w, height: h, borderRadius: r } as React.CSSProperties} />
-  );
-}
 
 export default function EditVendorPage() {
   const router = useRouter();
@@ -75,7 +70,7 @@ export default function EditVendorPage() {
     if (res.ok) {
       bustCache("/api/vendors");
       toast({ type: "success", title: "Vendor updated", message: "Changes saved." });
-      router.push("/purchases/vendors");
+      router.push(`/purchases/vendors/${id}`);
     } else {
       const d = await res.json().catch(() => ({}));
       toast({ type: "error", title: "Failed", message: d.error ?? "Failed to update vendor." });
@@ -83,85 +78,64 @@ export default function EditVendorPage() {
   }
 
   const hasChanges = initialForm !== null && JSON.stringify(form) !== JSON.stringify(initialForm);
-
-  if (loading) return (
-    <>
-      <OverlayLoader text="Loading vendor…" />
-      <div className={`page-stack ${styles.pageStack}`}>
-        <Sk w={160} h={13} />
-        <Sk w={180} h={20} />
-        <div className="form-card">
-          <div className="form-grid-2">
-            <div className={styles.skFieldStack}><Sk w={100} h={12} /><Sk h={38} r={8} /></div>
-            <div className={styles.skFieldStack}><Sk w={140} h={12} /><Sk h={38} r={8} /></div>
-          </div>
-          <div className="form-grid-2">
-            <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
-            <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
-          </div>
-          <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
-          <div className={styles.skFieldStack}><Sk w={80} h={12} /><Sk h={60} r={8} /></div>
-          <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={60} r={8} /></div>
-        </div>
-      </div>
-    </>
-  );
+  const disabled = loading || saving;
 
   return (
     <>
-    {saving && <OverlayLoader text="Saving…" />}
+    {loading && <OverlayLoader text="Loading vendor…" />}
+    {!loading && saving && <OverlayLoader text="Saving…" />}
     <div className={`page-stack ${styles.pageStack}`}>
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "Edit Vendor" }]} />
       <h1 className="page-title">Edit Vendor</h1>
 
-      <form onSubmit={handleSubmit} className="form-card">
+      <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
         <div className="form-grid-2">
           <FormField label="Vendor Name" required error={errors.name as string}>
-            <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. Lab Supplies Co." />
+            <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. Lab Supplies Co." disabled={disabled} />
           </FormField>
           <FormField label="Company / Trade Name">
-            <Input name="company" value={form.company} onChange={handleChange} placeholder="e.g. Lab Supplies Pvt. Ltd." />
+            <Input name="company" value={form.company} onChange={handleChange} placeholder="e.g. Lab Supplies Pvt. Ltd." disabled={disabled} />
           </FormField>
         </div>
 
         <div className="form-grid-2">
           <FormField label="Phone" error={errors.phone as string}>
-            <Input name="phone" type="tel" inputMode="numeric" value={form.phone} onChange={handleChange} placeholder="10-digit mobile" maxLength={10} />
+            <Input name="phone" type="tel" inputMode="numeric" value={form.phone} onChange={handleChange} placeholder="10-digit mobile" maxLength={10} disabled={disabled} />
           </FormField>
           <FormField label="Email" error={errors.email as string}>
-            <Input name="email" type="email" value={form.email} onChange={handleChange} placeholder="vendor@example.com" />
+            <Input name="email" type="email" value={form.email} onChange={handleChange} placeholder="vendor@example.com" disabled={disabled} />
           </FormField>
         </div>
 
         <FormField label="GSTIN" hint="Leave blank if unregistered." error={errors.gstin as string}>
-          <Input name="gstin" value={form.gstin} onChange={handleChange} placeholder="15-character GST number" maxLength={15} mono />
+          <Input name="gstin" value={form.gstin} onChange={handleChange} placeholder="15-character GST number" maxLength={15} mono disabled={disabled} />
         </FormField>
 
         <FormField label="Address">
-          <Textarea name="address" rows={2} value={form.address} onChange={handleChange} placeholder="Street, city, state…" />
+          <Textarea name="address" rows={2} value={form.address} onChange={handleChange} placeholder="Street, city, state…" disabled={disabled} />
         </FormField>
 
         <FormField label="Notes">
-          <Textarea name="notes" rows={2} value={form.notes} onChange={handleChange} placeholder="Any additional notes…" />
+          <Textarea name="notes" rows={2} value={form.notes} onChange={handleChange} placeholder="Any additional notes…" disabled={disabled} />
         </FormField>
 
         <label className={styles.checkboxLabel}>
-          <input type="checkbox" name="isActive" checked={form.isActive} onChange={handleChange} className={styles.checkboxInput} />
+          <input type="checkbox" name="isActive" checked={form.isActive} onChange={handleChange} className={styles.checkboxInput} disabled={disabled} />
           Active vendor
         </label>
 
         <div className="form-actions-wrap">
           <div className="form-actions">
-            <Button type="submit" variant="primary" disabled={saving || !hasChanges}>
+            <Button type="submit" variant="primary" disabled={disabled || !hasChanges}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
               Update Vendor
             </Button>
-            <Button variant="secondary" href="/purchases/vendors">
+            <Button variant="secondary" href={`/purchases/vendors/${id}`}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               Cancel
             </Button>
           </div>
-          {!hasChanges && !saving && (
+          {!loading && !hasChanges && !saving && (
             <span className={styles.noChanges}>No changes detected.</span>
           )}
         </div>

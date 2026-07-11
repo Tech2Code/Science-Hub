@@ -9,6 +9,7 @@ import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./customerNew.module.css";
 
 const INDIA_STATES = [
@@ -77,7 +78,7 @@ export default function NewCustomerPage() {
         <p className="page-sub">Add a new customer to your directory</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="form-card">
+      <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
         <FormField label="Customer Name" required error={errors.name as string}>
           <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. ABC Enterprises" autoFocus />
         </FormField>

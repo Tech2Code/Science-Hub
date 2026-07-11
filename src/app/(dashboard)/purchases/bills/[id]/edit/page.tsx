@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { useDirty } from "@/lib/useDirty";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./edit.module.css";
 
 interface BillItem {
@@ -419,7 +420,7 @@ export default function EditPurchaseBillPage() {
 
       {/* Summary stats */}
       {bill && (
-        <div className={styles.statGrid}>
+        <div {...animateSection(0, styles.statGrid)}>
           <StatCard label="Subtotal"    value={`₹${fmt(grossTotal)}`} />
           {itemDiscountTotal > 0 && <StatCard label="Item Discount" value={`−₹${fmt(itemDiscountTotal)}`} />}
           <StatCard label="GST"         value={`₹${fmt(taxTotal)}`} />
@@ -431,7 +432,7 @@ export default function EditPurchaseBillPage() {
       <form onSubmit={handleSubmit} className="form-stack">
 
         {/* Editable fields */}
-        <div className="form-card">
+        <div {...animateSection(1, "form-card")}>
           <h2 className="form-section-title">Bill Details</h2>
 
           <FormField label="Vendor" required>
@@ -487,7 +488,7 @@ export default function EditPurchaseBillPage() {
         </div>
 
         {/* Line items */}
-        <div className="form-card">
+        <div {...animateSection(2, "form-card")}>
           <div className={styles.itemsSectionHeaderRow}>
             <h2 className={`form-section-title ${styles.itemsSectionTitle}`}>Items</h2>
             <Button type="button" variant="secondary" size="sm" onClick={addItem}>
@@ -570,7 +571,7 @@ export default function EditPurchaseBillPage() {
         </div>
 
         {/* Discount & revised total */}
-        <div className="form-card">
+        <div {...animateSection(3, "form-card")}>
           <h2 className="form-section-title">Discount Adjustment</h2>
           <div className={styles.discountRow}>
             <div className={styles.discountField}>

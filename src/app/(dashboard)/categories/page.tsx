@@ -13,6 +13,7 @@ import { SortSelect } from "@/components/ui/SortSelect";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./categories.module.css";
 
 interface Category {
@@ -175,7 +176,7 @@ export default function CategoriesPage() {
       </div>
 
       {/* Add category form */}
-      <div className={`card ${styles.addCard}`}>
+      <div {...animateSection(0, `card ${styles.addCard}`)}>
         <h2 className={styles.addCardTitle}>
           Add New Category
         </h2>
@@ -195,7 +196,7 @@ export default function CategoriesPage() {
       </div>
 
       {/* Categories list */}
-      <div className="card">
+      <div {...animateSection(1, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
             <input

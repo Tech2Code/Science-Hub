@@ -9,6 +9,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./vendorNew.module.css";
 
 type StrForm = { name: string; company: string; gstin: string; phone: string; email: string; address: string; };
@@ -65,7 +66,7 @@ export default function NewVendorPage() {
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "New Vendor" }]} />
       <h1 className="page-title">New Vendor</h1>
 
-      <form onSubmit={handleSubmit} className="form-card">
+      <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
         <div className="form-grid-2">
           <FormField label="Vendor Name" required error={errors.name as string}>
             <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. Lab Supplies Co." autoFocus />

@@ -10,16 +10,11 @@ import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./productEdit.module.css";
 
 const UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pack", "Set", "Mtr", "Dozen"];
 const GST_RATES = [0, 5, 12, 18, 28];
-
-function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
-  return (
-    <div className={styles.skeletonBlock} style={{ width: w, height: h, borderRadius: r } as React.CSSProperties} />
-  );
-}
 
 interface Brand { id: string; name: string; }
 interface Category { id: string; name: string; }
@@ -112,45 +107,13 @@ export default function EditProductPage() {
     setFieldErrors({}); setConfirmOpen(true);
   }
 
-  // Renders the same OverlayLoader used by the "Edit"/"View" buttons that
-  // navigate here, on top of a skeleton shaped like the real form — keeps
-  // the loading experience visually continuous instead of swapping to a
-  // blank/plain-text loader once this page mounts.
-  if (loading) return (
-    <>
-      <OverlayLoader text="Loading product…" />
-      <div className={`page-stack ${styles.pageStack}`}>
-        <Sk w={160} h={13} />
-        <div className={styles.skRow}>
-          <div className={styles.skFieldStack}>
-            <Sk w={180} h={20} />
-            <Sk w={140} h={14} />
-          </div>
-          <Sk w={110} h={32} r={8} />
-        </div>
-        <div className="form-card">
-          <div className="form-grid-2">
-            <div className={styles.skFieldStack}><Sk w={100} h={12} /><Sk h={38} r={8} /></div>
-            <div className={styles.skFieldStack}><Sk w={100} h={12} /><Sk h={38} r={8} /></div>
-          </div>
-          <div className={styles.skFieldStack}><Sk w={100} h={12} /><Sk h={60} r={8} /></div>
-          <div className="form-grid-3">
-            <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
-            <div className={styles.skFieldStack}><Sk w={100} h={12} /><Sk h={38} r={8} /></div>
-            <div className={styles.skFieldStack}><Sk w={70} h={12} /><Sk h={38} r={8} /></div>
-          </div>
-          <div className="form-grid-2">
-            <div className={styles.skFieldStack}><Sk w={90} h={12} /><Sk h={38} r={8} /></div>
-            <div className={styles.skFieldStack}><Sk w={90} h={12} /><Sk h={38} r={8} /></div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
+  const noChanges = initialForm !== null && JSON.stringify(form) === JSON.stringify(initialForm);
+  const disabled = loading || saving;
 
   return (
     <>
-    {saving && <OverlayLoader text="Saving…" />}
+    {loading && <OverlayLoader text="Loading product…" />}
+    {!loading && saving && <OverlayLoader text="Saving…" />}
     <div className={`page-stack ${styles.pageStack}`}>
       <ConfirmDialog
         open={confirmOpen}
@@ -176,31 +139,31 @@ export default function EditProductPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="form-card">
+      <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
         <div className="form-grid-2">
           <FormField label="Product Name" required error={fieldErrors.name}>
-            <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. Beaker 250ml Borosilicate" />
+            <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. Beaker 250ml Borosilicate" disabled={disabled} />
           </FormField>
           <FormField label="SKU / Item Code">
-            <Input name="sku" value={form.sku} onChange={handleChange} placeholder="e.g. BKR-250-BOR" mono />
+            <Input name="sku" value={form.sku} onChange={handleChange} placeholder="e.g. BKR-250-BOR" mono disabled={disabled} />
           </FormField>
         </div>
 
         <FormField label="Description">
-          <Textarea name="description" rows={2} value={form.description} onChange={handleChange} placeholder="Brief product description…" />
+          <Textarea name="description" rows={2} value={form.description} onChange={handleChange} placeholder="Brief product description…" disabled={disabled} />
         </FormField>
 
         <div className="form-grid-3">
           <FormField label="Unit">
-            <Select name="unit" value={form.unit} onChange={handleChange}>
+            <Select name="unit" value={form.unit} onChange={handleChange} disabled={disabled}>
               {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
             </Select>
           </FormField>
           <FormField label="Selling Price (₹)" required error={fieldErrors.price}>
-            <Input name="price" type="number" min="0" step="0.01" value={form.price} onChange={handleChange} placeholder="0.00" />
+            <Input name="price" type="number" min="0" step="0.01" value={form.price} onChange={handleChange} placeholder="0.00" disabled={disabled} />
           </FormField>
           <FormField label="GST Rate">
-            <Select name="gstRate" value={form.gstRate} onChange={handleChange}>
+            <Select name="gstRate" value={form.gstRate} onChange={handleChange} disabled={disabled}>
               {GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
             </Select>
           </FormField>
@@ -208,28 +171,28 @@ export default function EditProductPage() {
 
         <div className="form-grid-2">
           <FormField label="Purchase Price (₹)" hint="Used to auto-fill the rate on Purchase Bills." error={fieldErrors.purchasePrice}>
-            <Input name="purchasePrice" type="number" min="0" step="0.01" value={form.purchasePrice} onChange={handleChange} placeholder="0.00" />
+            <Input name="purchasePrice" type="number" min="0" step="0.01" value={form.purchasePrice} onChange={handleChange} placeholder="0.00" disabled={disabled} />
           </FormField>
         </div>
 
         <div className="form-grid-2">
           <FormField label="Current Stock" error={fieldErrors.stock}>
-            <Input name="stock" type="number" min="0" value={form.stock} onChange={handleChange} />
+            <Input name="stock" type="number" min="0" value={form.stock} onChange={handleChange} disabled={disabled} />
           </FormField>
           <FormField label="Minimum Stock" hint="Alert triggers when stock drops to or below this." error={fieldErrors.minStock}>
-            <Input name="minStock" type="number" min="0" value={form.minStock} onChange={handleChange} />
+            <Input name="minStock" type="number" min="0" value={form.minStock} onChange={handleChange} disabled={disabled} />
           </FormField>
         </div>
 
         <div className="form-grid-2">
           <FormField label="Brand">
-            <Select name="brandId" value={form.brandId} onChange={handleChange}>
+            <Select name="brandId" value={form.brandId} onChange={handleChange} disabled={disabled}>
               <option value="">— None —</option>
               {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </Select>
           </FormField>
           <FormField label="Category">
-            <Select name="categoryId" value={form.categoryId} onChange={handleChange}>
+            <Select name="categoryId" value={form.categoryId} onChange={handleChange} disabled={disabled}>
               <option value="">— None —</option>
               {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
@@ -238,12 +201,12 @@ export default function EditProductPage() {
 
         <div className="form-actions-wrap">
           <div className="form-actions">
-            <Button type="submit" variant="primary" disabled={saving || (initialForm !== null && JSON.stringify(form) === JSON.stringify(initialForm))}>
+            <Button type="submit" variant="primary" disabled={disabled || noChanges}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Product
             </Button>
             <Button variant="secondary" href={`/products/${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
           </div>
-          {initialForm !== null && JSON.stringify(form) === JSON.stringify(initialForm) && !saving && (
+          {!loading && noChanges && !saving && (
             <span className={styles.noChanges}>No changes detected.</span>
           )}
         </div>

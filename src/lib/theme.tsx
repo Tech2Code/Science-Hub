@@ -2,9 +2,25 @@
 
 import { createContext, useContext } from "react";
 
-const ThemeContext = createContext<{ toggle: () => void }>({ toggle: () => {} });
+const ThemeContext = createContext<{ toggle: () => void; setAccent: (hex: string | null) => void }>({
+  toggle: () => {},
+  setAccent: () => {},
+});
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  // Per-user accent color (not org-wide) — persisted in localStorage only,
+  // same imperative DOM-write pattern as toggle() below (no React state, so
+  // there's nothing to keep in sync/hydrate).
+  const setAccent = (hex: string | null) => {
+    if (hex) {
+      localStorage.setItem("accentColor", hex);
+      document.documentElement.style.setProperty("--c-accent", hex);
+    } else {
+      localStorage.removeItem("accentColor");
+      document.documentElement.style.removeProperty("--c-accent");
+    }
+  };
+
   const toggle = () => {
     const next = document.documentElement.classList.contains("dark") ? "light" : "dark";
     localStorage.setItem("theme", next);
@@ -26,7 +42,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <ThemeContext.Provider value={{ toggle }}>
+    <ThemeContext.Provider value={{ toggle, setAccent }}>
       {children}
     </ThemeContext.Provider>
   );

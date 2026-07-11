@@ -1,0 +1,557 @@
+<title>Science Hub — Demo Deck</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root{
+    --paper:#F5F3EC;
+    --paper-raised:#FBFAF6;
+    --ink:#1C2420;
+    --ink-soft:#4B564F;
+    --rule:#D8D3C4;
+    --accent:#1F6F5C;
+    --accent-soft:#DCEAE4;
+    --amber:#B4772A;
+    --amber-soft:#F1E3CE;
+    --danger:#9C3B32;
+    --shadow: 0 1px 0 rgba(28,36,32,0.06);
+  }
+  :root[data-theme="dark"]{
+    --paper:#14181A;
+    --paper-raised:#1B211F;
+    --ink:#E9EDE9;
+    --ink-soft:#A7B3AB;
+    --rule:#2C3532;
+    --accent:#4FA98D;
+    --accent-soft:#1E332C;
+    --amber:#D69A52;
+    --amber-soft:#332816;
+    --danger:#D97567;
+    --shadow: 0 1px 0 rgba(0,0,0,0.3);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#14181A;
+      --paper-raised:#1B211F;
+      --ink:#E9EDE9;
+      --ink-soft:#A7B3AB;
+      --rule:#2C3532;
+      --accent:#4FA98D;
+      --accent-soft:#1E332C;
+      --amber:#D69A52;
+      --amber-soft:#332816;
+      --danger:#D97567;
+      --shadow: 0 1px 0 rgba(0,0,0,0.3);
+    }
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  .sans{ font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+  .mono{ font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+  /* deck chrome */
+  .toolbar{
+    position:fixed; top:0; left:0; right:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 20px;
+    background:color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: blur(6px);
+    border-bottom:1px solid var(--rule);
+    font-family:-apple-system,"Segoe UI",sans-serif;
+  }
+  .toolbar .brand{ font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); }
+  .toolbar .brand b{ color:var(--ink); font-weight:700; }
+  .toolbar .hint{ font-size:12px; color:var(--ink-soft); }
+  .toolbar .hint kbd{
+    font-family:ui-monospace,monospace; font-size:11px; background:var(--paper-raised);
+    border:1px solid var(--rule); border-radius:4px; padding:1px 6px; margin:0 2px; color:var(--ink);
+  }
+  .toolbar .right{ display:flex; align-items:center; gap:16px; }
+  .theme-toggle{
+    display:flex; align-items:center; gap:6px;
+    font-family:-apple-system,"Segoe UI",sans-serif; font-size:12px; font-weight:600;
+    background:var(--paper-raised); color:var(--ink);
+    border:1px solid var(--rule); border-radius:20px; padding:5px 12px 5px 10px;
+    cursor:pointer;
+  }
+  .theme-toggle:hover{ border-color:var(--accent); }
+  .theme-toggle:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .theme-toggle .icon{ font-size:13px; line-height:1; }
+
+  .deck{
+    padding-top:56px;
+    scroll-snap-type:y proximity;
+  }
+  .slide{
+    scroll-snap-align:start;
+    min-height:100vh;
+    width:100%;
+    max-width:1180px;
+    margin:0 auto;
+    padding:64px 72px 56px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    position:relative;
+    border-bottom:1px dashed var(--rule);
+  }
+  .slide:last-child{ border-bottom:none; }
+
+  .kicker{
+    font-family:-apple-system,"Segoe UI",sans-serif;
+    font-size:12.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent); margin:0 0 14px;
+  }
+  h1{
+    font-size:clamp(34px,4.6vw,58px); line-height:1.05; margin:0 0 18px; font-weight:600;
+    text-wrap:balance; letter-spacing:-0.01em;
+  }
+  h2{
+    font-size:clamp(28px,3.4vw,40px); line-height:1.12; margin:0 0 22px; font-weight:600;
+    text-wrap:balance;
+  }
+  .lede{
+    font-size:19px; line-height:1.55; color:var(--ink-soft); max-width:60ch; margin:0 0 8px;
+  }
+  .slide-num{
+    position:absolute; bottom:28px; right:72px;
+    font-family:ui-monospace,monospace; font-size:12px; color:var(--ink-soft);
+  }
+  .slide-tag{
+    position:absolute; bottom:28px; left:72px;
+    font-family:-apple-system,sans-serif; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft);
+  }
+
+  /* title slide */
+  .title-slide{ justify-content:center; align-items:flex-start; }
+  .seal{
+    width:64px;height:64px;border-radius:50%;
+    border:1.5px solid var(--accent);
+    display:flex;align-items:center;justify-content:center;
+    margin-bottom:28px;
+    font-family:-apple-system,sans-serif;font-weight:700;font-size:20px;color:var(--accent);
+  }
+  .title-meta{
+    display:flex; gap:28px; margin-top:36px; font-family:-apple-system,sans-serif;
+    font-size:13px; color:var(--ink-soft);
+  }
+  .title-meta div{ border-left:2px solid var(--rule); padding-left:12px; }
+  .title-meta b{ display:block; color:var(--ink); font-size:15px; font-weight:600; margin-bottom:2px; }
+
+  /* module grid */
+  .grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:8px; }
+  .grid.two{ grid-template-columns:repeat(2,1fr); }
+  .card{
+    background:var(--paper-raised); border:1px solid var(--rule); border-radius:10px;
+    padding:22px 22px 20px; box-shadow:var(--shadow);
+  }
+  .card .num{ font-family:ui-monospace,monospace; font-size:12px; color:var(--accent); margin-bottom:8px; letter-spacing:.04em;}
+  .card h3{ font-family:-apple-system,sans-serif; font-size:17px; font-weight:700; margin:0 0 8px; }
+  .card p{ font-family:-apple-system,sans-serif; font-size:14px; line-height:1.55; color:var(--ink-soft); margin:0; }
+
+  /* feature slide layout */
+  .feature{ display:grid; grid-template-columns:1.1fr 0.9fr; gap:56px; align-items:center; }
+  .feature .copy ul{ margin:18px 0 0; padding:0; list-style:none; }
+  .feature .copy li{
+    font-family:-apple-system,sans-serif; font-size:15.5px; line-height:1.5; color:var(--ink);
+    padding:10px 0 10px 26px; border-top:1px solid var(--rule); position:relative;
+  }
+  .feature .copy li:first-child{ border-top:none; }
+  .feature .copy li::before{
+    content:"—"; position:absolute; left:0; top:10px; color:var(--accent); font-weight:700;
+  }
+  .panel{
+    background:var(--paper-raised); border:1px solid var(--rule); border-radius:12px;
+    padding:24px; box-shadow:var(--shadow);
+  }
+  .panel-label{ font-family:-apple-system,sans-serif; font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-soft); margin-bottom:12px; }
+
+  /* mock invoice */
+  .mock-invoice{ font-family:-apple-system,sans-serif; font-size:13px; }
+  .mock-invoice .row{ display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--rule); }
+  .mock-invoice .row:last-child{ border-bottom:none; }
+  .mock-invoice .row.total{ font-weight:700; color:var(--accent); padding-top:12px; }
+  .badge{
+    display:inline-block; font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px;
+    background:var(--accent-soft); color:var(--accent); font-family:-apple-system,sans-serif;
+  }
+  .badge.amber{ background:var(--amber-soft); color:var(--amber); }
+
+  /* stepper for setup slides */
+  .steps{ counter-reset:step; margin-top:12px; }
+  .step{
+    display:flex; gap:20px; padding:18px 0; border-top:1px solid var(--rule);
+  }
+  .step:first-child{ border-top:none; }
+  .step .idx{
+    counter-increment:step; font-family:ui-monospace,monospace; font-size:13px; color:var(--accent);
+    min-width:34px; padding-top:2px;
+  }
+  .step .idx::before{ content: counter(step, decimal-leading-zero); }
+  .step .body h4{ font-family:-apple-system,sans-serif; font-size:16px; margin:0 0 5px; font-weight:700; }
+  .step .body p{ font-family:-apple-system,sans-serif; font-size:14px; color:var(--ink-soft); margin:0; line-height:1.5; max-width:56ch; }
+
+  /* stack list (roles / tech) */
+  .stack-row{
+    display:flex; justify-content:space-between; align-items:baseline;
+    padding:14px 0; border-top:1px solid var(--rule); gap:24px;
+  }
+  .stack-row:first-child{ border-top:none; }
+  .stack-row .k{ font-family:-apple-system,sans-serif; font-weight:700; font-size:15px; min-width:190px; }
+  .stack-row .v{ font-family:-apple-system,sans-serif; font-size:14.5px; color:var(--ink-soft); line-height:1.5; }
+
+  .closing{ align-items:center; text-align:center; }
+  .closing .lede{ max-width:52ch; margin-left:auto; margin-right:auto; }
+
+  @media (max-width: 900px){
+    .slide{ padding:88px 28px 40px; }
+    .feature{ grid-template-columns:1fr; }
+    .grid{ grid-template-columns:1fr 1fr; }
+    .slide-tag,.slide-num{ left:28px; right:28px; }
+  }
+  @media print{
+    .toolbar{ display:none; }
+    .deck{ padding-top:0; }
+    .slide{ page-break-after:always; min-height:auto; border-bottom:none; padding:40px; }
+  }
+</style>
+
+<div class="toolbar">
+  <div class="brand sans"><b>Science Hub</b> · Demo Walkthrough</div>
+  <div class="right">
+    <div class="hint sans">Scroll or press <kbd>↓</kbd> <kbd>↑</kbd> to move between slides · <kbd>Ctrl</kbd>+<kbd>P</kbd> to export as PDF</div>
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light/dark theme">
+      <span class="icon" id="themeIcon">🌙</span><span id="themeLabel">Dark</span>
+    </button>
+  </div>
+</div>
+
+<div class="deck" id="deck">
+
+  <!-- 1 : TITLE -->
+  <section class="slide title-slide">
+    <div class="kicker">GST Billing &amp; Inventory Platform — Business Walkthrough</div>
+    <div class="seal sans">SH</div>
+    <h1>Science Hub</h1>
+    <p class="lede">A single web app to raise GST-compliant invoices, track stock, manage vendors and purchases, and see the health of the business at a glance — built specifically around how this shop already works.</p>
+    <div class="title-meta">
+      <div><b>Audience</b>Owners &amp; staff</div>
+      <div><b>Format</b>Live demo, ~20 min</div>
+      <div><b>Access</b>Any browser, no install</div>
+    </div>
+    <div class="slide-num mono">01 / 15</div>
+  </section>
+
+  <!-- 2 : THE PROBLEM -->
+  <section class="slide">
+    <div class="kicker">Why this exists</div>
+    <h2>Replacing spreadsheets, WhatsApp PDFs, and memory</h2>
+    <p class="lede">Today, invoice numbers, stock counts, and who-owes-what live in separate files and someone's head. That breaks under volume, and it's invisible the moment that one person is unavailable.</p>
+    <div class="grid two" style="margin-top:28px;">
+      <div class="card">
+        <div class="num mono">BEFORE</div>
+        <h3>Manual &amp; scattered</h3>
+        <p>Invoices in Word/Excel, stock counted by hand, GST worked out on a calculator, no record of who changed what.</p>
+      </div>
+      <div class="card">
+        <div class="num mono">AFTER</div>
+        <h3>One system of record</h3>
+        <p>Every invoice, payment, purchase, and stock movement lands in one database — numbered, dated, and attributed automatically.</p>
+      </div>
+    </div>
+    <div class="slide-tag">Science Hub</div>
+    <div class="slide-num mono">02 / 15</div>
+  </section>
+
+  <!-- 3 : MODULE OVERVIEW -->
+  <section class="slide">
+    <div class="kicker">The whole app, at a glance</div>
+    <h2>Six modules, one workflow</h2>
+    <div class="grid" style="margin-top:8px;">
+      <div class="card"><div class="num mono">01</div><h3>Sales</h3><p>Customers, GST invoices, returns, payments received.</p></div>
+      <div class="card"><div class="num mono">02</div><h3>Purchases</h3><p>Vendors, purchase bills, attachments, payments made.</p></div>
+      <div class="card"><div class="num mono">03</div><h3>Catalog</h3><p>Products, brands, categories, stock levels &amp; reorder points.</p></div>
+      <div class="card"><div class="num mono">04</div><h3>Reports</h3><p>Sales &amp; purchase dashboards, outstanding dues, GST summary.</p></div>
+      <div class="card"><div class="num mono">05</div><h3>Admin</h3><p>Staff accounts, role permissions, full activity log.</p></div>
+      <div class="card"><div class="num mono">06</div><h3>Recycle Bin</h3><p>Every delete is recoverable for 30 days before it's gone.</p></div>
+    </div>
+    <div class="slide-tag">Modules</div>
+    <div class="slide-num mono">03 / 15</div>
+  </section>
+
+  <!-- 4 : INVOICING -->
+  <section class="slide">
+    <div class="feature">
+      <div class="copy">
+        <div class="kicker">Sales</div>
+        <h2>Invoicing that does the GST math for you</h2>
+        <ul>
+          <li>Auto-numbered invoices — <span class="mono">SH-2026-0001</span> — no gaps, no duplicates, even with two people billing at once</li>
+          <li>CGST+SGST or IGST calculated automatically from place of supply</li>
+          <li>Per-line HSN codes and discounts; reverse charge supported</li>
+          <li>One-click PDF, in Original/Duplicate copy format, emailed straight to the customer</li>
+          <li>Partial payments and returns tracked against the same invoice</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <div class="panel-label">Preview · Invoice SH-2026-0114</div>
+        <div class="mock-invoice">
+          <div class="row"><span>Borosilicate Beaker Set (x12)</span><span class="mono">₹4,320.00</span></div>
+          <div class="row"><span>Digital pH Meter (x2)</span><span class="mono">₹6,800.00</span></div>
+          <div class="row"><span>CGST 9% + SGST 9%</span><span class="mono">₹1,000.80</span></div>
+          <div class="row total"><span>Total due</span><span class="mono">₹12,120.80</span></div>
+          <div class="row"><span>Status</span><span class="badge amber">Partial</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-tag">Invoicing</div>
+    <div class="slide-num mono">04 / 15</div>
+  </section>
+
+  <!-- 5 : PURCHASES -->
+  <section class="slide">
+    <div class="feature">
+      <div class="copy">
+        <div class="kicker">Purchases</div>
+        <h2>The other side of the ledger, just as tight</h2>
+        <ul>
+          <li>Vendor records with GSTIN, contact and running balance</li>
+          <li>Purchase bills auto-numbered <span class="mono">PB-2026-0001</span>, with GST and totals recomputed server-side</li>
+          <li>Attach the scanned bill or photo directly to the record (image or PDF, up to 10 MB)</li>
+          <li>Stock increases the moment a bill is entered — no separate "add stock" step</li>
+          <li>Record vendor payments and see what's still owed, vendor by vendor</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <div class="panel-label">Preview · Purchase Bill PB-2026-0087</div>
+        <div class="mock-invoice">
+          <div class="row"><span>Vendor</span><span>Ambica Scientific Co.</span></div>
+          <div class="row"><span>Items received</span><span class="mono">18 lines</span></div>
+          <div class="row"><span>Attachment</span><span class="badge">bill_scan.pdf</span></div>
+          <div class="row total"><span>Total</span><span class="mono">₹58,940.00</span></div>
+          <div class="row"><span>Status</span><span class="badge">Paid</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-tag">Purchases</div>
+    <div class="slide-num mono">05 / 15</div>
+  </section>
+
+  <!-- 6 : INVENTORY / STOCK LEDGER -->
+  <section class="slide">
+    <div class="feature">
+      <div class="copy">
+        <div class="kicker">Catalog &amp; Stock</div>
+        <h2>Every unit of stock has a paper trail</h2>
+        <ul>
+          <li>Products carry HSN, unit, GST rate, min/max stock and reorder level</li>
+          <li>A running stock ledger logs every purchase, sale, return and manual adjustment — signed, timestamped, and tied to the document that caused it</li>
+          <li>Low-stock items surface automatically, per product</li>
+          <li>Products, brands and categories are organised together, with product counts per brand/category</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <div class="panel-label">Preview · Stock movement — Digital pH Meter</div>
+        <div class="mock-invoice">
+          <div class="row"><span>Purchase · PB-2026-0087</span><span class="mono">+10</span></div>
+          <div class="row"><span>Sale · SH-2026-0110</span><span class="mono">−2</span></div>
+          <div class="row"><span>Sale · SH-2026-0114</span><span class="mono">−2</span></div>
+          <div class="row total"><span>Balance on hand</span><span class="mono">6 units</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-tag">Inventory</div>
+    <div class="slide-num mono">06 / 15</div>
+  </section>
+
+  <!-- 7 : REPORTS -->
+  <section class="slide">
+    <div class="kicker">Reports</div>
+    <h2>The dashboard answers the owner's questions directly</h2>
+    <p class="lede">No spreadsheet exports needed — the numbers that matter for running the business are already assembled.</p>
+    <div class="grid" style="margin-top:20px;">
+      <div class="card"><h3>Sales dashboard</h3><p>Revenue, top customers, and invoice status at a glance.</p></div>
+      <div class="card"><h3>Purchase dashboard</h3><p>Spend by vendor and category, payments pending.</p></div>
+      <div class="card"><h3>Outstanding dues</h3><p>Who owes the business, and who the business owes.</p></div>
+      <div class="card"><h3>Stock report</h3><p>Current stock, value, and reorder alerts across the catalog.</p></div>
+      <div class="card"><h3>GST summary</h3><p>Tax collected vs. paid — ready for the accountant.</p></div>
+      <div class="card"><h3>Combined view</h3><p>Sales and purchases side by side for one period.</p></div>
+    </div>
+    <div class="slide-tag">Reports</div>
+    <div class="slide-num mono">07 / 15</div>
+  </section>
+
+  <!-- 8 : SEARCH, BIN, ADMIN -->
+  <section class="slide">
+    <div class="kicker">Day-to-day safety nets</div>
+    <h2>Find anything. Undo almost anything.</h2>
+    <div class="grid two" style="margin-top:20px;">
+      <div class="card">
+        <h3>Global search</h3>
+        <p>One search box in the top bar finds invoices, customers, products, vendors and bills as you type — no need to know which section it lives in.</p>
+      </div>
+      <div class="card">
+        <h3>Recycle bin, 30 days</h3>
+        <p>Deleted a customer or invoice by mistake? It sits in the bin for 30 days with a reason why it can or can't yet be permanently removed, then restores in one click.</p>
+      </div>
+      <div class="card">
+        <h3>Roles: Admin &amp; Staff</h3>
+        <p>Staff run day-to-day billing and purchasing. Admin-only areas — settings, user management, bulk bin actions — stay locked to owners/managers.</p>
+      </div>
+      <div class="card">
+        <h3>Activity log</h3>
+        <p>Every create, edit and delete is attributed to a user and timestamped — visible to admins, filterable by person.</p>
+      </div>
+    </div>
+    <div class="slide-tag">Controls</div>
+    <div class="slide-num mono">08 / 15</div>
+  </section>
+
+  <!-- 9 : HOW IT'S BUILT -->
+  <section class="slide">
+    <div class="kicker">Under the hood, briefly</div>
+    <h2>What it's built on — and why that's a safe choice</h2>
+    <div class="steps" style="margin-top:12px;">
+      <div class="stack-row"><div class="k sans">Runs in the browser</div><div class="v">No software to install on any computer — open the link, log in, and it works on desktop or laptop like any website.</div></div>
+      <div class="stack-row"><div class="k sans">Database</div><div class="v">PostgreSQL (via Neon), a mainstream, widely-used database engine — the same category banks and fintechs run on. Automatic backups.</div></div>
+      <div class="stack-row"><div class="k sans">Hosting</div><div class="v">Vercel — the same platform behind a large share of production web apps; scales automatically, no server to maintain.</div></div>
+      <div class="stack-row"><div class="k sans">Security</div><div class="v">Password-based login with role checks on every action; Gmail app-password and bank account number are encrypted in the database, not stored as plain text.</div></div>
+      <div class="stack-row"><div class="k sans">PDFs &amp; email</div><div class="v">Invoices render to PDF in the browser and send via the business's own Gmail account, so customers see a familiar sender.</div></div>
+    </div>
+    <div class="slide-tag">Architecture</div>
+    <div class="slide-num mono">09 / 15</div>
+  </section>
+
+  <!-- 10 : SETUP -->
+  <section class="slide">
+    <div class="kicker">Getting started</div>
+    <h2>Setup — a one-time, 15-minute job</h2>
+    <div class="steps">
+      <div class="step"><div class="idx"></div><div class="body"><h4>Deploy the app</h4><p>Publish the code to Vercel and connect it to a Neon database — a one-time technical step, done once by whoever maintains it.</p></div></div>
+      <div class="step"><div class="idx"></div><div class="body"><h4>Create the first admin account</h4><p>The very first login seeds the owner/admin user. After that, self-signup is disabled — every other account is created by an admin.</p></div></div>
+      <div class="step"><div class="idx"></div><div class="body"><h4>Fill in Business Settings</h4><p>Company name, GSTIN, PAN, address, bank details for invoices, and the Gmail account invoices will be sent from.</p></div></div>
+      <div class="step"><div class="idx"></div><div class="body"><h4>Add products, vendors, opening stock</h4><p>Bring in the existing catalog and current stock counts once — everything after that updates itself.</p></div></div>
+      <div class="step"><div class="idx"></div><div class="body"><h4>Add staff accounts</h4><p>Create a login per staff member with the right role, so every action in the system is attributed to a real person.</p></div></div>
+    </div>
+    <div class="slide-tag">Setup</div>
+    <div class="slide-num mono">10 / 15</div>
+  </section>
+
+  <!-- 11 : DAILY USE - SALES FLOW -->
+  <section class="slide">
+    <div class="kicker">Daily use · a sale</div>
+    <h2>From order to payment, in four steps</h2>
+    <div class="steps">
+      <div class="step"><div class="idx"></div><div class="body"><h4>Pick or add the customer</h4><p>Search existing customers, or create one inline while raising the invoice — no separate screen needed.</p></div></div>
+      <div class="step"><div class="idx"></div><div class="body"><h4>Add line items</h4><p>Products pull in their price, HSN and GST rate automatically; apply a discount if needed.</p></div></div>
+      <div class="step"><div class="idx"></div><div class="body"><h4>Generate &amp; send</h4><p>Download the PDF or email it straight to the customer from the invoice screen — stock is deducted the moment it's created.</p></div></div>
+      <div class="step"><div class="idx"></div><div class="body"><h4>Record the payment</h4><p>Log full or partial payment as it comes in; the invoice status updates itself to Unpaid, Partial or Paid.</p></div></div>
+    </div>
+    <div class="slide-tag">Workflow</div>
+    <div class="slide-num mono">11 / 15</div>
+  </section>
+
+  <!-- 12 : DAILY USE - PURCHASE FLOW -->
+  <section class="slide">
+    <div class="kicker">Daily use · a purchase</div>
+    <h2>Stock arrives, the ledger updates itself</h2>
+    <div class="steps">
+      <div class="step"><div class="idx"></div><div class="body"><h4>Open a new purchase bill</h4><p>Choose the vendor, enter the line items from their bill, attach a photo or PDF of the physical bill.</p></div></div>
+      <div class="step"><div class="idx"></div><div class="body"><h4>Confirm the totals</h4><p>The system recalculates GST and total independently — a safeguard against a typo on either side.</p></div></div>
+      <div class="step"><div class="idx"></div><div class="body"><h4>Save</h4><p>Stock increases immediately and a matching entry lands in the stock ledger — no extra "receive stock" step.</p></div></div>
+      <div class="step"><div class="idx"></div><div class="body"><h4>Pay the vendor</h4><p>Record the payment against the bill, in full or in parts, whenever it's actually made.</p></div></div>
+    </div>
+    <div class="slide-tag">Workflow</div>
+    <div class="slide-num mono">12 / 15</div>
+  </section>
+
+  <!-- 13 : ACCESS -->
+  <section class="slide">
+    <div class="kicker">Access &amp; day-to-day feel</div>
+    <h2>Nothing to install, nothing to remember to update</h2>
+    <div class="grid two" style="margin-top:20px;">
+      <div class="card"><h3>Any device with a browser</h3><p>Desktop at the counter, a laptop in the back office — same login, same data, always current.</p></div>
+      <div class="card"><h3>Light &amp; dark themes</h3><p>Switches instantly, remembered per device — easier on the eyes for long billing sessions.</p></div>
+      <div class="card"><h3>Forgot password, self-serve</h3><p>A reset link by email, no need to call whoever manages the system.</p></div>
+      <div class="card"><h3>Always up to date</h3><p>Improvements deploy centrally — every user sees the latest version the next time they load the page.</p></div>
+    </div>
+    <div class="slide-tag">Access</div>
+    <div class="slide-num mono">13 / 15</div>
+  </section>
+
+  <!-- 14 : WHAT'S NEXT -->
+  <section class="slide">
+    <div class="kicker">Roadmap</div>
+    <h2>Where this goes from here</h2>
+    <p class="lede">The core system — invoicing, purchases, stock, reports, admin — is complete and in daily use. Next, we validate it under real business conditions:</p>
+    <div class="grid two" style="margin-top:24px;">
+      <div class="card"><h3>End-to-end email test</h3><p>Confirm invoice delivery from Settings through to a customer's inbox under real load.</p></div>
+      <div class="card"><h3>Full password-reset drill</h3><p>Walk the reset flow start to finish on the live production address.</p></div>
+      <div class="card"><h3>Recycle bin walkthrough</h3><p>Exercise restore and permanent-delete across every record type.</p></div>
+      <div class="card"><h3>Team onboarding</h3><p>Create staff logins and set roles for everyone who'll use it day to day.</p></div>
+    </div>
+    <div class="slide-tag">Next steps</div>
+    <div class="slide-num mono">14 / 15</div>
+  </section>
+
+  <!-- 15 : CLOSING -->
+  <section class="slide closing">
+    <div class="seal sans">SH</div>
+    <h1>Ready when you are</h1>
+    <p class="lede">Science Hub already reflects how this business bills, buys, and stocks — the next step is putting real invoices through it.</p>
+    <div class="slide-num mono">15 / 15</div>
+  </section>
+
+</div>
+
+<script>
+  (function(){
+    var root = document.documentElement;
+    var btn = document.getElementById('themeToggle');
+    var icon = document.getElementById('themeIcon');
+    var label = document.getElementById('themeLabel');
+    var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+    function applyTheme(theme){
+      if(theme){
+        root.setAttribute('data-theme', theme);
+      } else {
+        root.removeAttribute('data-theme');
+      }
+      var isDark = theme ? theme === 'dark' : systemDark;
+      icon.textContent = isDark ? '☀️' : '🌙';
+      label.textContent = isDark ? 'Light' : 'Dark';
+    }
+
+    var saved = null;
+    try { saved = localStorage.getItem('science-hub-demo-theme'); } catch(e){}
+    applyTheme(saved);
+
+    btn.addEventListener('click', function(){
+      var current = root.getAttribute('data-theme') || (systemDark ? 'dark' : 'light');
+      var next = current === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      try { localStorage.setItem('science-hub-demo-theme', next); } catch(e){}
+    });
+
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    document.addEventListener('keydown', function(e){
+      if(e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'PageDown' && e.key !== 'PageUp') return;
+      e.preventDefault();
+      var mid = window.scrollY + window.innerHeight/2;
+      var idx = 0;
+      for(var i=0;i<slides.length;i++){
+        if(slides[i].offsetTop <= mid) idx = i;
+      }
+      if(e.key === 'ArrowDown' || e.key === 'PageDown') idx = Math.min(idx+1, slides.length-1);
+      if(e.key === 'ArrowUp' || e.key === 'PageUp') idx = Math.max(idx-1, 0);
+      slides[idx].scrollIntoView({behavior:'smooth'});
+    });
+  })();
+</script>

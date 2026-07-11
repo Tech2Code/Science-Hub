@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { useFetch } from "@/lib/useCache";
+import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
 import styles from "./salesReports.module.css";
 
@@ -119,7 +120,7 @@ export default function SalesReportsPage() {
       </div>
 
       {/* KPI banners */}
-      <div className="stat-banners">
+      <div {...animateSection(0, "stat-banners")}>
         <div className="stat-banner stat-banner-blue">
           <div className="stat-banner-label">Revenue This Month</div>
           <div className="stat-banner-value">{loadingSummary ? "—" : fmt(summaryData?.revenueThisMonth ?? 0)}</div>
@@ -143,7 +144,7 @@ export default function SalesReportsPage() {
       </div>
 
       {/* Tabs */}
-      <div className={`card ${styles.tabsCard}`}>
+      <div {...animateSection(1, `card ${styles.tabsCard}`)}>
         <div className={styles.tabsRow}>
           {(["outstanding", "summary", "gst"] as Tab[]).map((t) => (
             <button key={t} className={`${styles.tabBtn} ${tab === t ? styles.active : ""}`} onClick={() => setTab(t)}>

@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/Button";
 import { Input, Textarea, FormField } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
+import { useBranding } from "@/lib/businessBranding";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./settings.module.css";
 
 interface BusinessSettings {
@@ -13,6 +15,7 @@ interface BusinessSettings {
   gmailUser: string; gmailAppPasswordSet: boolean;
   bankName: string; bankAccountName: string; bankAccountNumber: string; bankIfsc: string; bankBranch: string;
   termsAndConditions: string;
+  logoUrl: string;
 }
 
 const EMPTY: BusinessSettings = {
@@ -21,6 +24,7 @@ const EMPTY: BusinessSettings = {
   gmailUser: "", gmailAppPasswordSet: false,
   bankName: "", bankAccountName: "", bankAccountNumber: "", bankIfsc: "", bankBranch: "",
   termsAndConditions: "",
+  logoUrl: "",
 };
 
 // Bank name/branch are printed on invoices — capitalize each word as typed
@@ -81,6 +85,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState<BusinessSettings>(EMPTY);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
+  const { setBranding } = useBranding();
 
   // Each section below has its own independent edit state — editing one
   // does not disturb or require re-submitting the others.
@@ -110,6 +115,9 @@ export default function SettingsPage() {
   const [termsForm, setTermsForm] = useState("");
   const [savingTerms, setSavingTerms] = useState(false);
 
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
   function applyLoaded(d: Record<string, string | boolean>) {
     const s: BusinessSettings = {
       name: (d.name as string) ?? "", tagline: (d.tagline as string) ?? "", email: (d.email as string) ?? "",
@@ -121,8 +129,10 @@ export default function SettingsPage() {
       bankAccountNumber: (d.bankAccountNumber as string) ?? "", bankIfsc: (d.bankIfsc as string) ?? "",
       bankBranch: (d.bankBranch as string) ?? "",
       termsAndConditions: (d.termsAndConditions as string) ?? "",
+      logoUrl: (d.logoUrl as string) ?? "",
     };
     setSaved(s);
+    setBranding({ name: s.name, tagline: s.tagline, logoUrl: s.logoUrl });
     return s;
   }
 
@@ -313,6 +323,56 @@ export default function SettingsPage() {
     setSavingTerms(false);
   }
 
+  // ── Logo ─────────────────────────────────────────────────────────────────
+
+  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/settings/logo", { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ type: "error", title: "Upload failed", message: data.error ?? "Could not upload logo." });
+        return;
+      }
+      const oldUrl = saved.logoUrl;
+      const result = await putSettings({ logoUrl: data.url });
+      if (result.ok) {
+        applyLoaded(result.data);
+        toast({ type: "success", title: "Logo updated", message: "Your business logo has been updated." });
+        if (oldUrl) {
+          fetch("/api/settings/logo", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: oldUrl }) }).catch(() => {});
+        }
+      } else {
+        // Save failed — remove the blob we just uploaded so it doesn't orphan.
+        fetch("/api/settings/logo", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: data.url }) }).catch(() => {});
+        toast({ type: "error", title: "Save failed", message: result.error ?? "Could not save logo." });
+      }
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Could not upload logo." });
+    }
+    setLogoUploading(false);
+    e.target.value = "";
+  }
+
+  async function handleRemoveLogo() {
+    const oldUrl = saved.logoUrl;
+    if (!oldUrl) return;
+    setLogoUploading(true);
+    const result = await putSettings({ logoUrl: "" });
+    if (result.ok) {
+      applyLoaded(result.data);
+      toast({ type: "success", title: "Logo removed", message: "Reverted to the default logo." });
+      fetch("/api/settings/logo", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: oldUrl }) }).catch(() => {});
+    } else {
+      toast({ type: "error", title: "Failed", message: result.error ?? "Could not remove logo." });
+    }
+    setLogoUploading(false);
+  }
+
   // ── Email config ──────────────────────────────────────────────────────────
 
   function handleEditEmail() {
@@ -380,8 +440,18 @@ export default function SettingsPage() {
       {/* ── Skeleton ─────────────────────────────────────────────────── */}
       {loading ? (
         <>
+          <div {...animateSection(0, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
+            <Sk w={100} h={13} />
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <Sk w={64} h={64} r={12} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <Sk w={110} h={36} r={8} />
+                <Sk w={80} h={36} r={8} />
+              </div>
+            </div>
+          </div>
           {[5, 4].map((count, ci) => (
-            <div key={ci} className={`card ${styles.cardPad} ${styles.skeletonCardBody}`}>
+            <div key={ci} {...animateSection(ci + 1, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
               <Sk w={ci === 0 ? 140 : 100} h={13} />
               <div className={styles.skeletonGrid}>
                 {Array.from({ length: count }).map((_, i) => (
@@ -393,7 +463,7 @@ export default function SettingsPage() {
               </div>
             </div>
           ))}
-          <div className={`card ${styles.cardPad} ${styles.skeletonCardBody}`}>
+          <div {...animateSection(3, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
             <Sk w={160} h={13} />
             <Sk w="50%" h={15} />
           </div>
@@ -401,8 +471,45 @@ export default function SettingsPage() {
 
       ) : (
         <>
+          {/* ── Branding (Logo) ──────────────────────────────────────────── */}
+          <div {...animateSection(0, `card ${styles.cardPad}`)}>
+            <h2 className={styles.sectionTitle}>Branding</h2>
+            <p className={styles.stateHint}>Shown on the sidebar, login screen, and every printed invoice.</p>
+            <div className={styles.emailFormGrid} style={{ alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <div
+                  style={{
+                    width: 64, height: 64, borderRadius: "var(--c-radius-sm)",
+                    border: "1px solid var(--c-border)", display: "flex", alignItems: "center",
+                    justifyContent: "center", overflow: "hidden", background: "var(--c-bg-sub)", flexShrink: 0,
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary uploaded blob URL, not a static asset */}
+                  <img src={saved.logoUrl || "/logo.png"} alt="Business logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleLogoChange}
+                    style={{ display: "none" }}
+                  />
+                  <Button type="button" variant="editOutline" disabled={logoUploading} onClick={() => logoInputRef.current?.click()}>
+                    {logoUploading ? "Uploading…" : saved.logoUrl ? "Replace Logo" : "Upload Logo"}
+                  </Button>
+                  {saved.logoUrl && (
+                    <Button type="button" variant="danger" disabled={logoUploading} onClick={handleRemoveLogo}>
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* ── Business Identity ─────────────────────────────────────── */}
-          <div className={`card ${styles.cardPad}`}>
+          <div {...animateSection(1, `card ${styles.cardPad}`)}>
             <SectionHeader title="Business Identity" editing={editingIdentity} onEdit={handleEditIdentity} />
             {!editingIdentity ? (
               <div className={styles.infoGrid}>
@@ -444,7 +551,7 @@ export default function SettingsPage() {
           </div>
 
           {/* ── Address ────────────────────────────────────────────────── */}
-          <div className={`card ${styles.cardPad}`}>
+          <div {...animateSection(2, `card ${styles.cardPad}`)}>
             <SectionHeader title="Address" editing={editingAddress} onEdit={handleEditAddress} />
             {!editingAddress ? (
               <>
@@ -489,7 +596,7 @@ export default function SettingsPage() {
           </div>
 
           {/* ── Bank Details ───────────────────────────────────────────── */}
-          <div className={`card ${styles.cardPad}`}>
+          <div {...animateSection(3, `card ${styles.cardPad}`)}>
             <SectionHeader title="Bank Details" editing={editingBank} onEdit={handleEditBank} />
             {!editingBank ? (
               <>
@@ -550,7 +657,7 @@ export default function SettingsPage() {
           </div>
 
           {/* ── Terms & Conditions ────────────────────────────────────────── */}
-          <div className={`card ${styles.cardPad}`}>
+          <div {...animateSection(4, `card ${styles.cardPad}`)}>
             <SectionHeader title="Terms & Conditions" editing={editingTerms} onEdit={handleEditTerms} />
             {!editingTerms ? (
               <>
@@ -583,7 +690,7 @@ export default function SettingsPage() {
           </div>
 
           {/* ── Email Configuration card (always visible, own edit state) ── */}
-          <div className={`card ${styles.cardPad}`}>
+          <div {...animateSection(5, `card ${styles.cardPad}`)}>
             <div className={styles.emailCardHeader}>
               <div>
                 <h2 className={styles.emailCardTitle}>

@@ -10,13 +10,8 @@ import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./customerEdit.module.css";
-
-function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
-  return (
-    <div className={styles.skeletonBlock} style={{ width: w, height: h, borderRadius: r } as React.CSSProperties} />
-  );
-}
 
 const INDIA_STATES = [
   "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat",
@@ -76,7 +71,7 @@ export default function EditCustomerPage() {
       bustCache(`/api/customers/${id}`);
       bustCache("/api/invoices");
       toast({ type: "success", title: "Customer updated", message: "Changes saved." });
-      router.push("/sales/customers");
+      router.push(`/sales/customers/${id}`);
     }
     else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to update customer." }); }
   }
@@ -94,39 +89,13 @@ export default function EditCustomerPage() {
     setErrors({}); setConfirmOpen(true);
   }
 
-  if (loading) return (
-    <>
-      <OverlayLoader text="Loading customer…" />
-      <div className={`page-stack ${styles.pageStack}`}>
-        <Sk w={160} h={13} />
-        <div className={styles.skRow}>
-          <div className={styles.skFieldStack}>
-            <Sk w={180} h={20} />
-            <Sk w={140} h={14} />
-          </div>
-          <Sk w={110} h={32} r={8} />
-        </div>
-        <div className="form-card">
-          <div className={styles.skFieldStack}><Sk w={110} h={12} /><Sk h={38} r={8} /></div>
-          <div className="form-grid-2">
-            <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
-            <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
-          </div>
-          <div className={styles.skFieldStack}><Sk w={80} h={12} /><Sk h={60} r={8} /></div>
-          <div className="form-grid-3">
-            <div className={styles.skFieldStack}><Sk w={40} h={12} /><Sk h={38} r={8} /></div>
-            <div className={styles.skFieldStack}><Sk w={40} h={12} /><Sk h={38} r={8} /></div>
-            <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
-          </div>
-          <div className={styles.skFieldStack}><Sk w={60} h={12} /><Sk h={38} r={8} /></div>
-        </div>
-      </div>
-    </>
-  );
+  const noChanges = initialForm !== null && JSON.stringify(form) === JSON.stringify(initialForm);
+  const disabled = loading || saving;
 
   return (
     <>
-    {saving && <OverlayLoader text="Saving…" />}
+    {loading && <OverlayLoader text="Loading customer…" />}
+    {!loading && saving && <OverlayLoader text="Saving…" />}
     <div className={`page-stack ${styles.pageStack}`}>
       <ConfirmDialog
         open={confirmOpen}
@@ -152,51 +121,51 @@ export default function EditCustomerPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="form-card">
+      <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
         <FormField label="Customer Name" required error={errors.name as string}>
-          <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. ABC Enterprises" />
+          <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. ABC Enterprises" disabled={disabled} />
         </FormField>
 
         <div className="form-grid-2">
           <FormField label="Phone" error={errors.phone as string}>
-            <Input name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="10-digit mobile" />
+            <Input name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="10-digit mobile" disabled={disabled} />
           </FormField>
           <FormField label="Email" error={errors.email as string}>
-            <Input name="email" type="email" value={form.email} onChange={handleChange} placeholder="billing@customer.com" />
+            <Input name="email" type="email" value={form.email} onChange={handleChange} placeholder="billing@customer.com" disabled={disabled} />
           </FormField>
         </div>
 
         <FormField label="Address">
-          <Textarea name="address" rows={2} value={form.address} onChange={handleChange} placeholder="Street address, building, floor…" />
+          <Textarea name="address" rows={2} value={form.address} onChange={handleChange} placeholder="Street address, building, floor…" disabled={disabled} />
         </FormField>
 
         <div className="form-grid-3">
           <FormField label="City">
-            <Input name="city" value={form.city} onChange={handleChange} placeholder="City" />
+            <Input name="city" value={form.city} onChange={handleChange} placeholder="City" disabled={disabled} />
           </FormField>
           <FormField label="State">
-            <Select name="state" value={form.state} onChange={handleChange}>
+            <Select name="state" value={form.state} onChange={handleChange} disabled={disabled}>
               <option value="">Select state</option>
               {INDIA_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
             </Select>
           </FormField>
           <FormField label="Pincode" error={errors.pincode as string}>
-            <Input name="pincode" value={form.pincode} onChange={handleChange} placeholder="6-digit PIN" maxLength={6} />
+            <Input name="pincode" value={form.pincode} onChange={handleChange} placeholder="6-digit PIN" maxLength={6} disabled={disabled} />
           </FormField>
         </div>
 
         <FormField label="GSTIN" hint="Leave blank if customer is unregistered." error={errors.gstin as string}>
-          <Input name="gstin" value={form.gstin} onChange={handleChange} placeholder="15-character GST number" maxLength={15} mono />
+          <Input name="gstin" value={form.gstin} onChange={handleChange} placeholder="15-character GST number" maxLength={15} mono disabled={disabled} />
         </FormField>
 
         <div className="form-actions-wrap">
           <div className="form-actions">
-            <Button type="submit" variant="primary" disabled={saving || JSON.stringify(form) === JSON.stringify(initialForm)}>
+            <Button type="submit" variant="primary" disabled={disabled || noChanges}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Customer
             </Button>
-            <Button variant="secondary" href="/sales/customers"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
+            <Button variant="secondary" href={`/sales/customers/${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
           </div>
-          {JSON.stringify(form) === JSON.stringify(initialForm) && !saving && (
+          {!loading && noChanges && !saving && (
             <span className={styles.noChanges}>No changes detected.</span>
           )}
         </div>

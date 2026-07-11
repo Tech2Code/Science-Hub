@@ -14,6 +14,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 import { amountInWordsINR } from "@/lib/numberToWords";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./invoiceDetail.module.css";
 
 interface InvoiceItem {
@@ -46,6 +47,7 @@ interface BusinessSettings {
   address: string; city: string; state: string; pincode: string; gstin: string; pan?: string;
   termsAndConditions?: string;
   bankName?: string; bankAccountName?: string; bankAccountNumber?: string; bankIfsc?: string; bankBranch?: string;
+  logoUrl?: string;
 }
 
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
@@ -344,7 +346,7 @@ export default function InvoiceDetailPage() {
   async function generatePdfBlob(copyLabels?: string[]): Promise<Blob | null> {
     const el = document.getElementById("invoice-print-area");
     if (!el) return null;
-    return generateInvoicePdfBlob(el, copyLabels ? { copyLabels } : undefined);
+    return generateInvoicePdfBlob(el, { copyLabels, logoUrl: settings?.logoUrl || undefined });
   }
 
   function handleDownloadClick() {
@@ -918,7 +920,7 @@ export default function InvoiceDetailPage() {
                     <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 20px" }}>
                       <div style={{ flexShrink: 0, width: 60, height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
                         {/* eslint-disable-next-line @next/next/no-img-element -- html2canvas needs a plain <img>, swapped to a data URL during PDF/print generation */}
-                        <img src="/logo.png" alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                        <img src={settings?.logoUrl || "/logo.png"} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
                       </div>
                       <div style={{ flex: 1, textAlign: "center" }}>
                         <div style={{
@@ -1380,7 +1382,7 @@ export default function InvoiceDetailPage() {
           const paidPct = Math.min(100, (paidTotal / invoice.total) * 100);
 
           return (
-            <div className="card">
+            <div {...animateSection(0, "card")}>
               {/* Header */}
               <div className={styles.historyHeader}>
                 {/* Left: title + count */}
@@ -1489,7 +1491,7 @@ export default function InvoiceDetailPage() {
         {returns.length > 0 && (() => {
           const totalReturned = returns.reduce((s, r) => s + r.items.reduce((ss, ri) => ss + ri.total, 0), 0);
           return (
-            <div className={`card ${styles.returnsHistoryCard}`}>
+            <div {...animateSection(1, `card ${styles.returnsHistoryCard}`)}>
               <div className={styles.returnsHistoryHeader}>
                 <div className={styles.returnsHistoryHeaderLeft}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 102.13-9.36L1 10" /></svg>

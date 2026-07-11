@@ -10,9 +10,9 @@
 // Border color — matches the @media print override in the invoice detail page CSS
 const BD = "#64748b";
 
-async function fetchLogoDataUrl(): Promise<string | null> {
+async function fetchLogoDataUrl(logoUrl?: string): Promise<string | null> {
   try {
-    const res = await fetch("/logo.png");
+    const res = await fetch(logoUrl || "/logo.png");
     if (!res.ok) return null;
     const blob = await res.blob();
     return await new Promise<string>((resolve, reject) => {
@@ -28,14 +28,14 @@ async function fetchLogoDataUrl(): Promise<string | null> {
 
 export async function generateInvoicePdfBlob(
   el: HTMLElement,
-  options?: { copyLabels?: string[] }
+  options?: { copyLabels?: string[]; logoUrl?: string }
 ): Promise<Blob | null> {
   const copyLabels = options?.copyLabels?.length ? options.copyLabels : [null];
   try {
     const [html2canvasModule, jspdfModule, logoDataUrl] = await Promise.all([
       import("html2canvas").then(m => m.default),
       import("jspdf"),
-      fetchLogoDataUrl(),
+      fetchLogoDataUrl(options?.logoUrl),
     ]);
     const html2canvas = html2canvasModule;
     const { jsPDF } = jspdfModule;

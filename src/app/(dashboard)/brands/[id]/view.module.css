@@ -26,6 +26,8 @@
 
 .headerActions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
+.renameRow { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
 .metaText {
   font-size: 0.75rem;
   color: var(--c-text-3);

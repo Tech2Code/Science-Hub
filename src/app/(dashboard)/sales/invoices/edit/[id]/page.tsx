@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { INDIA_STATES } from "@/lib/states";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./edit.module.css";
 
 
@@ -305,7 +306,7 @@ export default function EditInvoicePage() {
           {/* Left column */}
           <div className={styles.leftCol}>
             {/* Customer (read-only) */}
-            <div className={`card ${styles.sectionCard}`}>
+            <div {...animateSection(0, `card ${styles.sectionCard}`)}>
               <h2 className={styles.sectionTitle}>Bill To</h2>
               <div className={styles.billToBox}>
                 <div className={styles.billToName}>{invoice.customer.name}</div>
@@ -317,7 +318,7 @@ export default function EditInvoicePage() {
             </div>
 
             {/* Place of supply + inter-state + due date */}
-            <div className={`card ${styles.sectionCard}`}>
+            <div {...animateSection(1, `card ${styles.sectionCard}`)}>
               <div className={styles.optionsRow}>
                 <div className={styles.dueDateGroup}>
                   <label className={styles.dueDateLabel}>Place of supply *</label>
@@ -371,7 +372,7 @@ export default function EditInvoicePage() {
             </div>
 
             {/* Items */}
-            <div className={`card ${styles.sectionCard}`}>
+            <div {...animateSection(2, `card ${styles.sectionCard}`)}>
               <h2 className={styles.sectionTitle}>Line Items</h2>
               <div className={styles.productSearchWrap}>
                 <input
@@ -479,7 +480,7 @@ export default function EditInvoicePage() {
             </div>
 
             {/* Notes */}
-            <div className={`card ${styles.sectionCard}`}>
+            <div {...animateSection(3, `card ${styles.sectionCard}`)}>
               <label className={styles.notesLabel}>Notes / Terms</label>
               <textarea
                 rows={2}
@@ -493,7 +494,7 @@ export default function EditInvoicePage() {
 
           {/* Right — summary */}
           <div className={styles.rightCol}>
-            <div className={`card ${styles.summaryCard}`}>
+            <div {...animateSection(4, `card ${styles.summaryCard}`)}>
               <h2 className={styles.summaryTitle}>Invoice Summary</h2>
               <div className={styles.summaryList}>
                 <div className={styles.summaryRow}>

@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
+import { useBranding } from "@/lib/businessBranding";
 import styles from "../login/login.module.css";
 import { rules, validate } from "@/lib/validation";
 
 export default function ForgotPasswordPage() {
+  const { branding } = useBranding();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -47,9 +48,10 @@ export default function ForgotPasswordPage() {
       <div className={styles.grid} />
       <div className={styles.wrap}>
         <div className={styles.brand}>
-          <Image src="/logo.png" alt="Science Hub" width={56} height={56} className={styles.brandIcon} />
-          <h1 className={styles.brandName}>Science Hub</h1>
-          <p className={styles.brandSub}>Billing &amp; Inventory</p>
+          {/* eslint-disable-next-line @next/next/no-img-element -- dynamic uploaded business logo, not a static asset */}
+          <img src={branding.logoUrl || "/logo.png"} alt="Logo" width={56} height={56} className={styles.brandIcon} />
+          <h1 className={styles.brandName}>{branding.name}</h1>
+          <p className={styles.brandSub}>{branding.tagline || "Billing & Inventory"}</p>
         </div>
 
         <div className={styles.card}>

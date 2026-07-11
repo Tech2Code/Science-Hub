@@ -14,7 +14,9 @@ const CSP = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  // https://*.public.blob.vercel-storage.com is where the uploaded business
+  // logo lives (see src/lib/blobStorage.ts's isLogoBlobUrl allowlist).
+  "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com",
   "font-src 'self' data:",
   `connect-src 'self'${isDev ? " ws:" : ""}`,
   "frame-ancestors 'self'",

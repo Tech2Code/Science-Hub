@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { useFetch } from "@/lib/useCache";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./dashboardHome.module.css";
 
 interface RecentInvoice { id: string; invoiceNumber: string; date: string; customerName: string; total: number; paidAmount: number; status: string; }
@@ -116,7 +117,7 @@ export default function DashboardPage() {
   return (
     <div className="page-stack">
       {/* ── Hero welcome banner ── */}
-      <div className={`${styles.hero} animate-card animate-card-1`}>
+      <div {...animateSection(0, styles.hero)}>
         <div className={styles.heroGlow} aria-hidden="true" />
         <div className={styles.heroText}>
           <p className={styles.heroEyebrow} suppressHydrationWarning>
@@ -136,7 +137,7 @@ export default function DashboardPage() {
       )}
 
       {/* ── Primary action tiles ── */}
-      <div className={`${styles.actionTilesGrid} animate-card animate-card-2`}>
+      <div {...animateSection(1, styles.actionTilesGrid)}>
         {quickActionSections.map(section => (
           <Link key={section.key} href={section.actions[0].href} className={styles.actionTile} data-tone={section.tone}>
             <span className={styles.actionTileIcon}>{section.tileIcon}</span>
@@ -152,7 +153,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Secondary quick links ── */}
-      <div className={`card ${styles.quickActionsCard} animate-card animate-card-3`}>
+      <div {...animateSection(2, `card ${styles.quickActionsCard}`)}>
         {quickActionSections.map((section, sIdx) => (
           <div
             key={section.key}
@@ -180,7 +181,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Sales & Purchases side-by-side */}
-      <div className={`${styles.sideBySideGrid} animate-card animate-card-4`}>
+      <div {...animateSection(3, styles.sideBySideGrid)}>
         {/* SALES half */}
         <div className={styles.sideBySideCol}>
           <SectionLabel>Sales</SectionLabel>
@@ -204,7 +205,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent invoices & bills */}
-      <div className={`${styles.recentGrid} animate-card animate-card-4`}>
+      <div {...animateSection(4, styles.recentGrid)}>
         <div className="card">
           <div className={styles.cardHeader}>
             <h2 className={styles.cardHeaderTitle}>Recent Invoices</h2>
@@ -260,7 +261,7 @@ export default function DashboardPage() {
 
       {/* Low stock alert */}
       {!loading && (data?.lowStockCount ?? 0) > 0 && (
-        <div className={`card ${styles.lowStockCard}`}>
+        <div {...animateSection(5, `card ${styles.lowStockCard}`)}>
           <div className={styles.lowStockIconWrap}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--c-red)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </div>

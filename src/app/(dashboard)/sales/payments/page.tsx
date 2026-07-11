@@ -7,6 +7,7 @@ import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagina
 import { SortSelect } from "@/components/ui/SortSelect";
 import { useFetch } from "@/lib/useCache";
 import { Cell, type Column } from "@/components/ui/Table";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./salesPayments.module.css";
 
 interface Payment {
@@ -92,12 +93,12 @@ export default function PaymentsPage() {
         <div>
           <h1 className="page-title">Payments</h1>
           <p className="page-sub">
-            {payments.length} payments · Total collected ₹{totalCollected.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {loading ? "Loading…" : `${payments.length} payments · Total collected ₹${totalCollected.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </p>
         </div>
       </div>
 
-      <div className="card">
+      <div {...animateSection(0, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
             <input

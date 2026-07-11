@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
-import { TableSkeleton } from "@/components/ui/Skeleton";
+import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { fetchCached, bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./view.module.css";
 
 interface CategoryProduct {
@@ -17,12 +18,6 @@ interface CategoryProduct {
 }
 interface Category {
   id: string; name: string; products: CategoryProduct[];
-}
-
-function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
-  return (
-    <div className={styles.skeletonBlock} style={{ width: w, height: h, borderRadius: r } as React.CSSProperties} />
-  );
 }
 
 export default function CategoryViewPage() {
@@ -98,43 +93,21 @@ export default function CategoryViewPage() {
     }
   }
 
-  if (loading) return (
-    <div className={`page-stack ${styles.pageStack}`}>
-      <Sk w={160} h={13} />
-      <div className={`card ${styles.headerCard}`}>
-        <div className={styles.skRow}>
-          <div className={styles.skLeftRow}>
-            <Sk w={48} h={48} r={9999} />
-            <div className={styles.skCol}><Sk w={160} h={20} /></div>
-          </div>
-          <div className={styles.skActions}><Sk w={90} h={32} r={8} /></div>
-        </div>
-      </div>
-      <div className={styles.statsGrid}>
-        {[1, 2, 3].map((i) => (
-          <div key={i} className={`card ${styles.skStatCard}`}><Sk w={80} h={11} /><Sk w={100} h={22} /></div>
-        ))}
-      </div>
-      <div className="card">
-        <div className={styles.skTableHead}><Sk w={140} h={14} /></div>
-        <div className="table-wrap">
-          <table className="table-base"><tbody><TableSkeleton cols={4} rows={4} /></tbody></table>
-        </div>
-      </div>
-    </div>
-  );
-
-  if (error || !category)
+  if (!loading && (error || !category))
     return <div className={`loading-center ${styles.errorCenter}`}>{error || "Category not found."}</div>;
 
-  const lowStockCount = category.products.filter((p) => p.stock <= p.minStock).length;
+  // Rendered unconditionally (loading or loaded) so adding/removing a header
+  // button, stat, or column only ever needs one edit — see SkeletonSwap.
+  const products = category?.products ?? [];
+  const lowStockCount = products.filter((p) => p.stock <= p.minStock).length;
+  const catalogValue = products.reduce((s, p) => s + p.price * p.stock, 0);
 
   return (
     <div className={`page-stack ${styles.pageStack}`}>
       <ConfirmDialog
         open={confirmOpen}
         title="Delete Category"
-        message={`Move "${category.name}" to bin?`}
+        message={`Move "${category?.name ?? ""}" to bin?`}
         confirmLabel="Delete"
         variant="danger"
         loading={deleting}
@@ -142,12 +115,14 @@ export default function CategoryViewPage() {
         onCancel={() => { if (!deleting) setConfirmOpen(false); }}
       />
 
-      <Breadcrumb items={[{ label: "Categories", href: "/categories" }, { label: category.name }]} />
+      <Breadcrumb items={category ? [{ label: "Categories", href: "/categories" }, { label: category.name }] : [{ label: "Categories", href: "/categories" }]} />
 
-      <div className={`card ${styles.headerCard}`}>
+      <div {...animateSection(0, `card ${styles.headerCard}`)}>
         <div className={styles.headerTop}>
           <div className={styles.headerLeft}>
-            <div className={styles.avatar}>{category.name[0]?.toUpperCase()}</div>
+            <div className={styles.avatar}>
+              <SkeletonSwap loading={loading} w={48} h={48} r={9999}>{category?.name?.[0]?.toUpperCase()}</SkeletonSwap>
+            </div>
             {renaming ? (
               <div className={styles.renameRow}>
                 <Input
@@ -161,17 +136,19 @@ export default function CategoryViewPage() {
                 <Button size="sm" variant="secondary" onClick={() => setRenaming(false)} disabled={savingRename}>Cancel</Button>
               </div>
             ) : (
-              <h1 className="page-title">{category.name}</h1>
+              <h1 className="page-title">
+                <SkeletonSwap loading={loading} w={160} h={20}>{category?.name}</SkeletonSwap>
+              </h1>
             )}
           </div>
           <div className={styles.headerActions}>
             {!renaming && (
-              <Button variant="editOutline" onClick={startRename}>
+              <Button variant="editOutline" disabled={loading} onClick={startRename}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 Rename
               </Button>
             )}
-            <Button variant="danger" onClick={() => setConfirmOpen(true)}>
+            <Button variant="danger" disabled={loading} onClick={() => setConfirmOpen(true)}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
               Delete
             </Button>
@@ -179,22 +156,26 @@ export default function CategoryViewPage() {
         </div>
       </div>
 
-      <div className={styles.statsGrid}>
+      <div {...animateSection(1, styles.statsGrid)}>
         <div className={`card ${styles.cardPadSm}`}>
           <div className={styles.statLabel}>Products</div>
-          <div className={styles.statValue}>{category.products.length}</div>
+          <div className={styles.statValue}><SkeletonSwap loading={loading} w={40} h={22}>{products.length}</SkeletonSwap></div>
         </div>
         <div className={`card ${styles.cardPadSm}`}>
           <div className={styles.statLabel}>Low Stock</div>
-          <div className={`${styles.statValue} ${lowStockCount > 0 ? styles.negative : ""}`}>{lowStockCount}</div>
+          <div className={`${styles.statValue} ${!loading && lowStockCount > 0 ? styles.negative : ""}`}>
+            <SkeletonSwap loading={loading} w={40} h={22}>{lowStockCount}</SkeletonSwap>
+          </div>
         </div>
         <div className={`card ${styles.cardPadSm}`}>
           <div className={styles.statLabel}>Catalog Value</div>
-          <div className={styles.statValue}>₹{category.products.reduce((s, p) => s + p.price * p.stock, 0).toLocaleString("en-IN")}</div>
+          <div className={styles.statValue}>
+            <SkeletonSwap loading={loading} w={80} h={22}>₹{catalogValue.toLocaleString("en-IN")}</SkeletonSwap>
+          </div>
         </div>
       </div>
 
-      <div className="card">
+      <div {...animateSection(2, "card")}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>Products</h2>
         </div>
@@ -209,9 +190,11 @@ export default function CategoryViewPage() {
               </tr>
             </thead>
             <tbody>
-              {category.products.length === 0 ? (
+              {loading ? (
+                <TableSkeleton cols={4} rows={4} />
+              ) : products.length === 0 ? (
                 <tr><td colSpan={4} className={styles.emptyCell}>No products under this category.</td></tr>
-              ) : category.products.map((p) => (
+              ) : products.map((p) => (
                 <tr key={p.id}>
                   <td data-mobile-full data-label="Name">
                     <Link href={`/products/${p.id}`} className={styles.productLink}>{p.name}</Link>

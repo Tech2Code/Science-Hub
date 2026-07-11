@@ -14,6 +14,7 @@ import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 import { amountInWordsINR } from "@/lib/numberToWords";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./billDetail.module.css";
 
 interface PurchaseBillItem {
@@ -458,7 +459,7 @@ export default function PurchaseBillDetailPage() {
       </div>
 
       {/* ── KPI stat strip ── */}
-      <div className={styles.statStrip}>
+      <div {...animateSection(0, styles.statStrip)}>
         <StatCard label="Subtotal"    value={`₹${fmtShort(bill.subtotal)}`} />
         <StatCard label="GST"         value={`₹${fmtShort(bill.taxAmount)}`} />
         {bill.discount > 0 && <StatCard label="Discount" value={`−₹${fmtShort(bill.discount)}`} color="var(--c-red)" />}
@@ -468,7 +469,7 @@ export default function PurchaseBillDetailPage() {
       </div>
 
       {/* ── Info cards: Vendor | Bill Meta ── */}
-      <div className={styles.infoGrid}>
+      <div {...animateSection(1, styles.infoGrid)}>
         {/* Vendor */}
         <div className={`card ${styles.infoCard}`}>
           <div className={styles.infoCardLabel}>Vendor</div>
@@ -533,7 +534,7 @@ export default function PurchaseBillDetailPage() {
 
       {/* ── Record Payment form ── */}
       {showPayForm && bill.status !== "paid" && bill.status !== "cancelled" && (
-        <div className={`card ${styles.payFormCard}`}>
+        <div {...animateSection(2, `card ${styles.payFormCard}`)}>
           <div className={styles.payFormHeaderRow}>
             <h3 className={styles.payFormHeading}>
               Record Payment
@@ -585,7 +586,7 @@ export default function PurchaseBillDetailPage() {
       )}
 
       {/* ── Items table ── */}
-      <div className="card">
+      <div {...animateSection(3, "card")}>
         <div className={styles.sectionHeaderRow}>
           <h3 className={styles.sectionHeading}>
             Items <span className={styles.sectionCount}>({bill.items.length})</span>
@@ -646,7 +647,7 @@ export default function PurchaseBillDetailPage() {
       </div>
 
       {/* ── Payment History ── */}
-      <div className="card">
+      <div {...animateSection(4, "card")}>
         <div className={styles.sectionHeaderRow}>
           <h3 className={styles.sectionHeading}>
             Payment History

@@ -3,9 +3,9 @@
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTheme } from "@/lib/theme";
+import { useBranding } from "@/lib/businessBranding";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { GlobalSearch } from "./GlobalSearch";
 import styles from "./DashboardShell.module.css";
@@ -191,8 +191,98 @@ function ThemeToggle() {
   );
 }
 
+const ACCENT_PRESETS = ["#2563eb", "#059669", "#7c3aed", "#dc2626", "#0d9488", "#d97706"];
+
+function AccentPicker() {
+  const { setAccent } = useTheme();
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("accentColor") || "#2563eb" : "#2563eb"
+  );
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  function pick(hex: string) {
+    setValue(hex);
+    setAccent(hex);
+  }
+
+  function reset() {
+    setValue("#2563eb");
+    setAccent(null);
+  }
+
+  return (
+    <div style={{ position: "relative" }} ref={popRef}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Choose accent color"
+        title="Choose accent color"
+        className={styles.collapseBtn}
+      >
+        <span style={{ width: 16, height: 16, borderRadius: "50%", background: value, border: "1px solid rgba(0,0,0,0.15)" }} />
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 50,
+            background: "var(--c-bg-card)", border: "1px solid var(--c-border)",
+            borderRadius: "var(--c-radius)", boxShadow: "var(--c-shadow-lg)",
+            padding: 12, width: 200,
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--c-text-2)", marginBottom: 8 }}>Accent Color</div>
+          <div style={{ fontSize: 11, color: "var(--c-text-3)", marginBottom: 6 }}>Presets</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+            {ACCENT_PRESETS.map((hex) => (
+              <button
+                key={hex}
+                onClick={() => pick(hex)}
+                aria-label={hex}
+                title={hex}
+                style={{
+                  width: 22, height: 22, borderRadius: "50%", background: hex, cursor: "pointer",
+                  border: value.toLowerCase() === hex ? "2px solid var(--c-text)" : "1px solid rgba(0,0,0,0.15)",
+                }}
+              />
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--c-text-3)", marginBottom: 6 }}>Or pick your own</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="color"
+              value={value}
+              onChange={(e) => pick(e.target.value)}
+              title="Pick a custom color"
+              aria-label="Pick a custom color"
+              style={{ width: 32, height: 28, padding: 0, border: "1px solid var(--c-border)", borderRadius: 6, background: "none", cursor: "pointer" }}
+            />
+            <span style={{ fontSize: 12, color: "var(--c-text-2)" }}>Custom</span>
+            <button
+              onClick={reset}
+              style={{ fontSize: 12, color: "var(--c-text-3)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", marginLeft: "auto" }}
+            >
+              Reset to default
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
+  const { branding } = useBranding();
+  const logoSrc = branding.logoUrl || "/logo.png";
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -233,7 +323,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     return (
       <div className={styles.loadingScreen}>
         <div className={styles.loadingInner}>
-          <Image src="/logo.png" alt="Science Hub" width={40} height={40} loading="eager" className={styles.loadingIcon} />
+          {/* eslint-disable-next-line @next/next/no-img-element -- dynamic uploaded business logo, not a static asset */}
+          <img src={logoSrc} alt="Logo" width={40} height={40} loading="eager" className={styles.loadingIcon} />
           <span className={styles.loadingText}>Loading…</span>
         </div>
       </div>
@@ -263,11 +354,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
       <aside className={[styles.sidebar, sidebarOpen ? styles.sidebarOpen : styles.sidebarClosed].join(" ")}>
         <div className={[styles.sidebarLogo, (!mobile && !sidebarOpen) ? styles.sidebarLogoCollapsed : ""].join(" ")}>
-          <Image src="/logo.png" alt="Science Hub" width={36} height={36} loading="eager" className={styles.logoIcon} />
+          {/* eslint-disable-next-line @next/next/no-img-element -- dynamic uploaded business logo, not a static asset */}
+          <img src={logoSrc} alt="Logo" width={36} height={36} loading="eager" className={styles.logoIcon} />
           {(mobile || sidebarOpen) && (
             <div className={styles.logoText}>
-              <div className={styles.logoName}>Science Hub</div>
-              <div className={styles.logoSub}>Billing &amp; Inventory</div>
+              <div className={styles.logoName}>{branding.name}</div>
+              <div className={styles.logoSub}>{branding.tagline || "Billing & Inventory"}</div>
             </div>
           )}
           {mobile && sidebarOpen && (
@@ -396,6 +488,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <GlobalSearch />
 
           <div className={styles.topbarRight}>
+            <AccentPicker />
             <ThemeToggle />
             <Link href="/admin" className={styles.plainLink}>
               <div className={[styles.userChip, styles.userChipLink].join(" ")}>

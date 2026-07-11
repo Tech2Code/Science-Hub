@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -9,9 +9,10 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import styles from "./view.module.css";
-import { TableSkeleton } from "@/components/ui/Skeleton";
+import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { fetchCached, bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { animateSection } from "@/lib/animateSection";
 
 interface Invoice {
   id: string; invoiceNumber: string; date: string; createdAt: string;
@@ -21,15 +22,6 @@ interface Customer {
   id: string; name: string; phone: string; email: string;
   address: string; city: string; state: string; pincode: string;
   gstin: string; invoices: Invoice[];
-}
-
-function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
-  return (
-    <div
-      className={styles.skeletonBlock}
-      style={{ width: w, height: h, borderRadius: r } as React.CSSProperties}
-    />
-  );
 }
 
 export default function CustomerViewPage() {
@@ -45,7 +37,7 @@ export default function CustomerViewPage() {
 
   useEffect(() => {
     fetchCached(`/api/customers/${id}`)
-      .then((d) => { setCustomer(d as typeof customer); setLoading(false); })
+      .then((d) => { setCustomer(d as Customer); setLoading(false); })
       .catch(() => { setError("Customer not found."); setLoading(false); });
   }, [id]);
 
@@ -71,56 +63,14 @@ export default function CustomerViewPage() {
     }
   }
 
-  if (loading) return (
-    <div className={`page-stack ${styles.pageStack}`}>
-      {/* Breadcrumb */}
-      <Sk w={160} h={13} />
-
-      {/* Header card */}
-      <div className={`card ${styles.cardPad}`}>
-        <div className={styles.skRow}>
-          <div className={styles.skLeftRow}>
-            <Sk w={48} h={48} r={9999} />
-            <div className={styles.skCol}>
-              <Sk w={160} h={20} />
-              <Sk w={220} h={13} />
-              <Sk w={120} h={20} r={6} />
-            </div>
-          </div>
-          <div className={styles.skActions}>
-            <Sk w={72} h={32} r={8} />
-            <Sk w={110} h={32} r={8} />
-          </div>
-        </div>
-      </div>
-
-      {/* Stats grid */}
-      <div className={styles.statsGrid}>
-        {[1, 2, 3].map((i) => (
-          <div key={i} className={`card ${styles.skStatCard}`}>
-            <Sk w={80} h={11} />
-            <Sk w={120} h={22} />
-            <Sk w={60} h={11} />
-          </div>
-        ))}
-      </div>
-
-      {/* Invoice history table */}
-      <div className="card">
-        <div className={styles.skTableHead}>
-          <Sk w={120} h={14} />
-        </div>
-        <div className="table-wrap">
-          <table className="table-base"><tbody><TableSkeleton cols={6} rows={4} /></tbody></table>
-        </div>
-      </div>
-    </div>
-  );
-  if (error || !customer)
+  if (!loading && (error || !customer))
     return <div className={`loading-center ${styles.errorCenter}`}>{error || "Customer not found."}</div>;
 
-  const totalBilled = customer.invoices.reduce((s, i) => s + i.total, 0);
-  const totalPaid   = customer.invoices.reduce((s, i) => s + i.paidAmount, 0);
+  // Rendered unconditionally (loading or loaded) so adding/removing a header
+  // button, stat, or column only ever needs one edit — see SkeletonSwap.
+  const invoices = customer?.invoices ?? [];
+  const totalBilled = invoices.reduce((s, i) => s + i.total, 0);
+  const totalPaid   = invoices.reduce((s, i) => s + i.paidAmount, 0);
   const outstanding = totalBilled - totalPaid;
 
   return (
@@ -129,28 +79,30 @@ export default function CustomerViewPage() {
       <ConfirmDialog
         open={confirmOpen}
         title="Delete Customer"
-        message={`Move "${customer.name}" to bin?`}
+        message={`Move "${customer?.name ?? ""}" to bin?`}
         confirmLabel="Delete"
         variant="danger"
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => { if (!deleting) setConfirmOpen(false); }}
       />
-      <Breadcrumb items={[{ label: "Customers", href: "/sales/customers" }, { label: customer.name }]} />
+      <Breadcrumb items={customer ? [{ label: "Customers", href: "/sales/customers" }, { label: customer.name }] : [{ label: "Customers", href: "/sales/customers" }]} />
 
       {/* Header */}
-      <div className={`card ${styles.headerCard}`}>
+      <div {...animateSection(0, `card ${styles.headerCard}`)}>
         <div className={styles.headerTop}>
           <div className={styles.headerLeft}>
-            <div className={styles.avatar}>{customer.name[0]?.toUpperCase()}</div>
+            <div className={styles.avatar}>
+              <SkeletonSwap loading={loading} w={48} h={48} r={9999}>{customer?.name?.[0]?.toUpperCase()}</SkeletonSwap>
+            </div>
             <div>
-              <h1 className="page-title">{customer.name}</h1>
+              <h1 className="page-title"><SkeletonSwap loading={loading} w={160} h={20}>{customer?.name}</SkeletonSwap></h1>
               <div className={styles.contactRow}>
-                {customer.phone && <span className={styles.contactItem}>{customer.phone}</span>}
-                {customer.email && <span className={styles.contactItem}>{customer.email}</span>}
-                {customer.city  && <span className={styles.contactItem}>{[customer.city, customer.state].filter(Boolean).join(", ")}</span>}
+                {!loading && customer?.phone && <span className={styles.contactItem}>{customer.phone}</span>}
+                {!loading && customer?.email && <span className={styles.contactItem}>{customer.email}</span>}
+                {!loading && customer?.city  && <span className={styles.contactItem}>{[customer.city, customer.state].filter(Boolean).join(", ")}</span>}
               </div>
-              {customer.gstin && (
+              {!loading && customer?.gstin && (
                 <code className={styles.gstinCode}>
                   GSTIN: {customer.gstin}
                 </code>
@@ -158,12 +110,12 @@ export default function CustomerViewPage() {
             </div>
           </div>
           <div className={styles.headerActions}>
-            <Button variant="secondary" onClick={() => { setOpeningEdit(true); router.push(`/sales/customers/edit/${id}`); }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</Button>
+            <Button variant="secondary" disabled={loading} onClick={() => { setOpeningEdit(true); router.push(`/sales/customers/edit/${id}`); }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</Button>
             <Button variant="primary" href={`/sales/invoices/new?customerId=${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>
-            <Button variant="danger" onClick={() => setConfirmOpen(true)}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete</Button>
+            <Button variant="danger" disabled={loading} onClick={() => setConfirmOpen(true)}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete</Button>
           </div>
         </div>
-        {customer.address && (
+        {!loading && customer?.address && (
           <div className={styles.addressBlock}>
             <div className={styles.addressLabel}>Address</div>
             <p className={styles.addressText}>
@@ -177,22 +129,24 @@ export default function CustomerViewPage() {
       </div>
 
       {/* Stats */}
-      <div className={styles.statsGrid}>
+      <div {...animateSection(1, styles.statsGrid)}>
         {[
-          { label: "Total Billed", value: `₹${totalBilled.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: `${customer.invoices.length} invoice(s)`, tone: "" as "" | "positive" | "negative" },
+          { label: "Total Billed", value: `₹${totalBilled.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: `${invoices.length} invoice(s)`, tone: "" as "" | "positive" | "negative" },
           { label: "Total Paid",   value: `₹${totalPaid.toLocaleString("en-IN",   { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, tone: "positive" as "" | "positive" | "negative" },
           { label: "Outstanding",  value: `₹${outstanding.toLocaleString("en-IN",  { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, tone: (outstanding > 0 ? "negative" : "positive") as "" | "positive" | "negative" },
         ].map((s) => (
           <div key={s.label} className={`card ${styles.cardPadSm}`}>
             <div className={styles.statLabel}>{s.label}</div>
-            <div className={`${styles.statValue} ${s.tone === "positive" ? styles.positive : s.tone === "negative" ? styles.negative : ""}`}>{s.value}</div>
-            {s.sub && <div className={styles.statSub}>{s.sub}</div>}
+            <div className={`${styles.statValue} ${!loading && s.tone === "positive" ? styles.positive : !loading && s.tone === "negative" ? styles.negative : ""}`}>
+              <SkeletonSwap loading={loading} w={120} h={22}>{s.value}</SkeletonSwap>
+            </div>
+            {!loading && s.sub && <div className={styles.statSub}>{s.sub}</div>}
           </div>
         ))}
       </div>
 
       {/* Invoice history */}
-      <div className="card">
+      <div {...animateSection(2, "card")}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>Invoice History</h2>
         </div>
@@ -209,9 +163,11 @@ export default function CustomerViewPage() {
               </tr>
             </thead>
             <tbody>
-              {customer.invoices.length === 0 ? (
+              {loading ? (
+                <TableSkeleton cols={6} rows={4} />
+              ) : invoices.length === 0 ? (
                 <tr><td colSpan={6} className={styles.emptyCell}>No invoices yet.</td></tr>
-              ) : customer.invoices.map((inv) => (
+              ) : invoices.map((inv) => (
                 <tr key={inv.id}>
                   <td data-mobile-full>
                     <Link href={`/sales/invoices/${inv.id}`} className={styles.invoiceLink}>

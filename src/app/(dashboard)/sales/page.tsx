@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { useFetch } from "@/lib/useCache";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./salesOverview.module.css";
 
 interface MonthlyBar { month: string; total: number; }
@@ -95,7 +96,7 @@ export default function SalesDashboardPage() {
       </div>
 
       {/* Quick actions — on top */}
-      <div className={`card ${styles.sectionCard}`}>
+      <div {...animateSection(0, `card ${styles.sectionCard}`)}>
         <h2 className={styles.sectionTitle}>Quick Actions</h2>
         <div className={styles.quickActions}>
           <Button variant="primary" href="/sales/invoices/new">+ New Invoice</Button>
@@ -107,7 +108,7 @@ export default function SalesDashboardPage() {
       </div>
 
       {/* KPI row */}
-      <div className={styles.kpiRow}>
+      <div {...animateSection(1, styles.kpiRow)}>
         <KpiCard label="Revenue This Month" value={loading ? "—" : fmt(data?.revenueThisMonth ?? 0)} sub="total billed" loading={loading} color="var(--c-blue)" />
         <KpiCard label="Total Collected" value={loading ? "—" : fmt(data?.totalCollected ?? 0)} sub="all time" loading={loading} color="var(--c-green-text)" />
         <KpiCard label="Outstanding Balance" value={loading ? "—" : fmt(data?.outstandingBalance ?? 0)} sub="pending collection" loading={loading} color="var(--c-amber)" />
@@ -115,7 +116,7 @@ export default function SalesDashboardPage() {
       </div>
 
       {/* Monthly bar chart */}
-      <div className={`card ${styles.chartCard}`}>
+      <div {...animateSection(2, `card ${styles.chartCard}`)}>
         <h2 className={styles.chartCardTitle}>Monthly Revenue — {data?.fyLabel ?? "Current FY"}</h2>
         {loading || !data?.monthlyRevenue?.length
           ? <div className={styles.chartSkeleton} />
@@ -124,7 +125,7 @@ export default function SalesDashboardPage() {
       </div>
 
       {/* Recent invoices + Top customers */}
-      <div className={styles.twoColGrid}>
+      <div {...animateSection(3, styles.twoColGrid)}>
         {/* Recent Invoices */}
         <div className="card">
           <div className={styles.panelHeader}>

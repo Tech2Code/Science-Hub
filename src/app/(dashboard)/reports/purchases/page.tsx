@@ -10,6 +10,7 @@ import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagina
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
+import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
 import styles from "./purchaseReports.module.css";
 
@@ -213,7 +214,7 @@ export default function PurchaseReportsPage() {
       </div>
 
       {/* KPI banners */}
-      <div className="stat-banners">
+      <div {...animateSection(0, "stat-banners")}>
         <div className="stat-banner stat-banner-amber">
           <div className="stat-banner-label">Total Spend (12 months)</div>
           <div className="stat-banner-value">{loadingSummary ? "—" : fmt(totalSpend)}</div>
@@ -237,7 +238,7 @@ export default function PurchaseReportsPage() {
       </div>
 
       {/* Tabs */}
-      <div className={`card ${styles.tabsCard}`}>
+      <div {...animateSection(1, `card ${styles.tabsCard}`)}>
         <div className={styles.tabsRow}>
           {(["outstanding", "summary", "category", "ledger"] as Tab[]).map((t) => (
             <button key={t} className={`${styles.tabBtn} ${tab === t ? styles.active : ""}`} onClick={() => setTab(t)}>

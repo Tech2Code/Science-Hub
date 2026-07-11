@@ -12,6 +12,7 @@ import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./vendorsList.module.css";
 
 interface Vendor {
@@ -134,7 +135,7 @@ export default function VendorsPage() {
         </Button>
       </div>
 
-      <div className="card">
+      <div {...animateSection(0, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
             <input

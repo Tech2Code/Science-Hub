@@ -191,6 +191,7 @@ model BusinessSettings {
   id              String   @id @default("singleton")
   name            String   @default("Science Hub")
   tagline         String   @default("")
+  logoUrl         String   @default("")
   email           String   @default("")
   phone           String   @default("")
   address         String   @default("")

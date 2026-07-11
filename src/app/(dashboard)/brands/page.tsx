@@ -12,6 +12,7 @@ import { SortSelect } from "@/components/ui/SortSelect";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./brands.module.css";
 
 interface Brand {
@@ -152,7 +153,7 @@ export default function BrandsPage() {
       </div>
 
       {/* Add brand form */}
-      <div className={`card ${styles.addCard}`}>
+      <div {...animateSection(0, `card ${styles.addCard}`)}>
         <h2 className={styles.addCardTitle}>
           Add New Brand
         </h2>
@@ -172,7 +173,7 @@ export default function BrandsPage() {
       </div>
 
       {/* Brands list */}
-      <div className="card">
+      <div {...animateSection(1, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
             <input

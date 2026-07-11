@@ -9,6 +9,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./billNew.module.css";
 
 interface Vendor { id: string; name: string; company: string | null; gstin: string | null; }
@@ -431,7 +432,7 @@ export default function NewPurchaseBillPage() {
       <form onSubmit={handleSubmit} className="form-stack">
 
         {/* Bill Details */}
-        <div className="form-card">
+        <div {...animateSection(0, "form-card")}>
           <h2 className="form-section-title">Bill Details</h2>
 
           <div className="form-grid-2">
@@ -561,7 +562,7 @@ export default function NewPurchaseBillPage() {
         </div>
 
         {/* Line Items */}
-        <div className="form-card">
+        <div {...animateSection(1, "form-card")}>
           <div className={styles.sectionHeaderRow}>
             <h2 className={`form-section-title ${styles.sectionTitleNoMargin}`}>Items</h2>
             <Button type="button" variant="secondary" size="sm" onClick={addItem}>
@@ -732,7 +733,7 @@ export default function NewPurchaseBillPage() {
         </div>
 
         {/* Optional Payment */}
-        <div className="form-card">
+        <div {...animateSection(2, "form-card")}>
           <label className={styles.paymentCheckboxLabel}>
             <input type="checkbox" checked={addPayment} onChange={e => setAddPayment(e.target.checked)} className={styles.paymentCheckbox} />
             Record payment now

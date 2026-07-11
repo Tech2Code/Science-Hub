@@ -13,6 +13,7 @@ import { Cell, type Column } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./billsList.module.css";
 
 interface PurchaseBill {
@@ -237,7 +238,7 @@ export default function PurchasesPage() {
 
       {/* Dashboard cards */}
       {!loading && bills.length > 0 && (
-        <div className={styles.statsGrid}>
+        <div {...animateSection(0, styles.statsGrid)}>
           {[
             { label: "Total Purchase", value: `₹${fmt(totalPurchase)}`, cls: styles.statTotal },
             { label: "Paid",           value: `₹${fmt(totalPaid)}`,     cls: styles.statPaid },
@@ -253,7 +254,7 @@ export default function PurchasesPage() {
       )}
 
       {/* Status filter tabs */}
-      <div className="filter-tabs-row">
+      <div {...animateSection(1, "filter-tabs-row")}>
         <div className="filter-tabs">
           {STATUS_TABS.map(tab => (
             <button
@@ -267,7 +268,7 @@ export default function PurchasesPage() {
         </div>
       </div>
 
-      <div className="card">
+      <div {...animateSection(2, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
             <input

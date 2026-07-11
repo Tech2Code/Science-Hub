@@ -7,6 +7,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
 import styles from "./bin.module.css";
 
@@ -56,10 +57,11 @@ const BIN_COLUMNS: Column[] = [
 ];
 
 function TypeSection({
-  type, items, onRestore, onDeleteForever,
+  type, items, index, onRestore, onDeleteForever,
 }: {
   type: BinType;
   items: BinItem[];
+  index: number;
   onRestore: (item: BinItem) => void;
   onDeleteForever: (item: BinItem) => void;
 }) {
@@ -68,7 +70,7 @@ function TypeSection({
   if (items.length === 0) return null;
 
   return (
-    <div className={`card ${styles.sectionCard}`}>
+    <div {...animateSection(index, `card ${styles.sectionCard}`)}>
       <button
         onClick={() => setOpen(o => !o)}
         className={`${styles.sectionToggle} ${open ? styles.sectionToggleOpen : ""}`}
@@ -344,7 +346,7 @@ export default function BinPage() {
       </div>
 
       {!loading && totalCount > 0 && (
-        <div className={`card ${styles.searchCard}`}>
+        <div {...animateSection(0, `card ${styles.searchCard}`)}>
           <input
             type="search"
             aria-label="Search bin"
@@ -357,7 +359,7 @@ export default function BinPage() {
       )}
 
       {loading ? (
-        <div className="card">
+        <div {...animateSection(0, "card")}>
           <div className="table-wrap">
             <table className="table-base">
               <thead><tr><th>Name</th><th>Details</th><th>Deleted On</th><th>Deleted By</th><th>Expires</th><th>Actions</th></tr></thead>
@@ -366,7 +368,7 @@ export default function BinPage() {
           </div>
         </div>
       ) : totalCount === 0 ? (
-        <div className={`card ${styles.emptyState}`}>
+        <div {...animateSection(0, `card ${styles.emptyState}`)}>
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
             className={styles.emptyStateIcon}>
@@ -375,15 +377,16 @@ export default function BinPage() {
           Bin is empty — nothing has been deleted recently.
         </div>
       ) : search.trim() && filteredCount === 0 ? (
-        <div className={`card ${styles.emptyState}`}>
+        <div {...animateSection(1, `card ${styles.emptyState}`)}>
           No items match &ldquo;{search}&rdquo;.
         </div>
       ) : (
-        TYPE_ORDER.map(type => (
+        TYPE_ORDER.map((type, i) => (
           <TypeSection
             key={type}
             type={type}
             items={grouped[type]}
+            index={i + 1}
             onRestore={handleRestore}
             onDeleteForever={handleDeleteForever}
           />

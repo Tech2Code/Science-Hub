@@ -4,14 +4,15 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { useBranding } from "@/lib/businessBranding";
 import styles from "./login.module.css";
 import { rules, validate } from "@/lib/validation";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { branding } = useBranding();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -39,9 +40,10 @@ export default function LoginPage() {
       <div className={styles.grid} />
       <div className={styles.wrap}>
         <div className={styles.brand}>
-          <Image src="/logo.png" alt="Science Hub" width={56} height={56} className={styles.brandIcon} priority />
-          <h1 className={styles.brandName}>Science Hub</h1>
-          <p className={styles.brandSub}>Billing &amp; Inventory</p>
+          {/* eslint-disable-next-line @next/next/no-img-element -- dynamic uploaded business logo, not a static asset */}
+          <img src={branding.logoUrl || "/logo.png"} alt="Logo" width={56} height={56} className={styles.brandIcon} />
+          <h1 className={styles.brandName}>{branding.name}</h1>
+          <p className={styles.brandSub}>{branding.tagline || "Billing & Inventory"}</p>
         </div>
 
         <div className={styles.card}>

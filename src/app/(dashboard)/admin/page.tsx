@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./admin.module.css";
 
 interface User {
@@ -461,7 +462,7 @@ export default function AdminPage() {
         <div className={styles.mainCol}>
 
       {/* ── My Profile ─────────────────────────────────────────── */}
-      <div className="card">
+      <div {...animateSection(0, "card")}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>My Profile</h2>
           {!editingProfile && !profileLoading && (
@@ -558,7 +559,7 @@ export default function AdminPage() {
       </div>
 
       {/* ── User Management ────────────────────────────────────── */}
-      <div className="card">
+      <div {...animateSection(1, "card")}>
         <div className={styles.sectionHeader}>
           <div>
             <h2 className={styles.sectionTitle}>User Management</h2>
@@ -723,7 +724,7 @@ export default function AdminPage() {
       </div>
 
       {/* ── Activity Log ───────────────────────────────────────── */}
-      <div className="card">
+      <div {...animateSection(2, "card")}>
         <div className={styles.sectionHeaderWrap}>
           <div>
             <h2 className={styles.sectionTitle}>Activity Log</h2>
@@ -858,7 +859,7 @@ export default function AdminPage() {
       </div>{/* end main content column */}
 
         {/* ── Right sidebar — Role Reference ───────────────────── */}
-        <div className={styles.roleSidebar}>
+        <div {...animateSection(3, styles.roleSidebar)}>
           <div className={styles.roleSidebarLabel}>
             Role Permissions
           </div>

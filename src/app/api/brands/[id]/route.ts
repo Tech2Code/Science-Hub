@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireSession } from "@/lib/apiAuth";
@@ -36,6 +37,36 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   } catch (error) {
     console.error("GET /api/brands/[id] error:", error);
     return NextResponse.json({ error: "Failed to fetch brand" }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+
+    const { id } = await params;
+    const body = await request.json();
+    const trimmedName = typeof body.name === "string" ? body.name.trim() : "";
+    if (!trimmedName) {
+      return NextResponse.json({ error: "Name is required" }, { status: 400 });
+    }
+
+    const brand = await prisma.brand.update({ where: { id }, data: { name: trimmedName } });
+
+    await logActivity(auth.session.user.id, "update_brand", `Renamed brand to "${trimmedName}"`, id, "brand");
+    revalidateTag("products", { expire: 0 });
+    revalidateTag("reports", { expire: 0 });
+    return NextResponse.json(brand);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json({ error: "A brand with this name already exists" }, { status: 400 });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      return NextResponse.json({ error: "Brand not found" }, { status: 404 });
+    }
+    console.error("PUT /api/brands/[id] error:", error);
+    return NextResponse.json({ error: "Failed to update brand" }, { status: 500 });
   }
 }
 

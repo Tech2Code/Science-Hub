@@ -12,6 +12,7 @@ import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate, validateForm, hasErrors } from "@/lib/validation";
 import { INDIA_STATES } from "@/lib/states";
+import { animateSection } from "@/lib/animateSection";
 
 interface Customer { id: string; name: string; city: string; state: string; gstin: string; }
 interface Product { id: string; name: string; unit: string; price: number; gstRate: number; stock: number; hsn?: string | null; }
@@ -333,7 +334,7 @@ export default function NewInvoicePage() {
           {/* Left column */}
           <div className={styles.leftCol}>
             {/* Customer selector */}
-            <div className={`card ${styles.cardPad}`}>
+            <div {...animateSection(0, `card ${styles.cardPad}`)}>
               <div className={styles.sectionHeaderRow}>
                 <h2 className={styles.sectionTitle}>Bill To</h2>
                 {/* Mode toggle */}
@@ -452,7 +453,7 @@ export default function NewInvoicePage() {
             </div>
 
             {/* Place of supply + inter-state toggle + due date */}
-            <div className={`card ${styles.cardPad}`}>
+            <div {...animateSection(1, `card ${styles.cardPad}`)}>
               <div className={styles.toggleRow}>
                 <div className={styles.dueDateRow}>
                   <label className={styles.dueDateLabel}>Place of supply *</label>
@@ -502,7 +503,7 @@ export default function NewInvoicePage() {
             </div>
 
             {/* Line items */}
-            <div className={`card ${styles.cardPad}`}>
+            <div {...animateSection(2, `card ${styles.cardPad}`)}>
               <h2 className={styles.lineItemsHeading}>Line Items</h2>
               <div className={styles.productSearchWrap}>
                 <input
@@ -690,7 +691,7 @@ export default function NewInvoicePage() {
             </div>
 
             {/* Notes */}
-            <div className={`card ${styles.cardPad}`}>
+            <div {...animateSection(3, `card ${styles.cardPad}`)}>
               <label className={styles.notesLabel}>Notes / Terms</label>
               <textarea
                 rows={2}
@@ -704,7 +705,7 @@ export default function NewInvoicePage() {
 
           {/* Right — summary */}
           <div className={styles.rightCol}>
-            <div className={`card ${styles.summaryCard}`}>
+            <div {...animateSection(4, `card ${styles.summaryCard}`)}>
               <h2 className={styles.summaryHeading}>Invoice Summary</h2>
               <div className={styles.summaryList}>
                 <div className={styles.summaryLine}>

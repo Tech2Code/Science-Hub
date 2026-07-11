@@ -9,6 +9,7 @@ import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./productNew.module.css";
 
 const UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pack", "Set", "Mtr", "Dozen"];
@@ -87,7 +88,7 @@ export default function NewProductPage() {
         <h1 className="page-title">Add Product</h1>
         <p className="page-sub">Add a product or item to your catalog</p>
       </div>
-      <form onSubmit={handleSubmit} className="form-card">
+      <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
         <div className="form-grid-2">
           <FormField label="Product Name" required error={fieldErrors.name}>
             <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. Beaker 250ml Borosilicate" />

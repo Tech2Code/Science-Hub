@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const {
       name, tagline, email, phone, address, city, state, pincode, gstin, pan, gmailUser, gmailAppPassword,
-      bankName, bankAccountName, bankAccountNumber, bankIfsc, bankBranch, termsAndConditions,
+      bankName, bankAccountName, bankAccountNumber, bankIfsc, bankBranch, termsAndConditions, logoUrl,
     } = body;
     const validationError = validateSettingsInput({
       pan, termsAndConditions, phone, pincode, gstin, bankName, bankAccountNumber, bankIfsc, bankBranch,
@@ -43,6 +43,7 @@ export async function PUT(request: NextRequest) {
       bankName: bankName ?? "", bankAccountName: bankAccountName ?? "", bankIfsc: bankIfsc ?? "", bankBranch: bankBranch ?? "",
       termsAndConditions: termsAndConditions ?? "",
     };
+    if (logoUrl !== undefined) updateData.logoUrl = logoUrl ?? "";
     // Save password when explicitly provided; if gmailUser is being cleared, clear password too
     if (gmailAppPassword) updateData.gmailAppPassword = encrypt(gmailAppPassword);
     else if (!gmailUser) updateData.gmailAppPassword = "";

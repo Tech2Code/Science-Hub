@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
-import { TableSkeleton } from "@/components/ui/Skeleton";
+import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { fetchCached, bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
+import { animateSection } from "@/lib/animateSection";
 import styles from "./vendorDetail.module.css";
 
 interface Bill {
@@ -21,15 +22,6 @@ interface Vendor {
   id: string; name: string; company: string | null; gstin: string | null;
   phone: string | null; email: string | null; address: string | null;
   notes: string | null; isActive: boolean; purchaseBills: Bill[];
-}
-
-function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
-  return (
-    <div
-      className={styles.skeletonBlock}
-      style={{ width: w, height: h, borderRadius: r } as React.CSSProperties}
-    />
-  );
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -73,38 +65,14 @@ export default function VendorDetailPage() {
     }
   }
 
-  if (loading) return (
-    <div className={`page-stack ${styles.pageStack}`}>
-      <Sk w={160} h={13} />
-      <div className={`card ${styles.cardPad}`}>
-        <div className={styles.skRow}>
-          <Sk w={48} h={48} r={9999} />
-          <div className={styles.skCol}>
-            <Sk w={160} h={20} /><Sk w={220} h={13} /><Sk w={120} h={20} r={6} />
-          </div>
-        </div>
-      </div>
-      <div className={styles.statsGrid}>
-        {[1,2,3].map(i => (
-          <div key={i} className={`card ${styles.skStatCard}`}>
-            <Sk w={80} h={11} /><Sk w={120} h={22} />
-          </div>
-        ))}
-      </div>
-      <div className="card">
-        <div className={styles.skTableHead}><Sk w={120} h={14} /></div>
-        <div className="table-wrap">
-          <table className="table-base"><tbody><TableSkeleton cols={6} rows={4} /></tbody></table>
-        </div>
-      </div>
-    </div>
-  );
-
-  if (error || !vendor)
+  if (!loading && (error || !vendor))
     return <div className={`loading-center ${styles.errorCenter}`}>{error || "Vendor not found."}</div>;
 
-  const totalBilled = vendor.purchaseBills.reduce((s, b) => s + b.total, 0);
-  const totalPaid   = vendor.purchaseBills.reduce((s, b) => s + b.paidAmount, 0);
+  // Rendered unconditionally (loading or loaded) so adding/removing a header
+  // button, stat, or column only ever needs one edit — see SkeletonSwap.
+  const bills = vendor?.purchaseBills ?? [];
+  const totalBilled = bills.reduce((s, b) => s + b.total, 0);
+  const totalPaid   = bills.reduce((s, b) => s + b.paidAmount, 0);
   const balance     = totalBilled - totalPaid;
 
   return (
@@ -113,37 +81,39 @@ export default function VendorDetailPage() {
       <ConfirmDialog
         open={confirmOpen}
         title="Delete Vendor"
-        message={`Move "${vendor.name}" to bin?`}
+        message={`Move "${vendor?.name ?? ""}" to bin?`}
         confirmLabel="Delete"
         variant="danger"
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => { if (!deleting) setConfirmOpen(false); }}
       />
-      <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: vendor.name }]} />
+      <Breadcrumb items={vendor ? [{ label: "Vendors", href: "/purchases/vendors" }, { label: vendor.name }] : [{ label: "Vendors", href: "/purchases/vendors" }]} />
 
       {/* Header */}
-      <div className={`card ${styles.cardPad}`}>
+      <div {...animateSection(0, `card ${styles.cardPad}`)}>
         <div className={styles.headerTop}>
           <div className={styles.headerLeft}>
-            <div className={vendor.isActive ? styles.avatarActive : styles.avatarInactive}>
-              {vendor.name[0]?.toUpperCase()}
+            <div className={loading ? styles.avatarActive : vendor?.isActive ? styles.avatarActive : styles.avatarInactive}>
+              <SkeletonSwap loading={loading} w={48} h={48} r={9999}>{vendor?.name?.[0]?.toUpperCase()}</SkeletonSwap>
             </div>
             <div>
               <div className={styles.nameRow}>
-                <h1 className={styles.name}>{vendor.name}</h1>
-                <span className={`${styles.statusBadge} ${vendor.isActive ? styles.statusBadgeActive : styles.statusBadgeInactive}`}>
-                  {vendor.isActive ? "Active" : "Inactive"}
-                </span>
+                <h1 className={styles.name}><SkeletonSwap loading={loading} w={160} h={20}>{vendor?.name}</SkeletonSwap></h1>
+                {!loading && vendor && (
+                  <span className={`${styles.statusBadge} ${vendor.isActive ? styles.statusBadgeActive : styles.statusBadgeInactive}`}>
+                    {vendor.isActive ? "Active" : "Inactive"}
+                  </span>
+                )}
               </div>
-              {vendor.company && (
+              {!loading && vendor?.company && (
                 <div className={styles.company}>{vendor.company}</div>
               )}
               <div className={styles.contactRow}>
-                {vendor.phone && <span className={styles.contactItem}>{vendor.phone}</span>}
-                {vendor.email && <span className={styles.contactItem}>{vendor.email}</span>}
+                {!loading && vendor?.phone && <span className={styles.contactItem}>{vendor.phone}</span>}
+                {!loading && vendor?.email && <span className={styles.contactItem}>{vendor.email}</span>}
               </div>
-              {vendor.gstin && (
+              {!loading && vendor?.gstin && (
                 <code className={styles.gstinCode}>
                   GSTIN: {vendor.gstin}
                 </code>
@@ -151,7 +121,7 @@ export default function VendorDetailPage() {
             </div>
           </div>
           <div className={styles.headerActions}>
-            <Button variant="secondary" onClick={() => { setOpeningEdit(true); router.push(`/purchases/vendors/${id}/edit`); }}>
+            <Button variant="secondary" disabled={loading} onClick={() => { setOpeningEdit(true); router.push(`/purchases/vendors/${id}/edit`); }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               Edit
             </Button>
@@ -159,22 +129,22 @@ export default function VendorDetailPage() {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               New Bill
             </Button>
-            <Button variant="danger" onClick={() => setConfirmOpen(true)}>
+            <Button variant="danger" disabled={loading} onClick={() => setConfirmOpen(true)}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
               Delete
             </Button>
           </div>
         </div>
 
-        {(vendor.address || vendor.notes) && (
+        {!loading && (vendor?.address || vendor?.notes) && (
           <div className={styles.detailsBlock}>
-            {vendor.address && (
+            {vendor?.address && (
               <div>
                 <div className={styles.detailLabel}>Address</div>
                 <p className={styles.detailText}>{vendor.address}</p>
               </div>
             )}
-            {vendor.notes && (
+            {vendor?.notes && (
               <div>
                 <div className={styles.detailLabel}>Notes</div>
                 <p className={styles.detailText}>{vendor.notes}</p>
@@ -185,22 +155,24 @@ export default function VendorDetailPage() {
       </div>
 
       {/* Stats */}
-      <div className={styles.statsGrid}>
+      <div {...animateSection(1, styles.statsGrid)}>
         {[
-          { label: "Total Spend", value: fmt(totalBilled), sub: `${vendor.purchaseBills.length} bill(s)`, tone: "" as "" | "positive" | "negative" },
+          { label: "Total Spend", value: fmt(totalBilled), sub: `${bills.length} bill(s)`, tone: "" as "" | "positive" | "negative" },
           { label: "Total Paid",  value: fmt(totalPaid),   tone: "positive" as "" | "positive" | "negative" },
           { label: "Balance",     value: fmt(balance),     tone: (balance > 0 ? "negative" : "positive") as "" | "positive" | "negative" },
         ].map((s) => (
           <div key={s.label} className={`card ${styles.skStatCard}`}>
             <div className={styles.statLabel}>{s.label}</div>
-            <div className={`${styles.statValue} ${s.tone === "positive" ? styles.positive : s.tone === "negative" ? styles.negative : ""}`}>{s.value}</div>
-            {s.sub && <div className={styles.statSub}>{s.sub}</div>}
+            <div className={`${styles.statValue} ${!loading && s.tone === "positive" ? styles.positive : !loading && s.tone === "negative" ? styles.negative : ""}`}>
+              <SkeletonSwap loading={loading} w={120} h={22}>{s.value}</SkeletonSwap>
+            </div>
+            {!loading && s.sub && <div className={styles.statSub}>{s.sub}</div>}
           </div>
         ))}
       </div>
 
       {/* Bill history */}
-      <div className="card">
+      <div {...animateSection(2, "card")}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>Bill History</h2>
         </div>
@@ -217,9 +189,11 @@ export default function VendorDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {vendor.purchaseBills.length === 0 ? (
+              {loading ? (
+                <TableSkeleton cols={6} rows={4} />
+              ) : bills.length === 0 ? (
                 <tr><td colSpan={6} className={styles.emptyCell}>No bills yet.</td></tr>
-              ) : vendor.purchaseBills.map((b) => (
+              ) : bills.map((b) => (
                 <tr key={b.id}>
                   <td data-mobile-full>
                     <Link href={`/purchases/bills/${b.id}`} className={styles.billLink}>
