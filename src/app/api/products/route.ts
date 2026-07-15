@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(product, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "SKU already in use" }, { status: 400 });
+      return NextResponse.json({ error: "SKU already in use" }, { status: 409 });
     }
     console.error("POST /api/products error:", error);
     return NextResponse.json({ error: "Failed to create product" }, { status: 500 });

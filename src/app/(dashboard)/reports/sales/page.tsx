@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
+import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -157,7 +158,7 @@ export default function SalesReportsPage() {
           <div className={styles.dateFilterRow}>
             <label className={styles.dateFilterLabel}>
               From
-              <input
+              <Input
                 type="date" aria-label="Start date" value={startDate} min={MIN_REPORT_DATE} max={endDate || todayStr}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -170,7 +171,7 @@ export default function SalesReportsPage() {
             </label>
             <label className={styles.dateFilterLabel}>
               To
-              <input
+              <Input
                 type="date" aria-label="End date" value={endDate} min={startDate || MIN_REPORT_DATE} max={todayStr}
                 onChange={(e) => setEndDate(e.target.value)}
                 onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}

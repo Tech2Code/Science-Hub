@@ -95,8 +95,8 @@ export default function CustomerViewPage() {
             <div className={styles.avatar}>
               <SkeletonSwap loading={loading} w={48} h={48} r={9999}>{customer?.name?.[0]?.toUpperCase()}</SkeletonSwap>
             </div>
-            <div>
-              <h1 className="page-title"><SkeletonSwap loading={loading} w={160} h={20}>{customer?.name}</SkeletonSwap></h1>
+            <div style={{ minWidth: 0 }}>
+              <h1 className="page-title" title={customer?.name}><SkeletonSwap loading={loading} w={160} h={20}>{customer?.name}</SkeletonSwap></h1>
               <div className={styles.contactRow}>
                 {!loading && customer?.phone && <span className={styles.contactItem}>{customer.phone}</span>}
                 {!loading && customer?.email && <span className={styles.contactItem}>{customer.email}</span>}

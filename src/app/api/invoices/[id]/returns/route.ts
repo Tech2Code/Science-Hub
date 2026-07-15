@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession } from "@/lib/apiAuth";
-import { recordStockMovement } from "@/lib/stockMovement";
+import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
+import { isFutureIstDate } from "@/lib/validation";
 
 export async function GET(
   _req: NextRequest,
@@ -65,6 +66,20 @@ export async function POST(
       return NextResponse.json({ error: "No payment received yet. Record a payment before processing a return." }, { status: 400 });
     }
 
+    let returnDate = new Date();
+    if (date) {
+      returnDate = new Date(date);
+      if (isNaN(returnDate.getTime())) {
+        return NextResponse.json({ error: "Invalid return date" }, { status: 400 });
+      }
+      if (returnDate < invoice.date) {
+        return NextResponse.json({ error: "Return date cannot be before the invoice date" }, { status: 400 });
+      }
+      if (isFutureIstDate(date)) {
+        return NextResponse.json({ error: "Return date cannot be in the future" }, { status: 400 });
+      }
+    }
+
     // All availability checks are re-evaluated from a fresh read *inside* the
     // serializable transaction below, so two concurrent returns on the same
     // invoice can't both pass a stale check and jointly over-refund.
@@ -115,7 +130,7 @@ export async function POST(
       const created = await tx.return.create({
         data: {
           invoiceId: id,
-          date: date ? new Date(date) : new Date(),
+          date: returnDate,
           notes: notes || null,
           items: {
             create: items.map(item => ({
@@ -131,23 +146,11 @@ export async function POST(
       });
 
       // Restore stock for returned items
-      for (const item of items) {
-        if (item.productId) {
-          const product = await tx.product.update({
-            where: { id: item.productId },
-            data: { stock: { increment: item.quantity } },
-            select: { id: true, stock: true },
-          });
-          await recordStockMovement(tx, {
-            productId: product.id,
-            type: "return",
-            quantity: item.quantity,
-            balanceAfter: product.stock,
-            reference: invoice.invoiceNumber,
-            createdByUserId: auth.session.user.id,
-          });
-        }
-      }
+      await batchAdjustStock(
+        tx,
+        items.filter((item) => item.productId).map((item) => ({ productId: item.productId!, quantity: item.quantity })),
+        { type: "return", reference: invoice.invoiceNumber, createdByUserId: auth.session.user.id }
+      );
 
       return created;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });
@@ -166,7 +169,7 @@ export async function POST(
 
     return NextResponse.json(ret, { status: 201 });
   } catch (error) {
-    if (error instanceof ReturnValidationError) {
+    if (error instanceof ReturnValidationError || error instanceof ProductNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     console.error(error);

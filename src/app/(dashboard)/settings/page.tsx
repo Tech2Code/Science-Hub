@@ -16,6 +16,7 @@ interface BusinessSettings {
   bankName: string; bankAccountName: string; bankAccountNumber: string; bankIfsc: string; bankBranch: string;
   termsAndConditions: string;
   logoUrl: string;
+  updatedAt: string;
 }
 
 const EMPTY: BusinessSettings = {
@@ -25,6 +26,7 @@ const EMPTY: BusinessSettings = {
   bankName: "", bankAccountName: "", bankAccountNumber: "", bankIfsc: "", bankBranch: "",
   termsAndConditions: "",
   logoUrl: "",
+  updatedAt: "",
 };
 
 // Bank name/branch are printed on invoices — capitalize each word as typed
@@ -130,6 +132,7 @@ export default function SettingsPage() {
       bankBranch: (d.bankBranch as string) ?? "",
       termsAndConditions: (d.termsAndConditions as string) ?? "",
       logoUrl: (d.logoUrl as string) ?? "",
+      updatedAt: (d.updatedAt as string) ?? "",
     };
     setSaved(s);
     setBranding({ name: s.name, tagline: s.tagline, logoUrl: s.logoUrl });
@@ -145,11 +148,17 @@ export default function SettingsPage() {
   }, []);
 
   async function putSettings(overrides: Partial<BusinessSettings> & { gmailAppPassword?: string }) {
-    const body = { ...saved, ...overrides };
+    const body = { ...saved, ...overrides, expectedUpdatedAt: saved.updatedAt || undefined };
     const res = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (res.ok) return { ok: true as const, data: await res.json() };
     const d = await res.json().catch(() => ({}));
-    return { ok: false as const, error: d.error as string | undefined };
+    if (res.status === 409) {
+      // Refresh local state so the conflicting fields aren't shown stale, and
+      // so the next save attempt compares against the current updatedAt.
+      fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then(applyLoaded).catch(() => {});
+      return { ok: false as const, error: d.error as string | undefined, conflict: true as const };
+    }
+    return { ok: false as const, error: d.error as string | undefined, conflict: false as const };
   }
 
   // ── Business Identity ───────────────────────────────────────────────────
@@ -178,6 +187,8 @@ export default function SettingsPage() {
       applyLoaded(result.data);
       setEditingIdentity(false);
       toast({ type: "success", title: "Settings saved", message: "Business identity updated." });
+    } else if (result.conflict) {
+      toast({ type: "error", title: "Update conflict", message: result.error ?? "Business settings were changed by someone else. Please reload and try again." });
     } else {
       toast({ type: "error", title: "Save failed", message: result.error ?? "Could not save settings." });
     }
@@ -202,6 +213,8 @@ export default function SettingsPage() {
       applyLoaded(result.data);
       setEditingAddress(false);
       toast({ type: "success", title: "Settings saved", message: "Address updated." });
+    } else if (result.conflict) {
+      toast({ type: "error", title: "Update conflict", message: result.error ?? "Business settings were changed by someone else. Please reload and try again." });
     } else {
       toast({ type: "error", title: "Save failed", message: result.error ?? "Could not save settings." });
     }
@@ -293,6 +306,8 @@ export default function SettingsPage() {
       setEditingBank(false);
       setBankErrors({});
       toast({ type: "success", title: "Settings saved", message: "Bank details updated." });
+    } else if (result.conflict) {
+      toast({ type: "error", title: "Update conflict", message: result.error ?? "Business settings were changed by someone else. Please reload and try again." });
     } else {
       toast({ type: "error", title: "Save failed", message: result.error ?? "Could not save settings." });
     }
@@ -317,6 +332,8 @@ export default function SettingsPage() {
       applyLoaded(result.data);
       setEditingTerms(false);
       toast({ type: "success", title: "Settings saved", message: "Terms & conditions updated." });
+    } else if (result.conflict) {
+      toast({ type: "error", title: "Update conflict", message: result.error ?? "Business settings were changed by someone else. Please reload and try again." });
     } else {
       toast({ type: "error", title: "Save failed", message: result.error ?? "Could not save settings." });
     }
@@ -325,11 +342,44 @@ export default function SettingsPage() {
 
   // ── Logo ─────────────────────────────────────────────────────────────────
 
+  // The logo is rendered at ~40x36px in the sidebar/topbar on every dashboard
+  // page navigation — uploading it at full camera/screenshot resolution (up
+  // to the 2MB cap) means every page load decodes and downscales a full-size
+  // image in the browser. Downscale to a small max dimension client-side
+  // before upload so what's stored (and re-fetched on every nav) is already
+  // sidebar-sized, with some headroom for retina displays.
+  const LOGO_MAX_DIMENSION = 256;
+  function downscaleImage(file: File, maxDim: number): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        if (scale >= 1) { resolve(file); return; } // already small enough
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(file); return; }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const outType = file.type === "image/png" ? "image/png" : "image/webp";
+        canvas.toBlob((blob) => {
+          if (!blob) { resolve(file); return; }
+          resolve(new File([blob], file.name, { type: outType }));
+        }, outType, 0.9);
+      };
+      img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(file); };
+      img.src = objectUrl;
+    });
+  }
+
   async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const rawFile = e.target.files?.[0];
+    if (!rawFile) return;
     setLogoUploading(true);
     try {
+      const file = await downscaleImage(rawFile, LOGO_MAX_DIMENSION);
       const form = new FormData();
       form.append("file", file);
       const res = await fetch("/api/settings/logo", { method: "POST", body: form });
@@ -349,7 +399,11 @@ export default function SettingsPage() {
       } else {
         // Save failed — remove the blob we just uploaded so it doesn't orphan.
         fetch("/api/settings/logo", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: data.url }) }).catch(() => {});
-        toast({ type: "error", title: "Save failed", message: result.error ?? "Could not save logo." });
+        if (result.conflict) {
+          toast({ type: "error", title: "Update conflict", message: result.error ?? "Business settings were changed by someone else. Please reload and try again." });
+        } else {
+          toast({ type: "error", title: "Save failed", message: result.error ?? "Could not save logo." });
+        }
       }
     } catch {
       toast({ type: "error", title: "Network error", message: "Could not upload logo." });
@@ -367,6 +421,8 @@ export default function SettingsPage() {
       applyLoaded(result.data);
       toast({ type: "success", title: "Logo removed", message: "Reverted to the default logo." });
       fetch("/api/settings/logo", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: oldUrl }) }).catch(() => {});
+    } else if (result.conflict) {
+      toast({ type: "error", title: "Update conflict", message: result.error ?? "Business settings were changed by someone else. Please reload and try again." });
     } else {
       toast({ type: "error", title: "Failed", message: result.error ?? "Could not remove logo." });
     }
@@ -404,6 +460,8 @@ export default function SettingsPage() {
       applyLoaded(result.data);
       setEditingEmail(false);
       toast({ type: "success", title: "Email configured", message: "Gmail credentials saved successfully." });
+    } else if (result.conflict) {
+      toast({ type: "error", title: "Update conflict", message: result.error ?? "Business settings were changed by someone else. Please reload and try again." });
     } else {
       toast({ type: "error", title: "Save failed", message: result.error ?? "Could not save email settings." });
     }
@@ -419,8 +477,10 @@ export default function SettingsPage() {
       setEditingEmail(false);
       setConfirmClear(false);
       toast({ type: "success", title: "Credentials cleared", message: "Email configuration has been removed." });
+    } else if (result.conflict) {
+      toast({ type: "error", title: "Update conflict", message: result.error ?? "Business settings were changed by someone else. Please reload and try again." });
     } else {
-      toast({ type: "error", title: "Failed", message: "Could not clear credentials." });
+      toast({ type: "error", title: "Failed", message: result.error ?? "Could not clear credentials." });
     }
     setSavingEmail(false);
   }
@@ -477,15 +537,9 @@ export default function SettingsPage() {
             <p className={styles.stateHint}>Shown on the sidebar, login screen, and every printed invoice.</p>
             <div className={styles.emailFormGrid} style={{ alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <div
-                  style={{
-                    width: 64, height: 64, borderRadius: "var(--c-radius-sm)",
-                    border: "1px solid var(--c-border)", display: "flex", alignItems: "center",
-                    justifyContent: "center", overflow: "hidden", background: "var(--c-bg-sub)", flexShrink: 0,
-                  }}
-                >
+                <div className={styles.logoPreview}>
                   {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary uploaded blob URL, not a static asset */}
-                  <img src={saved.logoUrl || "/logo.png"} alt="Business logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                  <img src={saved.logoUrl || "/logo.png"} alt="Business logo" className={styles.logoPreviewImg} />
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
@@ -523,7 +577,7 @@ export default function SettingsPage() {
             ) : (
               <form onSubmit={handleSaveIdentity}>
                 <div className={styles.formGrid}>
-                  <FormField label="Business Name *">
+                  <FormField label="Business Name" required>
                     <Input value={identityForm.name} onChange={(e) => setIdentityForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Science Hub" required />
                   </FormField>
                   <FormField label="Tagline">
@@ -615,18 +669,19 @@ export default function SettingsPage() {
                   Printed on every invoice so customers can pay by bank transfer. Only admins can edit these.
                 </p>
                 <div className={styles.formGrid}>
-                  <FormField label="Bank Name *">
+                  <FormField label="Bank Name" required>
                     <Input value={bankForm.bankName} onChange={(e) => setBankForm((f) => ({ ...f, bankName: toTitleCase(e.target.value) }))} placeholder="e.g. HDFC Bank" required />
                   </FormField>
                   <FormField label="Account Holder Name">
                     <Input value={bankForm.bankAccountName} onChange={(e) => setBankForm((f) => ({ ...f, bankAccountName: e.target.value }))} placeholder="e.g. Science Hub" />
                   </FormField>
-                  <FormField label="Account Number *">
+                  <FormField label="Account Number" required>
                     <Input value={bankForm.bankAccountNumber} onChange={(e) => setBankForm((f) => ({ ...f, bankAccountNumber: e.target.value.replace(/\D/g, "").slice(0, 18) }))} placeholder="e.g. 123456789012" className={styles.gstinInput} maxLength={18} required />
                   </FormField>
                   <div>
                     <FormField
-                      label="IFSC Code *"
+                      label="IFSC Code"
+                      required
                       error={bankErrors.bankIfsc}
                       hint={ifscLookup.status === "loading" ? "Checking IFSC…" : undefined}
                     >
@@ -644,7 +699,7 @@ export default function SettingsPage() {
                       <p className={styles.ifscFoundHint}>✓ {ifscLookup.label}</p>
                     )}
                   </div>
-                  <FormField label="Branch *">
+                  <FormField label="Branch" required>
                     <Input value={bankForm.bankBranch} onChange={(e) => setBankForm((f) => ({ ...f, bankBranch: toTitleCase(e.target.value) }))} placeholder="e.g. Noida" required />
                   </FormField>
                 </div>

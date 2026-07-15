@@ -5,14 +5,18 @@ import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useFetch } from "@/lib/useCache";
-import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
+import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenerator";
+import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
+import { Input } from "@/components/ui/Input";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { StatCardsRow } from "@/components/ui/StatCardsRow";
+import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./billsList.module.css";
 
@@ -32,8 +36,12 @@ interface PurchaseBill {
   items: { name: string; product: { name: string; brand: { name: string } | null; category: { name: string } | null } | null }[];
 }
 
-type StatusFilter = "All" | "unpaid" | "partial" | "paid" | "cancelled";
-const STATUS_TABS: StatusFilter[] = ["All", "unpaid", "partial", "paid", "cancelled"];
+type StatusFilter = "All" | "unpaid" | "partial" | "paid" | "cancelled" | "overdue";
+const STATUS_TABS: StatusFilter[] = ["All", "overdue", "unpaid", "partial", "paid", "cancelled"];
+
+function isOverdue(b: { status: string; dueDate: string | null }): boolean {
+  return b.status !== "paid" && b.status !== "cancelled" && !!b.dueDate && new Date(b.dueDate) < new Date();
+}
 
 type SortOption = "newest" | "oldest" | "vendor_az" | "vendor_za" | "amount_high" | "amount_low" | "balance_high";
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -108,46 +116,48 @@ export default function PurchasesPage() {
     return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
   }, [pdfPreviewUrl]);
 
-  // Loads the bill detail page into a hidden iframe (to render its full
-  // #bill-print-area, which this list page doesn't have the data for) and
+  // Loads the bill detail page into a hidden iframe to render its full
+  // #bill-print-area (which this list page doesn't have the data for) and
   // generates a PDF blob from it.
-  function generatePdfViaIframe(billId: string): Promise<Blob | null> {
-    return new Promise((resolve) => {
-      const iframe = document.createElement("iframe");
-      Object.assign(iframe.style, { position: "fixed", width: "850px", height: "1200px", top: "-9999px", left: "-9999px", border: "none", opacity: "0", pointerEvents: "none" });
-      const cleanup = () => { try { document.body.removeChild(iframe); } catch {} };
-      const safetyTimer = setTimeout(() => { cleanup(); resolve(null); }, 45000);
-      iframe.onload = async () => {
-        const el = await new Promise<HTMLElement | null>(resolveEl => {
-          let tries = 0;
-          const check = () => {
-            const area = iframe.contentDocument?.getElementById("bill-print-area");
-            if (area?.querySelector("tbody tr")) { resolveEl(area); return; }
-            if (++tries > 40) { resolveEl(null); return; }
-            setTimeout(check, 250);
-          };
-          setTimeout(check, 250);
-        });
-        if (!el) { clearTimeout(safetyTimer); cleanup(); resolve(null); return; }
-        await new Promise(r => setTimeout(r, 400));
-        let blob: Blob | null = null;
-        try {
-          blob = await generateInvoicePdfBlob(el);
-        } catch { /* resolved as null below */ }
-        clearTimeout(safetyTimer); cleanup();
-        resolve(blob);
-      };
-      document.body.appendChild(iframe);
-      iframe.src = `/purchases/bills/${billId}`;
-    });
+  async function generatePdfViaIframe(billId: string, force = false): Promise<Blob | null> {
+    const variantKey = buildPdfVariantKey();
+    if (!force) {
+      const cached = await getCachedPdf("purchase-bill", billId, variantKey);
+      if (cached) return cached;
+    }
+    const blob = await pdfIframeGenerate({ route: `/purchases/bills/${billId}`, printAreaId: "bill-print-area" });
+    if (blob) setCachedPdf("purchase-bill", billId, variantKey, blob);
+    return blob;
   }
 
-  const apiUrl = filter === "All" ? "/api/purchase-bills" : `/api/purchase-bills?status=${filter}`;
+  // Bypasses the cache and re-renders a fresh PDF for the "Regenerate" action.
+  async function handleRegenerate(b: PurchaseBill) {
+    if (pdfBusyRef.current) return;
+    pdfBusyRef.current = true;
+    setPdfLoading(b.id);
+    try {
+      const blob = await generatePdfViaIframe(b.id, true);
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        setPdfPreviewUrl(url);
+        setPdfPreviewBill({ number: b.billNumber, vendor: b.vendor?.name ?? "" });
+        toast({ type: "success", title: "Regenerated", message: "Latest PDF generated and cached." });
+      } else {
+        toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
+      }
+    } finally {
+      setPdfLoading(null);
+      pdfBusyRef.current = false;
+    }
+  }
+
+  const apiUrl = filter === "All" || filter === "overdue" ? "/api/purchase-bills" : `/api/purchase-bills?status=${filter}`;
   const { data, loading, patchData } = useFetch<PurchaseBill[]>(apiUrl);
   const bills = data ?? [];
+  const scoped = filter === "overdue" ? bills.filter(isOverdue) : bills;
 
   const filtered = search.trim()
-    ? bills.filter(b => {
+    ? scoped.filter(b => {
         const q = search.toLowerCase();
         return (
           b.billNumber.toLowerCase().includes(q) ||
@@ -163,7 +173,7 @@ export default function PurchasesPage() {
           )
         );
       })
-    : bills;
+    : scoped;
 
   const sorted = sortBills(filtered, sort);
 
@@ -186,6 +196,7 @@ export default function PurchasesPage() {
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
         patchData((prev) => (prev ?? []).filter((b) => b.id !== target.id));
+        invalidateCachedPdf("purchase-bill", target.id);
         toast({ type: "success", title: "Bill deleted", message: `${target.billNumber} removed.` });
       } else {
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete bill." });
@@ -227,7 +238,7 @@ export default function PurchasesPage() {
         <div>
           <h1 className="page-title">Purchase Bills</h1>
           <p className="page-sub">
-            {loading ? "Loading…" : search.trim() ? `${filtered.length} of ${bills.length} bills` : `${bills.length} bills`}
+            {loading ? "Loading…" : search.trim() ? `${filtered.length} of ${scoped.length} bills` : `${scoped.length} bills`}
           </p>
         </div>
         <Button variant="primary" href="/purchases/bills/new">
@@ -237,47 +248,37 @@ export default function PurchasesPage() {
       </div>
 
       {/* Dashboard cards */}
-      {!loading && bills.length > 0 && (
-        <div {...animateSection(0, styles.statsGrid)}>
-          {[
-            { label: "Total Purchase", value: `₹${fmt(totalPurchase)}`, cls: styles.statTotal },
-            { label: "Paid",           value: `₹${fmt(totalPaid)}`,     cls: styles.statPaid },
-            { label: "Pending",        value: `₹${fmt(totalPending)}`,  cls: styles.statPending },
-            { label: "Overdue Bills",  value: String(overdue),          cls: overdue > 0 ? styles.statOverdueActive : styles.statOverdue },
-          ].map(card => (
-            <div key={card.label} className={`card ${styles.statCard}`}>
-              <div className={styles.statLabel}>{card.label}</div>
-              <div className={`${styles.statValue} ${card.cls}`}>{card.value}</div>
-            </div>
-          ))}
-        </div>
+      {(loading || bills.length > 0) && (
+        <StatCardsRow
+          sectionIndex={0}
+          loading={loading}
+          cards={[
+            { label: "Total Purchase", value: `₹${fmt(totalPurchase)}`, tone: "default" },
+            { label: "Paid",           value: `₹${fmt(totalPaid)}`,     tone: "positive" },
+            { label: "Pending",        value: `₹${fmt(totalPending)}`,  tone: "warning" },
+            { label: "Overdue Bills",  value: String(overdue),          tone: overdue > 0 ? "danger" : "muted" },
+          ]}
+        />
       )}
 
       {/* Status filter tabs */}
-      <div {...animateSection(1, "filter-tabs-row")}>
-        <div className="filter-tabs">
-          {STATUS_TABS.map(tab => (
-            <button
-              key={tab}
-              onClick={() => { setFilter(tab); setPage(1); }}
-              className={["filter-tab", filter === tab ? "filter-tab-active" : ""].join(" ")}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-      </div>
+      <StatusFilterTabs
+        sectionIndex={1}
+        tabs={STATUS_TABS}
+        value={filter}
+        onChange={(tab) => { setFilter(tab); setPage(1); }}
+      />
 
       <div {...animateSection(2, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
-            <input
+            <Input
               type="search"
               aria-label="Search purchase bills"
               placeholder="Search by bill no., vendor, product, brand, category or staff…"
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
-              className={`search-input ${styles.searchInput}`}
+              className={`${styles.searchInput}`}
             />
             <SortSelect
               ariaLabel="Sort purchase bills"
@@ -326,8 +327,8 @@ export default function PurchasesPage() {
                     )}
                   </Cell>
                   <Cell col={COLUMNS[2]} className={styles.vendorCell}>
-                    {b.vendor.name}
-                    {b.vendor.company && <div className={styles.vendorCompany}>{b.vendor.company}</div>}
+                    <div className={styles.vendorName} title={b.vendor.name}>{b.vendor.name}</div>
+                    {b.vendor.company && <div className={styles.vendorCompany} title={b.vendor.company}>{b.vendor.company}</div>}
                   </Cell>
                   <Cell col={COLUMNS[3]} className={styles.categoryCell}>
                     {b.category || <span className={styles.dash}>—</span>}
@@ -358,6 +359,9 @@ export default function PurchasesPage() {
                       }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         View
+                      </Button>
+                      <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" loading={pdfLoading === b.id} onClick={() => handleRegenerate(b)}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
                       </Button>
                       <Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(b)}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>

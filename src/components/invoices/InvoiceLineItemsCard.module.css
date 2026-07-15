@@ -1,0 +1,246 @@
+.cardPad { padding: 1.25rem; }
+
+.lineItemsHeading { font-size: 0.875rem; font-weight: 600; color: var(--c-text-2); margin-bottom: 0.75rem; }
+
+.productSearchWrap { position: relative; margin-bottom: 1rem; }
+
+/* ── Text input base + error state ────────────── */
+.input {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--c-border);
+  background: var(--c-bg-input);
+  color: var(--c-text);
+  font-size: 0.875rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.inputError {
+  composes: input;
+  border-color: var(--c-red);
+  box-shadow: 0 0 0 3px var(--c-red-bg);
+}
+
+.errMsg {
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--c-red);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* ── Search / dropdown ────────────────────────── */
+.dropdown {
+  position: absolute;
+  z-index: 20;
+  margin-top: 0.25rem;
+  width: 100%;
+  background: var(--c-bg-card);
+  border: 1px solid var(--c-border);
+  border-radius: 0.5rem;
+  box-shadow: var(--c-shadow-lg);
+  max-height: 13rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.dropdownBtn {
+  width: 100%;
+  text-align: left;
+  padding: 0.625rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--c-border);
+  cursor: pointer;
+}
+
+.dropdownBtn:hover { background: var(--c-bg-sub); }
+
+.dropdownItemName {
+  font-weight: 500;
+  color: var(--c-text);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dropdownItemMeta { font-size: 0.75rem; color: var(--c-text-4); }
+
+.dropdownEmpty {
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--c-text-3);
+}
+
+.dropdownEmptyLink {
+  color: var(--c-blue);
+  font-weight: 500;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* ── Quick-add product form ───────────────────── */
+.customForm { display: flex; flex-direction: column; gap: 0.625rem; margin-bottom: 1rem; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.625rem; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.625rem; }
+
+.customFormHint { font-size: 0.7rem; color: var(--c-text-4); }
+
+/* ── Line items table ─────────────────────────── */
+.itemsTableWrap {
+  overflow-x: auto;
+  border-radius: 0.625rem;
+  border: 1px solid var(--c-border);
+}
+
+.itemsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.itemsTable thead tr { background: var(--c-bg-sub); }
+.itemsTable tbody td { vertical-align: top; }
+
+.th {
+  padding: 0.625rem 0.875rem;
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--c-text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--c-border);
+}
+.thCenter { composes: th; text-align: center; }
+.thRight { composes: th; text-align: right; }
+.thAction { padding: 0.625rem 0.5rem; border-bottom: 1px solid var(--c-border); width: 2rem; }
+
+.itemRow { border-bottom: 1px solid var(--c-border); }
+.itemRowAlt { composes: itemRow; background: var(--c-bg-sub); }
+
+.tdIndex { padding: 0.625rem 0.875rem; color: var(--c-text-4); font-size: 0.75rem; font-weight: 500; }
+.tdProduct { padding: 0.625rem 0.875rem; font-weight: 600; color: var(--c-text); max-width: 10.8rem; }
+.tdProductInner { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tdCenter { padding: 0.625rem 0.875rem; text-align: center; }
+.tdRight { padding: 0.625rem 0.875rem; text-align: right; }
+.tdGstAmt { padding: 0.625rem 0.875rem; text-align: right; font-size: 0.8125rem; color: var(--c-text-3); }
+.tdTotal { padding: 0.625rem 0.875rem; text-align: right; font-weight: 700; font-size: 0.875rem; color: var(--c-text); }
+.tdActionCell { padding: 0.625rem 0.5rem; text-align: center; }
+
+.unitBadge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.375rem;
+  background: var(--c-bg-sub);
+  border: 1px solid var(--c-border);
+  font-size: 0.75rem;
+  color: var(--c-text-3);
+  font-weight: 500;
+}
+
+.gstBadge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.375rem;
+  background: var(--c-green-bg);
+  border: 1px solid var(--c-green-border);
+  font-size: 0.75rem;
+  color: var(--c-green-text);
+  font-weight: 600;
+}
+
+.qtyInput {
+  width: 4.5rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--c-blue-border);
+  background: var(--c-bg-input);
+  color: var(--c-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: center;
+  outline: none;
+}
+
+.priceInput {
+  composes: qtyInput;
+  width: 6rem;
+  text-align: right;
+}
+
+.hsnInput {
+  composes: qtyInput;
+  width: 5.5rem;
+  text-align: left;
+  font-weight: 500;
+}
+
+.discountSelect {
+  width: 4rem;
+  padding: 0.375rem 0.375rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--c-blue-border);
+  background: var(--c-bg-input);
+  color: var(--c-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+}
+
+.discountCell {
+  composes: tdCenter;
+}
+
+.discountStack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.discountAmountInput {
+  composes: qtyInput;
+  width: 4rem;
+  text-align: right;
+  font-weight: 500;
+}
+.discountAmountInput::placeholder { font-weight: 400; }
+
+.removeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: none;
+  border: 1px solid var(--c-border);
+  cursor: pointer;
+  color: var(--c-text-4);
+  font-size: 0.875rem;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.removeBtn:hover {
+  background: var(--c-red-bg);
+  border-color: var(--c-red-border);
+  color: var(--c-red-text);
+}
+
+.emptyItems {
+  text-align: center;
+  padding: 2rem;
+  font-size: 0.875rem;
+  color: var(--c-text-4);
+  border: 2px dashed var(--c-border);
+  border-radius: 0.625rem;
+}

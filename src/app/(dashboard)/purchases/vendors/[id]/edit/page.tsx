@@ -1,28 +1,26 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { Input, Textarea, FormField } from "@/components/ui/Input";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { VendorFormFields } from "@/components/vendors/VendorFormFields";
+import { BLANK_VENDOR_FORM, validateVendorForm, normalizeVendorField, type VendorFormData } from "@/lib/vendorForm";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
-import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+import { hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./vendorEdit.module.css";
-
-type StrForm = { name: string; company: string; gstin: string; phone: string; email: string; };
 
 export default function EditVendorPage() {
   const router = useRouter();
   const toast = useToast();
   const { id } = useParams<{ id: string }>();
-  const [form, setForm] = useState({
-    name: "", company: "", gstin: "", phone: "", email: "", address: "", notes: "", isActive: true,
-  });
-  const [initialForm, setInitialForm] = useState<typeof form | null>(null);
-  const [errors, setErrors] = useState<FormErrors<StrForm>>({});
+  const [form, setForm] = useState<VendorFormData>(BLANK_VENDOR_FORM);
+  const [initialForm, setInitialForm] = useState<VendorFormData | null>(null);
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
+  const [errors, setErrors] = useState<ReturnType<typeof validateVendorForm>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -30,13 +28,14 @@ export default function EditVendorPage() {
     fetch(`/api/vendors/${id}`, { headers: { "x-no-loader": "1" } })
       .then(r => r.json())
       .then(d => {
-        const loaded = {
+        const loaded: VendorFormData = {
           name: d.name ?? "", company: d.company ?? "", gstin: d.gstin ?? "",
           phone: d.phone ?? "", email: d.email ?? "", address: d.address ?? "",
           notes: d.notes ?? "", isActive: d.isActive !== false,
         };
         setForm(loaded);
         setInitialForm(loaded);
+        setLoadedUpdatedAt(d.updatedAt ?? null);
         setLoading(false);
       })
       .catch(() => { setLoading(false); });
@@ -44,33 +43,31 @@ export default function EditVendorPage() {
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
     const { name, value, type } = e.target;
-    const nextValue = name === "phone" ? value.replace(/\D/g, "").slice(0, 10) : value;
+    const nextValue = normalizeVendorField(name, value);
     setForm(prev => ({ ...prev, [name]: type === "checkbox" ? (e.target as HTMLInputElement).checked : nextValue }));
     setErrors(prev => ({ ...prev, [name]: undefined }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const strForm: StrForm = { name: form.name, company: form.company, gstin: form.gstin, phone: form.phone, email: form.email };
-    const newErrors = validateForm(strForm, {
-      name:  [rules.required("Vendor name is required.")],
-      phone: [rules.phone10()],
-      email: [rules.email()],
-      gstin: [rules.maxLength(15), rules.gstin()],
-    });
+    const newErrors = validateVendorForm(form, { requirePhone: false, requireAddress: false });
     if (hasErrors(newErrors)) { setErrors(newErrors); return; }
     setErrors({});
     setSaving(true);
     const res = await fetch(`/api/vendors/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, expectedUpdatedAt: loadedUpdatedAt }),
     });
     setSaving(false);
     if (res.ok) {
       bustCache("/api/vendors");
       toast({ type: "success", title: "Vendor updated", message: "Changes saved." });
       router.push(`/purchases/vendors/${id}`);
+    } else if (res.status === 409) {
+      const d = await res.json().catch(() => ({}));
+      bustCache(`/api/vendors/${id}`);
+      toast({ type: "error", title: "Update conflict", message: d?.error ?? "This vendor was changed by someone else. Please reload and try again." });
     } else {
       const d = await res.json().catch(() => ({}));
       toast({ type: "error", title: "Failed", message: d.error ?? "Failed to update vendor." });
@@ -89,40 +86,7 @@ export default function EditVendorPage() {
       <h1 className="page-title">Edit Vendor</h1>
 
       <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
-        <div className="form-grid-2">
-          <FormField label="Vendor Name" required error={errors.name as string}>
-            <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. Lab Supplies Co." disabled={disabled} />
-          </FormField>
-          <FormField label="Company / Trade Name">
-            <Input name="company" value={form.company} onChange={handleChange} placeholder="e.g. Lab Supplies Pvt. Ltd." disabled={disabled} />
-          </FormField>
-        </div>
-
-        <div className="form-grid-2">
-          <FormField label="Phone" error={errors.phone as string}>
-            <Input name="phone" type="tel" inputMode="numeric" value={form.phone} onChange={handleChange} placeholder="10-digit mobile" maxLength={10} disabled={disabled} />
-          </FormField>
-          <FormField label="Email" error={errors.email as string}>
-            <Input name="email" type="email" value={form.email} onChange={handleChange} placeholder="vendor@example.com" disabled={disabled} />
-          </FormField>
-        </div>
-
-        <FormField label="GSTIN" hint="Leave blank if unregistered." error={errors.gstin as string}>
-          <Input name="gstin" value={form.gstin} onChange={handleChange} placeholder="15-character GST number" maxLength={15} mono disabled={disabled} />
-        </FormField>
-
-        <FormField label="Address">
-          <Textarea name="address" rows={2} value={form.address} onChange={handleChange} placeholder="Street, city, state…" disabled={disabled} />
-        </FormField>
-
-        <FormField label="Notes">
-          <Textarea name="notes" rows={2} value={form.notes} onChange={handleChange} placeholder="Any additional notes…" disabled={disabled} />
-        </FormField>
-
-        <label className={styles.checkboxLabel}>
-          <input type="checkbox" name="isActive" checked={form.isActive} onChange={handleChange} className={styles.checkboxInput} disabled={disabled} />
-          Active vendor
-        </label>
+        <VendorFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} />
 
         <div className="form-actions-wrap">
           <div className="form-actions">

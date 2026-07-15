@@ -148,6 +148,10 @@
   text-decoration: none;
   display: block;
   margin-bottom: 0.125rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .vendorCompany {
@@ -162,6 +166,13 @@
   gap: 0.1rem;
   margin-top: 0.5rem;
 }
+
+/* ── Info-card loading skeleton spacing ── */
+.skLabelGap { margin-bottom: 0.625rem; }
+.skNameGap { margin-bottom: 0.375rem; }
+.skCompanyGap { margin-bottom: 0.5rem; }
+.skDetailsGap { gap: 0.4rem; }
+.skTableRow { display: flex; gap: 1rem; padding: 0.75rem 1rem; }
 
 .vendorGstin {
   font-size: 0.75rem;

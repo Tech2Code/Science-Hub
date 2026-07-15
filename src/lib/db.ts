@@ -21,6 +21,7 @@ export async function getInvoices(status?: string | null, customerId?: string | 
   return prisma.invoice.findMany({
     where,
     orderBy: { date: "desc" },
+    take: 2000,
     include: {
       customer: { select: { id: true, name: true } },
       // Selected for client-side search-by-product/brand/category on the
@@ -56,6 +57,7 @@ export async function getCustomers() {
   return prisma.customer.findMany({
     where: { deletedAt: null },
     orderBy: { name: "asc" },
+    take: 5000,
     include: { _count: { select: { invoices: true } } },
   });
 }
@@ -78,6 +80,7 @@ export async function getProducts(search?: string | null) {
       ? { deletedAt: null, OR: [{ name: { contains: search } }, { sku: { contains: search } }] }
       : { deletedAt: null },
     orderBy: { name: "asc" },
+    take: 5000,
     include: { category: true, brand: true, _count: { select: { invoiceItems: true } } },
   });
 }

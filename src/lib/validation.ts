@@ -3,6 +3,19 @@
 
 export type Validator = (value: string) => string | null;
 
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+// Payment/return date fields arrive as a plain "YYYY-MM-DD" string with no
+// timezone info, representing "today" in the business's own calendar (this
+// app is India-only). Comparing the UTC-midnight-parsed Date against the
+// exact server clock (Date.now()) falsely flags "today" as a future date
+// for the first ~5.5 hours of every IST day, since that day's UTC midnight
+// hasn't arrived yet. Comparing calendar-date strings in IST avoids that.
+export function isFutureIstDate(dateStr: string): boolean {
+  const todayIst = new Date(Date.now() + IST_OFFSET_MS).toISOString().slice(0, 10);
+  return dateStr > todayIst;
+}
+
 export const rules = {
   required: (msg = "This field is required."): Validator =>
     (v) => v.trim() ? null : msg,

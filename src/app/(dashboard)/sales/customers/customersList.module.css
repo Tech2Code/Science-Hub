@@ -1,9 +1,16 @@
 .searchInput {
   flex: 1;
+  max-width: 24rem;
 }
 
 .nameCell {
   font-weight: 500;
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 .mutedCell {

@@ -8,6 +8,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -65,7 +66,7 @@ export default function CustomersPage() {
   const { data, loading, patchData } = useFetch<Customer[]>("/api/customers");
   const customers = data ?? [];
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortOption>("name_az");
+  const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [confirmState, setConfirmState] = useState<{
@@ -141,13 +142,13 @@ export default function CustomersPage() {
       <div {...animateSection(0, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
-            <input
+            <Input
               type="search"
               aria-label="Search customers"
               placeholder="Search by name, phone, email, GSTIN, or city…"
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
-              className={`search-input ${styles.searchInput}`}
+              className={`${styles.searchInput}`}
             />
             <SortSelect ariaLabel="Sort customers" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
@@ -172,7 +173,7 @@ export default function CustomersPage() {
               ) : visible.map((c) => (
                 <tr key={c.id}>
                   <Cell col={COLUMNS[0]}>
-                    <Link href={`/sales/customers/${c.id}`} className={`${styles.nameCell} table-link`}>{c.name}</Link>
+                    <Link href={`/sales/customers/${c.id}`} className={`${styles.nameCell} table-link`} title={c.name}>{c.name}</Link>
                   </Cell>
                   <Cell col={COLUMNS[1]} className={styles.mutedCell}>
                     <div>{c.phone || "—"}</div>

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { logActivity } from "@/lib/activity";
 import { validateUserInput } from "@/lib/validation";
+import { requireAdmin } from "@/lib/apiAuth";
 
 const USER_SELECT = {
   id: true,
@@ -15,19 +14,10 @@ const USER_SELECT = {
   _count: { select: { invoices: true } },
 } as const;
 
-async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  if (!session) return { error: "Unauthorized", status: 401 } as const;
-  if (session.user.role !== "admin") return { error: "Forbidden", status: 403 } as const;
-  return { session };
-}
-
 export async function GET() {
   try {
     const auth = await requireAdmin();
-    if ("error" in auth) {
-      return NextResponse.json({ error: auth.error }, { status: auth.status });
-    }
+    if (!auth.ok) return auth.response;
 
     const users = await prisma.user.findMany({
       select: USER_SELECT,
@@ -44,9 +34,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAdmin();
-    if ("error" in auth) {
-      return NextResponse.json({ error: auth.error }, { status: auth.status });
-    }
+    if (!auth.ok) return auth.response;
 
     const body = await request.json();
     const { name, email, password, role } = body as {

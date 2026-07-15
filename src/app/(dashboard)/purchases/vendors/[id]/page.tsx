@@ -97,9 +97,9 @@ export default function VendorDetailPage() {
             <div className={loading ? styles.avatarActive : vendor?.isActive ? styles.avatarActive : styles.avatarInactive}>
               <SkeletonSwap loading={loading} w={48} h={48} r={9999}>{vendor?.name?.[0]?.toUpperCase()}</SkeletonSwap>
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className={styles.nameRow}>
-                <h1 className={styles.name}><SkeletonSwap loading={loading} w={160} h={20}>{vendor?.name}</SkeletonSwap></h1>
+                <h1 className={styles.name} title={vendor?.name}><SkeletonSwap loading={loading} w={160} h={20}>{vendor?.name}</SkeletonSwap></h1>
                 {!loading && vendor && (
                   <span className={`${styles.statusBadge} ${vendor.isActive ? styles.statusBadgeActive : styles.statusBadgeInactive}`}>
                     {vendor.isActive ? "Active" : "Inactive"}

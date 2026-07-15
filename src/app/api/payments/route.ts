@@ -9,6 +9,7 @@ export async function GET() {
 
     const payments = await prisma.payment.findMany({
       orderBy: { date: "desc" },
+      take: 5000,
       include: {
         invoice: {
           select: {

@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "./Select";
 import styles from "./SortSelect.module.css";
 
 export interface SortOptionDef<T extends string> {
@@ -19,16 +20,16 @@ export function SortSelect<T extends string>({ value, onChange, options, ariaLab
   return (
     <label className={styles.sortWrap}>
       <span className={styles.sortLabel}>{label}</span>
-      <select
+      <Select
         aria-label={ariaLabel}
         value={value}
         onChange={(e) => onChange(e.target.value as T)}
-        className={`search-input ${styles.sortSelect}`}
+        className={styles.sortSelect}
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
         ))}
-      </select>
+      </Select>
     </label>
   );
 }

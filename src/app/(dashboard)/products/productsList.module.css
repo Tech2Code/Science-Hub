@@ -6,6 +6,7 @@
 .searchInput {
   flex: 1 1 200px;
   min-width: 0;
+  max-width: 24rem;
 }
 
 .filterRow {
@@ -49,6 +50,12 @@
 
 .nameCell {
   font-weight: 500;
+  display: inline-block;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 .skuCell {

@@ -13,6 +13,7 @@ export async function GET() {
     const categories = await prisma.category.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },
+      take: 5000,
       include: { _count: { select: { products: { where: { deletedAt: null } } } } },
     });
 
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(category, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "A category with this name already exists" }, { status: 400 });
+      return NextResponse.json({ error: "A category with this name already exists" }, { status: 409 });
     }
     console.error("POST /api/categories error:", error);
     return NextResponse.json({ error: "Failed to create category" }, { status: 500 });

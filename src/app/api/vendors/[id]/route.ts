@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { validateVendorInput } from "@/lib/validation";
+import { requireSession } from "@/lib/apiAuth";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
     const { id } = await params;
     const vendor = await prisma.vendor.findFirst({
       where: { id, deletedAt: null },
@@ -30,13 +29,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
     const { id } = await params;
     const body = await req.json();
-    const { name, company, gstin, phone, email, address, notes, isActive } = body;
+    const { name, company, gstin, phone, email, address, notes, isActive, expectedUpdatedAt } = body;
     const validationError = validateVendorInput({ name, phone, email, gstin });
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+
+    const existing = await prisma.vendor.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
+    if (!existing) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
+    if (existing.deletedAt) {
+      return NextResponse.json({ error: "This vendor is in the bin — restore it before editing" }, { status: 400 });
+    }
+    if (expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== existing.updatedAt.getTime()) {
+      return NextResponse.json({ error: "This vendor was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
+    }
 
     const vendor = await prisma.vendor.update({
       where: { id },
@@ -47,7 +55,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         notes: notes?.trim() || null, isActive: isActive !== false,
       },
     });
-    await logActivity(session.user.id, "update_vendor", `Updated vendor "${vendor.name}"`, vendor.id, "vendor");
+    await logActivity(auth.session.user.id, "update_vendor", `Updated vendor "${vendor.name}"`, vendor.id, "vendor");
     revalidateTag("vendors", { expire: 0 });
     return NextResponse.json(vendor);
   } catch {
@@ -57,8 +65,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
     const { id } = await params;
     const existing = await prisma.vendor.findUnique({ where: { id }, select: { name: true } });
     if (!existing) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
@@ -70,7 +78,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       );
     }
     const vendor = await prisma.vendor.update({ where: { id }, data: { deletedAt: new Date() } });
-    await logActivity(session.user.id, "delete_vendor", `Deleted vendor "${vendor.name}"`, vendor.id, "vendor");
+    await logActivity(auth.session.user.id, "delete_vendor", `Deleted vendor "${vendor.name}"`, vendor.id, "vendor");
     revalidateTag("vendors", { expire: 0 });
     return NextResponse.json({ message: "Vendor deleted" });
   } catch {

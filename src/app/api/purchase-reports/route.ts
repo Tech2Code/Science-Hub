@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession, requireAdmin } from "@/lib/apiAuth";
-import { logActivity } from "@/lib/activity";
+import { requireSession } from "@/lib/apiAuth";
 
 async function getPurchaseSummary() {
   const now = new Date();
-  const result: { month: string; count: number; totalSpend: number; paid: number; payable: number }[] = [];
 
-  for (let i = 11; i >= 0; i--) {
+  const months = Array.from({ length: 12 }, (_, idx) => {
+    const i = 11 - idx;
     const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
     const label = start.toLocaleString("en-IN", { month: "short", year: "numeric" });
+    return { start, end, label };
+  });
 
+  const result = await Promise.all(months.map(async ({ start, end, label }) => {
     const bills = await prisma.purchaseBill.findMany({
       where: { deletedAt: null, billDate: { gte: start, lt: end } },
       select: { total: true, paidAmount: true },
@@ -19,8 +21,8 @@ async function getPurchaseSummary() {
 
     const totalSpend = bills.reduce((s, b) => s + b.total, 0);
     const paid = bills.reduce((s, b) => s + b.paidAmount, 0);
-    result.push({ month: label, count: bills.length, totalSpend, paid, payable: totalSpend - paid });
-  }
+    return { month: label, count: bills.length, totalSpend, paid, payable: totalSpend - paid };
+  }));
 
   return result;
 }
@@ -135,30 +137,5 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("GET /api/purchase-reports error:", error);
     return NextResponse.json({ error: "Failed to generate purchase report" }, { status: 500 });
-  }
-}
-
-// Admin-only bulk clear of the stock movement ledger — a temporary escape
-// hatch for wiping historical/test movement rows; does not touch product
-// stock quantities themselves.
-export async function DELETE(request: NextRequest) {
-  try {
-    const auth = await requireAdmin();
-    if (!auth.ok) return auth.response;
-
-    const { searchParams } = new URL(request.url);
-    const type = searchParams.get("type");
-    if (type !== "stock-ledger") {
-      return NextResponse.json({ error: `Unknown type: ${type}` }, { status: 400 });
-    }
-
-    const { count } = await prisma.stockMovement.deleteMany({});
-
-    await logActivity(auth.session.user.id, "empty_stock_ledger", `Cleared stock movement ledger: ${count} record(s) permanently deleted`);
-
-    return NextResponse.json({ deleted: count });
-  } catch (error) {
-    console.error("DELETE /api/purchase-reports error:", error);
-    return NextResponse.json({ error: "Failed to clear stock ledger" }, { status: 500 });
   }
 }

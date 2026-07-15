@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -60,7 +61,7 @@ export default function BrandsPage() {
   const { data, loading, patchData } = useFetch<Brand[]>("/api/brands");
   const brands = data ?? [];
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortOption>("name_az");
+  const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -158,13 +159,13 @@ export default function BrandsPage() {
           Add New Brand
         </h2>
         <form onSubmit={handleAdd} className={styles.addForm}>
-          <input
+          <Input
             ref={inputRef}
             type="text"
             placeholder="Brand name (e.g. Merck, Borosil…)"
             value={newName}
             onChange={(e) => { setNewName(e.target.value); }}
-            className={`search-input ${styles.addInput}`}
+            className={`${styles.addInput}`}
           />
           <Button type="submit" variant="primary" disabled={!newName.trim() || saving}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Brand
@@ -176,13 +177,13 @@ export default function BrandsPage() {
       <div {...animateSection(1, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
-            <input
+            <Input
               type="search"
               aria-label="Search brands"
               placeholder="Search brands…"
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
-              className={`search-input ${styles.searchInput}`}
+              className={`${styles.searchInput}`}
             />
             <SortSelect ariaLabel="Sort brands" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
@@ -208,7 +209,7 @@ export default function BrandsPage() {
                 <tr key={b.id}>
                   <Cell col={COLUMNS[0]} className={styles.indexCell}>{i + 1}</Cell>
                   <Cell col={COLUMNS[1]}>
-                    <Link href={`/brands/${b.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`}>{b.name}</Link>
+                    <Link href={`/brands/${b.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`} title={b.name}>{b.name}</Link>
                   </Cell>
                   <Cell col={COLUMNS[2]} className={styles.mutedCell}>{b.createdBy ?? "—"}</Cell>
                   <Cell col={COLUMNS[3]} className={styles.mutedCell}>

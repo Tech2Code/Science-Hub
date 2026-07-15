@@ -34,17 +34,20 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { name, phone, email, address, city, state, pincode, gstin } = body;
+    const { name, phone, email, address, city, state, pincode, gstin, expectedUpdatedAt } = body;
 
     const validationError = validateCustomerInput({ name, phone, email, pincode, gstin });
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    const existing = await prisma.customer.findUnique({ where: { id }, select: { deletedAt: true } });
+    const existing = await prisma.customer.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existing) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
     if (existing.deletedAt) {
       return NextResponse.json({ error: "This customer is in the bin — restore it before editing" }, { status: 400 });
+    }
+    if (expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== existing.updatedAt.getTime()) {
+      return NextResponse.json({ error: "This customer was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
     }
 
     const customer = await prisma.customer.update({

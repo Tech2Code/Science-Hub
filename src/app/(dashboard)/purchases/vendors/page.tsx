@@ -8,6 +8,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -23,11 +24,14 @@ interface Vendor {
   phone: string | null;
   email: string | null;
   isActive: boolean;
+  createdAt?: string;
   _count: { purchaseBills: number };
 }
 
-type SortOption = "name_az" | "name_za" | "bills_high" | "bills_low";
+type SortOption = "name_az" | "name_za" | "bills_high" | "bills_low" | "newest" | "oldest";
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "newest",     label: "Newest first" },
+  { value: "oldest",     label: "Oldest first" },
   { value: "name_az",    label: "Name (A–Z)" },
   { value: "name_za",    label: "Name (Z–A)" },
   { value: "bills_high", label: "Bills (High–Low)" },
@@ -40,6 +44,8 @@ function sortVendors(list: Vendor[], sort: SortOption): Vendor[] {
     case "name_za":    return arr.sort((a, b) => b.name.localeCompare(a.name));
     case "bills_high": return arr.sort((a, b) => b._count.purchaseBills - a._count.purchaseBills);
     case "bills_low":  return arr.sort((a, b) => a._count.purchaseBills - b._count.purchaseBills);
+    case "oldest":     return arr.sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
+    case "newest":     return arr.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
     case "name_az":
     default:           return arr.sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -60,7 +66,7 @@ export default function VendorsPage() {
   const vendors = data ?? [];
   const toast = useToast();
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortOption>("name_az");
+  const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null);
@@ -138,13 +144,13 @@ export default function VendorsPage() {
       <div {...animateSection(0, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
-            <input
+            <Input
               type="search"
               aria-label="Search vendors"
               placeholder="Search by name, company, GSTIN, phone or email…"
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
-              className={`search-input ${styles.searchInput}`}
+              className={`${styles.searchInput}`}
             />
             <SortSelect ariaLabel="Sort vendors" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
@@ -167,8 +173,8 @@ export default function VendorsPage() {
               ) : visible.map(v => (
                 <tr key={v.id}>
                   <Cell col={COLUMNS[0]}>
-                    <Link href={`/purchases/vendors/${v.id}`} className={`${styles.nameCell} table-link`}>{v.name}</Link>
-                    {v.company && <div className={styles.companySub}>{v.company}</div>}
+                    <Link href={`/purchases/vendors/${v.id}`} className={`${styles.nameCell} table-link`} title={v.name}>{v.name}</Link>
+                    {v.company && <div className={styles.companySub} title={v.company}>{v.company}</div>}
                   </Cell>
                   <Cell col={COLUMNS[1]} className={styles.gstinCell}>
                     {v.gstin || <span className={styles.emptyValue}>—</span>}

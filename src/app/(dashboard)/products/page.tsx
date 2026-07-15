@@ -8,6 +8,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -82,7 +83,7 @@ export default function ProductsPage() {
   const [stockFilter, setStockFilter] = useState<StockFilter>(
     urlFilter === "low" || urlFilter === "out" ? urlFilter : "all"
   );
-  const [sort, setSort] = useState<SortOption>("name_az");
+  const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [confirmState, setConfirmState] = useState<{
@@ -171,13 +172,13 @@ export default function ProductsPage() {
       <div {...animateSection(0, "card")}>
         <div className={`card-toolbar ${styles.toolbar}`}>
           <div className="toolbar-left">
-            <input
+            <Input
               type="search"
               aria-label="Search products"
               placeholder="Search by name, SKU, brand, or category…"
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
-              className={`search-input ${styles.searchInput}`}
+              className={`${styles.searchInput}`}
             />
             <SortSelect ariaLabel="Sort products" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
@@ -232,7 +233,7 @@ export default function ProductsPage() {
                 return (
                   <tr key={p.id}>
                     <Cell col={COLUMNS[0]}>
-                      <Link href={`/products/${p.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`}>{p.name}</Link>
+                      <Link href={`/products/${p.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`} title={p.name}>{p.name}</Link>
                       {p.sku && <div className={styles.skuCell}>{p.sku}</div>}
                     </Cell>
                     <Cell col={COLUMNS[1]} className={styles.mutedCell}>{p.brand?.name ?? "—"}</Cell>

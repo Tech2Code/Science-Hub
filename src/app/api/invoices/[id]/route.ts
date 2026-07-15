@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getInvoice } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession } from "@/lib/apiAuth";
 import { assertInvoiceQuantitiesNotBelowReturned, InvoiceQuantityValidationError } from "@/lib/invoiceReturns";
-import { recordStockMovement } from "@/lib/stockMovement";
+import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
+import { computeRoundOff } from "@/lib/roundOff";
+import { lineBreakdown } from "@/lib/invoiceCalc";
 
 export async function GET(
   request: NextRequest,
@@ -35,7 +38,16 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { items, notes, dueDate, isInterState, placeOfSupply, reverseCharge, status } = body;
+    const { items, notes, dueDate, isInterState, placeOfSupply, reverseCharge, status, expectedUpdatedAt } = body;
+
+    const existingBase = await prisma.invoice.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
+    if (!existingBase) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    if (existingBase.deletedAt) {
+      return NextResponse.json({ error: "This invoice is in the bin — restore it before editing" }, { status: 400 });
+    }
+    if (expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== existingBase.updatedAt.getTime()) {
+      return NextResponse.json({ error: "This invoice was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
+    }
 
     // Simple status/notes-only update (from payment flow)
     if (!items) {
@@ -108,10 +120,8 @@ export async function PUT(
       const price = parseFloat(String(item.price));
       const gstRate = parseFloat(String(item.gstRate ?? product?.gstRate ?? 18));
       const discountPercent = parseFloat(String(item.discountPercent ?? 0));
-      const grossAmount = price * quantity;
-      const discountAmount = (grossAmount * discountPercent) / 100;
-      const itemSubtotal = grossAmount - discountAmount;
-      const gstAmount = (itemSubtotal * gstRate) / 100;
+      const { discountAmount, gstAmt: gstAmount, total: itemTotal, taxable: itemSubtotal } =
+        lineBreakdown({ qty: quantity, price, gstRate, discountPercent });
       subtotal += itemSubtotal;
       totalGst += gstAmount;
       return {
@@ -125,7 +135,7 @@ export async function PUT(
         discountAmount,
         gstRate,
         gstAmount,
-        total: itemSubtotal + gstAmount,
+        total: itemTotal,
       };
     });
 
@@ -133,7 +143,7 @@ export async function PUT(
     const cgst = inter ? 0 : totalGst / 2;
     const sgst = inter ? 0 : totalGst / 2;
     const igst = inter ? totalGst : 0;
-    const total = subtotal + totalGst;
+    const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + totalGst);
 
     // Recalculate status based on paidAmount
     const paidAmount = existing.paidAmount;
@@ -149,27 +159,23 @@ export async function PUT(
       // untouched — nothing has been written yet.
       await assertInvoiceQuantitiesNotBelowReturned(tx, id, invoiceItems);
 
-      // Restore stock for old items before replacing them
+      // Restore stock for old items before replacing them — one batched
+      // UPDATE for every line item instead of one round trip each, so large
+      // invoices don't blow past the transaction timeout.
       const oldItems = await tx.invoiceItem.findMany({
         where: { invoiceId: id },
         select: { productId: true, quantity: true },
       });
-      for (const old of oldItems) {
-        const product = await tx.product.update({
-          where: { id: old.productId },
-          data: { stock: { increment: old.quantity } },
-          select: { id: true, stock: true },
-        });
-        await recordStockMovement(tx, {
-          productId: product.id,
+      await batchAdjustStock(
+        tx,
+        oldItems.map((old) => ({ productId: old.productId, quantity: old.quantity })),
+        {
           type: "adjustment",
-          quantity: old.quantity,
-          balanceAfter: product.stock,
           reference: existing.invoiceNumber,
           notes: "Invoice edited — old items reversed",
           createdByUserId: auth.session.user.id,
-        });
-      }
+        }
+      );
 
       await tx.invoiceItem.deleteMany({ where: { invoiceId: id } });
 
@@ -186,32 +192,32 @@ export async function PUT(
           sgst,
           igst,
           total,
+          roundOff,
           status: newStatus,
           items: { create: invoiceItems },
         },
         include: { items: true, customer: true },
       });
 
-      // Deduct stock for new items — update() returns the row directly so we
-      // don't need a second round-trip per item to check for negative stock.
-      const warnings: string[] = [];
-      for (const item of invoiceItems as { productId: string; quantity: number }[]) {
-        const product = await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
-          select: { id: true, name: true, stock: true },
-        });
-        if (product.stock < 0) warnings.push(`${product.name} (stock: ${product.stock})`);
-        await recordStockMovement(tx, {
-          productId: product.id,
-          type: "adjustment",
+      // Deduct stock for new items — one batched UPDATE ... RETURNING gives
+      // back every product's post-update stock in a single round trip, which
+      // is also how we detect negative stock without a second query per item.
+      const updatedProducts = await batchAdjustStock(
+        tx,
+        (invoiceItems as { productId: string; quantity: number }[]).map((item) => ({
+          productId: item.productId,
           quantity: -item.quantity,
-          balanceAfter: product.stock,
+        })),
+        {
+          type: "adjustment",
           reference: existing.invoiceNumber,
           notes: "Invoice edited — new items applied",
           createdByUserId: auth.session.user.id,
-        });
-      }
+        }
+      );
+      const warnings = updatedProducts
+        .filter((p) => p.stock < 0)
+        .map((p) => `${p.name} (stock: ${p.stock})`);
 
       return { invoice: inv, stockWarnings: warnings };
     }, { timeout: 20000, maxWait: 10000 });
@@ -228,6 +234,17 @@ export async function PUT(
       return NextResponse.json({ error: error.message, errors: error.errors }, { status: 400 });
     }
     console.error(error);
+    if (error instanceof ProductNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2025") {
+        return NextResponse.json({ error: "One of the products on this invoice no longer exists — remove it and re-add it from the current product list." }, { status: 400 });
+      }
+      if (error.code === "P2028") {
+        return NextResponse.json({ error: "The update took too long and timed out — please try again." }, { status: 500 });
+      }
+    }
     return NextResponse.json({ error: "Failed to update invoice" }, { status: 500 });
   }
 }
@@ -264,22 +281,16 @@ export async function DELETE(
       if (updateResult.count === 0) {
         return { found: true, alreadyDeleted: true, inv };
       }
-      for (const item of items) {
-        const product = await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.quantity } },
-          select: { id: true, stock: true },
-        });
-        await recordStockMovement(tx, {
-          productId: product.id,
+      await batchAdjustStock(
+        tx,
+        items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+        {
           type: "adjustment",
-          quantity: item.quantity,
-          balanceAfter: product.stock,
           reference: inv.invoiceNumber,
           notes: "Invoice deleted",
           createdByUserId: auth.session.user.id,
-        });
-      }
+        }
+      );
       return { found: true, alreadyDeleted: false, inv };
     }, { timeout: 20000, maxWait: 10000 });
 
@@ -296,6 +307,9 @@ export async function DELETE(
     return NextResponse.json({ message: "Invoice moved to bin" });
   } catch (error) {
     console.error(error);
+    if (error instanceof ProductNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ error: "Failed to delete invoice" }, { status: 500 });
   }
 }

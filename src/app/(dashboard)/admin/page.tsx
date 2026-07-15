@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { rules, validate } from "@/lib/validation";
+import { Input, Select, FormField } from "@/components/ui/Input";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -64,6 +65,7 @@ const ACTION_META: Record<string, { label: string; color: string; bg: string; bo
   record_purchase_payment:{ label: "Purchase Payment",       color: "var(--c-green-text)",  bg: "var(--c-green-bg)",  border: "var(--c-green-border)" },
   empty_bin:              { label: "Bin Emptied",            color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
   clear_activity_log:     { label: "Activity Log Cleared",   color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
+  factory_reset:          { label: "Factory Reset",          color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -106,15 +108,6 @@ function UserAvatar({ name, role, isSelf, size = 30 }: { name: string; role: str
       <div className={styles.roleDot} style={{ background: c.badge }}>
         {c.badgeIcon}
       </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className={styles.field}>
-      <label className={styles.fieldLabel}>{label}</label>
-      {children}
     </div>
   );
 }
@@ -187,6 +180,12 @@ export default function AdminPage() {
   const [clearLogsInput, setClearLogsInput] = useState("");
   const LOGS_LIMIT = 20;
   const CLEAR_LOGS_PHRASE = "DELETE ALL";
+
+  // ── Factory Reset ────────────────────────────────────────────
+  const [factoryResetConfirm, setFactoryResetConfirm] = useState(false);
+  const [factoryResetLoading, setFactoryResetLoading] = useState(false);
+  const [factoryResetInput, setFactoryResetInput] = useState("");
+  const FACTORY_RESET_PHRASE = "DELETE EVERYTHING";
 
   const loadLogs = useCallback(async (page: number, userId: string) => {
     setLogsLoading(true);
@@ -376,6 +375,32 @@ export default function AdminPage() {
     }
   }
 
+  async function runFactoryReset() {
+    if (factoryResetInput !== FACTORY_RESET_PHRASE) return;
+    setFactoryResetLoading(true);
+    try {
+      const res = await fetch("/api/admin/factory-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: factoryResetInput }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setFactoryResetLoading(false);
+      setFactoryResetConfirm(false);
+      setFactoryResetInput("");
+      if (!res.ok) {
+        toast({ type: "error", title: "Reset failed", message: data.error ?? "Could not reset app data." });
+        return;
+      }
+      toast({ type: "success", title: "App reset", message: "All business data and staff accounts have been permanently deleted." });
+      router.push("/dashboard");
+    } catch {
+      setFactoryResetLoading(false);
+      setFactoryResetConfirm(false);
+      toast({ type: "error", title: "Reset failed", message: "Network error. Please try again." });
+    }
+  }
+
   const selfId = session?.user?.id;
 
   const logsTotalPages = Math.max(1, Math.ceil(logsTotal / LOGS_LIMIT));
@@ -432,7 +457,7 @@ export default function AdminPage() {
             <label htmlFor="clear-logs-confirm">
               Type <strong>{CLEAR_LOGS_PHRASE}</strong> to confirm
             </label>
-            <input
+            <Input
               id="clear-logs-confirm"
               type="text"
               autoComplete="off"
@@ -446,6 +471,34 @@ export default function AdminPage() {
         }
         onConfirm={clearAllLogs}
         onCancel={() => { if (!clearLogsLoading) { setClearLogsConfirm(false); setClearLogsInput(""); } }}
+      />
+
+      <ConfirmDialog
+        open={factoryResetConfirm}
+        title="Factory Reset"
+        message="Permanently delete every invoice, purchase bill, customer, product, vendor, brand, category, stock movement, activity log entry, and staff account. This cannot be undone."
+        confirmLabel="Delete Everything" variant="danger" loading={factoryResetLoading}
+        confirmDisabled={factoryResetInput !== FACTORY_RESET_PHRASE}
+        detail={
+          <div className={styles.clearLogsConfirm}>
+            <p>Business settings (name, address, GSTIN, bank details, Gmail configuration) and admin accounts are kept.</p>
+            <label htmlFor="factory-reset-confirm">
+              Type <strong>{FACTORY_RESET_PHRASE}</strong> to confirm
+            </label>
+            <Input
+              id="factory-reset-confirm"
+              type="text"
+              autoComplete="off"
+              autoFocus
+              className={styles.inp}
+              value={factoryResetInput}
+              onChange={e => setFactoryResetInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && factoryResetInput === FACTORY_RESET_PHRASE) runFactoryReset(); }}
+            />
+          </div>
+        }
+        onConfirm={runFactoryReset}
+        onCancel={() => { if (!factoryResetLoading) { setFactoryResetConfirm(false); setFactoryResetInput(""); } }}
       />
 
       <div className="page-header">
@@ -489,8 +542,8 @@ export default function AdminPage() {
           ) : editingProfile ? (
             <form onSubmit={saveProfile} className={styles.formCol}>
               <div className={styles.fg2}>
-                <Field label="Full Name"><input className={styles.inp} value={profileForm.name} onChange={e => setProfileForm(p => ({ ...p, name: e.target.value }))} required /></Field>
-                <Field label="Login Email — used to sign in to this app"><input className={styles.inp} type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} required /></Field>
+                <FormField label="Full Name" required><Input className={styles.inp} value={profileForm.name} onChange={e => setProfileForm(p => ({ ...p, name: e.target.value }))} required /></FormField>
+                <FormField label="Login Email — used to sign in to this app" required><Input className={styles.inp} type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} required /></FormField>
               </div>
               {profileMsg && <Msg m={profileMsg} />}
               <div className={styles.formActions}>
@@ -544,9 +597,9 @@ export default function AdminPage() {
           {changingPw && (
             <form onSubmit={savePassword} className={styles.pwFormSpacing}>
               <div className={styles.fg3pw}>
-                <Field label="Current Password"><input className={styles.inp} type="password" value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))} required placeholder="••••••••" /></Field>
-                <Field label="New Password"><input className={styles.inp} type="password" value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))} required placeholder="min. 8 characters" /></Field>
-                <Field label="Confirm Password"><input className={styles.inp} type="password" value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} required placeholder="repeat new password" /></Field>
+                <FormField label="Current Password" required><Input className={styles.inp} type="password" value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))} required placeholder="••••••••" autoComplete="current-password" /></FormField>
+                <FormField label="New Password" required><Input className={styles.inp} type="password" value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))} required placeholder="min. 8 characters" autoComplete="new-password" /></FormField>
+                <FormField label="Confirm Password" required><Input className={styles.inp} type="password" value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} required placeholder="repeat new password" autoComplete="new-password" /></FormField>
               </div>
               {pwMsg && <Msg m={pwMsg} />}
               <div className={styles.formActions}>
@@ -578,36 +631,32 @@ export default function AdminPage() {
             <div className={styles.inlineFormTitle}>New User</div>
             <form onSubmit={addUser} className={styles.formColTight}>
               <div className={styles.fg4}>
-                <Field label="Full Name">
-                  <input className={`${styles.inp} ${addFieldErrors.name ? styles.inpError : ""}`} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} required placeholder="Jane Smith" />
-                  {addFieldErrors.name && <span className={styles.fieldErr}>{addFieldErrors.name}</span>}
-                </Field>
-                <Field label="Email">
+                <FormField label="Full Name" required error={addFieldErrors.name}>
+                  <Input className={`${styles.inp} ${addFieldErrors.name ? styles.inpError : ""}`} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} required placeholder="Jane Smith" />
+                </FormField>
+                <FormField label="Email" required error={addFieldErrors.email}>
                   <div className={styles.emailWrap}>
-                    <input className={`${styles.inp} ${addFieldErrors.email ? styles.inpError : ""}`} type="email" value={addForm.email} onChange={e => handleAddFormChange("email", e.target.value)} required placeholder="jane@example.com" />
+                    <Input className={`${styles.inp} ${addFieldErrors.email ? styles.inpError : ""}`} type="email" value={addForm.email} onChange={e => handleAddFormChange("email", e.target.value)} required placeholder="jane@example.com" />
                     {emailCheckLoading && <span className={styles.emailChecking}>checking…</span>}
                   </div>
-                  {addFieldErrors.email && <span className={styles.fieldErr}>{addFieldErrors.email}</span>}
-                </Field>
-                <Field label="Password">
-                  <PasswordInput className={styles.inp} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} required placeholder="min. 8 characters" />
-                  {addFieldErrors.password && <span className={styles.fieldErr}>{addFieldErrors.password}</span>}
-                </Field>
-                <Field label="Re-enter Password">
-                  <PasswordInput className={styles.inp} value={addForm.confirmPassword} onChange={e => handleAddFormChange("confirmPassword", e.target.value)} required placeholder="repeat password" />
-                  {addFieldErrors.confirmPassword && (
-                    <span className={styles.fieldErr}>{addFieldErrors.confirmPassword}</span>
-                  )}
-                  {!addFieldErrors.confirmPassword && addForm.confirmPassword && addForm.password === addForm.confirmPassword && (
-                    <span className={styles.fieldOk}>✓ Passwords match</span>
-                  )}
-                </Field>
-                <Field label="Role">
-                  <select className={`${styles.inp} ${styles.inpCursor}`} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>
+                </FormField>
+                <FormField label="Password" required error={addFieldErrors.password}>
+                  <PasswordInput className={styles.inp} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} required placeholder="min. 8 characters" autoComplete="new-password" />
+                </FormField>
+                <FormField
+                  label="Re-enter Password"
+                  required
+                  error={addFieldErrors.confirmPassword}
+                  hint={!addFieldErrors.confirmPassword && addForm.confirmPassword && addForm.password === addForm.confirmPassword ? "✓ Passwords match" : undefined}
+                >
+                  <PasswordInput className={styles.inp} value={addForm.confirmPassword} onChange={e => handleAddFormChange("confirmPassword", e.target.value)} required placeholder="repeat password" autoComplete="new-password" />
+                </FormField>
+                <FormField label="Role">
+                  <Select className={`${styles.inp} ${styles.inpCursor}`} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>
                     <option value="staff">Staff</option>
                     <option value="admin">Admin</option>
-                  </select>
-                </Field>
+                  </Select>
+                </FormField>
               </div>
               {addMsg && <Msg m={addMsg} />}
               <div className={styles.formActions}>
@@ -624,19 +673,19 @@ export default function AdminPage() {
             <div className={styles.inlineFormTitle}>Edit: {editUser.name}</div>
             <form onSubmit={saveEdit} className={styles.formCol}>
               <div className={styles.fg3}>
-                <Field label="Full Name"><input className={styles.inp} value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} required /></Field>
-                <Field label="Email"><input className={styles.inp} type="email" value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} required /></Field>
-                <Field label="Role">
-                  <select className={`${styles.inp} ${styles.inpCursor}`} value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value as Role }))}>
+                <FormField label="Full Name" required><Input className={styles.inp} value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} required /></FormField>
+                <FormField label="Email" required><Input className={styles.inp} type="email" value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} required /></FormField>
+                <FormField label="Role">
+                  <Select className={`${styles.inp} ${styles.inpCursor}`} value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value as Role }))}>
                     <option value="staff">Staff</option>
                     <option value="admin">Admin</option>
-                  </select>
-                </Field>
+                  </Select>
+                </FormField>
               </div>
               <div className={styles.pwSection}>
                 <div className={styles.pwSectionHint}>New password — leave blank to keep current</div>
                 <div className={styles.maxW20}>
-                  <Field label="New Password"><input className={styles.inp} type="password" value={editForm.newPassword} onChange={e => setEditForm(p => ({ ...p, newPassword: e.target.value }))} placeholder="min. 8 characters" /></Field>
+                  <FormField label="New Password"><Input className={styles.inp} type="password" value={editForm.newPassword} onChange={e => setEditForm(p => ({ ...p, newPassword: e.target.value }))} placeholder="min. 8 characters" autoComplete="new-password" /></FormField>
                 </div>
               </div>
               {editMsg && <Msg m={editMsg} />}
@@ -746,18 +795,20 @@ export default function AdminPage() {
 
         {/* Filters */}
         <div className={styles.filterBar}>
-          <input
+          <Input
             className={`${styles.inp} ${styles.inpCompact}`} type="search" aria-label="Search activity log" placeholder="Search actions or details…" value={logsSearch}
             onChange={e => setLogsSearch(e.target.value)}
           />
-          <select
-            className={`${styles.inp} ${styles.inpAuto} ${styles.inpCursor} ${styles.inpCompact}`}
-            value={logsFilter}
-            onChange={e => { setLogsFilter(e.target.value); setLogsPage(1); }}
-          >
-            <option value="">All users</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
+          <div className={styles.filterSelectWrap}>
+            <Select
+              className={`${styles.inp} ${styles.inpCursor} ${styles.inpCompact}`}
+              value={logsFilter}
+              onChange={e => { setLogsFilter(e.target.value); setLogsPage(1); }}
+            >
+              <option value="">All users</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </Select>
+          </div>
           {(logsSearch || logsFilter) && (
             <button className={styles.clearFiltersBtn} onClick={() => { setLogsSearch(""); setLogsFilter(""); setLogsPage(1); }}>
               Clear filters
@@ -855,6 +906,22 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {/* ── Danger Zone ─────────────────────────────────────────── */}
+      {(() => { const a = animateSection(3, "card"); return (
+      <div className={a.className} style={{ ...a.style, borderColor: "var(--c-red-border)" }}>
+        <div className={styles.sectionHeaderWrap}>
+          <div>
+            <h2 className={styles.sectionTitle} style={{ color: "var(--c-red)" }}>Danger Zone</h2>
+            <p className={styles.sectionSub}>Factory reset — wipes all business data, keeps admin accounts and business/Gmail settings</p>
+          </div>
+          <Button variant="dangerOutline" size="sm" onClick={() => { setFactoryResetInput(""); setFactoryResetConfirm(true); }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+            Factory Reset
+          </Button>
+        </div>
+      </div>
+      ); })()}
 
       </div>{/* end main content column */}
 

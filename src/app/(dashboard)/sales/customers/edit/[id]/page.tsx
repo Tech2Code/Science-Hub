@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
@@ -6,32 +6,23 @@ import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
-import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
+import { CustomerFormFields } from "@/components/customers/CustomerFormFields";
+import { BLANK_CUSTOMER_FORM, validateCustomerForm, normalizeCustomerField, type CustomerFormData } from "@/lib/customerForm";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
-import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+import { hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./customerEdit.module.css";
-
-const INDIA_STATES = [
-  "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat",
-  "Haryana","Himachal Pradesh","Jharkhand","Karnataka","Kerala","Madhya Pradesh",
-  "Maharashtra","Manipur","Meghalaya","Mizoram","Nagaland","Odisha","Punjab","Rajasthan",
-  "Sikkim","Tamil Nadu","Telangana","Tripura","Uttar Pradesh","Uttarakhand","West Bengal",
-  "Andaman and Nicobar Islands","Chandigarh","Delhi","Jammu and Kashmir","Ladakh",
-  "Lakshadweep","Puducherry",
-];
 
 export default function EditCustomerPage() {
   const router = useRouter();
   const toast = useToast();
   const { id } = useParams<{ id: string }>();
-  const [form, setForm] = useState({
-    name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "",
-  });
-  const [initialForm, setInitialForm] = useState<typeof form | null>(null);
+  const [form, setForm] = useState<CustomerFormData>(BLANK_CUSTOMER_FORM);
+  const [initialForm, setInitialForm] = useState<CustomerFormData | null>(null);
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [errors, setErrors] = useState<FormErrors<typeof form>>({});
+  const [errors, setErrors] = useState<FormErrors<CustomerFormData>>({});
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -39,22 +30,20 @@ export default function EditCustomerPage() {
     fetch(`/api/customers/${id}`, { headers: { "x-no-loader": "1" } })
       .then((r) => r.json())
       .then((d) => {
-        const loaded = { name: d.name ?? "", phone: d.phone ?? "", email: d.email ?? "",
+        const loaded: CustomerFormData = { name: d.name ?? "", phone: d.phone ?? "", email: d.email ?? "",
           address: d.address ?? "", city: d.city ?? "", state: d.state ?? "",
           pincode: d.pincode ?? "", gstin: d.gstin ?? "" };
         setForm(loaded);
         setInitialForm(loaded);
+        setLoadedUpdatedAt(d.updatedAt ?? null);
         setLoading(false);
       })
       .catch(() => { setLoading(false); });
   }, [id]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
-    const { name } = e.target;
-    let { value } = e.target;
-    if (name === "phone") value = value.replace(/\D/g, "").slice(0, 10);
-    if (name === "pincode") value = value.replace(/\D/g, "").slice(0, 6);
-    setForm((prev) => ({ ...prev, [name]: value }));
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: normalizeCustomerField(name, value) }));
     setErrors((prev) => ({ ...prev, [name]: undefined }));
   }
 
@@ -63,7 +52,7 @@ export default function EditCustomerPage() {
     const res = await fetch(`/api/customers/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, expectedUpdatedAt: loadedUpdatedAt }),
     });
     setSaving(false);
     if (res.ok) {
@@ -73,18 +62,17 @@ export default function EditCustomerPage() {
       toast({ type: "success", title: "Customer updated", message: "Changes saved." });
       router.push(`/sales/customers/${id}`);
     }
+    else if (res.status === 409) {
+      const d = await res.json().catch(() => ({}));
+      bustCache(`/api/customers/${id}`);
+      toast({ type: "error", title: "Update conflict", message: d?.error ?? "This customer was changed by someone else. Please reload and try again." });
+    }
     else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to update customer." }); }
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const newErrors = validateForm(form, {
-      name:    [rules.required("Customer name is required.")],
-      phone:   [rules.phone10()],
-      email:   [rules.email()],
-      pincode: [rules.pincode()],
-      gstin:   [rules.maxLength(15), rules.gstin()],
-    });
+    const newErrors = validateCustomerForm(form, { requirePhone: false });
     if (hasErrors(newErrors)) { setErrors(newErrors); return; }
     setErrors({}); setConfirmOpen(true);
   }
@@ -122,41 +110,7 @@ export default function EditCustomerPage() {
       </div>
 
       <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
-        <FormField label="Customer Name" required error={errors.name as string}>
-          <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. ABC Enterprises" disabled={disabled} />
-        </FormField>
-
-        <div className="form-grid-2">
-          <FormField label="Phone" error={errors.phone as string}>
-            <Input name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="10-digit mobile" disabled={disabled} />
-          </FormField>
-          <FormField label="Email" error={errors.email as string}>
-            <Input name="email" type="email" value={form.email} onChange={handleChange} placeholder="billing@customer.com" disabled={disabled} />
-          </FormField>
-        </div>
-
-        <FormField label="Address">
-          <Textarea name="address" rows={2} value={form.address} onChange={handleChange} placeholder="Street address, building, floor…" disabled={disabled} />
-        </FormField>
-
-        <div className="form-grid-3">
-          <FormField label="City">
-            <Input name="city" value={form.city} onChange={handleChange} placeholder="City" disabled={disabled} />
-          </FormField>
-          <FormField label="State">
-            <Select name="state" value={form.state} onChange={handleChange} disabled={disabled}>
-              <option value="">Select state</option>
-              {INDIA_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </Select>
-          </FormField>
-          <FormField label="Pincode" error={errors.pincode as string}>
-            <Input name="pincode" value={form.pincode} onChange={handleChange} placeholder="6-digit PIN" maxLength={6} disabled={disabled} />
-          </FormField>
-        </div>
-
-        <FormField label="GSTIN" hint="Leave blank if customer is unregistered." error={errors.gstin as string}>
-          <Input name="gstin" value={form.gstin} onChange={handleChange} placeholder="15-character GST number" maxLength={15} mono disabled={disabled} />
-        </FormField>
+        <CustomerFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} />
 
         <div className="form-actions-wrap">
           <div className="form-actions">

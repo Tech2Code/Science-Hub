@@ -6,39 +6,31 @@ import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
-import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
+import { ProductFormFields } from "@/components/products/ProductFormFields";
+import { validateProductForm, hasProductFieldErrors, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
-import { rules, validate } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./productEdit.module.css";
 
-const UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pack", "Set", "Mtr", "Dozen"];
-const GST_RATES = [0, 5, 12, 18, 28];
-
 interface Brand { id: string; name: string; }
 interface Category { id: string; name: string; }
-
-interface FormData {
-  name: string; sku: string; description: string; unit: string;
-  price: string; purchasePrice: string; gstRate: string; stock: string; minStock: string;
-  brandId: string; categoryId: string;
-}
 
 export default function EditProductPage() {
   const router = useRouter();
   const toast = useToast();
   const { id } = useParams<{ id: string }>();
-  const [form, setForm] = useState<FormData>({
+  const [form, setForm] = useState<ProductFormData>({
     name: "", sku: "", description: "", unit: "Nos",
     price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: "0",
     brandId: "", categoryId: "",
   });
-  const [initialForm, setInitialForm] = useState<FormData | null>(null);
+  const [initialForm, setInitialForm] = useState<ProductFormData | null>(null);
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [fieldErrors, setFieldErrors] = useState<{ name?: string; price?: string; purchasePrice?: string; stock?: string; minStock?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<ProductFieldErrors>({});
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -49,7 +41,7 @@ export default function EditProductPage() {
       fetch("/api/categories", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).catch(() => []),
     ])
       .then(([product, b, c]) => {
-        const loaded: FormData = {
+        const loaded: ProductFormData = {
           name: product.name ?? "", sku: product.sku ?? "",
           description: product.description ?? "", unit: product.unit ?? "Nos",
           price: product.price?.toString() ?? "", purchasePrice: product.purchasePrice != null ? product.purchasePrice.toString() : "",
@@ -59,6 +51,7 @@ export default function EditProductPage() {
         };
         setForm(loaded);
         setInitialForm(loaded);
+        setLoadedUpdatedAt(product.updatedAt ?? null);
         setBrands(b); setCategories(c); setLoading(false);
       })
       .catch(() => { setLoading(false); });
@@ -81,6 +74,7 @@ export default function EditProductPage() {
         gstRate: parseInt(form.gstRate),
         stock: parseInt(form.stock), minStock: parseInt(form.minStock),
         brandId: form.brandId || null, categoryId: form.categoryId || null,
+        expectedUpdatedAt: loadedUpdatedAt,
       }),
     });
     setSaving(false);
@@ -90,20 +84,19 @@ export default function EditProductPage() {
       bustCache("/api/reports?type=stock");
       toast({ type: "success", title: "Product updated", message: "Changes saved." });
       router.push(`/products/${id}`);
-    } else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to update product." }); }
+    }
+    else if (res.status === 409) {
+      const d = await res.json().catch(() => ({}));
+      bustCache(`/api/products/${id}`);
+      toast({ type: "error", title: "Update conflict", message: d?.error ?? "This product was changed by someone else. Please reload and try again." });
+    }
+    else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to update product." }); }
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const nameErr          = validate(form.name,  rules.required("Product name is required."));
-    const priceErr         = validate(form.price, rules.required("Price is required."), rules.positiveNumber("Price must be greater than 0."));
-    const purchasePriceErr = form.purchasePrice.trim() ? validate(form.purchasePrice, rules.nonNegativeNumber("Purchase price cannot be negative.")) : null;
-    const stockErr         = validate(form.stock, rules.required("Stock is required."), rules.nonNegativeNumber("Stock cannot be negative."));
-    const minStockErr      = validate(form.minStock, rules.required("Minimum stock is required."), rules.nonNegativeNumber("Minimum stock cannot be negative."));
-    if (nameErr || priceErr || purchasePriceErr || stockErr || minStockErr) {
-      setFieldErrors({ name: nameErr ?? undefined, price: priceErr ?? undefined, purchasePrice: purchasePriceErr ?? undefined, stock: stockErr ?? undefined, minStock: minStockErr ?? undefined });
-      return;
-    }
+    const errors = validateProductForm(form);
+    if (hasProductFieldErrors(errors)) { setFieldErrors(errors); return; }
     setFieldErrors({}); setConfirmOpen(true);
   }
 
@@ -140,64 +133,7 @@ export default function EditProductPage() {
       </div>
 
       <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
-        <div className="form-grid-2">
-          <FormField label="Product Name" required error={fieldErrors.name}>
-            <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. Beaker 250ml Borosilicate" disabled={disabled} />
-          </FormField>
-          <FormField label="SKU / Item Code">
-            <Input name="sku" value={form.sku} onChange={handleChange} placeholder="e.g. BKR-250-BOR" mono disabled={disabled} />
-          </FormField>
-        </div>
-
-        <FormField label="Description">
-          <Textarea name="description" rows={2} value={form.description} onChange={handleChange} placeholder="Brief product description…" disabled={disabled} />
-        </FormField>
-
-        <div className="form-grid-3">
-          <FormField label="Unit">
-            <Select name="unit" value={form.unit} onChange={handleChange} disabled={disabled}>
-              {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-            </Select>
-          </FormField>
-          <FormField label="Selling Price (₹)" required error={fieldErrors.price}>
-            <Input name="price" type="number" min="0" step="0.01" value={form.price} onChange={handleChange} placeholder="0.00" disabled={disabled} />
-          </FormField>
-          <FormField label="GST Rate">
-            <Select name="gstRate" value={form.gstRate} onChange={handleChange} disabled={disabled}>
-              {GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
-            </Select>
-          </FormField>
-        </div>
-
-        <div className="form-grid-2">
-          <FormField label="Purchase Price (₹)" hint="Used to auto-fill the rate on Purchase Bills." error={fieldErrors.purchasePrice}>
-            <Input name="purchasePrice" type="number" min="0" step="0.01" value={form.purchasePrice} onChange={handleChange} placeholder="0.00" disabled={disabled} />
-          </FormField>
-        </div>
-
-        <div className="form-grid-2">
-          <FormField label="Current Stock" error={fieldErrors.stock}>
-            <Input name="stock" type="number" min="0" value={form.stock} onChange={handleChange} disabled={disabled} />
-          </FormField>
-          <FormField label="Minimum Stock" hint="Alert triggers when stock drops to or below this." error={fieldErrors.minStock}>
-            <Input name="minStock" type="number" min="0" value={form.minStock} onChange={handleChange} disabled={disabled} />
-          </FormField>
-        </div>
-
-        <div className="form-grid-2">
-          <FormField label="Brand">
-            <Select name="brandId" value={form.brandId} onChange={handleChange} disabled={disabled}>
-              <option value="">— None —</option>
-              {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </Select>
-          </FormField>
-          <FormField label="Category">
-            <Select name="categoryId" value={form.categoryId} onChange={handleChange} disabled={disabled}>
-              <option value="">— None —</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </Select>
-          </FormField>
-        </div>
+        <ProductFormFields form={form} onChange={handleChange} fieldErrors={fieldErrors} brands={brands} categories={categories} disabled={disabled} stockLabel="Current Stock" />
 
         <div className="form-actions-wrap">
           <div className="form-actions">

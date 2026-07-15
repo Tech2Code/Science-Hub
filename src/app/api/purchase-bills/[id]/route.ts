@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
-import { recordStockMovement } from "@/lib/stockMovement";
+import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { deleteAttachmentBlob, isPurchaseBillBlobUrl } from "@/lib/blobStorage";
+import { computeRoundOff } from "@/lib/roundOff";
+import { requireSession } from "@/lib/apiAuth";
+import { purchaseBillLineBreakdown } from "@/lib/purchaseBillForm";
 
 const BILL_INCLUDE = {
   vendor: { select: { id: true, name: true, company: true, phone: true, email: true, gstin: true, address: true } },
@@ -16,8 +17,8 @@ const BILL_INCLUDE = {
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
     const { id } = await params;
     const bill = await prisma.purchaseBill.findFirst({ where: { id, deletedAt: null }, include: BILL_INCLUDE });
     if (!bill) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
@@ -29,11 +30,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
     const { id } = await params;
     const body = await req.json();
-    const { vendorId, billDate, dueDate, discount, notes, category, status, items, attachmentUrl, attachmentName } = body;
+    const { vendorId, billDate, dueDate, discount, notes, category, status, items, attachmentUrl, attachmentName, expectedUpdatedAt } = body;
 
     if (attachmentUrl && !isPurchaseBillBlobUrl(attachmentUrl)) {
       return NextResponse.json({ error: "Invalid attachment URL" }, { status: 400 });
@@ -41,6 +42,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const existing = await prisma.purchaseBill.findFirst({ where: { id, deletedAt: null } });
     if (!existing) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+    if (expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== existing.updatedAt.getTime()) {
+      return NextResponse.json({ error: "This purchase bill was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
+    }
 
     if (items !== undefined && (existing.status === "paid" || existing.status === "cancelled")) {
       return NextResponse.json(
@@ -95,20 +99,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         const purchasePrice = parseFloat(String(item.purchasePrice));
         const gstRate = parseFloat(String(item.gstRate ?? 0));
         const discountPercent = parseFloat(String(item.discountPercent ?? 0));
-        const gross = quantity * purchasePrice;
-        const discountAmount = gross * discountPercent / 100;
-        const itemSubtotal = gross - discountAmount;
-        const gstAmount = itemSubtotal * gstRate / 100;
-        return { ...item, quantity, purchasePrice, gstRate, discountPercent, discountAmount, gstAmount, total: itemSubtotal + gstAmount, itemSubtotal };
+        const { discountAmount, gstAmount, total, subtotal: itemSubtotal } =
+          purchaseBillLineBreakdown(quantity, purchasePrice, gstRate, discountPercent);
+        return { ...item, quantity, purchasePrice, gstRate, discountPercent, discountAmount, gstAmount, total, itemSubtotal };
       });
       subtotal = computedItems.reduce((s, i) => s + i.itemSubtotal, 0);
       taxAmount = computedItems.reduce((s, i) => s + i.gstAmount, 0);
     }
 
     const effectiveDiscount = discount !== undefined ? discount : existing.discount;
-    const total = subtotal !== undefined && taxAmount !== undefined
+    const rawTotal = subtotal !== undefined && taxAmount !== undefined
       ? subtotal + taxAmount - effectiveDiscount
       : existing.subtotal + existing.taxAmount - effectiveDiscount;
+    const { roundOff, roundedTotal: total } = computeRoundOff(rawTotal);
 
     if (total < 0) {
       return NextResponse.json({ error: "Total cannot be negative" }, { status: 400 });
@@ -148,23 +151,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           where: { purchaseBillId: id },
           select: { productId: true, quantity: true },
         });
-        for (const old of oldItems.filter(i => i.productId)) {
-          const product = await tx.product.update({
-            where: { id: old.productId! },
-            data: { stock: { decrement: old.quantity } },
-            select: { id: true, stock: true },
-          });
-          await recordStockMovement(tx, {
-            productId: product.id,
+        await batchAdjustStock(
+          tx,
+          oldItems.filter(i => i.productId).map((old) => ({ productId: old.productId!, quantity: -old.quantity })),
+          {
             type: "adjustment",
-            quantity: -old.quantity,
-            balanceAfter: product.stock,
             reference: existing.billNumber,
             purchaseBillId: id,
             notes: "Purchase bill edited — old items reversed",
-            createdByUserId: session.user.id,
-          });
-        }
+            createdByUserId: auth.session.user.id,
+          }
+        );
         await tx.purchaseBillItem.deleteMany({ where: { purchaseBillId: id } });
       }
 
@@ -178,6 +175,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           ...(taxAmount !== undefined && { taxAmount }),
           ...(discount !== undefined && { discount }),
           total,
+          roundOff,
           ...(notes !== undefined && { notes: notes || null }),
           ...(category !== undefined && { category: category || null }),
           ...(effectiveStatus !== undefined && { status: effectiveStatus }),
@@ -204,24 +202,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       });
 
       if (computedItems) {
-        for (const item of computedItems) {
-          if (!item.productId) continue;
-          const product = await tx.product.update({
-            where: { id: item.productId },
-            data: { stock: { increment: item.quantity } },
-            select: { id: true, stock: true },
-          });
-          await recordStockMovement(tx, {
-            productId: product.id,
+        await batchAdjustStock(
+          tx,
+          computedItems.filter(item => item.productId).map((item) => ({ productId: item.productId!, quantity: item.quantity })),
+          {
             type: "adjustment",
-            quantity: item.quantity,
-            balanceAfter: product.stock,
             reference: updated.billNumber,
             purchaseBillId: id,
             notes: "Purchase bill edited — new items applied",
-            createdByUserId: session.user.id,
-          });
-        }
+            createdByUserId: auth.session.user.id,
+          }
+        );
       }
 
       if (isCancelling || isUncancelling) {
@@ -229,23 +220,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           where: { purchaseBillId: id },
           select: { productId: true, quantity: true },
         });
-        for (const item of currentItems.filter(i => i.productId)) {
-          const product = await tx.product.update({
-            where: { id: item.productId! },
-            data: { stock: { [isCancelling ? "decrement" : "increment"]: item.quantity } },
-            select: { id: true, stock: true },
-          });
-          await recordStockMovement(tx, {
-            productId: product.id,
-            type: "adjustment",
+        await batchAdjustStock(
+          tx,
+          currentItems.filter(i => i.productId).map((item) => ({
+            productId: item.productId!,
             quantity: isCancelling ? -item.quantity : item.quantity,
-            balanceAfter: product.stock,
+          })),
+          {
+            type: "adjustment",
             reference: updated.billNumber,
             purchaseBillId: id,
             notes: isCancelling ? "Purchase bill cancelled" : "Purchase bill un-cancelled",
-            createdByUserId: session.user.id,
-          });
-        }
+            createdByUserId: auth.session.user.id,
+          }
+        );
       }
 
       return updated;
@@ -256,7 +244,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       await deleteAttachmentBlob(existing.attachmentUrl);
     }
 
-    await logActivity(session.user.id, "update_purchase_bill", `Updated purchase bill ${bill.billNumber}`, bill.id, "purchase_bill");
+    await logActivity(auth.session.user.id, "update_purchase_bill", `Updated purchase bill ${bill.billNumber}`, bill.id, "purchase_bill");
     revalidateTag("purchase-bills", { expire: 0 });
     if (isCancelling || isUncancelling || items !== undefined) {
       revalidateTag("products", { expire: 0 });
@@ -265,18 +253,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json(bill);
   } catch (err) {
     console.error("PUT /api/purchase-bills/[id] error:", err);
+    if (err instanceof ProductNotFoundError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     return NextResponse.json({ error: "Failed to update bill" }, { status: 500 });
   }
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
     const { id } = await params;
 
     // Reverse the stock this bill added at creation — and guard against a
-    // repeated delete call double-reversing it.
+    // repeated delete call double-reversing it. A cancelled bill already had
+    // its stock reversed when it was cancelled, so deleting it must not
+    // reverse it again.
     const result = await prisma.$transaction(async (tx) => {
       const updateResult = await tx.purchaseBill.updateMany({
         where: { id, deletedAt: null },
@@ -284,40 +277,39 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       });
       if (updateResult.count === 0) return null;
 
-      const items = await tx.purchaseBillItem.findMany({
-        where: { purchaseBillId: id },
-        select: { productId: true, quantity: true },
-      });
-      const bill = await tx.purchaseBill.findUnique({ where: { id }, select: { billNumber: true } });
-      for (const item of items.filter(i => i.productId)) {
-        const product = await tx.product.update({
-          where: { id: item.productId! },
-          data: { stock: { decrement: item.quantity } },
-          select: { id: true, stock: true },
+      const bill = await tx.purchaseBill.findUnique({ where: { id }, select: { billNumber: true, status: true } });
+      if (bill?.status !== "cancelled") {
+        const items = await tx.purchaseBillItem.findMany({
+          where: { purchaseBillId: id },
+          select: { productId: true, quantity: true },
         });
-        await recordStockMovement(tx, {
-          productId: product.id,
-          type: "adjustment",
-          quantity: -item.quantity,
-          balanceAfter: product.stock,
-          reference: bill?.billNumber,
-          purchaseBillId: id,
-          notes: "Purchase bill deleted",
-          createdByUserId: session.user.id,
-        });
+        await batchAdjustStock(
+          tx,
+          items.filter(i => i.productId).map((item) => ({ productId: item.productId!, quantity: -item.quantity })),
+          {
+            type: "adjustment",
+            reference: bill?.billNumber,
+            purchaseBillId: id,
+            notes: "Purchase bill deleted",
+            createdByUserId: auth.session.user.id,
+          }
+        );
       }
       return bill;
     }, { timeout: 20000, maxWait: 10000 });
 
     if (!result) return NextResponse.json({ message: "Bill already deleted" });
 
-    await logActivity(session.user.id, "delete_purchase_bill", `Deleted purchase bill ${result.billNumber}`, id, "purchase_bill");
+    await logActivity(auth.session.user.id, "delete_purchase_bill", `Deleted purchase bill ${result.billNumber}`, id, "purchase_bill");
     revalidateTag("purchase-bills", { expire: 0 });
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
     return NextResponse.json({ message: "Bill deleted" });
   } catch (err) {
     console.error("DELETE /api/purchase-bills/[id] error:", err);
+    if (err instanceof ProductNotFoundError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     return NextResponse.json({ error: "Failed to delete bill" }, { status: 500 });
   }
 }

@@ -114,8 +114,8 @@ export default function ProductViewPage() {
             <div className={styles.avatar}>
               <SkeletonSwap loading={loading} w={48} h={48} r={9999}>{product?.name?.[0]?.toUpperCase()}</SkeletonSwap>
             </div>
-            <div>
-              <h1 className="page-title"><SkeletonSwap loading={loading} w={160} h={20}>{product?.name}</SkeletonSwap></h1>
+            <div style={{ minWidth: 0 }}>
+              <h1 className="page-title" title={product?.name}><SkeletonSwap loading={loading} w={160} h={20}>{product?.name}</SkeletonSwap></h1>
               <div className={styles.metaRow}>
                 {!loading && product?.category && <span className={styles.badge}>{product.category.name}</span>}
                 {!loading && product?.brand && <span className={styles.badge}>{product.brand.name}</span>}

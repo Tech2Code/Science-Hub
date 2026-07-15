@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
@@ -127,7 +128,7 @@ export default function PurchaseReportsPage() {
   async function confirmEmptyLedger() {
     setEmptyLedgerLoading(true);
     try {
-      const res = await fetch("/api/purchase-reports?type=stock-ledger", { method: "DELETE" });
+      const res = await fetch("/api/stock-movements?type=stock-ledger", { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       setEmptyLedgerLoading(false);
       setEmptyLedgerOpen(false);
@@ -251,7 +252,7 @@ export default function PurchaseReportsPage() {
           <div className={styles.dateFilterRow}>
             <label className={styles.dateFilterLabel}>
               From
-              <input
+              <Input
                 type="date" aria-label="Start date" value={startDate} min={MIN_REPORT_DATE} max={endDate || todayStr}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -264,7 +265,7 @@ export default function PurchaseReportsPage() {
             </label>
             <label className={styles.dateFilterLabel}>
               To
-              <input
+              <Input
                 type="date" aria-label="End date" value={endDate} min={startDate || MIN_REPORT_DATE} max={todayStr}
                 onChange={(e) => setEndDate(e.target.value)}
                 onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
@@ -455,13 +456,13 @@ export default function PurchaseReportsPage() {
               </div>
             </div>
             <div className={styles.dateFilterRow}>
-              <input
+              <Input
                 type="search"
                 aria-label="Search stock ledger"
                 placeholder="Search by product, type, or reference…"
                 value={ledgerSearch}
                 onChange={(e) => { setLedgerSearch(e.target.value); setLedgerPage(1); }}
-                className="search-input"
+                className=""
               />
             </div>
             <div className="table-wrap">

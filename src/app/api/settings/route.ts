@@ -32,12 +32,17 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const {
       name, tagline, email, phone, address, city, state, pincode, gstin, pan, gmailUser, gmailAppPassword,
-      bankName, bankAccountName, bankAccountNumber, bankIfsc, bankBranch, termsAndConditions, logoUrl,
+      bankName, bankAccountName, bankAccountNumber, bankIfsc, bankBranch, termsAndConditions, logoUrl, expectedUpdatedAt,
     } = body;
     const validationError = validateSettingsInput({
       pan, termsAndConditions, phone, pincode, gstin, bankName, bankAccountNumber, bankIfsc, bankBranch,
     });
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+
+    const existing = await prisma.businessSettings.findUnique({ where: { id: "singleton" }, select: { updatedAt: true } });
+    if (existing && expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== existing.updatedAt.getTime()) {
+      return NextResponse.json({ error: "Business settings were updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
+    }
     const updateData: Record<string, string> = {
       name, tagline, email, phone, address, city, state, pincode, gstin, pan: (pan ?? "").toUpperCase(), gmailUser: gmailUser ?? "",
       bankName: bankName ?? "", bankAccountName: bankAccountName ?? "", bankIfsc: bankIfsc ?? "", bankBranch: bankBranch ?? "",

@@ -1,16 +1,25 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, Textarea, FormField } from "@/components/ui/Input";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { StatusBadge } from "@/components/ui/Badge";
 import { bustCache } from "@/lib/useCache";
+import { invalidateCachedPdf } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
 import { useDirty } from "@/lib/useDirty";
 import { animateSection } from "@/lib/animateSection";
+import { truncateFilename } from "@/lib/truncateFilename";
+import { BillDetailsCard } from "@/components/purchases/BillDetailsCard";
+import { PurchaseBillItemsTable } from "@/components/purchases/PurchaseBillItemsTable";
+import { PurchaseBillTotals } from "@/components/purchases/PurchaseBillTotals";
+import {
+  toNum, fmtCurrency, computePurchaseBillTotals, calcPurchaseBillItem,
+  type PurchaseBillLineItem, type PurchaseBillProduct, type PurchaseBillVendor,
+} from "@/lib/purchaseBillForm";
+import { computeRoundOff } from "@/lib/roundOff";
 import styles from "./edit.module.css";
 
 interface BillItem {
@@ -19,54 +28,25 @@ interface BillItem {
   product: { id: string; name: string } | null;
 }
 interface PurchaseBill {
-  id: string; billNumber: string; vendorId: string; billDate: string; dueDate: string | null;
+  id: string; billNumber: string; vendorId: string; billDate: string; dueDate: string | null; updatedAt?: string;
   category: string | null; notes: string | null; status: string;
   subtotal: number; taxAmount: number; discount: number; total: number; paidAmount: number;
   attachmentUrl: string | null; attachmentName: string | null;
   vendor: { id: string; name: string; company: string | null; gstin: string | null };
   items: BillItem[];
 }
-interface Vendor { id: string; name: string; company: string | null; }
-interface Product { id: string; name: string; sku: string | null; unit: string; price: number; purchasePrice: number | null; gstRate: number; }
 
-interface LineItem {
-  productId: string;
-  name: string;
-  unit: string;
-  quantity: string;
-  purchasePrice: string;
-  gstRate: string;
-  discountPercent: string;
-}
-
-const CATEGORIES = ["Raw Materials", "Lab Chemicals", "Lab Equipment", "Office Supplies", "Packaging", "Services", "Other"];
-const UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pack", "Set", "Mtr", "Dozen", "Pair"];
-const GST_RATES = ["0", "5", "12", "18", "28"];
-const DISCOUNT_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 40, 50];
-const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const toNum = (s: string) => { const n = parseFloat(s); return isNaN(n) ? 0 : n; };
-
-// A custom typed amount rarely lands on a preset % exactly — inject it into
-// the option list (rounded to 2dp) so the select actually shows/highlights
-// it instead of falling back to blank.
-function discountOptionsFor(percent: number) {
-  const rounded = Math.round(percent * 100) / 100;
-  if (DISCOUNT_OPTIONS.includes(rounded)) return DISCOUNT_OPTIONS;
-  return [...DISCOUNT_OPTIONS, rounded].sort((a, b) => a - b);
-}
-
-// Discount is applied to the line's gross amount (qty × rate) before GST —
-// taxable value = gross - discount, and GST is computed on that taxable value.
-function calcItem(item: LineItem) {
-  const qty     = toNum(item.quantity);
-  const price   = toNum(item.purchasePrice);
-  const rate    = toNum(item.gstRate);
-  const percent = toNum(item.discountPercent);
-  const gross           = qty * price;
-  const discountAmount  = gross * percent / 100;
-  const subtotal  = gross - discountAmount;
-  const gstAmount = subtotal * rate / 100;
-  return { gross, discountAmount, subtotal, gstAmount, total: subtotal + gstAmount };
+function loadedItemsToLineItems(items: BillItem[]): PurchaseBillLineItem[] {
+  return items.map((item, idx) => ({
+    key: `loaded-${item.id ?? idx}`,
+    productId: item.product?.id ?? "",
+    name: item.name,
+    unit: item.unit,
+    quantity: String(item.quantity),
+    purchasePrice: String(item.purchasePrice),
+    gstRate: String(item.gstRate),
+    discountPercent: String(item.discountPercent ?? 0),
+  }));
 }
 
 function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
@@ -90,8 +70,8 @@ export default function EditPurchaseBillPage() {
   const router = useRouter();
   const toast  = useToast();
 
-  const [vendors,  setVendors]  = useState<Vendor[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [vendors,  setVendors]  = useState<PurchaseBillVendor[]>([]);
+  const [products, setProducts] = useState<PurchaseBillProduct[]>([]);
   const [bill,    setBill]    = useState<PurchaseBill | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
@@ -103,7 +83,7 @@ export default function EditPurchaseBillPage() {
   const [category,  setCategory]  = useState("");
   const [notes,     setNotes]     = useState("");
   const [discount,  setDiscount]  = useState("0");
-  const [items,     setItems]     = useState<LineItem[]>([]);
+  const [items,     setItems]     = useState<PurchaseBillLineItem[]>([]);
   const [attachmentUrl,  setAttachmentUrl]  = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
@@ -112,6 +92,7 @@ export default function EditPurchaseBillPage() {
   // so an unsaved upload that gets replaced/removed can be discarded right
   // away instead of orphaning in Blob storage until someone notices.
   const originalAttachmentUrl = useRef<string | null>(null);
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
 
   const { isDirty, markClean } = useDirty({
     vendorId, billDate, dueDate, category, notes, discount, items, attachmentUrl, attachmentName,
@@ -132,18 +113,12 @@ export default function EditPurchaseBillPage() {
       setCategory(b.category ?? "");
       setNotes(b.notes ?? "");
       setDiscount(String(b.discount ?? 0));
-      setItems((b.items ?? []).map((item: BillItem) => ({
-        productId: item.product?.id ?? "",
-        name: item.name,
-        unit: item.unit,
-        quantity: String(item.quantity),
-        purchasePrice: String(item.purchasePrice),
-        gstRate: String(item.gstRate),
-        discountPercent: String(item.discountPercent ?? 0),
-      })));
+      const lineItems = loadedItemsToLineItems(b.items ?? []);
+      setItems(lineItems);
       setAttachmentUrl(b.attachmentUrl ?? null);
       setAttachmentName(b.attachmentName ?? null);
       originalAttachmentUrl.current = b.attachmentUrl ?? null;
+      setLoadedUpdatedAt(b.updatedAt ?? null);
       // Snapshot the freshly-loaded values directly rather than relying on
       // the state set above — those updates haven't committed yet at this
       // point in the callback, so reading them back here would be stale.
@@ -154,15 +129,7 @@ export default function EditPurchaseBillPage() {
         category: b.category ?? "",
         notes: b.notes ?? "",
         discount: String(b.discount ?? 0),
-        items: (b.items ?? []).map((item: BillItem) => ({
-          productId: item.product?.id ?? "",
-          name: item.name,
-          unit: item.unit,
-          quantity: String(item.quantity),
-          purchasePrice: String(item.purchasePrice),
-          gstRate: String(item.gstRate),
-          discountPercent: String(item.discountPercent ?? 0),
-        })),
+        items: lineItems,
         attachmentUrl: b.attachmentUrl ?? null,
         attachmentName: b.attachmentName ?? null,
       });
@@ -196,6 +163,7 @@ export default function EditPurchaseBillPage() {
         discardIfUnsaved(attachmentUrl);
         setAttachmentUrl(data.url);
         setAttachmentName(data.name);
+        toast({ type: "success", title: "File uploaded", message: `${truncateFilename(data.name)} uploaded successfully.` });
       } else {
         toast({ type: "error", title: "Upload failed", message: data.error ?? "Could not upload file." });
       }
@@ -212,80 +180,10 @@ export default function EditPurchaseBillPage() {
     setAttachmentName(null);
   }
 
-  const handleItemChange = useCallback((idx: number, field: keyof LineItem, value: string) => {
-    // Typing a name that exactly matches an existing catalog product (and
-    // this row isn't already linked) auto-links it — otherwise the item
-    // stays unlinked even though it's the same product, which both skips
-    // its stock update and risks creating a duplicate catalog entry.
-    if (field === "name" && !items[idx]?.productId) {
-      const match = products.find(p => p.name.trim().toLowerCase() === value.trim().toLowerCase());
-      if (match) {
-        const rate = match.purchasePrice ?? match.price;
-        setItems(prev => {
-          const next = [...prev];
-          next[idx] = {
-            ...next[idx],
-            name: value,
-            productId: match.id,
-            unit: match.unit,
-            purchasePrice: rate != null ? String(rate) : next[idx].purchasePrice,
-            gstRate: String(match.gstRate),
-          };
-          return next;
-        });
-        toast({ type: "success", title: "Linked to catalog", message: `Matched existing product "${match.name}".` });
-        return;
-      }
-    }
-    setItems(prev => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], [field]: value };
-      return next;
-    });
-  }, [items, products, toast]);
-
-  // Typing a flat ₹ amount is just another way to set discountPercent — it's
-  // converted against that line's gross (qty × rate) so the stored value
-  // stays a percentage, same as the sales invoice form.
-  function setItemDiscountAmount(idx: number, amountStr: string) {
-    const amount = toNum(amountStr);
-    setItems(prev => prev.map((item, i) => {
-      if (i !== idx) return item;
-      const gross = toNum(item.quantity) * toNum(item.purchasePrice);
-      const discountPercent = gross > 0 ? Math.min(100, Math.max(0, (amount / gross) * 100)) : 0;
-      return { ...item, discountPercent: String(discountPercent) };
-    }));
-  }
-
-  const handleProductSelect = useCallback((idx: number, productId: string) => {
-    const product = products.find(p => p.id === productId);
-    setItems(prev => {
-      const next = [...prev];
-      if (product) {
-        const rate = product.purchasePrice ?? product.price;
-        next[idx] = {
-          ...next[idx],
-          productId: product.id,
-          name: product.name,
-          unit: product.unit,
-          purchasePrice: rate != null ? String(rate) : next[idx].purchasePrice,
-          gstRate: String(product.gstRate),
-        };
-      } else {
-        next[idx] = { ...next[idx], productId: "", name: "" };
-      }
-      return next;
-    });
-  }, [products]);
-
-  function addItem() { setItems(prev => [...prev, { productId: "", name: "", unit: "Pcs", quantity: "1", purchasePrice: "", gstRate: "18", discountPercent: "0" }]); }
-  function removeItem(idx: number) { setItems(prev => prev.filter((_, i) => i !== idx)); }
-
-  const grossTotal = items.reduce((s, i) => s + calcItem(i).gross, 0);
-  const itemDiscountTotal = items.reduce((s, i) => s + calcItem(i).discountAmount, 0);
-  const subtotal   = items.reduce((s, i) => s + calcItem(i).subtotal, 0);
-  const taxTotal   = items.reduce((s, i) => s + calcItem(i).gstAmount, 0);
-  const computedTotal = subtotal + taxTotal - toNum(discount);
+  const { grossTotal, itemDiscountTotal, taxTotal } = computePurchaseBillTotals(items, "0");
+  const subtotal = grossTotal - itemDiscountTotal;
+  const rawTotal = subtotal + taxTotal - toNum(discount);
+  const { roundOff, roundedTotal: computedTotal } = computeRoundOff(rawTotal);
   const outstanding   = bill ? computedTotal - bill.paidAmount : 0;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -312,18 +210,22 @@ export default function EditPurchaseBillPage() {
         discount: toNum(discount),
         attachmentUrl,
         attachmentName,
-        items: items.map(i => ({
-          productId:       i.productId || null,
-          name:            i.name.trim(),
-          unit:            i.unit,
-          quantity:        toNum(i.quantity),
-          purchasePrice:   toNum(i.purchasePrice),
-          discountPercent: toNum(i.discountPercent),
-          gstRate:         toNum(i.gstRate),
-          discountAmount:  calcItem(i).discountAmount,
-          gstAmount:       calcItem(i).gstAmount,
-          total:           calcItem(i).total,
-        })),
+        expectedUpdatedAt: loadedUpdatedAt,
+        items: items.map(i => {
+          const { discountAmount, gstAmount, total } = calcPurchaseBillItem(i);
+          return {
+            productId:       i.productId || null,
+            name:            i.name.trim(),
+            unit:            i.unit,
+            quantity:        toNum(i.quantity),
+            purchasePrice:   toNum(i.purchasePrice),
+            discountPercent: toNum(i.discountPercent),
+            gstRate:         toNum(i.gstRate),
+            discountAmount,
+            gstAmount,
+            total,
+          };
+        }),
       };
       const res = await fetch(`/api/purchase-bills/${id}`, {
         method: "PUT",
@@ -334,8 +236,13 @@ export default function EditPurchaseBillPage() {
       if (res.ok) {
         bustCache("/api/purchase-bills");
         bustCache(`/api/purchase-bills/${id}`);
+        bustCache("/api/products");
+        invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Bill updated", message: "Changes saved successfully." });
         router.push(`/purchases/bills/${id}`);
+      } else if (res.status === 409) {
+        bustCache(`/api/purchase-bills/${id}`);
+        toast({ type: "error", title: "Update conflict", message: data.error ?? "This bill was changed by someone else. Please reload and try again." });
       } else {
         toast({ type: "error", title: "Failed to save", message: data.error ?? "Failed to update bill." });
       }
@@ -421,180 +328,52 @@ export default function EditPurchaseBillPage() {
       {/* Summary stats */}
       {bill && (
         <div {...animateSection(0, styles.statGrid)}>
-          <StatCard label="Subtotal"    value={`₹${fmt(grossTotal)}`} />
-          {itemDiscountTotal > 0 && <StatCard label="Item Discount" value={`−₹${fmt(itemDiscountTotal)}`} />}
-          <StatCard label="GST"         value={`₹${fmt(taxTotal)}`} />
-          <StatCard label="Paid"        value={`₹${fmt(bill.paidAmount)}`} />
-          <StatCard label="Outstanding" value={`₹${fmt(outstanding)}`} sub={outstanding <= 0 ? "Cleared" : undefined} />
+          <StatCard label="Paid"        value={`₹${fmtCurrency(bill.paidAmount)}`} />
+          <StatCard label="Outstanding" value={`₹${fmtCurrency(outstanding)}`} sub={outstanding <= 0 ? "Cleared" : undefined} />
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="form-stack">
 
-        {/* Editable fields */}
-        <div {...animateSection(1, "form-card")}>
-          <h2 className="form-section-title">Bill Details</h2>
+        <BillDetailsCard
+          sectionIndex={1}
+          vendors={vendors}
+          vendorId={vendorId}
+          onVendorIdChange={setVendorId}
+          onVendorCreated={(v) => setVendors(prev => [...prev, v])}
+          category={category}
+          onCategoryChange={setCategory}
+          billDate={billDate}
+          onBillDateChange={setBillDate}
+          dueDate={dueDate}
+          onDueDateChange={setDueDate}
+          notes={notes}
+          onNotesChange={setNotes}
+          attachmentUploading={attachmentUploading}
+          attachmentName={attachmentName}
+          attachmentUrl={attachmentUrl}
+          onAttachmentFileChange={handleAttachmentChange}
+          onAttachmentRemove={removeAttachment}
+        />
 
-          <FormField label="Vendor" required>
-            <Select value={vendorId} onChange={e => setVendorId(e.target.value)}>
-              <option value="">Select a vendor…</option>
-              {vendors.map(v => (
-                <option key={v.id} value={v.id}>{v.name}{v.company ? ` — ${v.company}` : ""}</option>
-              ))}
-            </Select>
-          </FormField>
+        <PurchaseBillItemsTable
+          sectionIndex={2}
+          products={products}
+          setProducts={setProducts}
+          items={items}
+          setItems={setItems}
+        />
 
-          <div className="form-grid-2">
-            <FormField label="Bill Date" required>
-              <Input type="date" value={billDate} onChange={e => setBillDate(e.target.value)} />
-            </FormField>
-            <FormField label="Due Date">
-              <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} min={billDate} />
-            </FormField>
-          </div>
-
-          <FormField label="Category">
-            <Select value={category} onChange={e => setCategory(e.target.value)}>
-              <option value="">— None —</option>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </Select>
-          </FormField>
-
-          <FormField label="Notes">
-            <Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes…" />
-          </FormField>
-
-          <FormField label="Attachment (bill copy / receipt)">
-            {attachmentUploading ? (
-              <span className={styles.attachmentUploading}>Uploading…</span>
-            ) : attachmentName ? (
-              <div className={styles.attachmentRow}>
-                {attachmentUrl && <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className={styles.attachmentLink}>{attachmentName}</a>}
-                <button type="button" onClick={removeAttachment} className={styles.attachmentRemoveBtn}>Remove</button>
-              </div>
-            ) : (
-              <label className={styles.attachmentPicker}>
-                <span className={styles.attachmentPickerBtn}>Choose File</span>
-                <span className={styles.attachmentPickerHint}>No file chosen</span>
-                <input
-                  type="file"
-                  accept="application/pdf,image/*"
-                  onChange={handleAttachmentChange}
-                  className={styles.attachmentPickerInput}
-                />
-              </label>
-            )}
-          </FormField>
-        </div>
-
-        {/* Line items */}
-        <div {...animateSection(2, "form-card")}>
-          <div className={styles.itemsSectionHeaderRow}>
-            <h2 className={`form-section-title ${styles.itemsSectionTitle}`}>Items</h2>
-            <Button type="button" variant="secondary" size="sm" onClick={addItem}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add Item
-            </Button>
-          </div>
-
-          <div className={styles.tableScroll}>
-            <table className={styles.itemsTable}>
-              <thead>
-                <tr>
-                  {["Product (optional)", "Item Name", "Unit", "Qty", "Rate (₹)", "Discount", "GST %", "Amount", ""].map(h => (
-                    <th key={h} className={h === "Amount" ? styles.itemsThRight : styles.itemsTh}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, idx) => {
-                  const { discountAmount, total } = calcItem(item);
-                  return (
-                    <tr key={idx} className={styles.itemsRow}>
-                      <td className={styles.itemsTdName}>
-                        <Select sz="sm" value={item.productId} onChange={e => handleProductSelect(idx, e.target.value)}>
-                          <option value="">— Select —</option>
-                          {products.map(p => <option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ""}</option>)}
-                        </Select>
-                      </td>
-                      <td className={styles.itemsTdItemName}>
-                        <Input sz="sm" value={item.name} onChange={e => handleItemChange(idx, "name", e.target.value)} placeholder="Item name" required />
-                      </td>
-                      <td className={styles.itemsTdUnit}>
-                        <Select sz="sm" value={item.unit} onChange={e => handleItemChange(idx, "unit", e.target.value)}>
-                          {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                        </Select>
-                      </td>
-                      <td className={styles.itemsTd}>
-                        <Input sz="sm" type="number" min="1" step="1" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} />
-                      </td>
-                      <td className={styles.itemsTd}>
-                        <Input sz="sm" type="text" inputMode="decimal" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" />
-                      </td>
-                      <td className={styles.discountTd}>
-                        <div className={styles.discountStack}>
-                          <Select sz="sm" value={Math.round(toNum(item.discountPercent) * 100) / 100} onChange={e => handleItemChange(idx, "discountPercent", e.target.value)}>
-                            {discountOptionsFor(toNum(item.discountPercent)).map(d => <option key={d} value={d}>{d}%</option>)}
-                          </Select>
-                          <Input
-                            sz="sm" type="text" inputMode="decimal"
-                            value={discountAmount > 0 ? Math.round(discountAmount * 100) / 100 : ""}
-                            onChange={e => setItemDiscountAmount(idx, e.target.value)}
-                            placeholder="₹0"
-                            title="Flat discount amount"
-                          />
-                        </div>
-                      </td>
-                      <td className={styles.itemsTdGst}>
-                        <Select sz="sm" value={item.gstRate} onChange={e => handleItemChange(idx, "gstRate", e.target.value)}>
-                          {GST_RATES.map(r => <option key={r} value={r}>{r}%</option>)}
-                        </Select>
-                      </td>
-                      <td className={styles.itemsTdTotal}>₹{fmt(total)}</td>
-                      <td className={styles.itemsTdAction}>
-                        <button
-                          type="button"
-                          onClick={() => removeItem(idx)}
-                          disabled={items.length <= 1}
-                          title="Remove item"
-                          className={items.length <= 1 ? styles.removeItemBtnDisabled : styles.removeItemBtn}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Discount & revised total */}
-        <div {...animateSection(3, "form-card")}>
-          <h2 className="form-section-title">Discount Adjustment</h2>
-          <div className={styles.discountRow}>
-            <div className={styles.discountField}>
-              <FormField label="Discount (₹)">
-                <Input
-                  type="number" min="0" step="0.01"
-                  value={discount}
-                  onChange={e => setDiscount(e.target.value)}
-                  placeholder="0.00"
-                />
-              </FormField>
-            </div>
-            <div className={styles.totalBlock}>
-              <div className={styles.totalLabel}>Revised Total</div>
-              <div className={styles.totalValue}>₹{fmt(computedTotal)}</div>
-              {toNum(discount) > 0 && (
-                <div className={styles.totalSub}>
-                  ₹{fmt(subtotal + taxTotal)} − ₹{fmt(toNum(discount))} discount
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <PurchaseBillTotals
+          sectionIndex={3}
+          grossTotal={grossTotal}
+          itemDiscountTotal={itemDiscountTotal}
+          taxTotal={taxTotal}
+          roundOff={roundOff}
+          grandTotal={computedTotal}
+          discount={discount}
+          onDiscountChange={setDiscount}
+        />
 
         <div className="form-actions">
           <Button type="submit" variant="primary" disabled={saving || !isDirty} title={!isDirty ? "No changes to save" : undefined}>

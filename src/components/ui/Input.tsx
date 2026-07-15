@@ -2,6 +2,8 @@
 
 import React, { useId } from "react";
 import styles from "./Input.module.css";
+import { DateInput } from "./DatePicker";
+export { Select } from "./Select";
 
 /* ── Input ─────────────────────────────────── */
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -10,6 +12,12 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   function Input({ mono, sz, className, type, onWheel, onClick, ...props }, ref) {
+    if (type === "date") {
+      // Custom calendar dropdown — see DatePicker.tsx. onClick was only ever
+      // used to force the native picker open; irrelevant once there's no
+      // native picker to open.
+      return <DateInput ref={ref} sz={sz} className={className} {...props} />;
+    }
     const cls = [styles.input, mono && styles.mono, sz === "sm" && styles.sm, className]
       .filter(Boolean).join(" ");
     // Scrolling the page with the cursor over a focused number input silently
@@ -20,14 +28,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     const handleWheel = type === "number"
       ? (e: React.WheelEvent<HTMLInputElement>) => { onWheel?.(e); e.currentTarget.blur(); }
       : onWheel;
-    // Native date inputs only pop the calendar open when you hit the tiny
-    // icon — clicking anywhere else in the box just places a text caret.
-    // showPicker() (Chromium/Edge; no-op elsewhere) makes the whole field
-    // open the calendar like the rest of the app's click targets do.
-    const handleClick = type === "date"
-      ? (e: React.MouseEvent<HTMLInputElement>) => { onClick?.(e); try { e.currentTarget.showPicker?.(); } catch { /* unsupported or not focusable — icon click still works */ } }
-      : onClick;
-    return <input ref={ref} type={type} className={cls} onWheel={handleWheel} onClick={handleClick} {...props} />;
+    return <input ref={ref} type={type} className={cls} onWheel={handleWheel} onClick={onClick} {...props} />;
   }
 );
 
@@ -38,15 +39,6 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
 export function Textarea({ sz, className, ...props }: TextareaProps) {
   const cls = [styles.textarea, sz === "sm" && styles.sm, className].filter(Boolean).join(" ");
   return <textarea className={cls} {...props} />;
-}
-
-/* ── Select ────────────────────────────────── */
-interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
-  sz?: "sm" | "md";
-}
-export function Select({ sz, className, ...props }: SelectProps) {
-  const cls = [styles.select, sz === "sm" && styles.sm, className].filter(Boolean).join(" ");
-  return <select className={cls} {...props} />;
 }
 
 /* ── FormField wrapper ─────────────────────── */

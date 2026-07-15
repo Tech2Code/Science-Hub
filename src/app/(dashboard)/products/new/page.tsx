@@ -1,19 +1,16 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
-import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
+import { ProductFormFields } from "@/components/products/ProductFormFields";
+import { validateProductForm, hasProductFieldErrors, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
-import { rules, validate } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./productNew.module.css";
-
-const UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pack", "Set", "Mtr", "Dozen"];
-const GST_RATES = [0, 5, 12, 18, 28];
 
 interface Brand { id: string; name: string; }
 interface Category { id: string; name: string; }
@@ -23,12 +20,12 @@ export default function NewProductPage() {
   const toast = useToast();
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<ProductFormData>({
     name: "", sku: "", description: "", unit: "Nos",
     price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: "5",
     brandId: "", categoryId: "",
   });
-  const [fieldErrors, setFieldErrors] = useState<{ name?: string; price?: string; purchasePrice?: string; stock?: string; minStock?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<ProductFieldErrors>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -44,15 +41,8 @@ export default function NewProductPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const nameErr          = validate(form.name,  rules.required("Product name is required."));
-    const priceErr         = validate(form.price, rules.required("Price is required."), rules.positiveNumber("Price must be greater than 0."));
-    const purchasePriceErr = form.purchasePrice.trim() ? validate(form.purchasePrice, rules.nonNegativeNumber("Purchase price cannot be negative.")) : null;
-    const stockErr         = validate(form.stock, rules.required("Stock is required."), rules.nonNegativeNumber("Stock cannot be negative."));
-    const minStockErr      = validate(form.minStock, rules.required("Minimum stock is required."), rules.nonNegativeNumber("Minimum stock cannot be negative."));
-    if (nameErr || priceErr || purchasePriceErr || stockErr || minStockErr) {
-      setFieldErrors({ name: nameErr ?? undefined, price: priceErr ?? undefined, purchasePrice: purchasePriceErr ?? undefined, stock: stockErr ?? undefined, minStock: minStockErr ?? undefined });
-      return;
-    }
+    const errors = validateProductForm(form);
+    if (hasProductFieldErrors(errors)) { setFieldErrors(errors); return; }
     setFieldErrors({}); setSaving(true);
     const res = await fetch("/api/products", {
       method: "POST",
@@ -89,64 +79,7 @@ export default function NewProductPage() {
         <p className="page-sub">Add a product or item to your catalog</p>
       </div>
       <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
-        <div className="form-grid-2">
-          <FormField label="Product Name" required error={fieldErrors.name}>
-            <Input name="name" value={form.name} onChange={handleChange} placeholder="e.g. Beaker 250ml Borosilicate" />
-          </FormField>
-          <FormField label="SKU / Item Code">
-            <Input name="sku" value={form.sku} onChange={handleChange} placeholder="e.g. BKR-250-BOR" mono />
-          </FormField>
-        </div>
-
-        <FormField label="Description">
-          <Textarea name="description" rows={2} value={form.description} onChange={handleChange} placeholder="Brief product description…" />
-        </FormField>
-
-        <div className="form-grid-3">
-          <FormField label="Unit">
-            <Select name="unit" value={form.unit} onChange={handleChange}>
-              {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-            </Select>
-          </FormField>
-          <FormField label="Selling Price (₹)" required error={fieldErrors.price}>
-            <Input name="price" type="number" min="0" step="0.01" value={form.price} onChange={handleChange} placeholder="0.00" />
-          </FormField>
-          <FormField label="GST Rate">
-            <Select name="gstRate" value={form.gstRate} onChange={handleChange}>
-              {GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
-            </Select>
-          </FormField>
-        </div>
-
-        <div className="form-grid-2">
-          <FormField label="Purchase Price (₹)" hint="Used to auto-fill the rate on Purchase Bills." error={fieldErrors.purchasePrice}>
-            <Input name="purchasePrice" type="number" min="0" step="0.01" value={form.purchasePrice} onChange={handleChange} placeholder="0.00" />
-          </FormField>
-        </div>
-
-        <div className="form-grid-2">
-          <FormField label="Opening Stock" error={fieldErrors.stock}>
-            <Input name="stock" type="number" min="0" value={form.stock} onChange={handleChange} />
-          </FormField>
-          <FormField label="Minimum Stock" hint="Alert triggers when stock drops to or below this." error={fieldErrors.minStock}>
-            <Input name="minStock" type="number" min="0" value={form.minStock} onChange={handleChange} />
-          </FormField>
-        </div>
-
-        <div className="form-grid-2">
-          <FormField label="Brand">
-            <Select name="brandId" value={form.brandId} onChange={handleChange}>
-              <option value="">— None —</option>
-              {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </Select>
-          </FormField>
-          <FormField label="Category">
-            <Select name="categoryId" value={form.categoryId} onChange={handleChange}>
-              <option value="">— None —</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </Select>
-          </FormField>
-        </div>
+        <ProductFormFields form={form} onChange={handleChange} fieldErrors={fieldErrors} brands={brands} categories={categories} />
 
         <div className="form-actions">
           <Button type="submit" variant="primary" disabled={saving}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Save Product</Button>

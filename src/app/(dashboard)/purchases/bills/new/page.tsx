@@ -1,104 +1,32 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, Textarea, FormField } from "@/components/ui/Input";
+import { Input, Select, FormField } from "@/components/ui/Input";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
-import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
+import { BillDetailsCard } from "@/components/purchases/BillDetailsCard";
+import { PurchaseBillItemsTable } from "@/components/purchases/PurchaseBillItemsTable";
+import { PurchaseBillTotals } from "@/components/purchases/PurchaseBillTotals";
+import {
+  makeBlankPurchaseBillItem, toNum, fmtCurrency, computePurchaseBillTotals, calcPurchaseBillItem,
+  type PurchaseBillLineItem, type PurchaseBillProduct, type PurchaseBillVendor,
+} from "@/lib/purchaseBillForm";
 import styles from "./billNew.module.css";
 
-interface Vendor { id: string; name: string; company: string | null; gstin: string | null; }
-interface Product { id: string; name: string; sku: string | null; unit: string; price: number; purchasePrice: number | null; gstRate: number; }
-
-interface LineItem {
-  key: string;
-  productId: string;
-  name: string;
-  unit: string;
-  quantity: string;
-  purchasePrice: string;
-  gstRate: string;
-  discountPercent: string;
-}
-
-type InlineVendorForm = { name: string; phone: string; email: string; gstin: string; address: string };
-// A stable per-row id, separate from array index — the catalogSalePrice/
-// catalogMarginPct/catalogSaving state below is keyed by this so removing a
-// row can't silently misapply another row's saved margin/price after the
-// array shifts.
-let itemKeySeq = 0;
-function makeBlankItem(): LineItem {
-  itemKeySeq += 1;
-  return { key: `item-${itemKeySeq}`, productId: "", name: "", unit: "Pcs", quantity: "1", purchasePrice: "", gstRate: "18", discountPercent: "0" };
-}
-const UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pack", "Set", "Mtr", "Dozen", "Pair"];
-const GST_RATES = ["0", "5", "12", "18", "28"];
-const CATEGORIES = ["Raw Materials", "Lab Chemicals", "Lab Equipment", "Office Supplies", "Packaging", "Services", "Other"];
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
-const MARGIN_PRESETS = ["10", "15", "20", "25", "30", "40", "50"];
-const DISCOUNT_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 40, 50];
-
-// A custom typed amount rarely lands on a preset % exactly — inject it into
-// the option list (rounded to 2dp) so the select actually shows/highlights
-// it instead of falling back to blank.
-function discountOptionsFor(percent: number) {
-  const rounded = Math.round(percent * 100) / 100;
-  if (DISCOUNT_OPTIONS.includes(rounded)) return DISCOUNT_OPTIONS;
-  return [...DISCOUNT_OPTIONS, rounded].sort((a, b) => a - b);
-}
-
-function toNum(s: string) { const n = parseFloat(s); return isNaN(n) ? 0 : n; }
-const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-// Discount is applied to the line's gross amount (qty × rate) before GST —
-// taxable value = gross - discount, and GST is computed on that taxable value.
-// Mirrors the sales invoice line calculation for consistency.
-function calcItem(item: LineItem) {
-  const qty     = toNum(item.quantity);
-  const price   = toNum(item.purchasePrice);
-  const rate    = toNum(item.gstRate);
-  const percent = toNum(item.discountPercent);
-  const gross           = qty * price;
-  const discountAmount  = gross * percent / 100;
-  const subtotal  = gross - discountAmount;
-  const gstAmount = subtotal * rate / 100;
-  return { gross, discountAmount, subtotal, gstAmount, total: subtotal + gstAmount };
-}
 
 export default function NewPurchaseBillPage() {
   const router = useRouter();
   const toast  = useToast();
 
-  const [vendors,  setVendors]  = useState<Vendor[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [vendors,  setVendors]  = useState<PurchaseBillVendor[]>([]);
+  const [products, setProducts] = useState<PurchaseBillProduct[]>([]);
   const [saving,   setSaving]   = useState(false);
-
-  // Inline vendor creation state (shown when scan finds vendor not in DB)
-  const [showVendorCreate, setShowVendorCreate] = useState(false);
-  const [ivName,    setIvName]    = useState("");
-  const [ivCompany, setIvCompany] = useState("");
-  const [ivGstin,   setIvGstin]   = useState("");
-  const [ivPhone,   setIvPhone]   = useState("");
-  const [ivEmail,   setIvEmail]   = useState("");
-  const [ivAddress, setIvAddress] = useState("");
-  const [ivSaving,  setIvSaving]  = useState(false);
-  const [ivError,   setIvError]   = useState("");
-  const [ivFieldErrors, setIvFieldErrors] = useState<FormErrors<InlineVendorForm>>({});
-
-  // Catalog save state: set of item keys currently being saved
-  const [catalogSaving, setCatalogSaving] = useState<Set<string>>(new Set());
-  // Selling price entered per unmatched-item row before "Save to catalog" —
-  // without this the product would be created with sale price == purchase
-  // price (zero margin), since the purchase-bill form never asks for one.
-  const [catalogSalePrice, setCatalogSalePrice] = useState<Record<string, string>>({});
-  // Margin % preset per row — picking one derives the sale price from cost;
-  // typing the sale price directly clears this back to "Custom".
-  const [catalogMarginPct, setCatalogMarginPct] = useState<Record<string, string>>({});
 
   const [vendorId,  setVendorId]  = useState("");
   const [billDate,  setBillDate]  = useState(() => new Date().toISOString().slice(0, 10));
@@ -106,7 +34,7 @@ export default function NewPurchaseBillPage() {
   const [category,  setCategory]  = useState("");
   const [discount,  setDiscount]  = useState("0");
   const [notes,     setNotes]     = useState("");
-  const [items,     setItems]     = useState<LineItem[]>(() => [makeBlankItem()]);
+  const [items,     setItems]     = useState<PurchaseBillLineItem[]>(() => [makeBlankPurchaseBillItem()]);
   const [attachmentUrl,  setAttachmentUrl]  = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
@@ -123,180 +51,9 @@ export default function NewPurchaseBillPage() {
     fetch("/api/products", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then(setProducts).catch(() => {});
   }, []);
 
-  async function handleCreateInlineVendor() {
-    const newErrors = validateForm<InlineVendorForm>({ name: ivName, phone: ivPhone, email: ivEmail, gstin: ivGstin, address: ivAddress }, {
-      name:    [rules.required("Vendor name is required.")],
-      phone:   [rules.required("Phone number is required."), rules.phone10()],
-      email:   [rules.email()],
-      gstin:   [rules.maxLength(15), rules.gstin()],
-      address: [rules.required("Address is required.")],
-    });
-    if (hasErrors(newErrors)) { setIvFieldErrors(newErrors); return; }
-    setIvFieldErrors({});
-    setIvSaving(true); setIvError("");
-    try {
-      const res = await fetch("/api/vendors", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name:    ivName.trim(),
-          company: ivCompany.trim() || null,
-          gstin:   ivGstin.trim() || null,
-          phone:   ivPhone.trim() || null,
-          email:   ivEmail.trim() || null,
-          address: ivAddress.trim() || null,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setVendors(prev => [...prev, data]);
-        setVendorId(data.id);
-        setShowVendorCreate(false);
-        bustCache("/api/vendors");
-        toast({ type: "success", title: "Vendor created", message: `${data.name} added and selected.` });
-      } else {
-        setIvError(data.error ?? "Failed to create vendor.");
-      }
-    } catch {
-      setIvError("Network error — please try again.");
-    }
-    setIvSaving(false);
-  }
-
-  function handleCatalogSalePriceChange(key: string, value: string) {
-    setCatalogSalePrice(prev => ({ ...prev, [key]: value }));
-    setCatalogMarginPct(prev => ({ ...prev, [key]: "" }));
-  }
-
-  function handleCatalogMarginChange(key: string, cost: string, pct: string) {
-    setCatalogMarginPct(prev => ({ ...prev, [key]: pct }));
-    if (pct === "") return;
-    setCatalogSalePrice(prev => ({ ...prev, [key]: (toNum(cost) * (1 + toNum(pct) / 100)).toFixed(2) }));
-  }
-
-  async function handleAddToCatalog(idx: number) {
-    const item = items[idx];
-    if (!item.name.trim()) return;
-    const salePrice = toNum(catalogSalePrice[item.key] ?? item.purchasePrice);
-    setCatalogSaving(prev => new Set(prev).add(item.key));
-    try {
-      const res = await fetch("/api/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name:          item.name.trim(),
-          unit:          item.unit,
-          price:         salePrice,
-          purchasePrice: toNum(item.purchasePrice),
-          gstRate:       toNum(item.gstRate),
-          stock:    0,
-          minStock: 0,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setProducts(prev => [...prev, data]);
-        setItems(prev => {
-          const next = [...prev];
-          const i = next.findIndex(x => x.key === item.key);
-          if (i !== -1) next[i] = { ...next[i], productId: data.id };
-          return next;
-        });
-        bustCache("/api/products");
-        toast({ type: "success", title: "Saved to catalog", message: `${data.name} added as a product.` });
-      } else {
-        toast({ type: "error", title: "Failed", message: data.error ?? "Could not save to catalog." });
-      }
-    } catch {
-      toast({ type: "error", title: "Error", message: "Network error — please try again." });
-    }
-    setCatalogSaving(prev => { const s = new Set(prev); s.delete(item.key); return s; });
-  }
-
-  const grossTotal      = items.reduce((s, i) => s + calcItem(i).gross, 0);
-  const itemDiscountTotal = items.reduce((s, i) => s + calcItem(i).discountAmount, 0);
-  const subtotal   = items.reduce((s, i) => s + calcItem(i).subtotal, 0);
-  const taxTotal   = items.reduce((s, i) => s + calcItem(i).gstAmount, 0);
-  const disc       = toNum(discount);
-  const grandTotal = subtotal + taxTotal - disc;
-
-  const handleItemChange = useCallback((idx: number, field: keyof LineItem, value: string) => {
-    // Typing a name that exactly matches an existing catalog product (and
-    // this row isn't already linked) auto-links it — otherwise the item
-    // stays unlinked even though it's the same product, which both skips
-    // its stock update and risks creating a duplicate catalog entry via
-    // "Save to catalog" below.
-    if (field === "name" && !items[idx]?.productId) {
-      const match = products.find(p => p.name.trim().toLowerCase() === value.trim().toLowerCase());
-      if (match) {
-        const rate = match.purchasePrice ?? match.price;
-        setItems(prev => {
-          const next = [...prev];
-          next[idx] = {
-            ...next[idx],
-            name: value,
-            productId: match.id,
-            unit: match.unit,
-            purchasePrice: rate != null ? String(rate) : next[idx].purchasePrice,
-            gstRate: String(match.gstRate),
-          };
-          return next;
-        });
-        toast({ type: "success", title: "Linked to catalog", message: `Matched existing product "${match.name}".` });
-        return;
-      }
-    }
-    setItems(prev => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], [field]: value };
-      return next;
-    });
-    // Rate changed after a margin % was already picked for this row's
-    // "save to catalog" card — re-derive the sale price from the new cost
-    // instead of leaving it stale from whatever the rate was before.
-    const key = items[idx]?.key;
-    if (field === "purchasePrice" && key && catalogMarginPct[key]) {
-      const pct = catalogMarginPct[key];
-      setCatalogSalePrice(prev => ({ ...prev, [key]: (toNum(value) * (1 + toNum(pct) / 100)).toFixed(2) }));
-    }
-  }, [items, products, toast, catalogMarginPct]);
-
-  // Typing a flat ₹ amount is just another way to set discountPercent — it's
-  // converted against that line's gross (qty × rate) so the stored value
-  // stays a percentage, same as the sales invoice form.
-  function setItemDiscountAmount(idx: number, amountStr: string) {
-    const amount = toNum(amountStr);
-    setItems(prev => prev.map((item, i) => {
-      if (i !== idx) return item;
-      const gross = toNum(item.quantity) * toNum(item.purchasePrice);
-      const discountPercent = gross > 0 ? Math.min(100, Math.max(0, (amount / gross) * 100)) : 0;
-      return { ...item, discountPercent: String(discountPercent) };
-    }));
-  }
-
-  const handleProductSelect = useCallback((idx: number, productId: string) => {
-    const product = products.find(p => p.id === productId);
-    setItems(prev => {
-      const next = [...prev];
-      if (product) {
-        // Prefer the dedicated purchase price; most existing catalog items
-        // won't have one set yet, so fall back to the sale price rather
-        // than leaving the rate blank.
-        const rate = product.purchasePrice ?? product.price;
-        next[idx] = {
-          ...next[idx],
-          productId: product.id,
-          name: product.name,
-          unit: product.unit,
-          purchasePrice: rate != null ? String(rate) : "",
-          gstRate: String(product.gstRate),
-        };
-      } else {
-        next[idx] = { ...next[idx], productId: "", name: "" };
-      }
-      return next;
-    });
-  }, [products]);
+  const { grossTotal, itemDiscountTotal, taxTotal, roundOff, grandTotal } = computePurchaseBillTotals(items, discount);
+  const subtotal = grossTotal - itemDiscountTotal;
+  const disc = toNum(discount);
 
   async function handleAttachmentChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -310,6 +67,7 @@ export default function NewPurchaseBillPage() {
       if (res.ok) {
         setAttachmentUrl(data.url);
         setAttachmentName(data.name);
+        toast({ type: "success", title: "File uploaded", message: `${data.name} uploaded successfully.` });
       } else {
         toast({ type: "error", title: "Upload failed", message: data.error ?? "Could not upload file." });
       }
@@ -333,22 +91,6 @@ export default function NewPurchaseBillPage() {
     setAttachmentName(null);
   }
 
-  function addItem() { setItems(prev => [...prev, makeBlankItem()]); }
-  function removeItem(idx: number) {
-    const key = items[idx]?.key;
-    setItems(prev => prev.filter((_, i) => i !== idx));
-    if (key) {
-      setCatalogSalePrice(prev => { const next = { ...prev }; delete next[key]; return next; });
-      setCatalogMarginPct(prev => { const next = { ...prev }; delete next[key]; return next; });
-      setCatalogSaving(prev => { if (!prev.has(key)) return prev; const s = new Set(prev); s.delete(key); return s; });
-    }
-  }
-
-  // Items from scan that are not linked to any product
-  const unmatchedItems = items
-    .map((item, idx) => ({ item, idx }))
-    .filter(({ item }) => item.productId === "" && item.name.trim() !== "");
-
   function validationToast(message: string) {
     toast({ type: "error", title: "Check form", message });
   }
@@ -362,19 +104,24 @@ export default function NewPurchaseBillPage() {
     if (items.some(i => toNum(i.quantity) <= 0))     { validationToast("All quantities must be greater than 0."); return; }
     if (items.some(i => !i.purchasePrice.trim() || toNum(i.purchasePrice) <= 0)) { validationToast("All item prices must be greater than 0."); return; }
     if (dueDate && dueDate < billDate)               { validationToast("Due date cannot be before the bill date."); return; }
+    if (addPayment && toNum(payAmount) > 0 && payDate < billDate) { validationToast("Payment date cannot be before the bill date."); return; }
+    if (addPayment && toNum(payAmount) > 0 && payDate > new Date().toISOString().slice(0, 10)) { validationToast("Payment date cannot be in the future."); return; }
 
-    const billItems = items.map(i => ({
-      productId:       i.productId || null,
-      name:            i.name.trim(),
-      unit:            i.unit,
-      quantity:        toNum(i.quantity),
-      purchasePrice:   toNum(i.purchasePrice),
-      discountPercent: toNum(i.discountPercent),
-      gstRate:         toNum(i.gstRate),
-      discountAmount:  calcItem(i).discountAmount,
-      gstAmount:       calcItem(i).gstAmount,
-      total:           calcItem(i).total,
-    }));
+    const billItems = items.map(i => {
+      const { discountAmount, gstAmount, total } = calcPurchaseBillItem(i);
+      return {
+        productId:       i.productId || null,
+        name:            i.name.trim(),
+        unit:            i.unit,
+        quantity:        toNum(i.quantity),
+        purchasePrice:   toNum(i.purchasePrice),
+        discountPercent: toNum(i.discountPercent),
+        gstRate:         toNum(i.gstRate),
+        discountAmount,
+        gstAmount,
+        total,
+      };
+    });
 
     const payload: Record<string, unknown> = {
       vendorId,
@@ -410,6 +157,7 @@ export default function NewPurchaseBillPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         bustCache("/api/purchase-bills");
+        bustCache("/api/products");
         toast({ type: "success", title: "Bill created", message: `${data.billNumber} saved.` });
         router.push(`/purchases/bills/${data.id}`);
       } else {
@@ -424,316 +172,53 @@ export default function NewPurchaseBillPage() {
   return (
     <>
     {saving && <OverlayLoader text="Creating bill…" />}
-    {ivSaving && <OverlayLoader text="Creating vendor…" />}
     <div className={`page-stack ${styles.pageWrap}`}>
       <Breadcrumb items={[{ label: "Purchases", href: "/purchases/bills" }, { label: "New Purchase Bill" }]} />
       <h1 className="page-title">New Purchase Bill</h1>
 
       <form onSubmit={handleSubmit} className="form-stack">
 
-        {/* Bill Details */}
-        <div {...animateSection(0, "form-card")}>
-          <h2 className="form-section-title">Bill Details</h2>
+        <BillDetailsCard
+          sectionIndex={0}
+          vendors={vendors}
+          vendorId={vendorId}
+          onVendorIdChange={setVendorId}
+          onVendorCreated={(v) => setVendors(prev => [...prev, v])}
+          category={category}
+          onCategoryChange={setCategory}
+          billDate={billDate}
+          onBillDateChange={setBillDate}
+          dueDate={dueDate}
+          onDueDateChange={setDueDate}
+          notes={notes}
+          onNotesChange={setNotes}
+          attachmentUploading={attachmentUploading}
+          attachmentName={attachmentName}
+          onAttachmentFileChange={handleAttachmentChange}
+          onAttachmentRemove={removeAttachment}
+        />
 
-          <div className="form-grid-2">
-            <FormField label="Vendor" required>
-              <Select value={vendorId} onChange={e => { setVendorId(e.target.value); if (e.target.value) setShowVendorCreate(false); }}>
-                <option value="">Select a vendor…</option>
-                {vendors.map(v => (
-                  <option key={v.id} value={v.id}>{v.name}{v.company ? ` — ${v.company}` : ""}</option>
-                ))}
-              </Select>
-              {!vendorId && !showVendorCreate && (
-                <button
-                  type="button"
-                  onClick={() => { setIvName(""); setIvCompany(""); setIvGstin(""); setIvPhone(""); setIvEmail(""); setIvAddress(""); setIvError(""); setIvFieldErrors({}); setShowVendorCreate(true); }}
-                  className={styles.addVendorLink}
-                >
-                  + Add new vendor manually
-                </button>
-              )}
-            </FormField>
-            <FormField label="Category">
-              <Select value={category} onChange={e => setCategory(e.target.value)}>
-                <option value="">— None —</option>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </Select>
-            </FormField>
-          </div>
+        <PurchaseBillItemsTable
+          sectionIndex={1}
+          products={products}
+          setProducts={setProducts}
+          items={items}
+          setItems={setItems}
+        />
 
-          {/* ── Inline Vendor Create ── */}
-          {showVendorCreate && (
-            <div className={styles.inlineVendorCard}>
-              {/* Header */}
-              <div className={styles.inlineVendorHeader}>
-                <div className={styles.inlineVendorHeaderLeft}>
-                  <div className={styles.inlineVendorIcon}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c-amber)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                  </div>
-                  <div>
-                    <div className={styles.inlineVendorTitle}>New Vendor</div>
-                    <div className={styles.inlineVendorSub}>Not in your list — fill details and create</div>
-                  </div>
-                </div>
-                <button type="button" onClick={() => setShowVendorCreate(false)} className={styles.inlineVendorCloseBtn}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-              </div>
-
-              {/* Body */}
-              <div className={styles.inlineVendorBody}>
-                {ivError && (
-                  <div className={styles.inlineVendorError}>
-                    {ivError}
-                  </div>
-                )}
-
-                <div className={styles.inlineVendorGrid}>
-                  <FormField label="Vendor Name" required error={ivFieldErrors.name}>
-                    <Input value={ivName} onChange={e => { setIvName(e.target.value); setIvFieldErrors(p => ({ ...p, name: undefined })); }} placeholder="e.g. Sharma Chemicals" />
-                  </FormField>
-                  <FormField label="Company / Trade Name">
-                    <Input value={ivCompany} onChange={e => setIvCompany(e.target.value)} placeholder="Optional" />
-                  </FormField>
-                  <FormField label="GSTIN" error={ivFieldErrors.gstin}>
-                    <Input value={ivGstin} onChange={e => { setIvGstin(e.target.value); setIvFieldErrors(p => ({ ...p, gstin: undefined })); }} placeholder="22AAAAA0000A1Z5" maxLength={15} mono />
-                  </FormField>
-                  <FormField label="Phone" required error={ivFieldErrors.phone}>
-                    <Input type="tel" inputMode="numeric" value={ivPhone} onChange={e => { setIvPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); setIvFieldErrors(p => ({ ...p, phone: undefined })); }} placeholder="10-digit mobile" maxLength={10} />
-                  </FormField>
-                  <FormField label="Email" error={ivFieldErrors.email}>
-                    <Input type="email" value={ivEmail} onChange={e => { setIvEmail(e.target.value); setIvFieldErrors(p => ({ ...p, email: undefined })); }} placeholder="vendor@example.com" />
-                  </FormField>
-                  <FormField label="Address" required error={ivFieldErrors.address}>
-                    <Input value={ivAddress} onChange={e => { setIvAddress(e.target.value); setIvFieldErrors(p => ({ ...p, address: undefined })); }} placeholder="Street / locality" />
-                  </FormField>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className={styles.inlineVendorFooter}>
-                <Button type="button" variant="primary" disabled={ivSaving} onClick={handleCreateInlineVendor}>
-                  {ivSaving ? "Creating…" : (
-                    <span className={styles.inlineVendorSubmitLabel}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                      Create &amp; Use This Vendor
-                    </span>
-                  )}
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => setShowVendorCreate(false)}>Dismiss</Button>
-              </div>
-            </div>
-          )}
-
-          <div className="form-grid-2">
-            <FormField label="Bill Date" required>
-              <Input type="date" value={billDate} onChange={e => setBillDate(e.target.value)} />
-            </FormField>
-            <FormField label="Due Date">
-              <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} min={billDate} />
-            </FormField>
-          </div>
-
-          <FormField label="Notes">
-            <Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes about this purchase…" />
-          </FormField>
-
-          <FormField label="Attachment (bill copy / receipt)">
-            {attachmentUploading ? (
-              <span className={styles.attachmentUploading}>Uploading…</span>
-            ) : attachmentName ? (
-              <div className={styles.attachmentRow}>
-                <span className={styles.attachmentName}>{attachmentName}</span>
-                <button type="button" onClick={removeAttachment} className={styles.attachmentRemoveBtn}>Remove</button>
-              </div>
-            ) : (
-              <label className={styles.attachmentPicker}>
-                <span className={styles.attachmentPickerBtn}>Choose File</span>
-                <span className={styles.attachmentPickerHint}>No file chosen</span>
-                <input
-                  type="file"
-                  accept="application/pdf,image/*"
-                  onChange={handleAttachmentChange}
-                  className={styles.attachmentPickerInput}
-                />
-              </label>
-            )}
-          </FormField>
-        </div>
-
-        {/* Line Items */}
-        <div {...animateSection(1, "form-card")}>
-          <div className={styles.sectionHeaderRow}>
-            <h2 className={`form-section-title ${styles.sectionTitleNoMargin}`}>Items</h2>
-            <Button type="button" variant="secondary" size="sm" onClick={addItem}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add Item
-            </Button>
-          </div>
-
-          <div className={styles.itemsTableWrap}>
-            <table className={styles.itemsTable}>
-              <thead>
-                <tr>
-                  {["Product (optional)", "Item Name", "Unit", "Qty", "Rate (₹)", "Discount", "GST %", "Amount", ""].map(h => (
-                    <th key={h} className={h === "Amount" ? styles.thRight : styles.th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, idx) => {
-                  const { discountAmount, total } = calcItem(item);
-                  return (
-                    <tr key={item.key} className={styles.itemRow}>
-                      <td className={styles.tdProduct}>
-                        <Select sz="sm" value={item.productId} onChange={e => handleProductSelect(idx, e.target.value)}>
-                          <option value="">— Select —</option>
-                          {products.map(p => <option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ""}</option>)}
-                        </Select>
-                      </td>
-                      <td className={styles.tdName}>
-                        <Input sz="sm" value={item.name} onChange={e => handleItemChange(idx, "name", e.target.value)} placeholder="Item name" required />
-                      </td>
-                      <td className={styles.tdUnit}>
-                        <Select sz="sm" value={item.unit} onChange={e => handleItemChange(idx, "unit", e.target.value)}>
-                          {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                        </Select>
-                      </td>
-                      <td className={styles.tdQty}>
-                        <Input sz="sm" type="number" min="1" step="1" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} className={styles.numInputRight} />
-                      </td>
-                      <td className={styles.tdRate}>
-                        <Input sz="sm" type="text" inputMode="decimal" value={item.purchasePrice} onChange={e => handleItemChange(idx, "purchasePrice", e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" className={styles.numInputRight} />
-                      </td>
-                      <td className={styles.tdDiscount}>
-                        <div className={styles.discountStack}>
-                          <Select sz="sm" value={Math.round(toNum(item.discountPercent) * 100) / 100} onChange={e => handleItemChange(idx, "discountPercent", e.target.value)}>
-                            {discountOptionsFor(toNum(item.discountPercent)).map(d => <option key={d} value={d}>{d}%</option>)}
-                          </Select>
-                          <Input
-                            sz="sm" type="text" inputMode="decimal"
-                            value={discountAmount > 0 ? Math.round(discountAmount * 100) / 100 : ""}
-                            onChange={e => setItemDiscountAmount(idx, e.target.value)}
-                            placeholder="₹0"
-                            title="Flat discount amount"
-                            className={styles.numInputRight}
-                          />
-                        </div>
-                      </td>
-                      <td className={styles.tdGst}>
-                        <Select sz="sm" value={item.gstRate} onChange={e => handleItemChange(idx, "gstRate", e.target.value)}>
-                          {GST_RATES.map(r => <option key={r} value={r}>{r}%</option>)}
-                        </Select>
-                      </td>
-                      <td className={styles.tdAmount}>₹{fmt(total)}</td>
-                      <td className={styles.tdAction}>
-                        <button
-                          type="button"
-                          onClick={() => removeItem(idx)}
-                          disabled={items.length <= 1}
-                          title="Remove item"
-                          className={items.length <= 1 ? styles.removeItemBtnDisabled : styles.removeItemBtn}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* ── Unmatched items — offer to save to product catalog ── */}
-          {unmatchedItems.length > 0 && (
-            <div className={styles.unmatchedWrap}>
-              <div className={styles.unmatchedHeading}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c-amber)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                {unmatchedItems.length} item{unmatchedItems.length > 1 ? "s" : ""} not linked to your product catalog — save them?
-              </div>
-              <div className={styles.unmatchedList}>
-                {unmatchedItems.map(({ item, idx }) => (
-                  <div key={item.key} className={styles.unmatchedRow}>
-                    <div className={styles.unmatchedInfo}>
-                      <div className={styles.unmatchedName} title={item.name}>{item.name}</div>
-                      <div className={styles.unmatchedMeta}>
-                        {item.unit} · Purchased at ₹{fmt(toNum(item.purchasePrice))} · GST {item.gstRate}%
-                      </div>
-                    </div>
-                    <div className={styles.unmatchedSaleField}>
-                      <label className={styles.unmatchedSaleLabel} htmlFor={`margin-pct-${item.key}`}>Margin %</label>
-                      <Select
-                        id={`margin-pct-${item.key}`}
-                        sz="sm"
-                        value={catalogMarginPct[item.key] ?? ""}
-                        onChange={(e) => handleCatalogMarginChange(item.key, item.purchasePrice, e.target.value)}
-                      >
-                        <option value="">Custom</option>
-                        {MARGIN_PRESETS.map((p) => <option key={p} value={p}>{p}%</option>)}
-                      </Select>
-                    </div>
-                    <div className={styles.unmatchedSaleField}>
-                      <label className={styles.unmatchedSaleLabel} htmlFor={`sale-price-${item.key}`}>Sale Price (₹)</label>
-                      <Input
-                        id={`sale-price-${item.key}`}
-                        sz="sm"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={catalogSalePrice[item.key] ?? item.purchasePrice}
-                        onChange={(e) => handleCatalogSalePriceChange(item.key, e.target.value)}
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      disabled={catalogSaving.has(item.key)}
-                      onClick={() => handleAddToCatalog(idx)}
-                      className={catalogSaving.has(item.key) ? styles.saveToCatalogBtnSaving : styles.saveToCatalogBtn}
-                    >
-                      {catalogSaving.has(item.key) ? (
-                        <svg className={styles.spinIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" d="M12 2a10 10 0 0 1 10 10"/></svg>
-                      ) : (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                      )}
-                      Save to catalog
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Totals */}
-          <div className={styles.totalsWrap}>
-            <div className={styles.totalsAlignRight}>
-              <div className={styles.totalsBox}>
-                <div className={styles.totalsLine}>
-                  <span>Subtotal</span><span>₹{fmt(grossTotal)}</span>
-                </div>
-                {itemDiscountTotal > 0 && (
-                  <div className={styles.totalsLine}>
-                    <span>Item Discount</span>
-                    <span className={styles.itemDiscountValue}>−₹{fmt(itemDiscountTotal)}</span>
-                  </div>
-                )}
-                <div className={styles.totalsLine}>
-                  <span>GST</span><span>₹{fmt(taxTotal)}</span>
-                </div>
-                <div className={styles.totalsDiscountLine}>
-                  <span>Additional Discount (₹)</span>
-                  <Input sz="sm" type="number" min="0" step="0.01" value={discount} onChange={e => setDiscount(e.target.value)} className={styles.discountInput} />
-                </div>
-                <div className={styles.totalsGrandLine}>
-                  <span>Total</span><span>₹{fmt(grandTotal)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PurchaseBillTotals
+          sectionIndex={2}
+          grossTotal={grossTotal}
+          itemDiscountTotal={itemDiscountTotal}
+          taxTotal={taxTotal}
+          roundOff={roundOff}
+          grandTotal={grandTotal}
+          discount={discount}
+          onDiscountChange={setDiscount}
+        />
 
         {/* Optional Payment */}
-        <div {...animateSection(2, "form-card")}>
+        <div {...animateSection(3, "form-card")}>
           <label className={styles.paymentCheckboxLabel}>
             <input type="checkbox" checked={addPayment} onChange={e => setAddPayment(e.target.checked)} className={styles.paymentCheckbox} />
             Record payment now
@@ -744,7 +229,7 @@ export default function NewPurchaseBillPage() {
               <div className={`form-grid-2 ${styles.marginBottom1}`}>
                 <FormField label="Amount (₹)">
                   <div className={styles.amountRow}>
-                    <Input type="number" min="0" step="0.01" max={grandTotal} value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder={`Max ₹${fmt(grandTotal)}`} className={styles.amountInput} />
+                    <Input type="number" min="0" step="0.01" max={grandTotal} value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder={`Max ₹${fmtCurrency(grandTotal)}`} className={styles.amountInput} />
                     <button
                       type="button"
                       onClick={() => setPayAmount(grandTotal.toFixed(2))}
@@ -756,7 +241,7 @@ export default function NewPurchaseBillPage() {
                   </div>
                 </FormField>
                 <FormField label="Payment Date">
-                  <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
+                  <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} min={billDate} max={new Date().toISOString().slice(0, 10)} />
                 </FormField>
               </div>
               <div className="form-grid-2">

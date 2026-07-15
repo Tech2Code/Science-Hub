@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTheme } from "@/lib/theme";
 import { useBranding } from "@/lib/businessBranding";
+import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { GlobalSearch } from "./GlobalSearch";
 import styles from "./DashboardShell.module.css";
@@ -221,55 +222,43 @@ function AccentPicker() {
   }
 
   return (
-    <div style={{ position: "relative" }} ref={popRef}>
+    <div className={styles.accentPickerWrap} ref={popRef}>
       <button
         onClick={() => setOpen((v) => !v)}
         aria-label="Choose accent color"
         title="Choose accent color"
         className={styles.collapseBtn}
       >
-        <span style={{ width: 16, height: 16, borderRadius: "50%", background: value, border: "1px solid rgba(0,0,0,0.15)" }} />
+        <span className={styles.accentSwatch} style={{ "--accent-swatch-color": value } as React.CSSProperties} />
       </button>
       {open && (
-        <div
-          style={{
-            position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 50,
-            background: "var(--c-bg-card)", border: "1px solid var(--c-border)",
-            borderRadius: "var(--c-radius)", boxShadow: "var(--c-shadow-lg)",
-            padding: 12, width: 200,
-          }}
-        >
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--c-text-2)", marginBottom: 8 }}>Accent Color</div>
-          <div style={{ fontSize: 11, color: "var(--c-text-3)", marginBottom: 6 }}>Presets</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+        <div className={styles.accentPopover}>
+          <div className={styles.accentPopoverTitle}>Accent Color</div>
+          <div className={styles.accentPopoverLabel}>Presets</div>
+          <div className={styles.accentPresetRow}>
             {ACCENT_PRESETS.map((hex) => (
               <button
                 key={hex}
                 onClick={() => pick(hex)}
                 aria-label={hex}
                 title={hex}
-                style={{
-                  width: 22, height: 22, borderRadius: "50%", background: hex, cursor: "pointer",
-                  border: value.toLowerCase() === hex ? "2px solid var(--c-text)" : "1px solid rgba(0,0,0,0.15)",
-                }}
+                className={value.toLowerCase() === hex ? styles.accentPresetBtnActive : styles.accentPresetBtn}
+                style={{ "--accent-preset-color": hex } as React.CSSProperties}
               />
             ))}
           </div>
-          <div style={{ fontSize: 11, color: "var(--c-text-3)", marginBottom: 6 }}>Or pick your own</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className={styles.accentPopoverLabel}>Or pick your own</div>
+          <div className={styles.accentCustomRow}>
             <input
               type="color"
               value={value}
               onChange={(e) => pick(e.target.value)}
               title="Pick a custom color"
               aria-label="Pick a custom color"
-              style={{ width: 32, height: 28, padding: 0, border: "1px solid var(--c-border)", borderRadius: 6, background: "none", cursor: "pointer" }}
+              className={styles.accentCustomInput}
             />
-            <span style={{ fontSize: 12, color: "var(--c-text-2)" }}>Custom</span>
-            <button
-              onClick={reset}
-              style={{ fontSize: 12, color: "var(--c-text-3)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", marginLeft: "auto" }}
-            >
+            <span className={styles.accentCustomLabel}>Custom</span>
+            <button onClick={reset} className={styles.accentResetBtn}>
               Reset to default
             </button>
           </div>
@@ -304,7 +293,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (status === "unauthenticated") router.replace("/login");
+    // Covers every way a session can end — the explicit Sign out button,
+    // JWT expiry, or a token invalidated elsewhere (e.g. tokenVersion bump)
+    // — not just the confirm dialog's own clearAllCachedPdfs() call below.
+    if (status === "unauthenticated") { clearAllCachedPdfs(); router.replace("/login"); }
   }, [status, router]);
 
   const handleNavClick = useCallback(() => {
@@ -485,7 +477,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <span className={styles.pageLabel}>{currentNav?.label ?? "Dashboard"}</span>
           </div>
 
-          <GlobalSearch />
+          <GlobalSearch mobile={mobile} />
 
           <div className={styles.topbarRight}>
             <AccentPicker />
@@ -508,6 +500,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               className={styles.signOutBtn}
               disabled={loggingOut}
               title="Sign out"
+              aria-label={loggingOut ? "Signing out…" : undefined}
             >
               {loggingOut ? (
                 <svg className={styles.signOutSpinner} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
@@ -526,21 +519,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </header>
-
-        <div className={styles.pageNavRow}>
-          <button onClick={() => router.back()} title="Go back" aria-label="Go back" className={styles.pageNavBtn}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-            <span className={styles.pageNavLabel}>Back</span>
-          </button>
-          <button onClick={() => router.forward()} title="Go forward" aria-label="Go forward" className={styles.pageNavBtn}>
-            <span className={styles.pageNavLabel}>Forward</span>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
-        </div>
 
         <main className={styles.content}>
           {children}

@@ -19,11 +19,11 @@ export function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
             </svg>
           )}
           {item.href ? (
-            <Link href={item.href} className={styles.link}>
+            <Link href={item.href} className={styles.link} title={item.label}>
               {item.label}
             </Link>
           ) : (
-            <span className={styles.current}>{item.label}</span>
+            <span className={styles.current} title={item.label}>{item.label}</span>
           )}
         </div>
       ))}

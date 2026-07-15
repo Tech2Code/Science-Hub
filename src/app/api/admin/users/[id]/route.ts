@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { logActivity } from "@/lib/activity";
 import { validateUserInput } from "@/lib/validation";
+import { requireAdmin } from "@/lib/apiAuth";
 
 const USER_SELECT = {
   id: true,
@@ -15,22 +16,13 @@ const USER_SELECT = {
   _count: { select: { invoices: true } },
 } as const;
 
-async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  if (!session) return { error: "Unauthorized", status: 401 } as const;
-  if (session.user.role !== "admin") return { error: "Forbidden", status: 403 } as const;
-  return { session };
-}
-
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const auth = await requireAdmin();
-    if ("error" in auth) {
-      return NextResponse.json({ error: auth.error }, { status: auth.status });
-    }
+    if (!auth.ok) return auth.response;
 
     const { id } = await params;
 
@@ -164,9 +156,7 @@ export async function DELETE(
 ) {
   try {
     const auth = await requireAdmin();
-    if ("error" in auth) {
-      return NextResponse.json({ error: auth.error }, { status: auth.status });
-    }
+    if (!auth.ok) return auth.response;
 
     const { session } = auth;
     const { id } = await params;

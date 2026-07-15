@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
-import { recordStockMovement } from "@/lib/stockMovement";
+import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { deleteAttachmentBlob } from "@/lib/blobStorage";
+import { requireSession, requireAdmin } from "@/lib/apiAuth";
 
 type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill";
 
@@ -49,8 +48,9 @@ export async function POST(
 ) {
   try {
     const { type, id } = await params;
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+    const { session } = auth;
 
     const binType = type as BinType;
     const name = await getItemName(binType, id);
@@ -69,22 +69,11 @@ export async function POST(
             where: { invoiceId: id },
             select: { productId: true, quantity: true },
           });
-          for (const item of invItems) {
-            const product = await tx.product.update({
-              where: { id: item.productId },
-              data: { stock: { decrement: item.quantity } },
-              select: { id: true, stock: true },
-            });
-            await recordStockMovement(tx, {
-              productId: product.id,
-              type: "adjustment",
-              quantity: -item.quantity,
-              balanceAfter: product.stock,
-              reference: name,
-              notes: "Invoice restored from bin",
-              createdByUserId: session.user?.id,
-            });
-          }
+          await batchAdjustStock(
+            tx,
+            invItems.map((item) => ({ productId: item.productId, quantity: -item.quantity })),
+            { type: "adjustment", reference: name, notes: "Invoice restored from bin", createdByUserId: session.user?.id }
+          );
           return true;
         }, { timeout: 20000, maxWait: 10000 });
         if (!restored) return NextResponse.json({ message: "Already restored" });
@@ -119,32 +108,25 @@ export async function POST(
         break;
       case "purchase_bill": {
         // Guard against double-restore, symmetric to the invoice case above.
+        // A cancelled bill's stock was already reversed at cancel-time, so
+        // restoring it from the bin must not re-apply it again.
         const restored = await prisma.$transaction(async (tx) => {
           const updateResult = await tx.purchaseBill.updateMany({
             where: { id, deletedAt: { not: null } },
             data: { deletedAt: null },
           });
           if (updateResult.count === 0) return false;
-          const billItems = await tx.purchaseBillItem.findMany({
-            where: { purchaseBillId: id },
-            select: { productId: true, quantity: true },
-          });
-          for (const item of billItems.filter(i => i.productId)) {
-            const product = await tx.product.update({
-              where: { id: item.productId! },
-              data: { stock: { increment: item.quantity } },
-              select: { id: true, stock: true },
+          const bill = await tx.purchaseBill.findUnique({ where: { id }, select: { status: true } });
+          if (bill?.status !== "cancelled") {
+            const billItems = await tx.purchaseBillItem.findMany({
+              where: { purchaseBillId: id },
+              select: { productId: true, quantity: true },
             });
-            await recordStockMovement(tx, {
-              productId: product.id,
-              type: "purchase",
-              quantity: item.quantity,
-              balanceAfter: product.stock,
-              reference: name,
-              purchaseBillId: id,
-              notes: "Purchase bill restored from bin",
-              createdByUserId: session.user?.id,
-            });
+            await batchAdjustStock(
+              tx,
+              billItems.filter(i => i.productId).map((item) => ({ productId: item.productId!, quantity: item.quantity })),
+              { type: "purchase", reference: name, purchaseBillId: id, notes: "Purchase bill restored from bin", createdByUserId: session.user?.id }
+            );
           }
           return true;
         }, { timeout: 20000, maxWait: 10000 });
@@ -165,6 +147,9 @@ export async function POST(
     return NextResponse.json({ message: "Restored" });
   } catch (error) {
     console.error("POST /api/bin/[type]/[id] error:", error);
+    if (error instanceof ProductNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ error: "Failed to restore item" }, { status: 500 });
   }
 }
@@ -176,11 +161,9 @@ export async function DELETE(
 ) {
   try {
     const { type, id } = await params;
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (session.user?.role !== "admin") {
-      return NextResponse.json({ error: "Admin only" }, { status: 403 });
-    }
+    const auth = await requireAdmin();
+    if (!auth.ok) return auth.response;
+    const { session } = auth;
 
     const binType = type as BinType;
     const name = await getItemName(binType, id);

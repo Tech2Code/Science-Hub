@@ -13,6 +13,7 @@ export async function GET() {
     const brands = await prisma.brand.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },
+      take: 5000,
       include: { _count: { select: { products: { where: { deletedAt: null } } } } },
     });
     const ids = brands.map((b) => b.id);
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(brand, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "A brand with this name already exists" }, { status: 400 });
+      return NextResponse.json({ error: "A brand with this name already exists" }, { status: 409 });
     }
     console.error("POST /api/brands error:", error);
     return NextResponse.json({ error: "Failed to create brand" }, { status: 500 });

@@ -11,8 +11,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
-    const brand = await prisma.brand.findUnique({
-      where: { id },
+    const brand = await prisma.brand.findFirst({
+      where: { id, deletedAt: null },
       include: {
         products: {
           where: { deletedAt: null },
@@ -48,8 +48,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
     const body = await request.json();
     const trimmedName = typeof body.name === "string" ? body.name.trim() : "";
+    const { expectedUpdatedAt } = body;
     if (!trimmedName) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
+    }
+
+    const existing = await prisma.brand.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
+    if (!existing) return NextResponse.json({ error: "Brand not found" }, { status: 404 });
+    if (existing.deletedAt) {
+      return NextResponse.json({ error: "This brand is in the bin — restore it before editing" }, { status: 400 });
+    }
+    if (expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== existing.updatedAt.getTime()) {
+      return NextResponse.json({ error: "This brand was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
     }
 
     const brand = await prisma.brand.update({ where: { id }, data: { name: trimmedName } });
@@ -60,7 +70,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json(brand);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "A brand with this name already exists" }, { status: 400 });
+      return NextResponse.json({ error: "A brand with this name already exists" }, { status: 409 });
     }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
       return NextResponse.json({ error: "Brand not found" }, { status: 404 });
