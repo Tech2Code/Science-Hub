@@ -274,7 +274,10 @@
   gap: 0.75rem;
   transition: background-color 0.2s, border-color 0.2s;
 }
-.topbarLeft  { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+/* Fixed width (rather than sizing to the label's content) so the global
+   search box right after it always starts at the same x position instead
+   of shifting left/right as the page label text changes length. */
+.topbarLeft  { display: flex; align-items: center; gap: 0.75rem; min-width: 0; width: 13rem; flex-shrink: 0; }
 /* Pushed to the far right explicitly (rather than via the row's own
    justify-content) so the search — full-width flex:1 on desktop, a small
    icon button on mobile — always sits right next to topbarLeft with just
@@ -307,6 +310,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   transition: color 0.2s;
+  flex: 1;
+  min-width: 0;
 }
 
 .userChip {
@@ -561,6 +566,7 @@
 /* ── Responsive topbar ───────────── */
 @media (max-width: 767px) {
   .topbar { height: 2.75rem; padding: 0 0.5rem; gap: 0.5rem;}
+   .topbarLeft { width: 8rem; }
   .topbarName { display: none; }
   .signOutBtn { font-size: 0.7rem; padding: 0.3rem 0.5rem; }
   /* .pageLabel { display: none; } */
