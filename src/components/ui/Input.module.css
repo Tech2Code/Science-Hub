@@ -11,6 +11,17 @@
   outline: none;
   transition: background-color 0.2s, color 0.2s, border-color 0.15s, box-shadow 0.15s;
   appearance: none;
+  -webkit-appearance: none;
+}
+
+/* iOS Safari renders type="search" with its own taller native chrome
+   (search icon + clear button) unless the decorations are stripped —
+   otherwise it ignores our padding and blows up the field height. */
+.input[type="search"]::-webkit-search-decoration,
+.input[type="search"]::-webkit-search-cancel-button,
+.input[type="search"]::-webkit-search-results-button,
+.input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
 }
 
 /* Below this, keep inputs at their original, more compact size — the

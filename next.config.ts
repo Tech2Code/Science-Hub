@@ -12,7 +12,7 @@ const isDev = process.env.NODE_ENV !== "production";
 
 const CSP = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  `script-src 'self' 'unsafe-inline' https://vercel.live${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   // https://*.public.blob.vercel-storage.com is where the uploaded business
   // logo lives (see src/lib/blobStorage.ts's isLogoBlobUrl allowlist).
