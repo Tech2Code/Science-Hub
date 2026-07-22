@@ -52,6 +52,11 @@
   outline: none;
 }
 
+/* The place-of-supply select shares .dueDateInput with the due-date input,
+   but with no option selected it shrinks to fit "Select state…" — give it
+   its own floor so it doesn't collapse to a sliver. */
+.placeOfSupplySelect { min-width: 150px; }
+
 /* On narrow screens the toggleRow's flex-wrap only gives each row/switch
    as much width as its own content needs, which squashes the place-of-supply
    dropdown down to a sliver — force each row to its own full-width line. */

@@ -35,7 +35,7 @@ export function InvoiceOptionsRow({
           <Select
             value={placeOfSupply}
             onChange={(e) => onPlaceOfSupplyChange(e.target.value)}
-            className={styles.dueDateInput}
+            className={`${styles.dueDateInput} ${styles.placeOfSupplySelect}`}
           >
             <option value="">Select state…</option>
             {INDIA_STATES.map((s) => <option key={s} value={s}>{s}</option>)}

@@ -171,20 +171,23 @@ export function validateUserInput(
 }
 
 // Server-side counterpart to the settings form's client-side validation.
+// `isBankSectionUpdate` must be true only when the request actually intends
+// to write the bank details section (i.e. the incoming body contains at
+// least one bank key) — otherwise a save of an unrelated section (identity,
+// address, terms, ...) would re-validate bank fields it never touched, and
+// fail if the account number couldn't be decrypted for an unrelated reason
+// (e.g. a NEXTAUTH_SECRET mismatch) rather than because it's actually blank.
 export function validateSettingsInput(input: {
   pan?: string; termsAndConditions?: string; phone?: string; pincode?: string; gstin?: string;
   bankName?: string; bankAccountNumber?: string; bankIfsc?: string; bankBranch?: string;
-}): string | null {
-  const bankConfigured = Boolean(
-    input.bankName || input.bankAccountNumber || input.bankIfsc || input.bankBranch
-  );
+}, isBankSectionUpdate: boolean): string | null {
   return (
     validate(input.pan ?? "", rules.maxLength(10), rules.pan()) ||
     validate(input.termsAndConditions ?? "", rules.maxLength(2000)) ||
     validate(input.phone ?? "", rules.phoneFlexible()) ||
     validate(input.pincode ?? "", rules.pincode()) ||
     validate(input.gstin ?? "", rules.maxLength(15), rules.gstin()) ||
-    (bankConfigured
+    (isBankSectionUpdate
       ? validate(input.bankName ?? "", rules.required("Bank name is required.")) ||
         validate(input.bankBranch ?? "", rules.required("Branch is required.")) ||
         validate(input.bankAccountNumber ?? "", rules.required("Account number is required."), rules.accountNumber()) ||

@@ -11,6 +11,20 @@
   animation: skPulse 1.4s ease-in-out infinite;
 }
 
+.decryptWarning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.875rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--c-danger, #dc2626);
+  background: color-mix(in srgb, var(--c-danger, #dc2626) 10%, transparent);
+  color: var(--c-danger, #dc2626);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
 .infoRowStack {
   display: flex;
   flex-direction: column;

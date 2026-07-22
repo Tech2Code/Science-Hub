@@ -71,7 +71,7 @@ model Category {
   id        String    @id @default(cuid())
   name      String    @unique
   createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  updatedAt DateTime  @default(now()) @updatedAt
   deletedAt DateTime?
   products  Product[]
 
@@ -82,7 +82,7 @@ model Brand {
   id        String    @id @default(cuid())
   name      String    @unique
   createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  updatedAt DateTime  @default(now()) @updatedAt
   deletedAt DateTime?
   products  Product[]
 

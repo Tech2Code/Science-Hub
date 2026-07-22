@@ -14,8 +14,9 @@ import styles from "./settings.module.css";
 interface BusinessSettings {
   name: string; tagline: string; email: string; phone: string;
   address: string; city: string; state: string; pincode: string; gstin: string; pan: string;
-  gmailUser: string; gmailAppPasswordSet: boolean;
+  gmailUser: string; gmailAppPasswordSet: boolean; gmailAppPasswordDecryptFailed: boolean;
   bankName: string; bankAccountName: string; bankAccountNumber: string; bankIfsc: string; bankBranch: string;
+  bankAccountNumberDecryptFailed: boolean;
   termsAndConditions: string;
   logoUrl: string;
   showLogoOnInvoices: boolean;
@@ -25,8 +26,9 @@ interface BusinessSettings {
 const EMPTY: BusinessSettings = {
   name: "", tagline: "", email: "", phone: "",
   address: "", city: "", state: "", pincode: "", gstin: "", pan: "",
-  gmailUser: "", gmailAppPasswordSet: false,
+  gmailUser: "", gmailAppPasswordSet: false, gmailAppPasswordDecryptFailed: false,
   bankName: "", bankAccountName: "", bankAccountNumber: "", bankIfsc: "", bankBranch: "",
+  bankAccountNumberDecryptFailed: false,
   termsAndConditions: "",
   logoUrl: "",
   showLogoOnInvoices: true,
@@ -60,6 +62,19 @@ function InfoRow({ label, value, mono }: { label: string; value: string; mono?: 
         ].filter(Boolean).join(" ")}
       >
         {value || "Not set"}
+      </span>
+    </div>
+  );
+}
+
+// Surfaces a NEXTAUTH_SECRET/decrypt mismatch instead of letting a stored
+// secret silently look "not configured" — e.g. bank account number blank on
+// printed invoices, or Gmail app password missing, for no visible reason.
+function DecryptWarning({ what }: { what: string }) {
+  return (
+    <div className={styles.decryptWarning} role="alert">
+      <span>
+        ⚠ Stored {what} could not be read back (likely a server configuration issue). Re-enter and save it below to fix.
       </span>
     </div>
   );
@@ -132,9 +147,11 @@ export default function SettingsPage() {
       state: (d.state as string) ?? "", pincode: (d.pincode as string) ?? "", gstin: (d.gstin as string) ?? "",
       pan: (d.pan as string) ?? "",
       gmailUser: (d.gmailUser as string) ?? "", gmailAppPasswordSet: Boolean(d.gmailAppPasswordSet),
+      gmailAppPasswordDecryptFailed: Boolean(d.gmailAppPasswordDecryptFailed),
       bankName: (d.bankName as string) ?? "", bankAccountName: (d.bankAccountName as string) ?? "",
       bankAccountNumber: (d.bankAccountNumber as string) ?? "", bankIfsc: (d.bankIfsc as string) ?? "",
       bankBranch: (d.bankBranch as string) ?? "",
+      bankAccountNumberDecryptFailed: Boolean(d.bankAccountNumberDecryptFailed),
       termsAndConditions: (d.termsAndConditions as string) ?? "",
       logoUrl: (d.logoUrl as string) ?? "",
       showLogoOnInvoices: d.showLogoOnInvoices === undefined ? true : Boolean(d.showLogoOnInvoices),
@@ -153,8 +170,14 @@ export default function SettingsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Sends only the fields the caller is actually editing — never the full
+  // `saved` snapshot. Each section (identity/address/bank/email/terms/...)
+  // saves independently on the server too (see the settings API route), so
+  // a stale or broken value in a section nobody touched (e.g. a bank account
+  // number that fails to decrypt because of a NEXTAUTH_SECRET mismatch)
+  // can never block or silently overwrite an unrelated save.
   async function putSettings(overrides: Partial<BusinessSettings> & { gmailAppPassword?: string }) {
-    const body = { ...saved, ...overrides, expectedUpdatedAt: saved.updatedAt || undefined };
+    const body = { ...overrides, expectedUpdatedAt: saved.updatedAt || undefined };
     const res = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (res.ok) {
       const data = await res.json();
@@ -701,6 +724,7 @@ export default function SettingsPage() {
           {/* ── Bank Details ───────────────────────────────────────────── */}
           <div {...animateSection(3, `card ${styles.cardPad}`)}>
             <SectionHeader title="Bank Details" editing={editingBank} onEdit={handleEditBank} />
+            {saved.bankAccountNumberDecryptFailed && <DecryptWarning what="bank account number" />}
             {!editingBank ? (
               <>
                 <p className={styles.stateHint}>Printed on every invoice so customers can pay by bank transfer.</p>
@@ -811,6 +835,7 @@ export default function SettingsPage() {
                 </Button>
               )}
             </div>
+            {saved.gmailAppPasswordDecryptFailed && <DecryptWarning what="Gmail app password" />}
 
             {!editingEmail ? (
               /* View sub-mode */
