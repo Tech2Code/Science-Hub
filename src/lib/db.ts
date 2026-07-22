@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { decrypt } from "@/lib/crypto";
+import { safeDecrypt } from "@/lib/crypto";
 
 export async function getBusinessSettings() {
   const settings = await prisma.businessSettings.upsert({
@@ -7,10 +7,18 @@ export async function getBusinessSettings() {
     create: { id: "singleton" },
     update: {},
   });
+  const gmailAppPassword = settings.gmailAppPassword ? safeDecrypt(settings.gmailAppPassword) : { value: settings.gmailAppPassword, failed: false };
+  const bankAccountNumber = settings.bankAccountNumber ? safeDecrypt(settings.bankAccountNumber) : { value: settings.bankAccountNumber, failed: false };
   return {
     ...settings,
-    gmailAppPassword: settings.gmailAppPassword ? decrypt(settings.gmailAppPassword) : settings.gmailAppPassword,
-    bankAccountNumber: settings.bankAccountNumber ? decrypt(settings.bankAccountNumber) : settings.bankAccountNumber,
+    gmailAppPassword: gmailAppPassword.value,
+    // Surfaced instead of silently treating a broken secret as "not
+    // configured" — a decrypt failure here (e.g. NEXTAUTH_SECRET mismatch
+    // between environments) must not be indistinguishable from an empty
+    // field, or it silently blanks bank details on printed invoices too.
+    gmailAppPasswordDecryptFailed: gmailAppPassword.failed,
+    bankAccountNumber: bankAccountNumber.value,
+    bankAccountNumberDecryptFailed: bankAccountNumber.failed,
   };
 }
 
