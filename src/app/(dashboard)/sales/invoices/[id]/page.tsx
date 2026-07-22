@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
-import { fetchCached, bustCache } from "@/lib/useCache";
+import { fetchCached, bustCache, useFetch } from "@/lib/useCache";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
@@ -13,8 +13,10 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
+import { getCachedPdf, setCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { amountInWordsINR } from "@/lib/numberToWords";
 import { animateSection } from "@/lib/animateSection";
+import { useCanWrite } from "@/lib/useCanWrite";
 import styles from "./invoiceDetail.module.css";
 
 interface InvoiceItem {
@@ -48,6 +50,8 @@ interface BusinessSettings {
   termsAndConditions?: string;
   bankName?: string; bankAccountName?: string; bankAccountNumber?: string; bankIfsc?: string; bankBranch?: string;
   logoUrl?: string;
+  showLogoOnInvoices?: boolean;
+  updatedAt?: string;
 }
 
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
@@ -181,8 +185,9 @@ function InvoiceSkeleton() {
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const canWrite = useCanWrite();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
-  const [settings, setSettings] = useState<BusinessSettings | null>(null);
+  const { data: settings, loading: settingsLoading } = useFetch<BusinessSettings>("/api/settings");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -213,12 +218,8 @@ export default function InvoiceDetailPage() {
 
   async function load(force = false) {
     try {
-      const [data, s] = await Promise.all([
-        fetchCached<Invoice>(`/api/invoices/${id}`, force),
-        fetchCached<BusinessSettings>("/api/settings"),
-      ]);
+      const data = await fetchCached<Invoice>(`/api/invoices/${id}`, force);
       setInvoice(data);
-      setSettings(s);
     } catch { setError("Invoice not found."); }
     setLoading(false);
   }
@@ -337,9 +338,20 @@ export default function InvoiceDetailPage() {
   }
 
   async function generatePdfBlob(copyLabels?: string[]): Promise<Blob | null> {
+    const showLogo = settings?.showLogoOnInvoices !== false;
+    const variantKey = buildPdfVariantKey(copyLabels, {
+      p: showPaymentInPdf,
+      r: showReturnInPdf,
+      logo: showLogo,
+      settings: settings?.updatedAt ?? "",
+    });
+    const cached = await getCachedPdf("invoice", id, variantKey);
+    if (cached) return cached;
     const el = document.getElementById("invoice-print-area");
     if (!el) return null;
-    return generateInvoicePdfBlob(el, { copyLabels, logoUrl: settings?.logoUrl || undefined });
+    const blob = await generateInvoicePdfBlob(el, { copyLabels, logoUrl: showLogo ? settings?.logoUrl || undefined : undefined });
+    if (blob) setCachedPdf("invoice", id, variantKey, blob);
+    return blob;
   }
 
   function handleDownloadClick() {
@@ -557,7 +569,7 @@ export default function InvoiceDetailPage() {
     setDeleteConfirm(false);
   }
 
-  if (loading) return <InvoiceSkeleton />;
+  if (loading || settingsLoading) return <InvoiceSkeleton />;
   if (error || !invoice) return <div className={`loading-center ${styles.errorText}`}>{error || "Invoice not found."}</div>;
 
   const balance = invoice.total - invoice.paidAmount;
@@ -614,8 +626,8 @@ export default function InvoiceDetailPage() {
           <Breadcrumb items={[{ label: "Invoices", href: "/sales/invoices" }, { label: invoice.invoiceNumber }]} />
           <div className={styles.toolbarActions}>
             <StatusBadge status={invoice.status} />
-            <Button variant="editOutline" size="sm" onClick={() => { setOpeningEdit(true); router.push(`/sales/invoices/edit/${id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>Edit Invoice</Button>
-            {balance > 0 && (
+            {canWrite && <Button variant="editOutline" size="sm" onClick={() => { setOpeningEdit(true); router.push(`/sales/invoices/edit/${id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>Edit Invoice</Button>}
+            {canWrite && balance > 0 && (
               <Button
                 variant="greenPrimary"
                 size="sm"
@@ -628,6 +640,7 @@ export default function InvoiceDetailPage() {
                 Record Payment
               </Button>
             )}
+            {canWrite && (
             <span
               title={
                 invoice.paidAmount <= 0
@@ -643,6 +656,7 @@ export default function InvoiceDetailPage() {
                 {allItemsReturned ? "All Items Returned" : "Record Return"}
               </Button>
             </span>
+            )}
             <Button variant="secondary" size="sm" onClick={handleDownloadClick}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
               Download PDF
@@ -651,10 +665,12 @@ export default function InvoiceDetailPage() {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
               Print
             </Button>
+            {canWrite && (
             <Button variant="dangerOutline" size="sm" disabled={deleting} onClick={() => setDeleteConfirm(true)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
               Delete
             </Button>
+            )}
             {/* Share PDF button */}
             <div className={styles.shareWrap} ref={shareContainerRef}>
               <Button variant="secondary" size="sm" disabled={shareLoading} onClick={() => {
@@ -920,10 +936,12 @@ export default function InvoiceDetailPage() {
                       borderTop: "1px solid var(--inv-bd)", borderLeft: "1px solid var(--inv-bd)",
                       borderRight: "1px solid var(--inv-bd)", borderBottom: "1px solid var(--inv-bd)"
                     }}>
-                      <div style={{ flexShrink: 0, width: 60, height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element -- html2canvas needs a plain <img>, swapped to a data URL during PDF/print generation */}
-                        <img src={settings?.logoUrl || "/logo.png"} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
-                      </div>
+                      {settings?.showLogoOnInvoices !== false && (
+                        <div style={{ flexShrink: 0, width: 60, height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element -- html2canvas needs a plain <img>, swapped to a data URL during PDF/print generation */}
+                          <img src={settings?.logoUrl || "/logo.png"} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                        </div>
+                      )}
                       <div style={{ flex: 1, textAlign: "center" }}>
                         <div style={{
                           fontSize: 10, fontWeight: 700,
@@ -958,7 +976,7 @@ export default function InvoiceDetailPage() {
                           </div>
                         )}
                       </div>
-                      <div style={{ flexShrink: 0, width: 60 }} aria-hidden="true" />
+                      {settings?.showLogoOnInvoices !== false && <div style={{ flexShrink: 0, width: 60 }} aria-hidden="true" />}
                     </div>
                   </th>
                 </tr>

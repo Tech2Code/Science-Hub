@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
-import { requireSession } from "@/lib/apiAuth";
+import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 
 export async function GET() {
   try {
@@ -26,7 +26,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const body = await request.json();

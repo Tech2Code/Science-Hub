@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
@@ -17,6 +18,10 @@ export default function EditVendorPage() {
   const router = useRouter();
   const toast = useToast();
   const { id } = useParams<{ id: string }>();
+  const { data: session } = useSession();
+  useEffect(() => {
+    if (session?.user?.role === "manager") router.replace("/dashboard");
+  }, [session, router]);
   const [form, setForm] = useState<VendorFormData>(BLANK_VENDOR_FORM);
   const [initialForm, setInitialForm] = useState<VendorFormData | null>(null);
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);

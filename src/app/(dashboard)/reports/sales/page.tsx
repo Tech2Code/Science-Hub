@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -70,6 +72,17 @@ function downloadCsv(filename: string, csv: string) {
 }
 
 export default function SalesReportsPage() {
+  const { data: session } = useSession();
+  const router = useRouter();
+  useEffect(() => {
+    if (!session) return;
+    const role = session.user?.role;
+    if (role === "admin") return;
+    if (!session.user?.sections?.includes("reports_sales")) {
+      router.replace("/dashboard");
+    }
+  }, [session, router]);
+
   const [tab, setTab] = useState<Tab>("outstanding");
   const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
   const [startDate, setStartDate] = useState("");

@@ -20,6 +20,7 @@ model User {
   resetTokens           PasswordResetToken[]
   purchaseBillsCreated  PurchaseBill[]       @relation("PurchaseBillCreator")
   stockMovementsCreated StockMovement[]      @relation("StockMovementCreator")
+  sectionPermissions    SectionPermission[]
 }
 
 model PasswordResetToken {
@@ -234,6 +235,7 @@ model BusinessSettings {
   bankIfsc        String   @default("")
   bankBranch      String   @default("")
   termsAndConditions String @default("Interest @ 24%p.a would be charged after 45 days of Invoice\nMaterial sold strictly for lab use only\nWe are not responsible for any loss in transit.\nSubject to 'Delhi' Jurisdiction only.")
+  showLogoOnInvoices Boolean @default(true)
   updatedAt       DateTime @updatedAt
 }
 
@@ -342,4 +344,19 @@ model StockMovement {
 
   @@index([productId, createdAt])
   @@index([createdAt])
+}
+
+// ── Section Permissions (Access Control) ──────────────────────────────────────
+
+model SectionPermission {
+  id        String   @id @default(cuid())
+  userId    String
+  section   String
+  enabled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, section])
+  @@index([userId])
 }

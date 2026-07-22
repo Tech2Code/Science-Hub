@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTheme } from "@/lib/theme";
 import { useBranding } from "@/lib/businessBranding";
+import { ProtectedSection } from "@/lib/sections";
 import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { GlobalSearch } from "./GlobalSearch";
@@ -102,7 +103,7 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
   ),
 };
 
-interface NavItem { href: string; label: string; iconKey: string; adminOnly: boolean; }
+interface NavItem { href: string; label: string; iconKey: string; adminOnly: boolean; sectionRequired?: ProtectedSection; }
 interface NavGroup { label: string | null; items: NavItem[]; }
 
 const NAV_GROUPS: NavGroup[] = [
@@ -115,19 +116,19 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "SALES",
     items: [
-      { href: "/sales",           label: "Sales Overview",    iconKey: "salesDashboard", adminOnly: false },
+      { href: "/sales",           label: "Sales Overview",    iconKey: "salesDashboard", adminOnly: false, sectionRequired: "sales_overview" },
       { href: "/sales/customers", label: "Customers",         iconKey: "customers",      adminOnly: false },
       { href: "/sales/invoices",  label: "Invoices",          iconKey: "invoices",       adminOnly: false },
-      { href: "/sales/payments",  label: "Payments Received", iconKey: "payments",       adminOnly: false },
+      { href: "/sales/payments",  label: "Payments Received", iconKey: "payments",       adminOnly: false, sectionRequired: "payments_received" },
     ],
   },
   {
     label: "PURCHASES",
     items: [
-      { href: "/purchases",          label: "Purchase Overview", iconKey: "purchaseDashboard", adminOnly: false },
+      { href: "/purchases",          label: "Purchase Overview", iconKey: "purchaseDashboard", adminOnly: false, sectionRequired: "purchase_overview" },
       { href: "/purchases/vendors",  label: "Vendors",           iconKey: "vendors",            adminOnly: false },
       { href: "/purchases/bills",    label: "Purchase Bills",    iconKey: "purchases",          adminOnly: false },
-      { href: "/purchases/payments", label: "Payments Made",     iconKey: "paymentsMade",       adminOnly: false },
+      { href: "/purchases/payments", label: "Payments Made",     iconKey: "paymentsMade",       adminOnly: false, sectionRequired: "payments_made" },
     ],
   },
   {
@@ -141,8 +142,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "REPORTS",
     items: [
-      { href: "/reports/sales",     label: "Sales Reports",    iconKey: "reportsSales",     adminOnly: false },
-      { href: "/reports/purchases", label: "Purchase Reports", iconKey: "reportsPurchases", adminOnly: false },
+      { href: "/reports/sales",     label: "Sales Reports",    iconKey: "reportsSales",     adminOnly: false, sectionRequired: "reports_sales" },
+      { href: "/reports/purchases", label: "Purchase Reports", iconKey: "reportsPurchases", adminOnly: false, sectionRequired: "reports_purchases" },
     ],
   },
   {
@@ -371,9 +372,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
         <nav className={styles.nav} ref={navRef}>
           {NAV_GROUPS.map((group) => {
-            const visibleItems = group.items.filter(
-              (item) => !item.adminOnly || session?.user?.role === "admin"
-            );
+            const visibleItems = group.items.filter((item) => {
+              if (item.adminOnly && session?.user?.role !== "admin") return false;
+              if (item.sectionRequired) {
+                if (session?.user?.role === "admin") return true;
+                return session?.user?.sections?.includes(item.sectionRequired) ?? false;
+              }
+              return true;
+            });
             if (visibleItems.length === 0) return null;
             return (
               <div key={group.label ?? "__top"}>
@@ -405,16 +411,18 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <Link
-          href="/bin"
-          onClick={handleNavClick}
-          title={!sidebarOpen && !mobile ? "Bin" : undefined}
-          className={[styles.navLink, styles.binLink, pathname.startsWith("/bin") ? styles.navLinkActive : ""].join(" ")}
-        >
-          <NavIcons.bin className={styles.navIcon} />
-          <span className={styles.navLabel}>Bin</span>
-          {pathname.startsWith("/bin") && <span className={styles.navDot} />}
-        </Link>
+        {session?.user?.role !== "manager" && (
+          <Link
+            href="/bin"
+            onClick={handleNavClick}
+            title={!sidebarOpen && !mobile ? "Bin" : undefined}
+            className={[styles.navLink, styles.binLink, pathname.startsWith("/bin") ? styles.navLinkActive : ""].join(" ")}
+          >
+            <NavIcons.bin className={styles.navIcon} />
+            <span className={styles.navLabel}>Bin</span>
+            {pathname.startsWith("/bin") && <span className={styles.navDot} />}
+          </Link>
+        )}
 
         <div className={styles.userBlock}>
           <div className={[styles.userBlockRow, (!mobile && !sidebarOpen) ? styles.userBlockRowCollapsed : ""].join(" ")}>

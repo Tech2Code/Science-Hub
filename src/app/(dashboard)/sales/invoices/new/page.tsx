@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
@@ -25,6 +26,10 @@ export default function NewInvoicePage() {
   const router = useRouter();
   const toast = useToast();
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
+  useEffect(() => {
+    if (session?.user?.role === "manager") router.replace("/dashboard");
+  }, [session, router]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customerMode, setCustomerMode] = useState<"existing" | "custom">("existing");

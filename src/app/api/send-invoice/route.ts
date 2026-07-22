@@ -3,13 +3,13 @@ import nodemailer from "nodemailer";
 import { getBusinessSettings } from "@/lib/db";
 import { rateLimit } from "@/lib/rateLimit";
 import { escapeHtml } from "@/lib/html";
-import { requireSession } from "@/lib/apiAuth";
+import { requireWriteAccess } from "@/lib/apiAuth";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10MB
 
 export async function POST(req: Request) {
-  const auth = await requireSession();
+  const auth = await requireWriteAccess();
   if (!auth.ok) return auth.response;
   const { session } = auth;
 

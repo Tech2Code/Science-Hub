@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
@@ -67,6 +69,17 @@ const COLUMNS: Column[] = [
 ];
 
 export default function PurchasePaymentsPage() {
+  const { data: session } = useSession();
+  const router = useRouter();
+  useEffect(() => {
+    if (!session) return;
+    const role = session.user?.role;
+    if (role === "admin") return;
+    if (!session.user?.sections?.includes("payments_made")) {
+      router.replace("/dashboard");
+    }
+  }, [session, router]);
+
   const { data, loading } = useFetch<PurchasePayment[]>("/api/purchase-bills/payments");
   const payments = data ?? [];
   const [search, setSearch] = useState("");

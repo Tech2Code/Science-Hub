@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { OverlayLoader } from "@/components/ui/Spinner";
@@ -23,6 +24,10 @@ const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other
 export default function NewPurchaseBillPage() {
   const router = useRouter();
   const toast  = useToast();
+  const { data: session } = useSession();
+  useEffect(() => {
+    if (session?.user?.role === "manager") router.replace("/dashboard");
+  }, [session, router]);
 
   const [vendors,  setVendors]  = useState<PurchaseBillVendor[]>([]);
   const [products, setProducts] = useState<PurchaseBillProduct[]>([]);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/apiAuth";
+import { requireSectionAccess } from "@/lib/apiAuth";
 
 async function getPurchaseSummary() {
   const now = new Date();
@@ -114,7 +114,7 @@ async function getStockLedger() {
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireSession();
+    const auth = await requireSectionAccess("reports_purchases");
     if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(request.url);

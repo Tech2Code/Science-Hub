@@ -67,10 +67,16 @@ function KpiCard({ icon, label, value, tone = "neutral", loading }: { icon: keyo
 export default function DashboardPage() {
   const { data, loading, error } = useFetch<CombinedDashboard>("/api/reports?type=combined-dashboard");
   const { data: session } = useSession();
+  const role = session?.user?.role;
+  const sections = session?.user?.sections ?? [];
+  const canSeeSales = role === "admin" || sections.includes("sales_overview");
+  const canSeePurchases = role === "admin" || sections.includes("purchase_overview");
 
   const firstName = session?.user?.name?.split(/[\s-]/)[0] ?? "";
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
+  const canWrite = role !== "manager";
 
   const quickActionSections = [
     {
@@ -78,11 +84,11 @@ export default function DashboardPage() {
       label: "Sales", tone: "blue" as Tone, color: "#2563eb", borderColor: "var(--c-blue)",
       icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>,
       tileIcon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>,
-      tileSub: "Bill a customer",
+      tileSub: canWrite ? "Bill a customer" : "View invoices",
       actions: [
-        { label: "+ New Invoice",   href: "/sales/invoices/new",  primary: true  },
-        { label: "+ New Customer",  href: "/sales/customers/new", primary: false },
-        { label: "All Invoices",    href: "/sales/invoices",      primary: false },
+        ...(canWrite ? [{ label: "+ New Invoice", href: "/sales/invoices/new", primary: true }] : []),
+        ...(canWrite ? [{ label: "+ New Customer", href: "/sales/customers/new", primary: false }] : []),
+        { label: "All Invoices",    href: "/sales/invoices",      primary: !canWrite },
         { label: "All Customers",   href: "/sales/customers",     primary: false },
       ],
     },
@@ -91,11 +97,11 @@ export default function DashboardPage() {
       label: "Purchases", tone: "amber" as Tone, color: "#d97706", borderColor: "var(--c-amber)",
       icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
       tileIcon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
-      tileSub: "Record a purchase",
+      tileSub: canWrite ? "Record a purchase" : "View purchases",
       actions: [
-        { label: "+ New Bill",     href: "/purchases/bills/new",   primary: true  },
-        { label: "+ New Vendor",   href: "/purchases/vendors/new", primary: false },
-        { label: "All Bills",      href: "/purchases/bills",       primary: false },
+        ...(canWrite ? [{ label: "+ New Bill", href: "/purchases/bills/new", primary: true }] : []),
+        ...(canWrite ? [{ label: "+ New Vendor", href: "/purchases/vendors/new", primary: false }] : []),
+        { label: "All Bills",      href: "/purchases/bills",       primary: !canWrite },
         { label: "All Vendors",    href: "/purchases/vendors",     primary: false },
       ],
     },
@@ -104,15 +110,19 @@ export default function DashboardPage() {
       label: "Catalog", tone: "neutral" as Tone, color: "#64748b", borderColor: "var(--c-border-md)",
       icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/></svg>,
       tileIcon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/></svg>,
-      tileSub: "Add to inventory",
+      tileSub: canWrite ? "Add to inventory" : "View catalog",
       actions: [
-        { label: "+ New Product",  href: "/products/new",    primary: true  },
-        { label: "All Products",   href: "/products",        primary: false },
-        { label: "Sales Reports",  href: "/reports/sales",   primary: false },
-        { label: "Buy Reports",    href: "/reports/purchases",primary: false },
+        ...(canWrite ? [{ label: "+ New Product", href: "/products/new", primary: true }] : []),
+        { label: "All Products",   href: "/products",        primary: !canWrite },
+        { label: "Brands",         href: "/brands",          primary: false },
+        { label: "Categories",     href: "/categories",      primary: false },
+        ...(role === "admin" || sections.includes("reports_sales") ? [{ label: "Sales Reports", href: "/reports/sales", primary: false }] : []),
+        ...(role === "admin" || sections.includes("reports_purchases") ? [{ label: "Buy Reports", href: "/reports/purchases", primary: false }] : []),
       ],
     },
   ];
+
+  const visibleQuickActions = quickActionSections;
 
   return (
     <div className="page-stack">
@@ -138,7 +148,7 @@ export default function DashboardPage() {
 
       {/* ── Primary action tiles ── */}
       <div {...animateSection(1, styles.actionTilesGrid)}>
-        {quickActionSections.map(section => (
+        {visibleQuickActions.map(section => (
           <Link key={section.key} href={section.actions[0].href} className={styles.actionTile} data-tone={section.tone}>
             <span className={styles.actionTileIcon}>{section.tileIcon}</span>
             <span className={styles.actionTileText}>
@@ -154,10 +164,10 @@ export default function DashboardPage() {
 
       {/* ── Secondary quick links ── */}
       <div {...animateSection(2, `card ${styles.quickActionsCard}`)}>
-        {quickActionSections.map((section, sIdx) => (
+        {visibleQuickActions.map((section, sIdx) => (
           <div
             key={section.key}
-            className={`${styles.quickActionSection} ${sIdx === quickActionSections.length - 1 ? styles.quickActionSectionLast : ""}`}
+            className={`${styles.quickActionSection} ${sIdx === visibleQuickActions.length - 1 ? styles.quickActionSectionLast : ""}`}
             style={{ "--accent": section.color, "--accent-border": section.borderColor } as React.CSSProperties}
           >
             {/* Section label — fixed width column */}
@@ -181,8 +191,10 @@ export default function DashboardPage() {
       </div>
 
       {/* Sales & Purchases side-by-side */}
+      {(canSeeSales || canSeePurchases) && (
       <div {...animateSection(3, styles.sideBySideGrid)}>
         {/* SALES half */}
+        {canSeeSales && (
         <div className={styles.sideBySideCol}>
           <SectionLabel>Sales</SectionLabel>
           <div className={styles.kpiGrid}>
@@ -192,7 +204,9 @@ export default function DashboardPage() {
             <KpiCard icon="check" label="Collected Today" value={loading ? "—" : fmt(data?.sales.collectedToday ?? 0)} tone="green" loading={loading} />
           </div>
         </div>
+        )}
         {/* PURCHASES half */}
+        {canSeePurchases && (
         <div className={styles.sideBySideCol}>
           <SectionLabel>Purchases</SectionLabel>
           <div className={styles.kpiGrid}>
@@ -202,7 +216,9 @@ export default function DashboardPage() {
             <KpiCard icon="check" label="Paid Today" value={loading ? "—" : fmt(data?.purchases.paidToday ?? 0)} tone="green" loading={loading} />
           </div>
         </div>
+        )}
       </div>
+      )}
 
       {/* Recent invoices & bills */}
       <div {...animateSection(4, styles.recentGrid)}>

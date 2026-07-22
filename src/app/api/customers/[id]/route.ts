@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCustomer } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
-import { requireSession } from "@/lib/apiAuth";
+import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { validateCustomerInput } from "@/lib/validation";
 
 export async function GET(
@@ -29,7 +29,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
@@ -68,7 +68,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const { id } = await params;

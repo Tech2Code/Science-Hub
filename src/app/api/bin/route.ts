@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { deleteAttachmentBlob } from "@/lib/blobStorage";
-import { requireSession } from "@/lib/apiAuth";
+import { requireWriteAccess } from "@/lib/apiAuth";
 
 export async function GET() {
   try {
-    const auth = await requireSession();
+    // Managers have no bin access — requireWriteAccess blocks them.
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);

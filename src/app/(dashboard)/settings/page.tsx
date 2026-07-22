@@ -7,6 +7,8 @@ import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
 import { useBranding } from "@/lib/businessBranding";
 import { animateSection } from "@/lib/animateSection";
+import { clearAllCachedPdfs } from "@/lib/pdfCache";
+import { patchCache } from "@/lib/useCache";
 import styles from "./settings.module.css";
 
 interface BusinessSettings {
@@ -16,6 +18,7 @@ interface BusinessSettings {
   bankName: string; bankAccountName: string; bankAccountNumber: string; bankIfsc: string; bankBranch: string;
   termsAndConditions: string;
   logoUrl: string;
+  showLogoOnInvoices: boolean;
   updatedAt: string;
 }
 
@@ -26,6 +29,7 @@ const EMPTY: BusinessSettings = {
   bankName: "", bankAccountName: "", bankAccountNumber: "", bankIfsc: "", bankBranch: "",
   termsAndConditions: "",
   logoUrl: "",
+  showLogoOnInvoices: true,
   updatedAt: "",
 };
 
@@ -118,6 +122,7 @@ export default function SettingsPage() {
   const [savingTerms, setSavingTerms] = useState(false);
 
   const [logoUploading, setLogoUploading] = useState(false);
+  const [savingBranding, setSavingBranding] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   function applyLoaded(d: Record<string, string | boolean>) {
@@ -132,6 +137,7 @@ export default function SettingsPage() {
       bankBranch: (d.bankBranch as string) ?? "",
       termsAndConditions: (d.termsAndConditions as string) ?? "",
       logoUrl: (d.logoUrl as string) ?? "",
+      showLogoOnInvoices: d.showLogoOnInvoices === undefined ? true : Boolean(d.showLogoOnInvoices),
       updatedAt: (d.updatedAt as string) ?? "",
     };
     setSaved(s);
@@ -150,7 +156,12 @@ export default function SettingsPage() {
   async function putSettings(overrides: Partial<BusinessSettings> & { gmailAppPassword?: string }) {
     const body = { ...saved, ...overrides, expectedUpdatedAt: saved.updatedAt || undefined };
     const res = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (res.ok) return { ok: true as const, data: await res.json() };
+    if (res.ok) {
+      const data = await res.json();
+      patchCache("/api/settings", () => data);
+      await clearAllCachedPdfs();
+      return { ok: true as const, data };
+    }
     const d = await res.json().catch(() => ({}));
     if (res.status === 409) {
       // Refresh local state so the conflicting fields aren't shown stale, and
@@ -429,6 +440,25 @@ export default function SettingsPage() {
     setLogoUploading(false);
   }
 
+  async function handleToggleInvoiceLogo() {
+    const next = !saved.showLogoOnInvoices;
+    setSavingBranding(true);
+    const result = await putSettings({ showLogoOnInvoices: next });
+    if (result.ok) {
+      applyLoaded(result.data);
+      toast({
+        type: "success",
+        title: "Invoice logo setting saved",
+        message: next ? "Logo will show on invoices." : "Logo will be hidden on invoices.",
+      });
+    } else if (result.conflict) {
+      toast({ type: "error", title: "Update conflict", message: result.error ?? "Business settings were changed by someone else. Please reload and try again." });
+    } else {
+      toast({ type: "error", title: "Save failed", message: result.error ?? "Could not save invoice logo setting." });
+    }
+    setSavingBranding(false);
+  }
+
   // ── Email config ──────────────────────────────────────────────────────────
 
   function handleEditEmail() {
@@ -534,7 +564,7 @@ export default function SettingsPage() {
           {/* ── Branding (Logo) ──────────────────────────────────────────── */}
           <div {...animateSection(0, `card ${styles.cardPad}`)}>
             <h2 className={styles.sectionTitle}>Branding</h2>
-            <p className={styles.stateHint}>Shown on the sidebar, login screen, and every printed invoice.</p>
+            <p className={styles.stateHint}>Shown on the sidebar, login screen, and invoices when enabled.</p>
             <div className={styles.emailFormGrid} style={{ alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                 <div className={styles.logoPreview}>
@@ -558,6 +588,25 @@ export default function SettingsPage() {
                     </Button>
                   )}
                 </div>
+              </div>
+              <div className={styles.invoiceLogoToggleRow}>
+                <div>
+                  <div className={styles.invoiceLogoToggleTitle}>Show logo on invoices</div>
+                  <div className={styles.invoiceLogoToggleHint}>
+                    {saved.showLogoOnInvoices ? "Invoice PDFs and print views include the business logo." : "Invoice PDFs and print views hide the business logo."}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={saved.showLogoOnInvoices}
+                  disabled={savingBranding}
+                  onClick={handleToggleInvoiceLogo}
+                  className={[styles.invoiceLogoSwitch, saved.showLogoOnInvoices ? styles.invoiceLogoSwitchOn : ""].filter(Boolean).join(" ")}
+                >
+                  <span className={styles.invoiceLogoSwitchThumb} />
+                  {savingBranding && <span className={styles.invoiceLogoSwitchSpinner} />}
+                </button>
               </div>
             </div>
           </div>

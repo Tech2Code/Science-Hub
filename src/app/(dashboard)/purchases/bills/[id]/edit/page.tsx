@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
@@ -69,6 +70,10 @@ export default function EditPurchaseBillPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const toast  = useToast();
+  const { data: session } = useSession();
+  useEffect(() => {
+    if (session?.user?.role === "manager") router.replace("/dashboard");
+  }, [session, router]);
 
   const [vendors,  setVendors]  = useState<PurchaseBillVendor[]>([]);
   const [products, setProducts] = useState<PurchaseBillProduct[]>([]);

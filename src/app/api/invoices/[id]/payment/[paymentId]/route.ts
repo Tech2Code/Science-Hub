@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
-import { requireSession } from "@/lib/apiAuth";
+import { requireWriteAccess } from "@/lib/apiAuth";
 import { isFutureIstDate } from "@/lib/validation";
 
 export async function PUT(
@@ -10,7 +10,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string; paymentId: string }> }
 ) {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const { id, paymentId } = await params;

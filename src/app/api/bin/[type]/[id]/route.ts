@@ -4,7 +4,7 @@ import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { deleteAttachmentBlob } from "@/lib/blobStorage";
-import { requireSession, requireAdmin } from "@/lib/apiAuth";
+import { requireWriteAccess, requireAdmin } from "@/lib/apiAuth";
 
 type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill";
 
@@ -48,7 +48,7 @@ export async function POST(
 ) {
   try {
     const { type, id } = await params;
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
     const { session } = auth;
 

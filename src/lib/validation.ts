@@ -164,8 +164,8 @@ export function validateUserInput(
   if (input.password !== undefined && input.password.length < 8) {
     return `${passwordLabel} must be at least 8 characters`;
   }
-  if (input.role !== undefined && input.role !== "admin" && input.role !== "staff") {
-    return 'role must be "admin" or "staff"';
+  if (input.role !== undefined && input.role !== "admin" && input.role !== "staff" && input.role !== "manager") {
+    return 'role must be "admin", "staff", or "manager"';
   }
   return null;
 }

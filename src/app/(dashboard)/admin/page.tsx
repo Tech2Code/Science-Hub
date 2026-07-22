@@ -32,7 +32,7 @@ interface ActivityLog {
   user: { id: string; name: string; email: string; role: string };
 }
 
-type Role = "admin" | "staff";
+type Role = "admin" | "staff" | "manager";
 
 // ── Action metadata ──────────────────────────────────────
 const ACTION_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -77,15 +77,17 @@ function ActionBadge({ action }: { action: string }) {
 
 function RoleBadge({ role }: { role: string }) {
   const isAdmin = role === "admin";
+  const isManager = role === "manager";
   return (
-    <span className={`${styles.roleBadge} ${isAdmin ? styles.roleBadgeAdmin : styles.roleBadgeStaff}`}>
-      {isAdmin ? "⬡ Admin" : "◌ Staff"}
+    <span className={`${styles.roleBadge} ${isAdmin ? styles.roleBadgeAdmin : isManager ? styles.roleBadgeAdmin : styles.roleBadgeStaff}`}>
+      {isAdmin ? "⬡ Admin" : isManager ? "◈ Manager" : "◌ Staff"}
     </span>
   );
 }
 
 const AVATAR_COLORS = {
   admin: { bg: "#6366f1", text: "#fff", badge: "#f59e0b", badgeIcon: "★" },
+  manager: { bg: "#2563eb", text: "#fff", badge: "#6366f1", badgeIcon: "◈" },
   staff: { bg: "#22c55e", text: "#fff", badge: "#94a3b8", badgeIcon: "·" },
 };
 
@@ -415,11 +417,15 @@ export default function AdminPage() {
   const ROLE_INFO = [
     {
       role: "admin", color: "var(--c-blue)", dotBg: "#f59e0b",
-      perms: ["All business features", "Manage users (create / edit / delete)", "Reset any user's password", "View full activity log"],
+      perms: ["All business features", "Manage users (create / edit / delete)", "Reset any user's password", "View full activity log", "Manage section permissions"],
+    },
+    {
+      role: "manager", color: "var(--c-blue)", dotBg: "#6366f1",
+      perms: ["Access granted sections (set by Admin)", "Invoices, customers, products", "No access to Admin Panel"],
     },
     {
       role: "staff", color: "var(--c-text-3)", dotBg: "#94a3b8",
-      perms: ["Invoices, customers, products, reports", "No access to Admin Panel", "Cannot manage users or view activity"],
+      perms: ["Access granted sections (set by Admin)", "Invoices, customers, products", "No access to Admin Panel", "Cannot manage users or view activity"],
     },
   ];
 
@@ -506,6 +512,10 @@ export default function AdminPage() {
           <h1 className="page-title">Admin Panel</h1>
           <p className="page-sub">Profile, user management &amp; activity log</p>
         </div>
+        <Button variant="secondary" size="sm" href="/admin/permissions">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Section Permissions
+        </Button>
       </div>
 
       {/* ── Two-column layout ───────────────────────────────────── */}
@@ -654,6 +664,7 @@ export default function AdminPage() {
                 <FormField label="Role">
                   <Select className={`${styles.inp} ${styles.inpCursor}`} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>
                     <option value="staff">Staff</option>
+                    <option value="manager">Manager</option>
                     <option value="admin">Admin</option>
                   </Select>
                 </FormField>
@@ -678,6 +689,7 @@ export default function AdminPage() {
                 <FormField label="Role">
                   <Select className={`${styles.inp} ${styles.inpCursor}`} value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value as Role }))}>
                     <option value="staff">Staff</option>
+                    <option value="manager">Manager</option>
                     <option value="admin">Admin</option>
                   </Select>
                 </FormField>

@@ -18,6 +18,7 @@ import { SortSelect } from "@/components/ui/SortSelect";
 import { StatCardsRow } from "@/components/ui/StatCardsRow";
 import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
 import { animateSection } from "@/lib/animateSection";
+import { useCanWrite } from "@/lib/useCanWrite";
 import styles from "./billsList.module.css";
 
 interface PurchaseBill {
@@ -25,6 +26,7 @@ interface PurchaseBill {
   billNumber: string;
   billDate: string;
   dueDate: string | null;
+  createdAt: string;
   status: string;
   total: number;
   paidAmount: number;
@@ -58,7 +60,7 @@ function sortBills(list: PurchaseBill[], sort: SortOption): PurchaseBill[] {
   const arr = [...list];
   switch (sort) {
     case "oldest":
-      return arr.sort((a, b) => new Date(a.billDate).getTime() - new Date(b.billDate).getTime());
+      return arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     case "vendor_az":
       return arr.sort((a, b) => a.vendor.name.localeCompare(b.vendor.name));
     case "vendor_za":
@@ -71,7 +73,7 @@ function sortBills(list: PurchaseBill[], sort: SortOption): PurchaseBill[] {
       return arr.sort((a, b) => (b.total - b.paidAmount) - (a.total - a.paidAmount));
     case "newest":
     default:
-      return arr.sort((a, b) => new Date(b.billDate).getTime() - new Date(a.billDate).getTime());
+      return arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 }
 
@@ -90,6 +92,7 @@ const COLUMNS: Column[] = [
 const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function PurchasesPage() {
+  const canWrite = useCanWrite();
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
@@ -241,10 +244,10 @@ export default function PurchasesPage() {
             {loading ? "Loading…" : search.trim() ? `${filtered.length} of ${scoped.length} bills` : `${scoped.length} bills`}
           </p>
         </div>
-        <Button variant="primary" href="/purchases/bills/new">
+        {canWrite && (<Button variant="primary" href="/purchases/bills/new">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           New Bill
-        </Button>
+        </Button>)}
       </div>
 
       {/* Dashboard cards */}
@@ -321,7 +324,10 @@ export default function PurchasesPage() {
                     )}
                   </Cell>
                   <Cell col={COLUMNS[1]} className={styles.dateCell}>
-                    {new Date(b.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                    <div>{new Date(b.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
+                    <div className={["date-sub", styles.dateSub].join(" ")}>
+                      {new Date(b.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                    </div>
                     {b.dueDate && new Date(b.dueDate) < new Date() && b.status !== "paid" && (
                       <div className={styles.overdueSub}>Overdue</div>
                     )}
@@ -363,10 +369,10 @@ export default function PurchasesPage() {
                       <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" loading={pdfLoading === b.id} onClick={() => handleRegenerate(b)}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
                       </Button>
-                      <Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(b)}>
+                      {canWrite && (<Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(b)}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
                         Delete
-                      </Button>
+                      </Button>)}
                     </div>
                   </Cell>
                 </tr>

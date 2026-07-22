@@ -7,7 +7,7 @@ import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { isPurchaseBillBlobUrl } from "@/lib/blobStorage";
 import { isFutureIstDate } from "@/lib/validation";
 import { computeRoundOff } from "@/lib/roundOff";
-import { requireSession } from "@/lib/apiAuth";
+import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { purchaseBillLineBreakdown } from "@/lib/purchaseBillForm";
 
 const BILL_INCLUDE = {
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
         ...(vendorId ? { vendorId } : {}),
       },
       include: BILL_INCLUDE,
-      orderBy: { billDate: "desc" },
+      orderBy: { createdAt: "desc" },
       take: 2000,
     });
     return NextResponse.json(bills);
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
     const userId = auth.session.user.id;
 

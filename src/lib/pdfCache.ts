@@ -5,8 +5,8 @@
  *
  * PDF generation (html2canvas + jsPDF) is the expensive step, not the data
  * fetch (already cached by useCache.ts), so this caches the rendered Blob
- * itself, keyed by entity + the render options that actually change its
- * content (copy labels, payment/return-history toggles).
+ * itself, keyed by entity + the render options/settings that actually change
+ * its content (copy labels, payment/return-history toggles, business settings).
  */
 
 const DB_NAME = "science-hub-pdf-cache";
@@ -25,10 +25,10 @@ function recordId(entity: PdfEntity, entityId: string): string {
 }
 
 /** Stable key for a given combination of copy labels / extra render flags. */
-export function buildPdfVariantKey(copyLabels?: string[], extra?: Record<string, boolean>): string {
+export function buildPdfVariantKey(copyLabels?: string[], extra?: Record<string, boolean | string | number | null | undefined>): string {
   const labelsPart = copyLabels?.length ? [...copyLabels].sort().join("+") : "default";
   const extraPart = extra
-    ? Object.keys(extra).sort().map((k) => `${k}=${extra[k] ? 1 : 0}`).join(",")
+    ? Object.keys(extra).sort().map((k) => `${k}=${String(extra[k])}`).join(",")
     : "";
   return extraPart ? `${labelsPart}|${extraPart}` : labelsPart;
 }

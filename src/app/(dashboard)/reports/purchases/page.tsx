@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -109,6 +110,16 @@ type Tab = "summary" | "outstanding" | "category" | "ledger";
 
 export default function PurchaseReportsPage() {
   const { data: session } = useSession();
+  const router = useRouter();
+  useEffect(() => {
+    if (!session) return;
+    const role = session.user?.role;
+    if (role === "admin") return;
+    if (!session.user?.sections?.includes("reports_purchases")) {
+      router.replace("/dashboard");
+    }
+  }, [session, router]);
+
   const isAdmin = session?.user?.role === "admin";
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("outstanding");

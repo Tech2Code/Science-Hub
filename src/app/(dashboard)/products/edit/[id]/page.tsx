@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
@@ -20,6 +21,10 @@ export default function EditProductPage() {
   const router = useRouter();
   const toast = useToast();
   const { id } = useParams<{ id: string }>();
+  const { data: session } = useSession();
+  useEffect(() => {
+    if (session?.user?.role === "manager") router.replace("/dashboard");
+  }, [session, router]);
   const [form, setForm] = useState<ProductFormData>({
     name: "", sku: "", description: "", unit: "Nos",
     price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: "0",

@@ -42,6 +42,10 @@
   font-size: 0.8125rem;
 }
 
+.dateSub {
+  margin-top: 2px;
+}
+
 .overdueSub {
   font-size: 0.7rem;
   color: var(--c-red);

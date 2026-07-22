@@ -18,6 +18,7 @@ import { amountInWordsINR } from "@/lib/numberToWords";
 import { animateSection } from "@/lib/animateSection";
 import { truncateFilename } from "@/lib/truncateFilename";
 import { AttachmentIcon } from "@/components/purchases/AttachmentIcon";
+import { useCanWrite } from "@/lib/useCanWrite";
 import styles from "./billDetail.module.css";
 
 interface PurchaseBillItem {
@@ -72,6 +73,7 @@ export default function PurchaseBillDetailPage() {
   const { id } = useParams<{ id: string }>();
   const toast   = useToast();
   const router  = useRouter();
+  const canWrite = useCanWrite();
 
   const [bill,    setBill]    = useState<PurchaseBill | null>(null);
   const [loading, setLoading] = useState(true);
@@ -470,6 +472,7 @@ export default function PurchaseBillDetailPage() {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
             Regenerate
           </Button>
+          {canWrite && (
           <Button
             variant="secondary"
             size="sm"
@@ -480,19 +483,22 @@ export default function PurchaseBillDetailPage() {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Edit
           </Button>
-          {bill.status !== "paid" && bill.status !== "cancelled" && (
+          )}
+          {canWrite && bill.status !== "paid" && bill.status !== "cancelled" && (
             <Button variant="primary" size="sm" onClick={() => setShowPayForm(v => !v)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               {showPayForm ? "Hide Payment" : "Record Payment"}
             </Button>
           )}
-          {bill.status !== "cancelled" && (
+          {canWrite && bill.status !== "cancelled" && (
             <Button variant="dangerOutline" size="sm" onClick={() => setConfirmCancel(true)}>Cancel Bill</Button>
           )}
+          {canWrite && (
           <Button variant="dangerOutline" size="sm" onClick={() => setConfirmDelete(true)}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
             Delete
           </Button>
+          )}
         </div>
       </div>
 
