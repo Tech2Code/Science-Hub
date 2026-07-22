@@ -1140,19 +1140,19 @@ export default function InvoiceDetailPage() {
                   return (
                     <tr id="invoice-col-header" style={{ background: "var(--inv-bg3)", fontWeight: 700, fontSize: 9.5, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--inv-tx2)" }}>
                       {[
-                        ["#", "center", "3%"], ["Description", "left", "16%"], ["HSN/SAC", "center", "6%"],
+                        ["#", "center", "3%"], ["Description", "left", "13%"], ["HSN/SAC", "center", "6%"],
                         ["Qty", "center", "5%"], ["Unit", "center", "5%"],
                       ].map(([label, align, width]) => (
                         <td key={label} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align as "left" | "right" | "center", width, whiteSpace: "nowrap", verticalAlign: "middle" }}>{label}</td>
                       ))}
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "7%", verticalAlign: "middle" }}>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "9%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                         <div>List</div><div>Price(₹)</div>
                       </td>
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "7%", verticalAlign: "middle" }}>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "8%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                         <div>Total</div><div>Value (₹)</div>
                       </td>
                       {[
-                        ["Discount", "center", "6%"], ["Taxable (₹)", "right", "7%"],
+                        ["Discount", "center", "5%"], ["Taxable (₹)", "right", "7%"],
                       ].map(([label, align, width]) => (
                         <td key={label} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align as "left" | "right" | "center", width, whiteSpace: "nowrap", verticalAlign: "middle" }}>{label}</td>
                       ))}
@@ -1160,7 +1160,7 @@ export default function InvoiceDetailPage() {
                         ? taxGroup("IGST", "9%")
                         : <>{taxGroup("CGST", "8%")}{taxGroup("SGST", "8%")}</>
                       }
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "8%", whiteSpace: "nowrap", verticalAlign: "middle" }}>Total (₹)</td>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "9%", whiteSpace: "nowrap", verticalAlign: "middle" }}>Total (₹)</td>
                     </tr>
                   );
                 })()}
@@ -1188,14 +1188,14 @@ export default function InvoiceDetailPage() {
                       <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 6px", background: rowBg, fontWeight: 600, color: "var(--inv-tx)", wordBreak: "break-word" }}>{item.name}</td>
                       {c(item.hsn || "—")}
                       {c(item.quantity)}{c(item.unit)}
-                      {c(fmt(item.price))}
-                      {c(fmt(grossValue))}
-                      {c(discountAmount > 0 ? `₹${fmt(discountAmount)}` : "—")}
+                      {c(fmt(item.price), "center", false, undefined, true)}
+                      {c(fmt(grossValue), "center", false, undefined, true)}
+                      {c(discountAmount > 0 ? `₹${fmt(discountAmount)}` : "—", "center", false, undefined, true)}
                       {c(fmt(taxable), "right")}
                       {invoice.isInterState
                         ? <>{c(`${item.gstRate}%`, "center", false, "4.5%", true)}{c(fmt(item.gstAmount), "right", false, undefined, true)}</>
                         : <>{c(`${halfRate}%`, "center", false, "4.5%", true)}{c(fmt(halfGst), "right", false, undefined, true)}{c(`${halfRate}%`, "center", false, "4.5%", true)}{c(fmt(halfGst), "right", false, undefined, true)}</>}
-                      {c(fmt(item.total), "right", true)}
+                      {c(fmt(item.total), "right", true, undefined, true)}
                     </tr>
                   );
                 })}
@@ -1208,7 +1208,7 @@ export default function InvoiceDetailPage() {
                       <div style={{ marginTop: "auto" }}>
                         <div style={{ display: "flex", gap: 16, marginBottom: 10 }}>
                           {settings?.termsAndConditions?.trim() && (
-                            <div style={{ flex: 1.7, minWidth: 0 }}>
+                            <div style={{ flex: 1.37, minWidth: 0 }}>
                               <div style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10, marginBottom: 4, color: "var(--inv-tx2)" }}>Terms &amp; Conditions</div>
                               <ol style={{ margin: 0, paddingLeft: 14, fontSize: 9.5, lineHeight: 1.5 }}>
                                 {settings.termsAndConditions.split("\n").map((line, i) => line.trim() && <li key={i}>{line.trim()}</li>)}
@@ -1219,7 +1219,7 @@ export default function InvoiceDetailPage() {
                             const bankRow = (label: string, value?: string) => value && (
                               <div>
                                 <span style={{ fontWeight: 600, color: "var(--inv-tx2)" }}>{label} : </span>
-                                <span>{value}</span>
+                                <span style={{ fontWeight: 700 }}>{value}</span>
                               </div>
                             );
                             const hasTerms = Boolean(settings?.termsAndConditions?.trim());
