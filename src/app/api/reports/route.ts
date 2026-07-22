@@ -53,18 +53,18 @@ async function getSalesDashboard() {
   const fyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
   const fyStart = new Date(fyYear, 3, 1);
   const fyLabel = `FY ${fyYear}-${String(fyYear + 1).slice(2)}`;
-  const monthlyRevenue: { month: string; total: number }[] = [];
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(fyStart.getFullYear(), fyStart.getMonth() + i, 1);
-    const label = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
-    if (d > now) { monthlyRevenue.push({ month: label, total: 0 }); continue; }
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-    const agg = await prisma.invoice.aggregate({
-      where: { deletedAt: null, date: { gte: d, lt: end } },
-      _sum: { total: true },
-    });
-    monthlyRevenue.push({ month: label, total: agg._sum.total ?? 0 });
-  }
+  const monthlyRevenue: { month: string; total: number }[] = await Promise.all(
+    Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(fyStart.getFullYear(), fyStart.getMonth() + i, 1);
+      const label = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
+      if (d > now) return Promise.resolve({ month: label, total: 0 });
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+      return prisma.invoice.aggregate({
+        where: { deletedAt: null, date: { gte: d, lt: end } },
+        _sum: { total: true },
+      }).then((agg) => ({ month: label, total: agg._sum.total ?? 0 }));
+    })
+  );
 
   return {
     revenueThisMonth: revenueAgg._sum.total ?? 0,
@@ -129,18 +129,18 @@ async function getPurchaseDashboard() {
   const fyYearP = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
   const fyStartP = new Date(fyYearP, 3, 1);
   const fyLabelP = `FY ${fyYearP}-${String(fyYearP + 1).slice(2)}`;
-  const monthlySpend: { month: string; total: number }[] = [];
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(fyStartP.getFullYear(), fyStartP.getMonth() + i, 1);
-    const label = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
-    if (d > now) { monthlySpend.push({ month: label, total: 0 }); continue; }
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-    const agg = await prisma.purchaseBill.aggregate({
-      where: { deletedAt: null, billDate: { gte: d, lt: end } },
-      _sum: { total: true },
-    });
-    monthlySpend.push({ month: label, total: agg._sum.total ?? 0 });
-  }
+  const monthlySpend: { month: string; total: number }[] = await Promise.all(
+    Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(fyStartP.getFullYear(), fyStartP.getMonth() + i, 1);
+      const label = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
+      if (d > now) return Promise.resolve({ month: label, total: 0 });
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+      return prisma.purchaseBill.aggregate({
+        where: { deletedAt: null, billDate: { gte: d, lt: end } },
+        _sum: { total: true },
+      }).then((agg) => ({ month: label, total: agg._sum.total ?? 0 }));
+    })
+  );
 
   return {
     spendThisMonth: spendAgg._sum.total ?? 0,

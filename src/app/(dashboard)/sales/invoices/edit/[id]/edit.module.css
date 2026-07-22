@@ -44,105 +44,15 @@
 .sectionTitle { font-size: 0.875rem; font-weight: 600; color: var(--c-text-2); margin-bottom: 0.75rem; }
 
 .billToBox { padding: 0.75rem 1rem; border-radius: 0.625rem; background: var(--c-bg-sub); border: 1px solid var(--c-border); }
-.billToName { font-weight: 600; color: var(--c-text); }
+.billToName {
+  font-weight: 600;
+  color: var(--c-text);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .billToMeta { font-size: 0.75rem; color: var(--c-text-3); margin-top: 0.25rem; }
-
-/* ---- Inter-state + due date row ---- */
-.optionsRow { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; }
-.switchLabel { display: flex; align-items: center; gap: 0.625rem; cursor: pointer; }
-.switchTrack {
-  position: relative; width: 2.5rem; height: 1.25rem; border-radius: 9999px; cursor: pointer;
-  background: var(--c-border-md); transition: background 0.2s;
-}
-.switchTrackOn { background: var(--c-blue); }
-.switchThumb {
-  position: absolute; top: 0.125rem; left: 0.125rem;
-  width: 1rem; height: 1rem; border-radius: 9999px; background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: left 0.2s;
-}
-.switchThumbOn { left: 1.375rem; }
-.switchText { font-size: 0.875rem; font-weight: 500; color: var(--c-text-2); }
-.dueDateGroup { display: flex; align-items: center; gap: 0.5rem; }
-.dueDateLabel { font-size: 0.875rem; font-weight: 500; color: var(--c-text-2); }
-.dueDateInput {
-  padding: 0.375rem 0.75rem; border-radius: 0.5rem;
-  border: 1px solid var(--c-border); background: var(--c-bg-input);
-  color: var(--c-text); font-size: 0.875rem; outline: none;
-}
-
-/* ---- Product search / dropdown ---- */
-.productSearchWrap { position: relative; margin-bottom: 1rem; }
-.productSearchInput {
-  width: 100%; padding: 0.625rem 0.875rem; border-radius: 0.5rem;
-  border: 1px solid var(--c-border); background: var(--c-bg-input);
-  color: var(--c-text); font-size: 0.875rem; outline: none; box-sizing: border-box;
-}
-.productDropdown {
-  position: absolute; z-index: 20; margin-top: 0.25rem; width: 100%;
-  background: var(--c-bg-card); border: 1px solid var(--c-border);
-  border-radius: 0.5rem; box-shadow: var(--c-shadow-lg); max-height: 13rem; overflow-y: auto;
-}
-.productOption {
-  width: 100%; text-align: left; padding: 0.625rem 1rem; background: none;
-  border: none; border-bottom: 1px solid var(--c-border); cursor: pointer;
-  font-size: 0.875rem;
-}
-.productOption:hover { background: var(--c-bg-sub); }
-.productOptionName { font-weight: 500; color: var(--c-text); }
-.productOptionMeta { font-size: 0.75rem; color: var(--c-text-4); }
-
-/* ---- Items table ---- */
-.tableScroll { overflow-x: auto; }
-.itemsTable { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-.itemsTable tr { border-bottom: 1px solid var(--c-border); }
-.itemsTable tbody td { vertical-align: middle; }
-.itemsTh { padding: 0.375rem 0.5rem; text-align: left; font-size: 0.75rem; font-weight: 600; color: var(--c-text-4); text-transform: uppercase; letter-spacing: 0.05em; }
-.itemsThRight { text-align: right; }
-.itemsThCenter { text-align: center; }
-.itemsTd { padding: 0.5rem; }
-.itemsTdNum { padding: 0.5rem; text-align: right; }
-.itemsTdName { padding: 0.5rem; font-weight: 500; color: var(--c-text); }
-.itemsTdUnit { padding: 0.5rem; color: var(--c-text-3); font-size: 0.75rem; }
-.itemsTdRight { padding: 0.5rem; text-align: right; font-size: 0.75rem; color: var(--c-text-3); }
-.itemsTdCenter { padding: 0.5rem; text-align: center; }
-.itemsTdAmount { padding: 0.5rem; text-align: right; font-weight: 500; font-size: 0.75rem; color: var(--c-text); }
-.qtyInput {
-  box-sizing: border-box; height: 1.75rem;
-  width: 4rem; padding: 0.25rem 0.375rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
-  background: var(--c-bg-input); color: var(--c-text); font-size: 0.75rem; text-align: right;
-}
-.priceInput {
-  box-sizing: border-box; height: 1.75rem;
-  width: 5.5rem; padding: 0.25rem 0.375rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
-  background: var(--c-bg-input); color: var(--c-text); font-size: 0.75rem; text-align: right;
-}
-.hsnInput {
-  box-sizing: border-box; height: 1.75rem;
-  width: 5rem; padding: 0.25rem 0.375rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
-  background: var(--c-bg-input); color: var(--c-text); font-size: 0.75rem; text-align: left;
-}
-.discountSelect {
-  box-sizing: border-box; height: 1.75rem;
-  width: 3.6rem; padding: 0.25rem 0.25rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
-  background: var(--c-bg-input); color: var(--c-text); font-size: 0.75rem; cursor: pointer;
-}
-.discountCell { composes: itemsTdCenter; }
-.discountStack { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
-.discountAmountInput {
-  box-sizing: border-box; height: 1.75rem;
-  width: 3.6rem; padding: 0.25rem 0.375rem; border-radius: 0.375rem; border: 1px solid var(--c-border);
-  background: var(--c-bg-input); color: var(--c-text); font-size: 0.75rem; text-align: right;
-}
-.removeBtn {
-  background: none; border: none; cursor: pointer; color: var(--c-text-4); font-size: 1rem;
-  line-height: 1; padding: 0.125rem 0.375rem;
-}
-.removeBtn:hover { color: var(--c-red); }
-
-.emptyItems {
-  text-align: center; padding: 2rem; font-size: 0.875rem; color: var(--c-text-4);
-  border: 2px dashed var(--c-border); border-radius: 0.625rem;
-}
 
 /* ---- Notes ---- */
 .notesLabel { display: block; font-size: 0.875rem; font-weight: 500; color: var(--c-text-2); margin-bottom: 0.375rem; }

@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
@@ -73,6 +75,7 @@ function TypeSection({
     <div {...animateSection(index, `card ${styles.sectionCard}`)}>
       <button
         onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
         className={`${styles.sectionToggle} ${open ? styles.sectionToggleOpen : ""}`}
       >
         <span className={`${styles.typePill} ${m.pillCls}`}>
@@ -160,7 +163,12 @@ export default function BinPage() {
   const items = useMemo(() => data ?? [], [data]);
   const toast = useToast();
   const { data: session } = useSession();
+  const router = useRouter();
   const isAdmin = session?.user?.role === "admin";
+
+  useEffect(() => {
+    if (session?.user?.role === "manager") router.replace("/dashboard");
+  }, [session, router]);
 
   const [search, setSearch] = useState("");
   const [confirmState, setConfirmState] = useState<{
@@ -308,12 +316,12 @@ export default function BinPage() {
             <label htmlFor="empty-bin-confirm">
               Type <strong>{EMPTY_BIN_PHRASE}</strong> to confirm
             </label>
-            <input
+            <Input
               id="empty-bin-confirm"
               type="text"
               autoComplete="off"
               autoFocus
-              className="search-input"
+              className=""
               value={emptyBinInput}
               onChange={(e) => setEmptyBinInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && emptyBinInput === EMPTY_BIN_PHRASE) confirmEmptyBin(); }}
@@ -347,13 +355,13 @@ export default function BinPage() {
 
       {!loading && totalCount > 0 && (
         <div {...animateSection(0, `card ${styles.searchCard}`)}>
-          <input
+          <Input
             type="search"
             aria-label="Search bin"
             placeholder="Search by name, invoice no., customer, phone, amount, deleted by, date…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className={`search-input ${styles.searchInputFull}`}
+            className={`${styles.searchInputFull}`}
           />
         </div>
       )}

@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
-import { requireSession } from "@/lib/apiAuth";
+import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 
 export async function GET() {
   try {
@@ -13,6 +13,7 @@ export async function GET() {
     const categories = await prisma.category.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },
+      take: 5000,
       include: { _count: { select: { products: { where: { deletedAt: null } } } } },
     });
 
@@ -25,7 +26,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(category, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "A category with this name already exists" }, { status: 400 });
+      return NextResponse.json({ error: "A category with this name already exists" }, { status: 409 });
     }
     console.error("POST /api/categories error:", error);
     return NextResponse.json({ error: "Failed to create category" }, { status: 500 });

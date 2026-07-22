@@ -22,6 +22,7 @@ interface ButtonProps {
   size?: Size;
   href?: string;
   loading?: boolean;
+  loadingText?: string;
   disabled?: boolean;
   fullScreen?: boolean;
   onClick?: (e: React.MouseEvent) => void;
@@ -38,6 +39,7 @@ export function Button({
   size = "md",
   href,
   loading = false,
+  loadingText = "Please wait…",
   disabled = false,
   fullScreen = false,
   onClick,
@@ -67,7 +69,7 @@ export function Button({
                 <div className={styles.overlayDot} />
                 <div className={styles.overlayDot} />
               </div>
-              <span className={styles.overlayText}>Please wait…</span>
+              <span className={styles.overlayText}>{loadingText}</span>
             </div>
           </div>,
           document.body

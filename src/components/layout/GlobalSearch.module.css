@@ -6,7 +6,15 @@
 }
 
 .inputWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.inputInner {
   position: relative;
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
 }
@@ -89,6 +97,7 @@
   flex-direction: column;
   gap: 0.0625rem;
   width: 100%;
+  min-width: 0;
   padding: 0.4375rem 0.875rem;
   border: none;
   background: none;
@@ -106,12 +115,70 @@
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--c-text);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .itemSubtitle {
   font-size: 0.75rem;
   color: var(--c-text-3);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+/* ── Mobile: icon-only trigger + full-width expanding overlay ────────── */
+
+.mobileTrigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--c-text-3);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.mobileTrigger:hover { background: var(--c-bg-sub); color: var(--c-text); }
+
+.mobileBack {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border-radius: 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--c-text-2);
+  cursor: pointer;
+}
+.mobileBack:hover { background: var(--c-bg-sub); color: var(--c-text); }
 
 @media (max-width: 767px) {
   .wrap { max-width: none; }
+
+  /* Expanded state overlays the whole topbar row so the input gets the
+     full screen width instead of being squeezed between the hamburger/
+     page-title on the left and the theme/avatar icons on the right. */
+  .wrapMobileExpanded {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2.75rem;
+    display: flex;
+    align-items: center;
+    padding: 0 0.5rem;
+    background: var(--c-topbar);
+    border-bottom: 1px solid var(--c-border);
+    z-index: 60;
+  }
+  .wrapMobileExpanded .inputWrap { width: 100%; }
 }

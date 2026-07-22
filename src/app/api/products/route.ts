@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getProducts } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
-import { requireSession } from "@/lib/apiAuth";
+import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { validateProductInput, validateNumericField } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(product, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "SKU already in use" }, { status: 400 });
+      return NextResponse.json({ error: "SKU already in use" }, { status: 409 });
     }
     console.error("POST /api/products error:", error);
     return NextResponse.json({ error: "Failed to create product" }, { status: 500 });

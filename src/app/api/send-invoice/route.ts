@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { getBusinessSettings } from "@/lib/db";
 import { rateLimit } from "@/lib/rateLimit";
 import { escapeHtml } from "@/lib/html";
+import { requireWriteAccess } from "@/lib/apiAuth";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10MB
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireWriteAccess();
+  if (!auth.ok) return auth.response;
+  const { session } = auth;
 
   const limit = rateLimit(`send-invoice:${session.user.id}`, 20, 15 * 60 * 1000);
   if (!limit.allowed) {

@@ -17,7 +17,7 @@ interface CategoryProduct {
   id: string; name: string; sku: string | null; price: number; stock: number; minStock: number;
 }
 interface Category {
-  id: string; name: string; products: CategoryProduct[];
+  id: string; name: string; updatedAt?: string; products: CategoryProduct[];
 }
 
 export default function CategoryViewPage() {
@@ -53,7 +53,7 @@ export default function CategoryViewPage() {
       const res = await fetch(`/api/categories/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, expectedUpdatedAt: category.updatedAt }),
       });
       const data = await res.json().catch(() => ({}));
       setSavingRename(false);
@@ -62,6 +62,9 @@ export default function CategoryViewPage() {
         bustCache("/api/categories");
         setRenaming(false);
         toast({ type: "success", title: "Category renamed", message: `Renamed to "${name}".` });
+      } else if (res.status === 409) {
+        bustCache(`/api/categories/${id}`);
+        toast({ type: "error", title: "Update conflict", message: data.error ?? "This category was changed by someone else. Please reload and try again." });
       } else {
         toast({ type: "error", title: "Rename failed", message: data.error ?? "Could not rename category." });
       }
@@ -136,7 +139,7 @@ export default function CategoryViewPage() {
                 <Button size="sm" variant="secondary" onClick={() => setRenaming(false)} disabled={savingRename}>Cancel</Button>
               </div>
             ) : (
-              <h1 className="page-title">
+              <h1 className="page-title" title={category?.name}>
                 <SkeletonSwap loading={loading} w={160} h={20}>{category?.name}</SkeletonSwap>
               </h1>
             )}

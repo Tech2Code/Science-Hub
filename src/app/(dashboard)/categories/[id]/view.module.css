@@ -8,7 +8,7 @@
   flex-wrap: wrap;
 }
 
-.headerLeft { display: flex; gap: 1rem; align-items: center; }
+.headerLeft { display: flex; gap: 1rem; align-items: center; min-width: 0; }
 
 .avatar {
   width: 3rem;

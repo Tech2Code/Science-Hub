@@ -68,6 +68,7 @@
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .name {
@@ -75,6 +76,10 @@
   font-weight: 700;
   color: var(--c-text);
   margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .statusBadge {
@@ -149,6 +154,7 @@
   font-size: 0.875rem;
   color: var(--c-text-2);
   margin: 0;
+  overflow-wrap: break-word;
 }
 
 .statsGrid {

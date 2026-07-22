@@ -13,8 +13,12 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
+import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { amountInWordsINR } from "@/lib/numberToWords";
 import { animateSection } from "@/lib/animateSection";
+import { truncateFilename } from "@/lib/truncateFilename";
+import { AttachmentIcon } from "@/components/purchases/AttachmentIcon";
+import { useCanWrite } from "@/lib/useCanWrite";
 import styles from "./billDetail.module.css";
 
 interface PurchaseBillItem {
@@ -28,7 +32,7 @@ interface PurchasePayment {
 interface PurchaseBill {
   id: string; billNumber: string; billDate: string; dueDate: string | null;
   status: string; category: string | null; notes: string | null;
-  subtotal: number; taxAmount: number; discount: number; total: number; paidAmount: number;
+  subtotal: number; taxAmount: number; discount: number; total: number; roundOff: number; paidAmount: number;
   vendor: { id: string; name: string; company: string | null; gstin: string | null; phone: string | null; email: string | null; address: string | null; };
   createdBy: { id: string; name: string };
   items: PurchaseBillItem[];
@@ -69,6 +73,7 @@ export default function PurchaseBillDetailPage() {
   const { id } = useParams<{ id: string }>();
   const toast   = useToast();
   const router  = useRouter();
+  const canWrite = useCanWrite();
 
   const [bill,    setBill]    = useState<PurchaseBill | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,13 +111,18 @@ export default function PurchaseBillDetailPage() {
     fetch("/api/settings").then(r => r.json()).then(setSettings).catch(() => {});
   }, []);
 
-  async function handleDownloadPdf() {
+  async function handleDownloadPdf(force = false) {
     if (!bill) return;
     setPdfDownloading(true);
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    await document.fonts.ready;
-    const el = document.getElementById("bill-print-area");
-    const blob = el ? await generateInvoicePdfBlob(el) : null;
+    const variantKey = buildPdfVariantKey();
+    let blob = force ? null : await getCachedPdf("purchase-bill", bill.id, variantKey);
+    if (!blob) {
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await document.fonts.ready;
+      const el = document.getElementById("bill-print-area");
+      blob = el ? await generateInvoicePdfBlob(el) : null;
+      if (blob) setCachedPdf("purchase-bill", bill.id, variantKey, blob);
+    }
     setPdfDownloading(false);
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
     const url = URL.createObjectURL(blob);
@@ -120,6 +130,7 @@ export default function PurchaseBillDetailPage() {
     a.href = url; a.download = `${bill.billNumber}.pdf`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
+    if (force) toast({ type: "success", title: "Regenerated", message: "Latest PDF generated and cached." });
   }
 
   async function handlePayment(e: React.FormEvent) {
@@ -129,6 +140,8 @@ export default function PurchaseBillDetailPage() {
     const balance = bill.total - bill.paidAmount;
     if (!payAmount || isNaN(amount) || amount <= 0) { toast({ type: "error", title: "Check form", message: "Enter a valid amount." }); return; }
     if (amount > balance + 0.01) { toast({ type: "error", title: "Check form", message: `Amount exceeds outstanding balance of ₹${fmt(balance)}.` }); return; }
+    if (payDate < bill.billDate.slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be before the bill date." }); return; }
+    if (payDate > new Date().toISOString().slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be in the future." }); return; }
     setSubmitting(true);
     try {
       const res = await fetch(`/api/purchase-bills/${id}/payment`, {
@@ -139,6 +152,7 @@ export default function PurchaseBillDetailPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         bustCache("/api/purchase-bills");
+        invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Payment recorded", message: `₹${fmt(amount)} via ${payMethod}.` });
         setShowPayForm(false);
         setPayAmount(""); setPayRef("");
@@ -162,6 +176,8 @@ export default function PurchaseBillDetailPage() {
       });
       if (res.ok) {
         bustCache("/api/purchase-bills");
+        bustCache("/api/products");
+        invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Bill cancelled", message: "Status updated to cancelled." });
         load();
       } else {
@@ -181,6 +197,8 @@ export default function PurchaseBillDetailPage() {
       const res = await fetch(`/api/purchase-bills/${id}`, { method: "DELETE" });
       if (res.ok) {
         bustCache("/api/purchase-bills");
+        bustCache("/api/products");
+        invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Deleted", message: "Purchase bill moved to bin." });
         router.push("/purchases/bills");
       } else {
@@ -226,18 +244,29 @@ export default function PurchaseBillDetailPage() {
 
       {/* Info cards: Vendor | Bill Meta — matches the real `card infoCard` padding */}
       <div className={styles.infoGrid}>
-        {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className={`card ${styles.infoCard}`}>
-            <Sk w={60} h={10} r={3} />
-            <Sk w={140} h={16} r={3} />
-            {Array.from({ length: 3 }).map((_, j) => (
-              <div key={j} className={styles.infoRow}>
-                <Sk w={70} h={11} r={3} />
-                <Sk w={100} h={11} r={3} />
-              </div>
-            ))}
+        {/* Vendor — name link + company line + a few contact-detail lines,
+            not label:value rows (that shape belongs to the Bill Info card below). */}
+        <div className={`card ${styles.infoCard}`}>
+          <div className={styles.skLabelGap}><Sk w={60} h={10} r={3} /></div>
+          <div className={styles.skNameGap}><Sk w={140} h={16} r={3} /></div>
+          <div className={styles.skCompanyGap}><Sk w={100} h={13} r={3} /></div>
+          <div className={`${styles.vendorDetails} ${styles.skDetailsGap}`}>
+            <Sk w={160} h={12} r={3} />
+            <Sk w={120} h={12} r={3} />
+            <Sk w={140} h={12} r={3} />
           </div>
-        ))}
+        </div>
+
+        {/* Bill Information — label:value rows */}
+        <div className={`card ${styles.infoCard}`}>
+          <div className={styles.skLabelGap}><Sk w={60} h={10} r={3} /></div>
+          {Array.from({ length: 4 }).map((_, j) => (
+            <div key={j} className={styles.infoRow}>
+              <Sk w={70} h={11} r={3} />
+              <Sk w={100} h={11} r={3} />
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Items table — mirrors the #/Item/Qty/Rate/Discount/GST %/GST Amt/Total columns below.
@@ -248,7 +277,7 @@ export default function PurchaseBillDetailPage() {
           <Sk w={80} h={14} r={3} />
         </div>
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} style={{ display: "flex", gap: "1rem", padding: "0.75rem 1rem" }}>
+          <div key={i} className={styles.skTableRow}>
             <Sk w={20} h={12} r={3} />
             <Sk w="24%" h={12} r={3} />
             <Sk w="8%" h={12} r={3} />
@@ -267,7 +296,7 @@ export default function PurchaseBillDetailPage() {
           <Sk w={140} h={14} r={3} />
         </div>
         {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} style={{ display: "flex", gap: "1rem", padding: "0.75rem 1rem" }}>
+          <div key={i} className={styles.skTableRow}>
             <Sk w="20%" h={12} r={3} />
             <Sk w="20%" h={12} r={3} />
             <Sk w="30%" h={12} r={3} />
@@ -295,7 +324,13 @@ export default function PurchaseBillDetailPage() {
       }
     `}</style>
 
-    <div id="bill-print-area" style={{ position: "fixed", left: -9999, top: 0, width: 794, background: "var(--bp-bg)", color: "var(--bp-tx)", padding: 28, fontFamily: "Arial, sans-serif" }} aria-hidden="true">
+    {/* overflowWrap inherits down to every field (vendor/business address,
+        GSTIN, etc.) so a long unbreakable token wraps instead of spilling
+        past this fixed 794px width — which html2canvas would otherwise
+        capture as content bleeding outside the page during PDF generation.
+        The vendor-name div overrides this locally with nowrap + ellipsis,
+        which still wins for that single line. */}
+    <div id="bill-print-area" style={{ position: "fixed", left: -9999, top: 0, width: 794, background: "var(--bp-bg)", color: "var(--bp-tx)", padding: 28, fontFamily: "Arial, sans-serif", overflowWrap: "break-word", wordBreak: "break-word" }} aria-hidden="true">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, borderBottom: `2px solid var(--bp-bd)`, paddingBottom: 12 }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: "var(--bp-tx)" }}>{settings?.name || "Science Hub"}</div>
@@ -321,7 +356,7 @@ export default function PurchaseBillDetailPage() {
 
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: "var(--bp-tx3)", textTransform: "uppercase", marginBottom: 3 }}>Vendor</div>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>{bill.vendor.name}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }} title={bill.vendor.name}>{bill.vendor.name}</div>
         {bill.vendor.company && <div style={{ fontSize: 11, color: "var(--bp-tx2)" }}>{bill.vendor.company}</div>}
         {bill.vendor.address && <div style={{ fontSize: 11, color: "var(--bp-tx3)" }}>{bill.vendor.address}</div>}
         {bill.vendor.gstin && <div style={{ fontSize: 11, color: "var(--bp-tx3)" }}>GSTIN: {bill.vendor.gstin}</div>}
@@ -369,6 +404,7 @@ export default function PurchaseBillDetailPage() {
                 {row("Subtotal", `₹${fmt(bill.subtotal)}`, { muted: true })}
                 {row("GST", `₹${fmt(bill.taxAmount)}`, { muted: true })}
                 {bill.discount > 0 && row("Discount", `−₹${fmt(bill.discount)}`, { muted: true })}
+                {bill.roundOff !== 0 && row("Round Off", `${bill.roundOff > 0 ? "+" : "−"}₹${fmt(Math.abs(bill.roundOff))}`, { muted: true })}
                 {row("Total", `₹${fmt(bill.total)}`, { bold: true })}
                 {row("Paid", `₹${fmt(bill.paidAmount)}`, { muted: true })}
                 {row("Balance Due", `₹${fmt(balance)}`, { bold: true })}
@@ -428,10 +464,15 @@ export default function PurchaseBillDetailPage() {
           </div>
         </div>
         <div className={styles.toolbarActions}>
-          <Button variant="secondary" size="sm" onClick={handleDownloadPdf} disabled={pdfDownloading}>
+          <Button variant="secondary" size="sm" onClick={() => handleDownloadPdf(false)} disabled={pdfDownloading}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             {pdfDownloading ? "Generating…" : "Download PDF"}
           </Button>
+          <Button variant="secondary" size="sm" title="Discard the cached PDF and download a freshly generated copy" onClick={() => handleDownloadPdf(true)} disabled={pdfDownloading}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+            Regenerate
+          </Button>
+          {canWrite && (
           <Button
             variant="secondary"
             size="sm"
@@ -442,19 +483,22 @@ export default function PurchaseBillDetailPage() {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Edit
           </Button>
-          {bill.status !== "paid" && bill.status !== "cancelled" && (
+          )}
+          {canWrite && bill.status !== "paid" && bill.status !== "cancelled" && (
             <Button variant="primary" size="sm" onClick={() => setShowPayForm(v => !v)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               {showPayForm ? "Hide Payment" : "Record Payment"}
             </Button>
           )}
-          {bill.status !== "cancelled" && (
+          {canWrite && bill.status !== "cancelled" && (
             <Button variant="dangerOutline" size="sm" onClick={() => setConfirmCancel(true)}>Cancel Bill</Button>
           )}
+          {canWrite && (
           <Button variant="dangerOutline" size="sm" onClick={() => setConfirmDelete(true)}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
             Delete
           </Button>
+          )}
         </div>
       </div>
 
@@ -476,6 +520,7 @@ export default function PurchaseBillDetailPage() {
           <Link
             href={`/purchases/vendors/${bill.vendor.id}`}
             className={styles.vendorName}
+            title={bill.vendor.name}
           >
             {bill.vendor.name}
           </Link>
@@ -519,8 +564,9 @@ export default function PurchaseBillDetailPage() {
           {bill.attachmentUrl && (
             <div className={styles.infoRow}>
               <span className={styles.infoRowLabel}>Attachment</span>
-              <a href={bill.attachmentUrl} target="_blank" rel="noopener noreferrer" download={bill.attachmentName ?? undefined} className={styles.infoRowValue}>
-                {bill.attachmentName || "View attachment"}
+              <a href={bill.attachmentUrl} target="_blank" rel="noopener noreferrer" download={bill.attachmentName ?? undefined} title={bill.attachmentName ?? undefined} className={styles.infoRowValue} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                <AttachmentIcon name={bill.attachmentName} />
+                {bill.attachmentName ? truncateFilename(bill.attachmentName) : "View attachment"}
               </a>
             </div>
           )}
@@ -564,7 +610,7 @@ export default function PurchaseBillDetailPage() {
                 </p>
               </FormField>
               <FormField label="Date">
-                <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
+                <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} min={bill.billDate.slice(0, 10)} max={new Date().toISOString().slice(0, 10)} />
               </FormField>
             </div>
             <div className={`form-grid-2 ${styles.marginBottom1}`}>
@@ -634,6 +680,12 @@ export default function PurchaseBillDetailPage() {
               ))}
             </tbody>
             <tfoot>
+              {bill.roundOff !== 0 && (
+                <tr>
+                  <td colSpan={7} className={styles.textMuted}>Round Off</td>
+                  <td className={`${styles.textRight} ${styles.textMuted}`}>{bill.roundOff > 0 ? "+" : "−"}₹{fmt(Math.abs(bill.roundOff))}</td>
+                </tr>
+              )}
               <tr className={styles.tfootRow}>
                 <td colSpan={7} className={styles.tfootLabelCell}>Grand Total</td>
                 <td className={styles.tfootValueCell}>₹{fmt(bill.total)}</td>

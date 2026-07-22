@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { Input } from "@/components/ui/Input";
 import { useBranding } from "@/lib/businessBranding";
 import styles from "./login.module.css";
 import { rules, validate } from "@/lib/validation";
@@ -52,7 +53,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className={styles.formStack}>
             <div>
               <label htmlFor="email" className={styles.fieldLabel}>Email address</label>
-              <input
+              <Input
                 id="email"
                 type="email"
                 autoComplete="email"
@@ -74,7 +75,7 @@ export default function LoginPage() {
                 placeholder="••••••••"
               />
             </div>
-            <Button type="submit" variant="primary" size="full" loading={loading} fullScreen disabled={loading}>
+            <Button type="submit" variant="primary" size="full" loading={loading} loadingText="Logging in…" fullScreen disabled={loading}>
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>

@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
+import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -69,6 +72,17 @@ function downloadCsv(filename: string, csv: string) {
 }
 
 export default function SalesReportsPage() {
+  const { data: session } = useSession();
+  const router = useRouter();
+  useEffect(() => {
+    if (!session) return;
+    const role = session.user?.role;
+    if (role === "admin") return;
+    if (!session.user?.sections?.includes("reports_sales")) {
+      router.replace("/dashboard");
+    }
+  }, [session, router]);
+
   const [tab, setTab] = useState<Tab>("outstanding");
   const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
   const [startDate, setStartDate] = useState("");
@@ -157,7 +171,7 @@ export default function SalesReportsPage() {
           <div className={styles.dateFilterRow}>
             <label className={styles.dateFilterLabel}>
               From
-              <input
+              <Input
                 type="date" aria-label="Start date" value={startDate} min={MIN_REPORT_DATE} max={endDate || todayStr}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -170,7 +184,7 @@ export default function SalesReportsPage() {
             </label>
             <label className={styles.dateFilterLabel}>
               To
-              <input
+              <Input
                 type="date" aria-label="End date" value={endDate} min={startDate || MIN_REPORT_DATE} max={todayStr}
                 onChange={(e) => setEndDate(e.target.value)}
                 onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}

@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
-import { requireSession } from "@/lib/apiAuth";
+import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { validateProductInput, validateNumericField } from "@/lib/validation";
 
 export async function GET(
@@ -15,8 +15,8 @@ export async function GET(
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
-    const product = await prisma.product.findUnique({
-      where: { id },
+    const product = await prisma.product.findFirst({
+      where: { id, deletedAt: null },
       include: {
         category: true,
         brand: true,
@@ -40,12 +40,22 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
     const body = await request.json();
-    const { name, description, sku, unit, price, purchasePrice, gstRate, stock, minStock, categoryId, brandId } = body;
+    const { name, description, sku, unit, price, purchasePrice, gstRate, stock, minStock, categoryId, brandId, expectedUpdatedAt } = body;
+
+    const existing = await prisma.product.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
+    if (!existing) return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    if (existing.deletedAt) {
+      return NextResponse.json({ error: "This product is in the bin — restore it before editing" }, { status: 400 });
+    }
+    if (expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== existing.updatedAt.getTime()) {
+      return NextResponse.json({ error: "This product was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
+    }
+
     const data: Record<string, unknown> = {};
     if (name !== undefined) {
       const coreErr = validateProductInput({ name });
@@ -90,7 +100,7 @@ export async function PUT(
     return NextResponse.json(product);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "SKU already in use" }, { status: 400 });
+      return NextResponse.json({ error: "SKU already in use" }, { status: 409 });
     }
     console.error(error);
     return NextResponse.json({ error: "Failed to update product" }, { status: 500 });
@@ -102,7 +112,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const { id } = await params;

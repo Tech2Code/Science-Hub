@@ -1,0 +1,38 @@
+.totalsWrap {
+  border-top: 1px solid var(--c-border);
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.totalsAlignRight { display: flex; justify-content: flex-end; }
+
+.totalsBox { width: min(320px, 100%); }
+
+.totalsLine {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+  font-size: 0.875rem;
+  color: var(--c-text-3);
+  white-space: nowrap;
+}
+
+.totalsDiscountLine {
+  composes: totalsLine;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.itemDiscountValue { color: var(--c-amber); }
+
+.discountInput { width: 90px; text-align: right; }
+
+.totalsGrandLine {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+  border-top: 1px solid var(--c-border);
+  margin-top: 0.25rem;
+}

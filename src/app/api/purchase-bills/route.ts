@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { logActivity } from "@/lib/activity";
-import { recordStockMovement } from "@/lib/stockMovement";
+import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { isPurchaseBillBlobUrl } from "@/lib/blobStorage";
+import { isFutureIstDate } from "@/lib/validation";
+import { computeRoundOff } from "@/lib/roundOff";
+import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
+import { purchaseBillLineBreakdown } from "@/lib/purchaseBillForm";
 
 const BILL_INCLUDE = {
   vendor: { select: { id: true, name: true, company: true } },
@@ -27,8 +29,8 @@ const BILL_INCLUDE = {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
@@ -41,7 +43,8 @@ export async function GET(req: NextRequest) {
         ...(vendorId ? { vendorId } : {}),
       },
       include: BILL_INCLUDE,
-      orderBy: { billDate: "desc" },
+      orderBy: { createdAt: "desc" },
+      take: 2000,
     });
     return NextResponse.json(bills);
   } catch {
@@ -51,9 +54,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const userId = session.user.id;
+    const auth = await requireWriteAccess();
+    if (!auth.ok) return auth.response;
+    const userId = auth.session.user.id;
 
     const body = await req.json();
     const { vendorId, billDate, dueDate, discount, notes, category, items, payment, attachmentUrl, attachmentName } = body;
@@ -75,6 +78,21 @@ export async function POST(req: NextRequest) {
       const parsedBillDate = new Date(billDate ?? Date.now());
       if (parsedDueDate < parsedBillDate) {
         return NextResponse.json({ error: "Due date cannot be before the bill date" }, { status: 400 });
+      }
+    }
+
+    const effectiveBillDate = new Date(billDate ?? Date.now());
+    let paymentDate: Date | undefined;
+    if (payment?.date) {
+      paymentDate = new Date(payment.date);
+      if (isNaN(paymentDate.getTime())) {
+        return NextResponse.json({ error: "Invalid payment date" }, { status: 400 });
+      }
+      if (paymentDate < effectiveBillDate) {
+        return NextResponse.json({ error: "Payment date cannot be before the bill date" }, { status: 400 });
+      }
+      if (isFutureIstDate(payment.date)) {
+        return NextResponse.json({ error: "Payment date cannot be in the future" }, { status: 400 });
       }
     }
 
@@ -102,11 +120,9 @@ export async function POST(req: NextRequest) {
       const purchasePrice = parseFloat(String(item.purchasePrice));
       const gstRate = parseFloat(String(item.gstRate ?? 0));
       const discountPercent = parseFloat(String(item.discountPercent ?? 0));
-      const gross = quantity * purchasePrice;
-      const discountAmount = gross * discountPercent / 100;
-      const itemSubtotal = gross - discountAmount;
-      const gstAmount = itemSubtotal * gstRate / 100;
-      return { ...item, quantity, purchasePrice, gstRate, discountPercent, discountAmount, gstAmount, total: itemSubtotal + gstAmount, itemSubtotal };
+      const { discountAmount, gstAmount, total, subtotal: itemSubtotal } =
+        purchaseBillLineBreakdown(quantity, purchasePrice, gstRate, discountPercent);
+      return { ...item, quantity, purchasePrice, gstRate, discountPercent, discountAmount, gstAmount, total, itemSubtotal };
     });
     const subtotal = computedItems.reduce((s, i) => s + i.itemSubtotal, 0);
     const taxAmount = computedItems.reduce((s, i) => s + i.gstAmount, 0);
@@ -116,7 +132,7 @@ export async function POST(req: NextRequest) {
     }
 
     const payAmt = payment?.amount ?? 0;
-    const billTotal = subtotal + taxAmount - parsedDiscount;
+    const { roundOff, roundedTotal: billTotal } = computeRoundOff(subtotal + taxAmount - parsedDiscount);
     if (billTotal < 0) return NextResponse.json({ error: "Discount cannot exceed the bill total" }, { status: 400 });
     const paidAmount = Math.min(payAmt, billTotal);
     const status = paidAmount >= billTotal && billTotal > 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
@@ -145,6 +161,7 @@ export async function POST(req: NextRequest) {
             taxAmount,
             discount: parsedDiscount,
             total: billTotal,
+            roundOff,
             paidAmount,
             status,
             notes: notes || null,
@@ -172,7 +189,7 @@ export async function POST(req: NextRequest) {
                   amount: paidAmount,
                   method: payment.method ?? "Cash",
                   reference: payment.reference || null,
-                  date: payment.date ? new Date(payment.date) : new Date(),
+                  date: paymentDate ?? new Date(),
                   notes: payment.notes || null,
                 },
               },
@@ -184,22 +201,11 @@ export async function POST(req: NextRequest) {
         // A purchase bill's whole point is restocking — without this, inventory
         // only ever drains via sales and never gets replenished.
         const stockedItems = computedItems.filter(item => item.productId);
-        for (const item of stockedItems) {
-          const product = await tx.product.update({
-            where: { id: item.productId! },
-            data: { stock: { increment: item.quantity } },
-            select: { id: true, stock: true },
-          });
-          await recordStockMovement(tx, {
-            productId: product.id,
-            type: "purchase",
-            quantity: item.quantity,
-            balanceAfter: product.stock,
-            reference: created.billNumber,
-            purchaseBillId: created.id,
-            createdByUserId: userId,
-          });
-        }
+        await batchAdjustStock(
+          tx,
+          stockedItems.map((item) => ({ productId: item.productId!, quantity: item.quantity })),
+          { type: "purchase", reference: created.billNumber, purchaseBillId: created.id, createdByUserId: userId }
+        );
 
         return created;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });
@@ -219,13 +225,16 @@ export async function POST(req: NextRequest) {
     }
     if (!bill) throw new Error("Failed to create purchase bill after retries");
 
-    await logActivity(session.user.id, "create_purchase_bill", `Created purchase bill ${bill.billNumber} from ${bill.vendor.name} — ₹${billTotal}`, bill.id, "purchase_bill");
+    await logActivity(userId, "create_purchase_bill", `Created purchase bill ${bill.billNumber} from ${bill.vendor.name} — ₹${billTotal}`, bill.id, "purchase_bill");
     revalidateTag("purchase-bills", { expire: 0 });
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
     return NextResponse.json(bill, { status: 201 });
   } catch (err) {
     console.error(err);
+    if (err instanceof ProductNotFoundError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     return NextResponse.json({ error: "Failed to create purchase bill" }, { status: 500 });
   }
 }

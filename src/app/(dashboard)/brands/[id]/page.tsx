@@ -17,7 +17,7 @@ interface BrandProduct {
   id: string; name: string; sku: string | null; price: number; stock: number; minStock: number;
 }
 interface Brand {
-  id: string; name: string; createdAt: string | null; createdBy: string | null; products: BrandProduct[];
+  id: string; name: string; createdAt: string | null; createdBy: string | null; updatedAt?: string; products: BrandProduct[];
 }
 
 export default function BrandViewPage() {
@@ -53,7 +53,7 @@ export default function BrandViewPage() {
       const res = await fetch(`/api/brands/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, expectedUpdatedAt: brand.updatedAt }),
       });
       const data = await res.json().catch(() => ({}));
       setSavingRename(false);
@@ -62,6 +62,9 @@ export default function BrandViewPage() {
         bustCache("/api/brands");
         setRenaming(false);
         toast({ type: "success", title: "Brand renamed", message: `Renamed to "${name}".` });
+      } else if (res.status === 409) {
+        bustCache(`/api/brands/${id}`);
+        toast({ type: "error", title: "Update conflict", message: data.error ?? "This brand was changed by someone else. Please reload and try again." });
       } else {
         toast({ type: "error", title: "Rename failed", message: data.error ?? "Could not rename brand." });
       }
@@ -136,8 +139,8 @@ export default function BrandViewPage() {
                 <Button size="sm" variant="secondary" onClick={() => setRenaming(false)} disabled={savingRename}>Cancel</Button>
               </div>
             ) : (
-              <div>
-                <h1 className="page-title">
+              <div style={{ minWidth: 0 }}>
+                <h1 className="page-title" title={brand?.name}>
                   <SkeletonSwap loading={loading} w={160} h={20}>{brand?.name}</SkeletonSwap>
                 </h1>
                 {!loading && (brand?.createdBy || brand?.createdAt) && (

@@ -7,15 +7,20 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
-import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
+import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenerator";
+import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
+import { StatCardsRow } from "@/components/ui/StatCardsRow";
+import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
+import { useCanWrite } from "@/lib/useCanWrite";
 import styles from "./invoicesList.module.css";
 
 interface Invoice {
@@ -31,8 +36,17 @@ interface Invoice {
   items: { name: string; product: { name: string; brand: { name: string } | null; category: { name: string } | null } | null }[];
 }
 
-type StatusFilter = "All" | "unpaid" | "partial" | "paid";
-const STATUS_TABS: StatusFilter[] = ["All", "unpaid", "partial", "paid"];
+interface BusinessSettings {
+  showLogoOnInvoices?: boolean;
+  updatedAt?: string;
+}
+
+type StatusFilter = "All" | "unpaid" | "partial" | "paid" | "overdue";
+const STATUS_TABS: StatusFilter[] = ["All", "overdue", "unpaid", "partial", "paid"];
+
+function isOverdue(inv: { status: string; dueDate: string | null }): boolean {
+  return inv.status !== "paid" && !!inv.dueDate && new Date(inv.dueDate) < new Date();
+}
 
 type SortOption = "newest" | "oldest" | "customer_az" | "customer_za" | "amount_high" | "amount_low" | "balance_high";
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -80,6 +94,7 @@ const COLUMNS: Column[] = [
 const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function InvoicesPage() {
+  const canWrite = useCanWrite();
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
@@ -111,42 +126,50 @@ export default function InvoicesPage() {
     return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
   }, [pdfPreviewUrl]);
 
-  // Loads the invoice detail page into a hidden iframe (to render its full
-  // #invoice-print-area, which this list page doesn't have the data for) and
+  // Loads the invoice detail page into a hidden iframe to render its full
+  // #invoice-print-area (which this list page doesn't have the data for) and
   // generates a PDF blob from it — optionally stamped with copy labels.
-  function generatePdfViaIframe(invoiceId: string, copyLabels?: string[]): Promise<Blob | null> {
-    return new Promise((resolve) => {
-      const iframe = document.createElement("iframe");
-      Object.assign(iframe.style, { position: "fixed", width: "850px", height: "1200px", top: "-9999px", left: "-9999px", border: "none", opacity: "0", pointerEvents: "none" });
-      const cleanup = () => { try { document.body.removeChild(iframe); } catch {} };
-      const safetyTimer = setTimeout(() => { cleanup(); resolve(null); }, 45000);
-      iframe.onload = async () => {
-        const el = await new Promise<HTMLElement | null>(resolveEl => {
-          let tries = 0;
-          const check = () => {
-            const area = iframe.contentDocument?.getElementById("invoice-print-area");
-            if (area?.querySelector("tbody tr")) { resolveEl(area); return; }
-            if (++tries > 40) { resolveEl(null); return; }
-            setTimeout(check, 250);
-          };
-          setTimeout(check, 250);
-        });
-        if (!el) { clearTimeout(safetyTimer); cleanup(); resolve(null); return; }
-        await new Promise(r => setTimeout(r, 400));
-        // Read the logo's already-resolved src straight from the iframe's DOM
-        // (either the business's uploaded logo or the default fallback) so the
-        // synthetic continuation-page header stamps match what page 1 shows.
-        const logoUrl = el.querySelector<HTMLImageElement>('img[alt="Logo"]')?.src || undefined;
-        let blob: Blob | null = null;
-        try {
-          blob = await generateInvoicePdfBlob(el, { ...(copyLabels ? { copyLabels } : {}), logoUrl });
-        } catch { /* resolved as null below */ }
-        clearTimeout(safetyTimer); cleanup();
-        resolve(blob);
-      };
-      document.body.appendChild(iframe);
-      iframe.src = `/sales/invoices/${invoiceId}`;
+  // The iframe always renders the detail page in its default state (payment/
+  // return history toggles off), so the cached variant key can assume those
+  // flags are false without needing to inspect the loaded page.
+  async function generatePdfViaIframe(invoiceId: string, copyLabels?: string[], force = false): Promise<Blob | null> {
+    const showLogoOnInvoices = settings?.showLogoOnInvoices !== false;
+    const variantKey = buildPdfVariantKey(copyLabels, {
+      p: false,
+      r: false,
+      logo: showLogoOnInvoices,
+      settings: settings?.updatedAt ?? "loading",
     });
+    if (!force) {
+      const cached = await getCachedPdf("invoice", invoiceId, variantKey);
+      if (cached) return cached;
+    }
+    const blob = await pdfIframeGenerate({ route: `/sales/invoices/${invoiceId}`, printAreaId: "invoice-print-area", copyLabels, includeLogo: true });
+    if (blob) setCachedPdf("invoice", invoiceId, variantKey, blob);
+    return blob;
+  }
+
+  // Bypasses the cache and re-renders a fresh PDF for the "Regenerate" action
+  // — for when something outside the invoice's own data changed (business
+  // logo/settings) and the cached copy needs to be replaced.
+  async function handleRegenerate(inv: Invoice) {
+    if (pdfBusyRef.current) return;
+    pdfBusyRef.current = true;
+    setPdfLoading(inv.id);
+    try {
+      const blob = await generatePdfViaIframe(inv.id, ["ORIGINAL COPY", "DUPLICATE COPY"], true);
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        setPdfPreviewUrl(url);
+        setPdfPreviewInvoice({ number: inv.invoiceNumber, customer: inv.customer?.name ?? "" });
+        toast({ type: "success", title: "Regenerated", message: "Latest PDF generated and cached." });
+      } else {
+        toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
+      }
+    } finally {
+      setPdfLoading(null);
+      pdfBusyRef.current = false;
+    }
   }
 
   async function handlePdfDialogConfirm(copyLabels: string[]) {
@@ -171,12 +194,14 @@ export default function InvoicesPage() {
     setPdfDialogInvoice(null);
   }
 
-  const apiUrl = filter === "All" ? "/api/invoices" : `/api/invoices?status=${filter}`;
+  const apiUrl = filter === "All" || filter === "overdue" ? "/api/invoices" : `/api/invoices?status=${filter}`;
   const { data, loading, patchData } = useFetch<Invoice[]>(apiUrl);
+  const { data: settings } = useFetch<BusinessSettings>("/api/settings");
   const invoices = data ?? [];
+  const scoped = filter === "overdue" ? invoices.filter(isOverdue) : invoices;
 
   const filtered = search.trim()
-    ? invoices.filter((inv) => {
+    ? scoped.filter((inv) => {
         const q = search.toLowerCase();
         return (
           inv.invoiceNumber.toLowerCase().includes(q) ||
@@ -189,7 +214,7 @@ export default function InvoicesPage() {
           )
         );
       })
-    : invoices;
+    : scoped;
 
   const sorted = sortInvoices(filtered, sort);
 
@@ -213,6 +238,7 @@ export default function InvoicesPage() {
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
         patchData((prev) => (prev ?? []).filter((inv) => inv.id !== target.id));
+        invalidateCachedPdf("invoice", target.id);
         toast({ type: "success", title: "Moved to bin", message: `${target.invoiceNumber} moved to bin. You can restore it within 30 days.` });
       } else {
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete invoice." });
@@ -262,54 +288,44 @@ export default function InvoicesPage() {
         <div>
           <h1 className="page-title">Invoices</h1>
           <p className="page-sub">
-            {loading ? "Loading…" : search.trim() ? `${filtered.length} of ${invoices.length} invoices` : `${invoices.length} invoices`}
+            {loading ? "Loading…" : search.trim() ? `${filtered.length} of ${scoped.length} invoices` : `${scoped.length} invoices`}
           </p>
         </div>
-        <Button variant="primary" href="/sales/invoices/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>
+        {canWrite && (<Button variant="primary" href="/sales/invoices/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>)}
       </div>
 
       {/* Dashboard cards */}
-      {!loading && invoices.length > 0 && (
-        <div {...animateSection(0, styles.statsGrid)}>
-          {[
-            { label: "Total Invoiced",  value: `₹${fmt(totalInvoiced)}`, cls: styles.statTotal },
-            { label: "Paid",            value: `₹${fmt(totalPaid)}`,     cls: styles.statPaid },
-            { label: "Pending",         value: `₹${fmt(totalPending)}`,  cls: styles.statPending },
-            { label: "Overdue Invoices", value: String(overdue),         cls: overdue > 0 ? styles.statOverdueActive : styles.statOverdue },
-          ].map(card => (
-            <div key={card.label} className={`card ${styles.statCard}`}>
-              <div className={styles.statLabel}>{card.label}</div>
-              <div className={`${styles.statValue} ${card.cls}`}>{card.value}</div>
-            </div>
-          ))}
-        </div>
+      {(loading || invoices.length > 0) && (
+        <StatCardsRow
+          sectionIndex={0}
+          loading={loading}
+          cards={[
+            { label: "Total Invoiced",   value: `₹${fmt(totalInvoiced)}`, tone: "default" },
+            { label: "Paid",             value: `₹${fmt(totalPaid)}`,     tone: "positive" },
+            { label: "Pending",          value: `₹${fmt(totalPending)}`,  tone: "warning" },
+            { label: "Overdue Invoices", value: String(overdue),          tone: overdue > 0 ? "danger" : "muted" },
+          ]}
+        />
       )}
 
       {/* Status filter tabs */}
-      <div {...animateSection(1, "filter-tabs-row")}>
-        <div className="filter-tabs">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => { setFilter(tab); setPage(1); }}
-              className={["filter-tab", filter === tab ? "filter-tab-active" : ""].join(" ")}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-      </div>
+      <StatusFilterTabs
+        sectionIndex={1}
+        tabs={STATUS_TABS}
+        value={filter}
+        onChange={(tab) => { setFilter(tab); setPage(1); }}
+      />
 
       <div {...animateSection(2, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
-            <input
+            <Input
               type="search"
               aria-label="Search invoices"
               placeholder="Search by invoice no., customer, product, brand or category…"
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className={["search-input", styles.searchInput].join(" ")}
+              className={styles.searchInput}
             />
             <SortSelect
               ariaLabel="Sort invoices"
@@ -348,6 +364,7 @@ export default function InvoicesPage() {
                     <div className={["date-sub", styles.dateSub].join(" ")}>
                       {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                     </div>
+                    {isOverdue(inv) && <div className={styles.overdueSub}>Overdue</div>}
                   </Cell>
                   <Cell col={COLUMNS[2]} className={styles.customerCell}>{inv.customer?.name}</Cell>
                   <Cell col={COLUMNS[3]} className={styles.totalCell}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Cell>
@@ -386,10 +403,14 @@ export default function InvoicesPage() {
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         PDF
                       </Button>
+                      {/* 2b. Regenerate → discards the cached PDF and re-renders a fresh one */}
+                      <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" loading={pdfLoading === inv.id} onClick={() => handleRegenerate(inv)}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                      </Button>
                       {/* 3. Edit */}
-                      <Button variant="editOutline" size="sm" onClick={() => { setOpeningEditId(inv.id); router.push(`/sales/invoices/edit/${inv.id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</Button>
+                      {canWrite && (<Button variant="editOutline" size="sm" onClick={() => { setOpeningEditId(inv.id); router.push(`/sales/invoices/edit/${inv.id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</Button>)}
                       {/* 4. Delete */}
-                      <Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(inv)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete</Button>
+                      {canWrite && (<Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(inv)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete</Button>)}
                     </div>
                   </Cell>
                 </tr>

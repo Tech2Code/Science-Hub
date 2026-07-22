@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { put } from "@vercel/blob";
 import { deleteAttachmentBlob, isPurchaseBillBlobUrl } from "@/lib/blobStorage";
+import { requireWriteAccess } from "@/lib/apiAuth";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"];
@@ -32,8 +31,8 @@ function matchesDeclaredType(bytes: Uint8Array, type: string): boolean {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireWriteAccess();
+    if (!auth.ok) return auth.response;
 
     const form = await req.formData();
     const file = form.get("file");
@@ -69,8 +68,8 @@ export async function POST(req: NextRequest) {
 // submitting) — without this it would sit in Blob storage forever.
 export async function DELETE(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireWriteAccess();
+    if (!auth.ok) return auth.response;
 
     const { url } = await req.json();
     if (typeof url !== "string" || !isPurchaseBillBlobUrl(url)) {

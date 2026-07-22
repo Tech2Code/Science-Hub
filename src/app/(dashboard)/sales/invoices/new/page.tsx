@@ -2,42 +2,34 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Input } from "@/components/ui/Input";
+import { InvoiceOptionsRow } from "@/components/invoices/InvoiceOptionsRow";
+import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
+import { computeInvoiceTotals, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
 import styles from "./new.module.css";
 import { bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate, validateForm, hasErrors } from "@/lib/validation";
-import { INDIA_STATES } from "@/lib/states";
 import { animateSection } from "@/lib/animateSection";
 
 interface Customer { id: string; name: string; city: string; state: string; gstin: string; }
-interface Product { id: string; name: string; unit: string; price: number; gstRate: number; stock: number; hsn?: string | null; }
-interface LineItem {
-  productId: string; productName: string; unit: string;
-  qty: number; price: number; gstRate: number;
-  hsn: string; discountPercent: number;
-}
-
-const DISCOUNT_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 40, 50];
-const QUICK_ADD_UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pack", "Set", "Mtr", "Dozen"];
-
-// A custom typed amount rarely lands on a preset % exactly — inject it into
-// the option list (rounded to 2dp) so the select actually shows/highlights
-// it instead of falling back to blank.
-function discountOptionsFor(percent: number) {
-  const rounded = Math.round(percent * 100) / 100;
-  if (DISCOUNT_OPTIONS.includes(rounded)) return DISCOUNT_OPTIONS;
-  return [...DISCOUNT_OPTIONS, rounded].sort((a, b) => a - b);
-}
+type Product = InvoiceProduct;
+type LineItem = InvoiceLineItem;
 
 export default function NewInvoicePage() {
   const router = useRouter();
   const toast = useToast();
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
+  useEffect(() => {
+    if (session?.user?.role === "manager") router.replace("/dashboard");
+  }, [session, router]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customerMode, setCustomerMode] = useState<"existing" | "custom">("existing");
@@ -50,12 +42,6 @@ export default function NewInvoicePage() {
   const [businessState, setBusinessState] = useState("");
   const [reverseCharge, setReverseCharge] = useState(false);
   const [items, setItems] = useState<LineItem[]>([]);
-  const [productSearch, setProductSearch] = useState("");
-  const [showProductDropdown, setShowProductDropdown] = useState(false);
-  const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
-  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "Nos", price: "", gstRate: "18" });
-  const [quickAddErrors, setQuickAddErrors] = useState<Partial<Record<"name" | "price" | "gstRate", string>>>({});
-  const [quickAddSaving, setQuickAddSaving] = useState(false);
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
@@ -83,7 +69,6 @@ export default function NewInvoicePage() {
   }, []);
 
   const filteredCustomers = customers.filter((c) => c.name.toLowerCase().includes(customerSearch.toLowerCase()));
-  const filteredProducts = products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase()));
   const selectedCustomer = customers.find((c) => c.id === customerId);
 
   function applyPlaceOfSupply(state: string) {
@@ -99,96 +84,7 @@ export default function NewInvoicePage() {
     if (c.state && businessState) setIsInterState(c.state !== businessState);
   }, [businessState]);
 
-  function addProduct(p: Product) {
-    setItems((prev) => {
-      const existingIdx = prev.findIndex((i) => i.productId === p.id);
-      if (existingIdx !== -1) {
-        return prev.map((item, i) => (i === existingIdx ? { ...item, qty: item.qty + 1 } : item));
-      }
-      return [...prev, { productId: p.id, productName: p.name, unit: p.unit, qty: 1, price: p.price, gstRate: p.gstRate, hsn: p.hsn ?? "", discountPercent: 0 }];
-    });
-    setProductSearch(""); setShowProductDropdown(false);
-  }
-  function openQuickAddProduct() {
-    setQuickAddProduct({ name: productSearch, unit: "Nos", price: "", gstRate: "18" });
-    setQuickAddErrors({});
-    setShowQuickAddProduct(true);
-  }
-
-  async function handleQuickAddProduct() {
-    const errs: Partial<Record<"name" | "price" | "gstRate", string>> = {
-      name: validate(quickAddProduct.name, rules.required("Product name is required.")) ?? undefined,
-      price: validate(quickAddProduct.price, rules.required("Price is required."), rules.nonNegativeNumber()) ?? undefined,
-      gstRate: validate(quickAddProduct.gstRate, rules.nonNegativeNumber()) ?? undefined,
-    };
-    if (Object.values(errs).some(Boolean)) { setQuickAddErrors(errs); return; }
-    setQuickAddErrors({});
-    setQuickAddSaving(true);
-    try {
-      const res = await fetch("/api/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: quickAddProduct.name.trim(),
-          unit: quickAddProduct.unit.trim() || "Nos",
-          price: quickAddProduct.price,
-          gstRate: quickAddProduct.gstRate,
-          stock: 0,
-        }),
-      });
-      const d = await res.json().catch(() => ({}));
-      setQuickAddSaving(false);
-      if (!res.ok) { toast({ type: "error", title: "Failed", message: d?.error ?? "Could not add product." }); return; }
-      bustCache("/api/products");
-      setProducts((prev) => [...prev, d]);
-      addProduct(d);
-      setShowQuickAddProduct(false);
-      setShowProductDropdown(false);
-      toast({ type: "success", title: "Product added", message: `"${d.name}" was created and added to this invoice.` });
-    } catch {
-      setQuickAddSaving(false);
-      toast({ type: "error", title: "Failed", message: "Network error." });
-    }
-  }
-
-  function removeItem(idx: number) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
-  function updateItem(idx: number, field: keyof LineItem, value: string | number) {
-    setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
-  }
-
-  // Typing a flat ₹ amount is just another way to set discountPercent — it's
-  // converted against that line's gross (qty × rate) so the stored value stays
-  // a percentage, same as picking one from the dropdown.
-  function setDiscountAmount(idx: number, amountStr: string) {
-    const amount = parseFloat(amountStr) || 0;
-    setItems((prev) => prev.map((item, i) => {
-      if (i !== idx) return item;
-      const gross = item.qty * item.price;
-      const discountPercent = gross > 0 ? Math.min(100, Math.max(0, (amount / gross) * 100)) : 0;
-      return { ...item, discountPercent };
-    }));
-  }
-
-  // Discount is applied to the line's gross amount (qty × rate) before GST —
-  // taxable value = gross - discount, and GST is computed on that taxable value.
-  const lineBreakdown = (item: LineItem) => {
-    const gross = item.qty * item.price;
-    const discountAmount = (gross * item.discountPercent) / 100;
-    const taxable = gross - discountAmount;
-    const gstAmt = (taxable * item.gstRate) / 100;
-    return { gross, discountAmount, taxable, gstAmt, total: taxable + gstAmt };
-  };
-
-  const grossTotal = items.reduce((sum, item) => sum + lineBreakdown(item).gross, 0);
-  const discountTotal = items.reduce((sum, item) => sum + lineBreakdown(item).discountAmount, 0);
-  const subtotal = items.reduce((sum, item) => sum + lineBreakdown(item).taxable, 0);
-  const taxBreakdown = items.reduce((acc, item) => {
-    const { gstAmt } = lineBreakdown(item);
-    acc[item.gstRate] = (acc[item.gstRate] ?? 0) + gstAmt;
-    return acc;
-  }, {} as Record<number, number>);
-  const totalTax = Object.values(taxBreakdown).reduce((a, b) => a + b, 0);
-  const grandTotal = subtotal + totalTax;
+  const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal } = computeInvoiceTotals(items);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -334,7 +230,13 @@ export default function NewInvoicePage() {
           {/* Left column */}
           <div className={styles.leftCol}>
             {/* Customer selector */}
-            <div {...animateSection(0, `card ${styles.cardPad}`)}>
+            {(() => {
+              const section = animateSection(0, `card ${styles.cardPad}`);
+              return (
+                <div
+                  className={section.className}
+                  style={{ ...section.style, position: "relative", zIndex: showCustomerDropdown ? 5 : "auto" }}
+                >
               <div className={styles.sectionHeaderRow}>
                 <h2 className={styles.sectionTitle}>Bill To</h2>
                 {/* Mode toggle */}
@@ -355,7 +257,7 @@ export default function NewInvoicePage() {
               {customerMode === "existing" ? (
                 <>
                   <div className={styles.searchWrap}>
-                    <input
+                    <Input
                       type="text"
                       placeholder="Search customer…"
                       value={customerSearch}
@@ -368,7 +270,7 @@ export default function NewInvoicePage() {
                       <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
                         {filteredCustomers.length > 0 ? filteredCustomers.map((c) => (
                           <button key={c.id} type="button" onClick={() => handleCustomerSelect(c)} className={styles.dropdownBtn}>
-                            <div className={styles.dropdownItemName}>{c.name}</div>
+                            <div className={styles.dropdownItemName} title={c.name}>{c.name}</div>
                             <div className={styles.dropdownItemSub}>{c.city}{c.gstin ? ` · ${c.gstin}` : ""}</div>
                           </button>
                         )) : (
@@ -398,7 +300,7 @@ export default function NewInvoicePage() {
               ) : (
                 <div className={styles.customForm}>
                   <div>
-                    <input
+                    <Input
                       type="text" placeholder="Customer name *"
                       value={customCustomer.name}
                       onChange={(e) => { setCustomCustomer((p) => ({ ...p, name: e.target.value })); clearErr("name"); }}
@@ -408,24 +310,24 @@ export default function NewInvoicePage() {
                   </div>
                   <div className={styles.grid2}>
                     <div>
-                      <input type="tel" placeholder="Phone *" value={customCustomer.phone}
+                      <Input type="tel" placeholder="Phone *" value={customCustomer.phone}
                         onChange={(e) => { setCustomCustomer((p) => ({ ...p, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })); clearErr("phone"); }}
                         className={errInput("phone")} />
                       {errMsg("phone")}
                     </div>
                     <div>
-                      <input type="email" placeholder="Email" value={customCustomer.email}
+                      <Input type="email" placeholder="Email" value={customCustomer.email}
                         onChange={(e) => { setCustomCustomer((p) => ({ ...p, email: e.target.value })); clearErr("email"); }}
                         className={errInput("email")} />
                       {errMsg("email")}
                     </div>
                   </div>
-                  <input type="text" placeholder="Address" value={customCustomer.address}
+                  <Input type="text" placeholder="Address" value={customCustomer.address}
                     onChange={(e) => setCustomCustomer((p) => ({ ...p, address: e.target.value }))} className={styles.input} />
                   <div className={styles.grid3}>
-                    <input type="text" placeholder="City" value={customCustomer.city}
+                    <Input type="text" placeholder="City" value={customCustomer.city}
                       onChange={(e) => setCustomCustomer((p) => ({ ...p, city: e.target.value }))} className={styles.input} />
-                    <input type="text" placeholder="State" value={customCustomer.state}
+                    <Input type="text" placeholder="State" value={customCustomer.state}
                       onChange={(e) => {
                         const state = e.target.value;
                         setCustomCustomer((p) => ({ ...p, state }));
@@ -433,14 +335,14 @@ export default function NewInvoicePage() {
                       }}
                       className={styles.input} />
                     <div>
-                      <input type="text" placeholder="Pincode" value={customCustomer.pincode}
+                      <Input type="text" placeholder="Pincode" value={customCustomer.pincode}
                         onChange={(e) => { setCustomCustomer((p) => ({ ...p, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })); clearErr("pincode"); }}
                         className={errInput("pincode")} />
                       {errMsg("pincode")}
                     </div>
                   </div>
                   <div>
-                    <input type="text" placeholder="GSTIN" value={customCustomer.gstin} maxLength={15}
+                    <Input type="text" placeholder="GSTIN" value={customCustomer.gstin} maxLength={15}
                       onChange={(e) => { setCustomCustomer((p) => ({ ...p, gstin: e.target.value })); clearErr("gstin"); }}
                       className={errInputMono("gstin")} />
                     {errMsg("gstin")}
@@ -450,245 +352,32 @@ export default function NewInvoicePage() {
                   </p>
                 </div>
               )}
-            </div>
+                </div>
+              );
+            })()}
 
             {/* Place of supply + inter-state toggle + due date */}
-            <div {...animateSection(1, `card ${styles.cardPad}`)}>
-              <div className={styles.toggleRow}>
-                <div className={styles.dueDateRow}>
-                  <label className={styles.dueDateLabel}>Place of supply *</label>
-                  <select
-                    value={placeOfSupply}
-                    onChange={(e) => applyPlaceOfSupply(e.target.value)}
-                    className={styles.dueDateInput}
-                  >
-                    <option value="">Select state…</option>
-                    {INDIA_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-                <label className={styles.switchLabel}>
-                  <div
-                    role="switch"
-                    aria-checked={isInterState}
-                    onClick={() => setIsInterState((v) => !v)}
-                    className={`${styles.switchTrack} ${isInterState ? styles.switchTrackOn : ""}`}
-                  >
-                    <span className={`${styles.switchThumb} ${isInterState ? styles.switchThumbOn : ""}`} />
-                  </div>
-                  <span className={styles.switchText}>Inter-state supply (IGST)</span>
-                </label>
-                <label className={styles.switchLabel}>
-                  <div
-                    role="switch"
-                    aria-checked={reverseCharge}
-                    onClick={() => setReverseCharge((v) => !v)}
-                    className={`${styles.switchTrack} ${reverseCharge ? styles.switchTrackOn : ""}`}
-                  >
-                    <span className={`${styles.switchThumb} ${reverseCharge ? styles.switchThumbOn : ""}`} />
-                  </div>
-                  <span className={styles.switchText}>Reverse charge applicable</span>
-                </label>
-                <div className={styles.dueDateRow}>
-                  <label className={styles.dueDateLabel}>Due date</label>
-                  <input
-                    type="date"
-                    value={dueDate}
-                    min={todayStr}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
-                    className={styles.dueDateInput}
-                  />
-                </div>
-              </div>
-            </div>
+            <InvoiceOptionsRow
+              sectionIndex={1}
+              placeOfSupply={placeOfSupply}
+              onPlaceOfSupplyChange={applyPlaceOfSupply}
+              isInterState={isInterState}
+              onToggleInterState={() => setIsInterState((v) => !v)}
+              reverseCharge={reverseCharge}
+              onToggleReverseCharge={() => setReverseCharge((v) => !v)}
+              dueDate={dueDate}
+              onDueDateChange={setDueDate}
+              minDueDate={todayStr}
+            />
 
             {/* Line items */}
-            <div {...animateSection(2, `card ${styles.cardPad}`)}>
-              <h2 className={styles.lineItemsHeading}>Line Items</h2>
-              <div className={styles.productSearchWrap}>
-                <input
-                  type="text"
-                  placeholder="Search and add product…"
-                  value={productSearch}
-                  onChange={(e) => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
-                  onFocus={() => setShowProductDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowProductDropdown(false), 150)}
-                  className={styles.input}
-                />
-                {showProductDropdown && (
-                  <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
-                    {filteredProducts.length > 0 ? filteredProducts.map((p) => (
-                      <button key={p.id} type="button" onClick={() => addProduct(p)} className={styles.dropdownBtn}>
-                        <div className={styles.dropdownItemName}>{p.name}</div>
-                        <div className={styles.dropdownItemMeta}>
-                          {p.unit} · ₹{p.price} · GST {p.gstRate}% · Stock: {p.stock}
-                        </div>
-                      </button>
-                    )) : (
-                      <div className={styles.dropdownEmpty}>
-                        No product found.{" "}
-                        <button type="button" className={styles.dropdownEmptyLink} onMouseDown={(e) => e.preventDefault()} onClick={openQuickAddProduct}>
-                          Add new product →
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {showQuickAddProduct && (
-                <div className={styles.customForm}>
-                  <div>
-                    <input
-                      type="text" placeholder="Product name *"
-                      value={quickAddProduct.name}
-                      onChange={(e) => { setQuickAddProduct((p) => ({ ...p, name: e.target.value })); setQuickAddErrors((p) => ({ ...p, name: undefined })); }}
-                      className={quickAddErrors.name ? styles.inputError : styles.input}
-                    />
-                    {quickAddErrors.name && <p className={styles.errMsg}>{quickAddErrors.name}</p>}
-                  </div>
-                  <div className={styles.grid3}>
-                    <select
-                      value={quickAddProduct.unit}
-                      onChange={(e) => setQuickAddProduct((p) => ({ ...p, unit: e.target.value }))}
-                      className={styles.input}
-                    >
-                      {QUICK_ADD_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-                    </select>
-                    <div>
-                      <input
-                        type="text" inputMode="decimal" placeholder="Price (₹) *"
-                        value={quickAddProduct.price}
-                        onChange={(e) => { setQuickAddProduct((p) => ({ ...p, price: e.target.value })); setQuickAddErrors((p) => ({ ...p, price: undefined })); }}
-                        className={quickAddErrors.price ? styles.inputError : styles.input}
-                      />
-                      {quickAddErrors.price && <p className={styles.errMsg}>{quickAddErrors.price}</p>}
-                    </div>
-                    <div>
-                      <input
-                        type="text" inputMode="decimal" placeholder="GST %"
-                        value={quickAddProduct.gstRate}
-                        onChange={(e) => { setQuickAddProduct((p) => ({ ...p, gstRate: e.target.value })); setQuickAddErrors((p) => ({ ...p, gstRate: undefined })); }}
-                        className={quickAddErrors.gstRate ? styles.inputError : styles.input}
-                      />
-                      {quickAddErrors.gstRate && <p className={styles.errMsg}>{quickAddErrors.gstRate}</p>}
-                    </div>
-                  </div>
-                  <div className={styles.grid2}>
-                    <Button type="button" variant="primary" size="sm" onClick={handleQuickAddProduct} disabled={quickAddSaving}>
-                      {quickAddSaving ? "Adding…" : "Add & use product"}
-                    </Button>
-                    <Button type="button" variant="secondary" size="sm" onClick={() => setShowQuickAddProduct(false)} disabled={quickAddSaving}>
-                      Cancel
-                    </Button>
-                  </div>
-                  <p className={styles.customFormHint}>
-                    This product will be saved to your catalog and added to this invoice.
-                  </p>
-                </div>
-              )}
-
-              {items.length > 0 ? (
-                <div className={styles.itemsTableWrap}>
-                  <table className={styles.itemsTable}>
-                    <thead>
-                      <tr>
-                        <th className={styles.th}>#</th>
-                        <th className={styles.th}>Product</th>
-                        <th className={styles.thCenter}>HSN/SAC</th>
-                        <th className={styles.thCenter}>Unit</th>
-                        <th className={styles.thCenter}>Qty</th>
-                        <th className={styles.thRight}>List Price (₹)</th>
-                        <th className={styles.thCenter}>Discount</th>
-                        <th className={styles.thCenter}>GST %</th>
-                        <th className={styles.thRight}>GST Amt</th>
-                        <th className={styles.thRight}>Total (₹)</th>
-                        <th className={styles.thAction} />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item, idx) => {
-                        const { discountAmount, gstAmt: lineGst, total: lineTotal } = lineBreakdown(item);
-                        return (
-                          <tr key={idx} className={idx % 2 === 0 ? styles.itemRow : styles.itemRowAlt}>
-                            <td className={styles.tdIndex}>{idx + 1}</td>
-                            <td className={styles.tdProduct}>
-                              <div className={styles.tdProductInner} title={item.productName}>{item.productName}</div>
-                            </td>
-                            <td className={styles.tdCenter}>
-                              <input
-                                type="text" value={item.hsn}
-                                onChange={(e) => updateItem(idx, "hsn", e.target.value)}
-                                placeholder="HSN/SAC"
-                                className={styles.hsnInput}
-                              />
-                            </td>
-                            <td className={styles.tdCenter}>
-                              <span className={styles.unitBadge}>
-                                {item.unit}
-                              </span>
-                            </td>
-                            <td className={styles.tdCenter}>
-                              <input
-                                type="number" min="1" value={item.qty}
-                                onChange={(e) => updateItem(idx, "qty", parseFloat(e.target.value) || 1)}
-                                className={styles.qtyInput}
-                              />
-                            </td>
-                            <td className={styles.tdRight}>
-                              <input
-                                type="text" inputMode="decimal" value={item.price}
-                                onChange={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
-                                className={styles.priceInput}
-                              />
-                            </td>
-                            <td className={styles.discountCell}>
-                              <div className={styles.discountStack}>
-                                <select
-                                  value={Math.round(item.discountPercent * 100) / 100}
-                                  onChange={(e) => updateItem(idx, "discountPercent", parseFloat(e.target.value) || 0)}
-                                  className={styles.discountSelect}
-                                >
-                                  {discountOptionsFor(item.discountPercent).map((d) => <option key={d} value={d}>{d}%</option>)}
-                                </select>
-                                <input
-                                  type="text" inputMode="decimal"
-                                  value={discountAmount > 0 ? Math.round(discountAmount * 100) / 100 : ""}
-                                  onChange={(e) => setDiscountAmount(idx, e.target.value)}
-                                  placeholder="₹0"
-                                  title="Flat discount amount"
-                                  className={styles.discountAmountInput}
-                                />
-                              </div>
-                            </td>
-                            <td className={styles.tdCenter}>
-                              <span className={styles.gstBadge}>
-                                {item.gstRate}%
-                              </span>
-                            </td>
-                            <td className={styles.tdGstAmt}>
-                              ₹{lineGst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td className={styles.tdTotal}>
-                              ₹{lineTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td className={styles.tdActionCell}>
-                              <button type="button" onClick={() => removeItem(idx)} aria-label="Remove" className={styles.removeBtn}>
-                                ×
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className={styles.emptyItems}>
-                  Search for a product above to add items
-                </div>
-              )}
-            </div>
+            <InvoiceLineItemsCard
+              sectionIndex={2}
+              products={products}
+              setProducts={setProducts}
+              items={items}
+              setItems={setItems}
+            />
 
             {/* Notes */}
             <div {...animateSection(3, `card ${styles.cardPad}`)}>
@@ -736,6 +425,12 @@ export default function NewInvoicePage() {
                       </div>
                     </div>
                   )
+                )}
+                {roundOff !== 0 && (
+                  <div className={styles.summaryLine}>
+                    <span>Round Off</span>
+                    <span>{roundOff > 0 ? "+" : "−"}₹{Math.abs(roundOff).toFixed(2)}</span>
+                  </div>
                 )}
                 <div className={styles.summaryTotal}>
                   <span>Grand Total</span>

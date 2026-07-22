@@ -1,5 +1,6 @@
 .searchInput {
   flex: 1;
+  max-width: 24rem;
 }
 
 .emptyCell {
@@ -10,11 +11,21 @@
 
 .nameCell {
   font-weight: 600;
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 .companySub {
   font-size: 0.78rem;
   color: var(--c-text-4);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .gstinCell {

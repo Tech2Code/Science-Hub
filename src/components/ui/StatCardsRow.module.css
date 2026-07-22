@@ -1,0 +1,30 @@
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.875rem;
+}
+
+.statCard {
+  padding: 1rem 1.25rem;
+}
+
+.statLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--c-text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.statValue {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--stat-color, var(--c-text));
+  margin-top: 0.25rem;
+}
+
+.toneDefault  { --stat-color: var(--c-text); }
+.tonePositive { --stat-color: var(--c-green-text); }
+.toneWarning  { --stat-color: var(--c-amber); }
+.toneMuted    { --stat-color: var(--c-text-4); }
+.toneDanger   { --stat-color: var(--c-red); }

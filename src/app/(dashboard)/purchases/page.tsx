@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
+import { useCanWrite } from "@/lib/useCanWrite";
 import styles from "./purchasesOverview.module.css";
 
 interface MonthlyBar { month: string; total: number; }
@@ -82,6 +85,18 @@ function KpiCard({ label, value, sub, color = "var(--c-text)", loading }: { labe
 }
 
 export default function PurchaseDashboardPage() {
+  const { data: session } = useSession();
+  const router = useRouter();
+  const canWrite = useCanWrite();
+  useEffect(() => {
+    if (!session) return;
+    const role = session.user?.role;
+    if (role === "admin") return;
+    if (!session.user?.sections?.includes("purchase_overview")) {
+      router.replace("/dashboard");
+    }
+  }, [session, router]);
+
   const { data, loading } = useFetch<PurchaseDashboard>("/api/reports?type=purchase-dashboard");
 
   return (
@@ -99,8 +114,8 @@ export default function PurchaseDashboardPage() {
       <div {...animateSection(0, `card ${styles.sectionCard}`)}>
         <h2 className={styles.sectionTitle}>Quick Actions</h2>
         <div className={styles.quickActions}>
-          <Button variant="primary" href="/purchases/bills/new">+ New Bill</Button>
-          <Button variant="secondary" href="/purchases/vendors/new">+ New Vendor</Button>
+          {canWrite && <Button variant="primary" href="/purchases/bills/new">+ New Bill</Button>}
+          {canWrite && <Button variant="secondary" href="/purchases/vendors/new">+ New Vendor</Button>}
           <Button variant="secondary" href="/purchases/bills">All Bills</Button>
           <Button variant="secondary" href="/purchases/vendors">All Vendors</Button>
           <Button variant="secondary" href="/reports/purchases">Purchase Reports</Button>

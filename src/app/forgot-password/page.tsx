@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useBranding } from "@/lib/businessBranding";
+import { Input } from "@/components/ui/Input";
 import styles from "../login/login.module.css";
 import { rules, validate } from "@/lib/validation";
 
@@ -90,7 +91,7 @@ export default function ForgotPasswordPage() {
               <form onSubmit={handleSubmit} className={styles.formStack} noValidate>
                 <div>
                   <label htmlFor="email" className={styles.fieldLabel}>Email address</label>
-                  <input
+                  <Input
                     id="email"
                     type="email"
                     required

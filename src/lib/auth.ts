@@ -51,9 +51,38 @@ export const authOptions: NextAuthOptions = {
         token.role = (user as { role?: string }).role;
         token.tokenVersion = (user as { tokenVersion?: number }).tokenVersion ?? 0;
         token.tvCheckedAt = Date.now();
+
+        // Load section permissions for the user
+        try {
+          const permissions = await prisma.sectionPermission.findMany({
+            where: { userId: user.id, enabled: true },
+            select: { section: true },
+          });
+          token.sections = permissions.map((p) => p.section);
+        } catch {
+          token.sections = [];
+        }
+
         return token;
       }
       if (!token.id) return token;
+
+      // Reload section permissions every 30 seconds so permission changes
+      // by admin take effect quickly without hitting DB on every request.
+      const PERMS_INTERVAL_MS = 30 * 1000;
+      const lastPermsCheck = typeof token.permsCheckedAt === "number" ? token.permsCheckedAt : 0;
+      if (trigger === "update" || Date.now() - lastPermsCheck >= PERMS_INTERVAL_MS) {
+        try {
+          const freshPerms = await prisma.sectionPermission.findMany({
+            where: { userId: token.id as string, enabled: true },
+            select: { section: true },
+          });
+          token.sections = freshPerms.map((p) => p.section);
+          token.permsCheckedAt = Date.now();
+        } catch {
+          // Keep existing sections on failure
+        }
+      }
 
       // getServerSession() runs this callback on every single authenticated
       // API request — checking tokenVersion against the DB on every one of
@@ -89,6 +118,7 @@ export const authOptions: NextAuthOptions = {
       }
       token.tokenVersion = current.tokenVersion;
       token.tvCheckedAt = Date.now();
+
       if (trigger === "update") {
         token.name = current.name;
         token.email = current.email;
@@ -106,6 +136,7 @@ export const authOptions: NextAuthOptions = {
       if (token?.id) {
         session.user.id   = token.id   as string;
         session.user.role = token.role as string;
+        session.user.sections = (token.sections as string[]) ?? [];
       }
       return session;
     },

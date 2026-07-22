@@ -44,21 +44,25 @@ export function useFetch<T>(url: string | null) {
     if (!listeners.has(url)) listeners.set(url, new Set());
     listeners.get(url)!.add(onUpdate);
 
-    // Shows last-known cached data immediately on mount (no skeleton), ahead
-    // of the background revalidation below.
+    // Shows last-known cached data immediately on mount (no skeleton). Cache is
+    // trusted until something explicitly busts it (mutate()/bustCache()/patchCache()
+    // after a write) — mounting a page that hasn't changed since last visit does
+    // NOT trigger a network request.
     const hasCache = cache.has(url);
     if (hasCache) {
       setData(cache.get(url) as T); // eslint-disable-line react-hooks/set-state-in-effect -- seeds from the module-level cache synchronously so the first paint shows it, not a skeleton
       setLoading(false);
-    } else {
-      setLoading(true);
+      setError(false);
+      return () => { active = false; listeners.get(url)?.delete(onUpdate); };
     }
+
+    setLoading(true);
     setError(false);
 
     fetch(url, { headers: { "x-no-loader": "1" } })
       .then((r) => parseOrThrow<T>(r))
       .then((d) => { if (active) { publish(url, d); setLoading(false); } })
-      .catch(() => { if (active) { setLoading(false); if (!hasCache) setError(true); } });
+      .catch(() => { if (active) { setLoading(false); setError(true); } });
 
     return () => { active = false; listeners.get(url)?.delete(onUpdate); };
   }, [url]);

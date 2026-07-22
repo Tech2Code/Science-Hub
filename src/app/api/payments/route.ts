@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/apiAuth";
+import { requireSectionAccess } from "@/lib/apiAuth";
 
 export async function GET() {
   try {
-    const auth = await requireSession();
+    const auth = await requireSectionAccess("payments_received");
     if (!auth.ok) return auth.response;
 
     const payments = await prisma.payment.findMany({
       orderBy: { date: "desc" },
+      take: 5000,
       include: {
         invoice: {
           select: {

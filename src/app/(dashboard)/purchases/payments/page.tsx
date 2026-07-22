@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
 import { Cell, type Column } from "@/components/ui/Table";
 import { animateSection } from "@/lib/animateSection";
@@ -66,6 +69,17 @@ const COLUMNS: Column[] = [
 ];
 
 export default function PurchasePaymentsPage() {
+  const { data: session } = useSession();
+  const router = useRouter();
+  useEffect(() => {
+    if (!session) return;
+    const role = session.user?.role;
+    if (role === "admin") return;
+    if (!session.user?.sections?.includes("payments_made")) {
+      router.replace("/dashboard");
+    }
+  }, [session, router]);
+
   const { data, loading } = useFetch<PurchasePayment[]>("/api/purchase-bills/payments");
   const payments = data ?? [];
   const [search, setSearch] = useState("");
@@ -100,13 +114,13 @@ export default function PurchasePaymentsPage() {
       <div {...animateSection(0, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
-            <input
+            <Input
               type="search"
               aria-label="Search purchase payments"
               placeholder="Search by vendor, bill no, method or reference…"
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
-              className={`search-input ${styles.searchInput}`}
+              className={`${styles.searchInput}`}
             />
             <SortSelect ariaLabel="Sort purchase payments" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>

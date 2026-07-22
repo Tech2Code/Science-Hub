@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBranding } from "@/lib/businessBranding";
+import { Input } from "@/components/ui/Input";
 import styles from "../login/login.module.css";
 import pageStyles from "./findEmail.module.css";
 import { rules, validate } from "@/lib/validation";
@@ -74,7 +75,7 @@ export default function FindEmailPage() {
           <form onSubmit={handleSubmit} className={styles.formStack}>
             <div>
               <label htmlFor="name" className={styles.fieldLabel}>Your name</label>
-              <input
+              <Input
                 id="name"
                 type="text"
                 required

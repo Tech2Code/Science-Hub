@@ -66,27 +66,49 @@ export async function generateInvoicePdfBlob(
     const theadTop = theadRowEl ? Math.round((theadRowEl.getBoundingClientRect().top - elTop) * SCALE) : 0;
     const theadH   = theadRowEl ? Math.round(theadRowEl.getBoundingClientRect().height * SCALE) : 0;
 
-    // "Page No. X of Y" marker inside the banner — its position is measured
-    // once here (identical across pages/copies, since the flex layout around
-    // it never changes width), then the baked-in text is painted over per
-    // page in stampPageMarker() below with the real page number for that page.
-    const pageMarkerEl = el.querySelector<HTMLElement>("#invoice-page-marker");
-    const pmRect = pageMarkerEl?.getBoundingClientRect();
-    const pmLeftPx   = pmRect ? Math.round((pmRect.left - elLeft) * SCALE) : 0;
-    const pmTopPx    = pmRect ? Math.round((pmRect.top  - elTop)  * SCALE) : 0;
-    const pmWidthPx  = pmRect ? Math.round(pmRect.width  * SCALE) : 0;
-    const pmHeightPx = pmRect ? Math.round(pmRect.height * SCALE) : 0;
-
     // Measure footer row (tfoot) — appended at bottom of every non-last page
     const tfootRowEl = el.querySelector("tfoot tr") as HTMLElement | null;
     const tfootTop = tfootRowEl ? Math.round((tfootRowEl.getBoundingClientRect().top - elTop) * SCALE) : 0;
-    const tfootH   = tfootRowEl ? Math.round(tfootRowEl.getBoundingClientRect().height * SCALE) : 0;
+    const tfootOwnBottom = tfootRowEl ? Math.round((tfootRowEl.getBoundingClientRect().bottom - elTop) * SCALE) : 0;
+
+    // "Page No. X of Y" marker — sits outside/below the table's own box, in the
+    // borderless row right after </table>. Its wrapping row is captured and
+    // moved together with the tfoot above as one combined "footer" block (this
+    // is why tfootH is measured through the marker row's bottom, not the
+    // tfoot's own), so it always lands directly under the footer whether that
+    // block is appended after content or pinned to the page bottom.
+    const pageMarkerEl = el.querySelector<HTMLElement>("#invoice-page-marker");
+    const pmRect = pageMarkerEl?.getBoundingClientRect();
+    const markerRowEl = pageMarkerEl?.parentElement as HTMLElement | null;
+    const markerRowBottom = markerRowEl ? Math.round((markerRowEl.getBoundingClientRect().bottom - elTop) * SCALE) : tfootOwnBottom;
+    const tfootH = Math.max(tfootOwnBottom, markerRowBottom) - tfootTop;
+
+    const pmLeftPx     = pmRect ? Math.round((pmRect.left - elLeft) * SCALE) : 0;
+    const pmOffsetTopPx = pmRect ? Math.round((pmRect.top - elTop) * SCALE) - tfootTop : 0;
+    const pmWidthPx    = pmRect ? Math.round(pmRect.width  * SCALE) : 0;
+    const pmHeightPx   = pmRect ? Math.round(pmRect.height * SCALE) : 0;
 
     // tbody row bottoms — safe split boundaries (tfoot is NOT a split point)
     const tbodySplitPoints = Array.from(el.querySelectorAll("tbody tr")).map(
       (row) => Math.round(((row as HTMLElement).getBoundingClientRect().bottom - elTop) * SCALE)
     );
     const lastTbodyBottom = tbodySplitPoints[tbodySplitPoints.length - 1] ?? 0;
+
+    // Bottoms of the actual invoice line-item rows only — tagged with
+    // data-invoice-item-row since the item rows sit among several static
+    // rows (invoice meta, buyer/seller, column header, totals) inside the
+    // same tbody, so a plain row index can't be used to count/locate them.
+    const itemRowBottoms = Array.from(el.querySelectorAll("tbody tr[data-invoice-item-row]")).map(
+      (row) => Math.round(((row as HTMLElement).getBoundingClientRect().bottom - elTop) * SCALE)
+    );
+    // From this many line items onward, everything from the 18th item down
+    // through the footer (Terms/Bank/Totals) moves onto its own page —
+    // the first page keeps only the first 17 items.
+    const ITEM_COUNT_FOOTER_SPLIT = 18;
+    const forcedItemSplitPoint =
+      itemRowBottoms.length >= ITEM_COUNT_FOOTER_SPLIT
+        ? itemRowBottoms[ITEM_COUNT_FOOTER_SPLIT - 2]
+        : null;
 
     el.style.width = prevW;
     el.style.minWidth = prevMin;
@@ -225,14 +247,20 @@ export async function generateInvoicePdfBlob(
       const page2HeightPx = pageHeightPx - theadH; // pages 2+ have the TAX INVOICE banner
 
       // Overwrites the baked-in "Page No. 1 of 1" text with the real page
-      // number for this page — the banner image itself is a pixel copy from
+      // number for this page — the footer image itself is a pixel copy from
       // a single html2canvas capture, so this is the only way to vary that
       // text per page instead of it repeating the same value everywhere.
-      const stampPageMarker = (ctx: CanvasRenderingContext2D, pageNum: number, totalPages: number) => {
-        if (!pmWidthPx || !pmHeightPx) return;
-        const y = pmTopPx - theadTop;
+      // For single-page invoices it just erases the baked-in text instead —
+      // the page marker should only be visible when there's more than one page.
+      // `footerY` is where the footer's top actually landed on this page's
+      // composited canvas (appended, pinned to the bottom, or copied in place) —
+      // pass null when this page doesn't carry a footer at all.
+      const stampPageMarker = (ctx: CanvasRenderingContext2D, footerY: number | null, pageNum: number, totalPages: number) => {
+        if (!pmWidthPx || !pmHeightPx || footerY == null) return;
+        const y = footerY + pmOffsetTopPx;
         ctx.fillStyle = "#fff";
         ctx.fillRect(pmLeftPx, y, pmWidthPx, pmHeightPx);
+        if (totalPages <= 1) return;
         ctx.fillStyle = BD;
         ctx.font = `${9 * SCALE}px Arial, sans-serif`;
         ctx.textBaseline = "middle";
@@ -259,17 +287,25 @@ export async function generateInvoicePdfBlob(
         }
         ctx.drawImage(canvas, 0, startPx, canvas.width, sliceH, 0, y, canvas.width, sliceH);
         y += sliceH;
+        let footerY: number | null = null;
         if (appendFooter && tfootH > 0) {
           ctx.drawImage(canvas, 0, tfootTop, canvas.width, tfootH, 0, y, canvas.width, tfootH);
+          footerY = y;
+        } else if (tfootH > 0 && startPx <= tfootTop && endPx >= tfootTop + tfootH) {
+          // Footer wasn't explicitly appended, but this slice's own range
+          // already covers it (e.g. a single-page invoice copied whole) —
+          // it's present at its natural offset within the copied slice.
+          footerY = hdrH + (tfootTop - startPx);
         }
-        if (totalPages > 1) stampPageMarker(ctx, pageNum, totalPages);
+        stampPageMarker(ctx, footerY, pageNum, totalPages);
         return { dataUrl: pc.toDataURL("image/jpeg", 0.95), totalH };
       };
 
-      // Renders a full page-height canvas with the footer pinned to the very
-      // bottom instead of floating directly under the last content row —
-      // used only for the actual last page, and only when its content
-      // doesn't already reach the bottom of the page on its own.
+      // Renders a full page-height canvas with the footer (the "Thank you…"
+      // line + page marker) pinned to the very bottom of the page instead of
+      // floating directly under the last content row — used only for the
+      // actual last page, and only when its content doesn't already reach
+      // the bottom of the page on its own.
       const slicePagePinned = (startPx: number, endPx: number, withHeader: boolean, pageNum: number, totalPages: number) => {
         const pc = document.createElement("canvas");
         pc.width = canvas.width;
@@ -312,9 +348,7 @@ export async function generateInvoicePdfBlob(
           // left border occupies [edge, edge+width), a right border occupies
           // [edge-width, edge). A canvas stroke centers on its coordinate, so
           // match that by offsetting the left line inward (+) and the right
-          // line inward (-) by half the width — using the same +offset for
-          // both, as before, pushed the right line half a pixel past the
-          // table's actual right edge instead of just inside it.
+          // line inward (-) by half the width.
           [tableLeftPx + BORDER_W / 2, tableRightPx - BORDER_W / 2].forEach((x) => {
             ctx.beginPath();
             ctx.moveTo(x, y);
@@ -336,7 +370,7 @@ export async function generateInvoicePdfBlob(
           ctx.lineTo(tableRightPx, footerTop + 0.5);
           ctx.stroke();
         }
-        if (totalPages > 1) stampPageMarker(ctx, pageNum, totalPages);
+        stampPageMarker(ctx, tfootH > 0 ? footerTop : null, pageNum, totalPages);
         return { dataUrl: pc.toDataURL("image/jpeg", 0.95), totalH: pageHeightPx };
       };
 
@@ -345,59 +379,58 @@ export async function generateInvoicePdfBlob(
         isFirstPageOverall = false;
       };
 
-      if (canvas.height <= pageHeightPx) {
-        addPageBreakIfNeeded();
-        const { dataUrl, totalH } = tfootH > 0 && canvas.height < pageHeightPx
-          ? slicePagePinned(0, canvas.height, false, 1, 1)
-          : slicePage(0, canvas.height, false, false, 1, 1);
-        pdf.addImage(dataUrl, "JPEG", M, M, contentW, totalH * mmPerPx);
-      } else {
-        // Pass 1: compute split points, reserving tfootH on every non-last page
-        const pageSplits: number[] = [];
-        {
-          let start = 0, pNum = 0;
-          while (start < canvas.height) {
-            const fullAvail    = pNum === 0 ? pageHeightPx : page2HeightPx;
-            const contentAvail = fullAvail - tfootH;
-            const idealEnd = Math.min(start + contentAvail, canvas.height);
-            let splitAt = idealEnd;
-            if (idealEnd < canvas.height) {
-              const safe = tbodySplitPoints.filter(b => b > start && b <= idealEnd);
-              splitAt = safe.length > 0 ? safe[safe.length - 1] : idealEnd;
-              if (splitAt >= lastTbodyBottom) {
-                if (canvas.height - start <= fullAvail) {
-                  splitAt = canvas.height;
-                } else {
-                  const prev = tbodySplitPoints.filter(b => b > start && b < lastTbodyBottom);
-                  if (prev.length > 0) splitAt = prev[prev.length - 1];
-                }
+      // Pass 1: compute split points across the whole document (this runs
+      // even when everything would otherwise fit on one page, since the
+      // item-count rule below can still force a break).
+      //   - forcedItemSplitPoint (15+ items): a hard cap on every page's end
+      //     until it's crossed, so item 15 onward always starts a fresh
+      //     page together with the footer — regardless of how much budget
+      //     would otherwise be left on the page containing item 14.
+      //   - Otherwise, tbody row bottoms are used as safe break points,
+      //     reserving room for the footer on every page so it's never cut
+      //     across a page break.
+      const pageSplits: number[] = [];
+      {
+        let start = 0, pNum = 0;
+        while (start < canvas.height) {
+          const fullAvail    = pNum === 0 ? pageHeightPx : page2HeightPx;
+          const contentAvail = fullAvail - tfootH;
+          let idealEnd = Math.min(start + contentAvail, canvas.height);
+          if (forcedItemSplitPoint != null && start < forcedItemSplitPoint) {
+            idealEnd = Math.min(idealEnd, forcedItemSplitPoint);
+          }
+          let splitAt = idealEnd;
+          if (idealEnd < canvas.height) {
+            const safe = tbodySplitPoints.filter(b => b > start && b <= idealEnd);
+            splitAt = safe.length > 0 ? safe[safe.length - 1] : idealEnd;
+            if (splitAt >= lastTbodyBottom) {
+              if (canvas.height - start <= fullAvail) {
+                splitAt = canvas.height;
+              } else {
+                const prev = tbodySplitPoints.filter(b => b > start && b < lastTbodyBottom);
+                if (prev.length > 0) splitAt = prev[prev.length - 1];
               }
             }
-            pageSplits.push(splitAt);
-            start = splitAt;
-            pNum++;
           }
-        }
-
-        // Pass 2: render — append footer on all pages except the last; on
-        // the last page, pin the real footer to the bottom of the page
-        // instead of the sheer content height when it doesn't fill the page.
-        let start = 0;
-        pageSplits.forEach((splitAt, i) => {
-          const isLast     = i === pageSplits.length - 1;
-          const withHeader = i > 0;
-          const availPx    = i === 0 ? pageHeightPx : page2HeightPx;
-          addPageBreakIfNeeded();
-          let dataUrl: string, totalH: number;
-          if (isLast && tfootH > 0 && splitAt - start < availPx) {
-            ({ dataUrl, totalH } = slicePagePinned(start, splitAt, withHeader, i + 1, pageSplits.length));
-          } else {
-            ({ dataUrl, totalH } = slicePage(start, splitAt, withHeader, !isLast && tfootH > 0, i + 1, pageSplits.length));
-          }
-          pdf.addImage(dataUrl, "JPEG", M, M, contentW, totalH * mmPerPx);
+          pageSplits.push(splitAt);
           start = splitAt;
-        });
+          pNum++;
+        }
       }
+
+      // Pass 2: render — the footer (a repeated copy on every non-last page,
+      // its real content on the last) is pinned to the bottom of every page
+      // that shows it, not just floated directly under that page's content.
+      let start = 0;
+      pageSplits.forEach((splitAt, i) => {
+        const withHeader = i > 0;
+        addPageBreakIfNeeded();
+        const { dataUrl, totalH } = tfootH > 0
+          ? slicePagePinned(start, splitAt, withHeader, i + 1, pageSplits.length)
+          : slicePage(start, splitAt, withHeader, false, i + 1, pageSplits.length);
+        pdf.addImage(dataUrl, "JPEG", M, M, contentW, totalH * mmPerPx);
+        start = splitAt;
+      });
     }
 
     return pdf.output("blob");

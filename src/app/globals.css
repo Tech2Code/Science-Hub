@@ -20,7 +20,7 @@
   --c-text:        #0f172a;
   --c-text-2:      #334155;
   --c-text-3:      #64748b;
-  --c-text-4:      #94a3b8;
+  --c-text-4:      #5b6472;
 
   /* Brand blue — overridable per-user via --c-accent (see AccentPicker),
      derived shades computed with color-mix() so only this one variable
@@ -93,7 +93,7 @@
   --c-text:        #f1f5f9;
   --c-text-2:      #cbd5e1;
   --c-text-3:      #94a3b8;
-  --c-text-4:      #7c8ba1;
+  --c-text-4:      #8090a5;
 
   --c-blue:        color-mix(in srgb, var(--c-accent, #3b82f6) 85%, white);
   --c-blue-h:      var(--c-accent, #2563eb);
@@ -276,7 +276,7 @@ select::-moz-focus-inner {
   transition: background-color 0.2s, border-color 0.2s;
 }
 
-.page-title { font-size: 1.25rem; font-weight: 700; color: var(--c-text); }
+.page-title { font-size: 1.25rem; font-weight: 700; color: var(--c-text); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page-sub   { font-size: 0.875rem; color: var(--c-text-3); margin-top: 0.125rem; }
 
 .card {
@@ -584,26 +584,6 @@ select::-moz-focus-inner {
   margin-top: 0.25rem;
 }
 
-/* ── Search input (used across list pages) ──── */
-.search-input {
-  width: 100%;
-  max-width: 24rem;
-  padding: 0.625rem 0.875rem;
-  border-radius: var(--c-radius-sm);
-  border: 1px solid var(--c-border);
-  background: var(--c-bg-input);
-  color: var(--c-text);
-  font-size: 0.875rem;
-  font-family: var(--font-sans);
-  outline: none;
-  transition: background-color 0.2s, color 0.2s, border-color 0.15s, box-shadow 0.15s;
-}
-.search-input::placeholder { color: var(--c-text-4); }
-.search-input:focus {
-  border-color: var(--c-blue);
-  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
-}
-
 /* ── Table action button group ─────────────── */
 .table-actions {
   display: flex;
@@ -625,7 +605,7 @@ select::-moz-focus-inner {
 }
 @media (max-width: 640px) {
   .card-toolbar { padding: 0.75rem 1rem; gap: 0.5rem; }
-  .card-toolbar .search-input { max-width: 100%; }
+  .card-toolbar input { max-width: 100%; }
 }
 
 /* ── Toolbar left group (search + sort, kept together so the

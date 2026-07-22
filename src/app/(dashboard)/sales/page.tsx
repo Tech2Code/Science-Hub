@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
+import { useCanWrite } from "@/lib/useCanWrite";
 import styles from "./salesOverview.module.css";
 
 interface MonthlyBar { month: string; total: number; }
@@ -82,6 +85,18 @@ function KpiCard({ label, value, sub, color = "var(--c-text)", loading }: { labe
 }
 
 export default function SalesDashboardPage() {
+  const { data: session } = useSession();
+  const router = useRouter();
+  const canWrite = useCanWrite();
+  useEffect(() => {
+    if (!session) return;
+    const role = session.user?.role;
+    if (role === "admin") return;
+    if (!session.user?.sections?.includes("sales_overview")) {
+      router.replace("/dashboard");
+    }
+  }, [session, router]);
+
   const { data, loading } = useFetch<SalesDashboard>("/api/reports?type=sales-dashboard");
 
   return (
@@ -99,8 +114,8 @@ export default function SalesDashboardPage() {
       <div {...animateSection(0, `card ${styles.sectionCard}`)}>
         <h2 className={styles.sectionTitle}>Quick Actions</h2>
         <div className={styles.quickActions}>
-          <Button variant="primary" href="/sales/invoices/new">+ New Invoice</Button>
-          <Button variant="secondary" href="/sales/customers/new">+ New Customer</Button>
+          {canWrite && <Button variant="primary" href="/sales/invoices/new">+ New Invoice</Button>}
+          {canWrite && <Button variant="secondary" href="/sales/customers/new">+ New Customer</Button>}
           <Button variant="secondary" href="/sales/invoices">All Invoices</Button>
           <Button variant="secondary" href="/sales/customers">All Customers</Button>
           <Button variant="secondary" href="/reports/sales">Sales Reports</Button>

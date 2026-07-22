@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import styles from "./PdfPreviewModal.module.css";
 
@@ -12,13 +12,66 @@ interface PdfPreviewModalProps {
   onClose: () => void;
 }
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function PdfPreviewModal({ url, fileName, title, subtitle, onClose }: PdfPreviewModalProps) {
   const [isMobile, setIsMobile] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<Element | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     const ua = navigator.userAgent;
     const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua) || window.innerWidth < 768;
     setIsMobile(mobile); // eslint-disable-line react-hooks/set-state-in-effect -- reads browser-only navigator/window APIs, unavailable during SSR
+  }, []);
+
+  // This component is only ever mounted while "open" (call sites conditionally
+  // render it), so mount/unmount stand in for the open/close transition.
+  // Capture the trigger element and move focus into the dialog on mount;
+  // restore focus to the trigger on unmount.
+  useEffect(() => {
+    triggerRef.current = document.activeElement;
+
+    const dialogEl = dialogRef.current;
+    const focusable = dialogEl?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+    (focusable && focusable.length > 0 ? focusable[0] : dialogEl)?.focus();
+
+    return () => {
+      if (triggerRef.current instanceof HTMLElement) {
+        triggerRef.current.focus();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+      if (e.key === "Tab") {
+        const dialogEl = dialogRef.current;
+        if (!dialogEl) return;
+        const focusable = Array.from(
+          dialogEl.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, []);
 
   function handleDownload() {
@@ -35,8 +88,8 @@ export function PdfPreviewModal({ url, fileName, title, subtitle, onClose }: Pdf
   }
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.dialog} onClick={e => e.stopPropagation()}>
+    <div className={styles.overlay} role="dialog" aria-modal="true" onClick={onClose}>
+      <div className={styles.dialog} ref={dialogRef} tabIndex={-1} onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className={styles.header}>
           <div className={styles.fileIcon}>

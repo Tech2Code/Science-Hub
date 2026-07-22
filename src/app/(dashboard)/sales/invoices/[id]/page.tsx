@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
-import { fetchCached, bustCache } from "@/lib/useCache";
+import { fetchCached, bustCache, useFetch } from "@/lib/useCache";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
@@ -13,8 +13,10 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
+import { getCachedPdf, setCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { amountInWordsINR } from "@/lib/numberToWords";
 import { animateSection } from "@/lib/animateSection";
+import { useCanWrite } from "@/lib/useCanWrite";
 import styles from "./invoiceDetail.module.css";
 
 interface InvoiceItem {
@@ -39,7 +41,7 @@ interface Invoice {
   items: InvoiceItem[];
   payments: Payment[];
   subtotal: number; cgst: number; sgst: number; igst: number;
-  total: number; paidAmount: number; notes: string;
+  total: number; roundOff: number; paidAmount: number; notes: string;
 }
 
 interface BusinessSettings {
@@ -48,6 +50,8 @@ interface BusinessSettings {
   termsAndConditions?: string;
   bankName?: string; bankAccountName?: string; bankAccountNumber?: string; bankIfsc?: string; bankBranch?: string;
   logoUrl?: string;
+  showLogoOnInvoices?: boolean;
+  updatedAt?: string;
 }
 
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
@@ -161,7 +165,7 @@ function InvoiceSkeleton() {
               <Sk w="60%" h={11} r={3} />
             </div>
             <div className={styles.skTotalsRight}>
-              {["Subtotal", "CGST", "SGST", "Grand Total", "Paid", "Balance Due"].map(label => (
+              {["Subtotal", "CGST", "SGST", "Round Off", "Grand Total", "Paid", "Balance Due"].map(label => (
                 <div key={label} className={styles.skTotalsLine}>
                   <Sk w="60%" h={11} r={3} />
                   <Sk w="70%" h={11} r={3} />
@@ -181,8 +185,9 @@ function InvoiceSkeleton() {
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const canWrite = useCanWrite();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
-  const [settings, setSettings] = useState<BusinessSettings | null>(null);
+  const { data: settings, loading: settingsLoading } = useFetch<BusinessSettings>("/api/settings");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -213,27 +218,14 @@ export default function InvoiceDetailPage() {
 
   async function load(force = false) {
     try {
-      const [data, s] = await Promise.all([
-        fetchCached<Invoice>(`/api/invoices/${id}`, force),
-        fetchCached<BusinessSettings>("/api/settings"),
-      ]);
+      const data = await fetchCached<Invoice>(`/api/invoices/${id}`, force);
       setInvoice(data);
-      setSettings(s);
     } catch { setError("Invoice not found."); }
     setLoading(false);
   }
   useEffect(() => {
-    Promise.all([
-      fetchCached<Invoice>(`/api/invoices/${id}`),
-      fetchCached<BusinessSettings>("/api/settings"),
-    ]).then(([data, s]) => {
-      setInvoice(data as Invoice);
-      setSettings(s as BusinessSettings);
-      setLoading(false);
-    }).catch(() => {
-      setError("Invoice not found.");
-      setLoading(false);
-    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- fetch-on-id-change; load() sets invoice/settings/loading state
+    load();
   }, [id]);
 
   useEffect(() => {
@@ -315,6 +307,8 @@ export default function InvoiceDetailPage() {
     for (const ri of selected) {
       if (ri.qty > ri.maxQty) { toast({ type: "error", title: "Check form", message: `${ri.name}: quantity exceeds returnable amount (max ${ri.maxQty}).` }); return; }
     }
+    if (invoice && returnDate < invoice.date.slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Return date cannot be before the invoice date." }); return; }
+    if (returnDate > new Date().toISOString().slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Return date cannot be in the future." }); return; }
     setAddingReturn(true);
     try {
       const res = await fetch(`/api/invoices/${id}/returns`, {
@@ -344,9 +338,20 @@ export default function InvoiceDetailPage() {
   }
 
   async function generatePdfBlob(copyLabels?: string[]): Promise<Blob | null> {
+    const showLogo = settings?.showLogoOnInvoices !== false;
+    const variantKey = buildPdfVariantKey(copyLabels, {
+      p: showPaymentInPdf,
+      r: showReturnInPdf,
+      logo: showLogo,
+      settings: settings?.updatedAt ?? "",
+    });
+    const cached = await getCachedPdf("invoice", id, variantKey);
+    if (cached) return cached;
     const el = document.getElementById("invoice-print-area");
     if (!el) return null;
-    return generateInvoicePdfBlob(el, { copyLabels, logoUrl: settings?.logoUrl || undefined });
+    const blob = await generateInvoicePdfBlob(el, { copyLabels, logoUrl: showLogo ? settings?.logoUrl || undefined : undefined });
+    if (blob) setCachedPdf("invoice", id, variantKey, blob);
+    return blob;
   }
 
   function handleDownloadClick() {
@@ -564,7 +569,7 @@ export default function InvoiceDetailPage() {
     setDeleteConfirm(false);
   }
 
-  if (loading) return <InvoiceSkeleton />;
+  if (loading || settingsLoading) return <InvoiceSkeleton />;
   if (error || !invoice) return <div className={`loading-center ${styles.errorText}`}>{error || "Invoice not found."}</div>;
 
   const balance = invoice.total - invoice.paidAmount;
@@ -621,8 +626,8 @@ export default function InvoiceDetailPage() {
           <Breadcrumb items={[{ label: "Invoices", href: "/sales/invoices" }, { label: invoice.invoiceNumber }]} />
           <div className={styles.toolbarActions}>
             <StatusBadge status={invoice.status} />
-            <Button variant="editOutline" size="sm" onClick={() => { setOpeningEdit(true); router.push(`/sales/invoices/edit/${id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>Edit Invoice</Button>
-            {balance > 0 && (
+            {canWrite && <Button variant="editOutline" size="sm" onClick={() => { setOpeningEdit(true); router.push(`/sales/invoices/edit/${id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>Edit Invoice</Button>}
+            {canWrite && balance > 0 && (
               <Button
                 variant="greenPrimary"
                 size="sm"
@@ -635,6 +640,7 @@ export default function InvoiceDetailPage() {
                 Record Payment
               </Button>
             )}
+            {canWrite && (
             <span
               title={
                 invoice.paidAmount <= 0
@@ -650,6 +656,7 @@ export default function InvoiceDetailPage() {
                 {allItemsReturned ? "All Items Returned" : "Record Return"}
               </Button>
             </span>
+            )}
             <Button variant="secondary" size="sm" onClick={handleDownloadClick}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
               Download PDF
@@ -658,10 +665,12 @@ export default function InvoiceDetailPage() {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
               Print
             </Button>
+            {canWrite && (
             <Button variant="dangerOutline" size="sm" disabled={deleting} onClick={() => setDeleteConfirm(true)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
               Delete
             </Button>
+            )}
             {/* Share PDF button */}
             <div className={styles.shareWrap} ref={shareContainerRef}>
               <Button variant="secondary" size="sm" disabled={shareLoading} onClick={() => {
@@ -748,15 +757,17 @@ export default function InvoiceDetailPage() {
                     </button>
                   </div>
                 </FormField>
-                <FormField label="Method">
-                  <Select
-                    value={paymentForm.method}
-                    onChange={(e) => setPaymentForm((p) => ({ ...p, method: e.target.value }))}
-                    sz="sm"
-                  >
-                    {PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
-                  </Select>
-                </FormField>
+                <div className={styles.paymentMethodField}>
+                  <FormField label="Method">
+                    <Select
+                      value={paymentForm.method}
+                      onChange={(e) => setPaymentForm((p) => ({ ...p, method: e.target.value }))}
+                      sz="sm"
+                    >
+                      {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </Select>
+                  </FormField>
+                </div>
                 <FormField label="Reference / UTR">
                   <Input
                     type="text"
@@ -807,7 +818,7 @@ export default function InvoiceDetailPage() {
                 <div className={styles.returnModalMetaRow}>
                   <div>
                     <label className={styles.returnModalFieldLabel}>Return Date</label>
-                    <Input type="date" sz="sm" value={returnDate} onChange={e => setReturnDate(e.target.value)} className={styles.returnDateInput} />
+                    <Input type="date" sz="sm" value={returnDate} onChange={e => setReturnDate(e.target.value)} min={invoice?.date.slice(0, 10)} max={new Date().toISOString().slice(0, 10)} className={styles.returnDateInput} />
                   </div>
                   <div className={styles.returnNotesField}>
                     <label className={styles.returnModalFieldLabel}>Notes</label>
@@ -883,46 +894,61 @@ export default function InvoiceDetailPage() {
         <div id="invoice-print-area"
           style={{ background: "var(--inv-bg)", color: "var(--inv-tx)", borderRadius: "0.75rem", boxShadow: "var(--c-shadow-sm)" }}>
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10.5 }}>
+            {/* minWidth keeps the printable layout's proportions intact on
+                narrow screens — without it the table shrinks to the
+                viewport width instead of triggering the scroll wrapper
+                above, and the nowrap header/cell text gets visually
+                clipped by neighboring cells instead of staying legible. */}
+            {/* overflowWrap inherits down to every cell (address, GSTIN,
+                phone/email, place of supply, etc.) so a long unbreakable
+                token wraps instead of spilling past the cell/table edge —
+                which html2canvas would otherwise capture as content
+                bleeding outside the page during PDF generation. The
+                customer-name divs override this locally with nowrap +
+                ellipsis, which still wins for that single line. */}
+            <table style={{ width: "100%", minWidth: 700, borderCollapse: "collapse", fontSize: 10.5, overflowWrap: "break-word", wordBreak: "break-word" }}>
               {/* ── Letterhead header ── */}
               <thead>
                 <tr>
                   <th colSpan={invoice.isInterState ? 12 : 14}
-                    style={{ padding: 0, border: "1px solid var(--inv-bd)", background: "var(--inv-bg)", fontWeight: "normal" }}>
-                    {/* Thin top bar: page marker · TAX INVOICE · copy label */}
+                    style={{ padding: 0, background: "var(--inv-bg)", fontWeight: "normal" }}>
+                    {/* Thin top bar: copy label only (no border — only the
+                        block below is boxed) */}
                     <div style={{
-                      display: "flex", alignItems: "center", justifyContent: "space-between",
-                      padding: "4px 14px", borderBottom: "1px solid var(--inv-bd)",
+                      display: "flex", alignItems: "center", justifyContent: "flex-end",
+                      padding: "4px 14px",
                       fontSize: 9, color: "var(--inv-tx3)"
                     }}>
-                      {/* Baked into the captured banner image once, then overwritten
-                          per page with the real page number — see stampPageMarker()
-                          in generateInvoicePdf.ts. */}
-                      <span id="invoice-page-marker" data-role="page-marker" style={{ flex: 1, textAlign: "left" }}>Page No. 1 of 1</span>
-                      <span style={{
-                        flex: 1, textAlign: "center", fontSize: 10, fontWeight: 700,
-                        letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--inv-tx2)"
-                      }}>
-                        Tax Invoice
-                      </span>
                       {/* "Original Copy" by default on screen; overwritten to
                           "ORIGINAL COPY"/"DUPLICATE COPY" per pass during PDF
                           generation / printing — data-role survives node cloning
                           (ids get stripped there). */}
                       <span id="invoice-copy-badge" data-role="copy-badge" style={{
-                        flex: 1, textAlign: "right",
+                        textAlign: "right",
                         fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--inv-tx2)"
                       }}>
                         Original Copy
                       </span>
                     </div>
                     {/* Logo + company block */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 20px" }}>
-                      <div style={{ flexShrink: 0, width: 60, height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element -- html2canvas needs a plain <img>, swapped to a data URL during PDF/print generation */}
-                        <img src={settings?.logoUrl || "/logo.png"} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
-                      </div>
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 14, padding: "10px 20px",
+                      borderTop: "1px solid var(--inv-bd)", borderLeft: "1px solid var(--inv-bd)",
+                      borderRight: "1px solid var(--inv-bd)", borderBottom: "1px solid var(--inv-bd)"
+                    }}>
+                      {settings?.showLogoOnInvoices !== false && (
+                        <div style={{ flexShrink: 0, width: 60, height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element -- html2canvas needs a plain <img>, swapped to a data URL during PDF/print generation */}
+                          <img src={settings?.logoUrl || "/logo.png"} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                        </div>
+                      )}
                       <div style={{ flex: 1, textAlign: "center" }}>
+                        <div style={{
+                          fontSize: 10, fontWeight: 700,
+                          letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--inv-tx2)", marginBottom: 3
+                        }}>
+                          Tax Invoice
+                        </div>
                         <div style={{
                           fontSize: 17, fontWeight: 800, letterSpacing: "0.02em",
                           color: "var(--inv-tx)", marginBottom: 3, lineHeight: 1.2
@@ -950,7 +976,7 @@ export default function InvoiceDetailPage() {
                           </div>
                         )}
                       </div>
-                      <div style={{ flexShrink: 0, width: 60 }} aria-hidden="true" />
+                      {settings?.showLogoOnInvoices !== false && <div style={{ flexShrink: 0, width: 60 }} aria-hidden="true" />}
                     </div>
                   </th>
                 </tr>
@@ -1001,7 +1027,13 @@ export default function InvoiceDetailPage() {
                       Buyer (Bill to)
                     </div>
                     <div style={{ padding: "10px 14px", lineHeight: 1.75, fontSize: 10.5 }}>
-                      <div style={{ fontWeight: 700, fontSize: 12, color: "var(--inv-tx)", marginBottom: 2 }}>
+                      {/* nowrap+ellipsis doesn't clip inside an auto-layout
+                          table — the cell just grows to fit the unwrapped
+                          text instead, pushing the whole table (and PDF
+                          page) wider. Let it wrap/break like the address
+                          below it, which the table's own overflowWrap
+                          already handles correctly. */}
+                      <div style={{ fontWeight: 700, fontSize: 12, color: "var(--inv-tx)", marginBottom: 2 }} title={invoice.customer.name}>
                         {invoice.customer.name}
                       </div>
                       {invoice.customer.address && (
@@ -1045,7 +1077,13 @@ export default function InvoiceDetailPage() {
                       Buyer (Ship to)
                     </div>
                     <div style={{ padding: "10px 14px", lineHeight: 1.75, fontSize: 10.5 }}>
-                      <div style={{ fontWeight: 700, fontSize: 12, color: "var(--inv-tx)", marginBottom: 2 }}>
+                      {/* nowrap+ellipsis doesn't clip inside an auto-layout
+                          table — the cell just grows to fit the unwrapped
+                          text instead, pushing the whole table (and PDF
+                          page) wider. Let it wrap/break like the address
+                          below it, which the table's own overflowWrap
+                          already handles correctly. */}
+                      <div style={{ fontWeight: 700, fontSize: 12, color: "var(--inv-tx)", marginBottom: 2 }} title={invoice.customer.name}>
                         {invoice.customer.name}
                       </div>
                       {invoice.customer.address && (
@@ -1119,8 +1157,8 @@ export default function InvoiceDetailPage() {
                         <td key={label} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align as "left" | "right" | "center", width, whiteSpace: "nowrap", verticalAlign: "middle" }}>{label}</td>
                       ))}
                       {invoice.isInterState
-                        ? taxGroup("IGST", "10%")
-                        : <>{taxGroup("CGST", "9%")}{taxGroup("SGST", "9%")}</>
+                        ? taxGroup("IGST", "9%")
+                        : <>{taxGroup("CGST", "8%")}{taxGroup("SGST", "8%")}</>
                       }
                       <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "8%", whiteSpace: "nowrap", verticalAlign: "middle" }}>Total (₹)</td>
                     </tr>
@@ -1135,16 +1173,17 @@ export default function InvoiceDetailPage() {
                   const halfGst = item.gstAmount / 2;
                   const halfRate = item.gstRate / 2;
                   const rowBg = idx % 2 === 1 ? "var(--inv-bg2)" : "var(--inv-bg)";
-                  const c = (content: React.ReactNode, align: "left" | "right" | "center" = "center", bold = false, width?: string) => (
+                  const c = (content: React.ReactNode, align: "left" | "right" | "center" = "center", bold = false, width?: string, nowrap = false) => (
                     <td style={{
                       border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align, width,
-                      fontWeight: bold ? 700 : undefined, background: rowBg, color: bold ? "var(--inv-tx)" : "var(--inv-tx2)"
+                      fontWeight: bold ? 700 : undefined, background: rowBg, color: bold ? "var(--inv-tx)" : "var(--inv-tx2)",
+                      ...(nowrap ? { whiteSpace: "nowrap" as const } : {})
                     }}>
                       {content}
                     </td>
                   );
                   return (
-                    <tr key={item.id}>
+                    <tr key={item.id} data-invoice-item-row="true">
                       {c(idx + 1)}
                       <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 6px", background: rowBg, fontWeight: 600, color: "var(--inv-tx)", wordBreak: "break-word" }}>{item.name}</td>
                       {c(item.hsn || "—")}
@@ -1154,8 +1193,8 @@ export default function InvoiceDetailPage() {
                       {c(discountAmount > 0 ? `₹${fmt(discountAmount)}` : "—")}
                       {c(fmt(taxable), "right")}
                       {invoice.isInterState
-                        ? <>{c(`${item.gstRate}%`, "center", false, "4.5%")}{c(fmt(item.gstAmount), "right")}</>
-                        : <>{c(`${halfRate}%`, "center", false, "4.5%")}{c(fmt(halfGst), "right")}{c(`${halfRate}%`, "center", false, "4.5%")}{c(fmt(halfGst), "right")}</>}
+                        ? <>{c(`${item.gstRate}%`, "center", false, "4.5%", true)}{c(fmt(item.gstAmount), "right", false, undefined, true)}</>
+                        : <>{c(`${halfRate}%`, "center", false, "4.5%", true)}{c(fmt(halfGst), "right", false, undefined, true)}{c(`${halfRate}%`, "center", false, "4.5%", true)}{c(fmt(halfGst), "right", false, undefined, true)}</>}
                       {c(fmt(item.total), "right", true)}
                     </tr>
                   );
@@ -1237,6 +1276,12 @@ export default function InvoiceDetailPage() {
                       <td colSpan={4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.sgst)}</td>
                     </tr>
                   </>
+                )}
+                {invoice.roundOff !== 0 && (
+                  <tr>
+                    <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Round Off</td>
+                    <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>{invoice.roundOff > 0 ? "+" : "−"}₹{fmt(Math.abs(invoice.roundOff))}</td>
+                  </tr>
                 )}
                 <tr>
                   <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", fontWeight: 700, color: "var(--inv-tx)", background: "var(--inv-bg4)", fontSize: 12 }}>Grand Total</td>
@@ -1361,6 +1406,15 @@ export default function InvoiceDetailPage() {
                 </tr>
               </tfoot>
             </table>
+            {/* Outside/below the table's box, where the table ends — no border.
+                Baked into the captured page image once, then overwritten per
+                page with the real page number — see stampPageMarker() in
+                generateInvoicePdf.ts. Measured together with the tfoot above
+                as one combined block, so it moves with the footer whether
+                appended after content or pinned to the page bottom. */}
+            <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 14px 0", fontSize: 9, color: "var(--inv-tx3)" }}>
+              <span id="invoice-page-marker" data-role="page-marker">Page No. 1 of 1</span>
+            </div>
           </div>
 
         </div>

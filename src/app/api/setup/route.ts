@@ -243,7 +243,7 @@ export async function POST(request: NextRequest) {
         products: productData.length, customers: customerRows.length,
         invoices: 15, invoicesPaid: 5, invoicesPartial: 4, invoicesUnpaid: 6,
       },
-    }, { status: 200 });
+    }, { status: 201 });
   } catch (error) {
     console.error("Setup error:", error);
     return NextResponse.json({ error: "Setup failed" }, { status: 500 });

@@ -4,8 +4,10 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getInvoices } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
-import { requireSession } from "@/lib/apiAuth";
-import { recordStockMovement } from "@/lib/stockMovement";
+import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
+import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
+import { computeRoundOff } from "@/lib/roundOff";
+import { lineBreakdown } from "@/lib/invoiceCalc";
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,7 +27,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
     const user = auth.session.user;
 
@@ -121,11 +123,8 @@ export async function POST(request: NextRequest) {
       const price = parseFloat(String(item.price));
       const gstRate = parseFloat(String(item.gstRate ?? product?.gstRate ?? 18));
       const discountPercent = parseFloat(String(item.discountPercent ?? 0));
-      const grossAmount = price * quantity;
-      const discountAmount = (grossAmount * discountPercent) / 100;
-      const itemSubtotal = grossAmount - discountAmount;
-      const gstAmount = (itemSubtotal * gstRate) / 100;
-      const itemTotal = itemSubtotal + gstAmount;
+      const { discountAmount, gstAmt: gstAmount, total: itemTotal, taxable: itemSubtotal } =
+        lineBreakdown({ qty: quantity, price, gstRate, discountPercent });
 
       subtotal += itemSubtotal;
       totalGst += gstAmount;
@@ -156,7 +155,7 @@ export async function POST(request: NextRequest) {
       sgst = totalGst / 2;
     }
 
-    const total = subtotal + cgst + sgst + igst;
+    const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + cgst + sgst + igst);
 
     // Invoice-number generation (highest-existing-number-for-year + 1) and the
     // create both run inside one Serializable transaction, with a retry on the
@@ -187,6 +186,7 @@ export async function POST(request: NextRequest) {
             sgst,
             igst,
             total,
+            roundOff,
             paidAmount: 0,
             notes: notes || null,
             dueDate: dueDate ? new Date(dueDate) : null,
@@ -198,23 +198,17 @@ export async function POST(request: NextRequest) {
           include: { customer: true, items: true },
         });
 
-        const warnings: string[] = [];
-        for (const item of invoiceItems as { productId: string; quantity: number }[]) {
-          const product = await tx.product.update({
-            where: { id: item.productId },
-            data: { stock: { decrement: item.quantity } },
-            select: { id: true, name: true, stock: true },
-          });
-          if (product.stock < 0) warnings.push(`${product.name} (stock: ${product.stock})`);
-          await recordStockMovement(tx, {
-            productId: product.id,
-            type: "sale",
+        const updatedProducts = await batchAdjustStock(
+          tx,
+          (invoiceItems as { productId: string; quantity: number }[]).map((item) => ({
+            productId: item.productId,
             quantity: -item.quantity,
-            balanceAfter: product.stock,
-            reference: inv.invoiceNumber,
-            createdByUserId: user.id,
-          });
-        }
+          })),
+          { type: "sale", reference: inv.invoiceNumber, createdByUserId: user.id }
+        );
+        const warnings = updatedProducts
+          .filter((p) => p.stock < 0)
+          .map((p) => `${p.name} (stock: ${p.stock})`);
 
         return { invoice: inv, stockWarnings: warnings };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });
@@ -241,6 +235,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ...invoice, stockWarnings }, { status: 201 });
   } catch (error) {
     console.error("POST /api/invoices error:", error);
+    if (error instanceof ProductNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ error: "Failed to create invoice" }, { status: 500 });
   }
 }
