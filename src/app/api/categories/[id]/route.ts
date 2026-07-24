@@ -86,6 +86,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
         { status: 400 }
       );
     }
+    const purchaseItemCount = await prisma.purchaseBillItem.count({ where: { product: { categoryId: id } } });
+    if (purchaseItemCount > 0) {
+      return NextResponse.json(
+        { error: `"${category.name}" has products used in ${purchaseItemCount} purchase bill line item${purchaseItemCount > 1 ? "s" : ""} and cannot be deleted.` },
+        { status: 400 }
+      );
+    }
     if (category._count.products > 0) {
       return NextResponse.json(
         { error: `"${category.name}" has ${category._count.products} product(s) assigned and cannot be deleted. Reassign or delete those products first.` },

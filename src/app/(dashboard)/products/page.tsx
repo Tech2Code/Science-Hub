@@ -15,6 +15,7 @@ import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { isOutOfStock, isLowStock } from "@/lib/stockStatus";
 import styles from "./productsList.module.css";
 
 type StockFilter = "all" | "low" | "out";
@@ -117,8 +118,8 @@ export default function ProductsPage() {
     });
   }
 
-  const outOfStockCount = products.filter(p => p.stock === 0).length;
-  const lowStockCount   = products.filter(p => p.stock > 0 && p.stock <= p.minStock).length;
+  const outOfStockCount = products.filter(p => isOutOfStock(p.stock)).length;
+  const lowStockCount   = products.filter(p => isLowStock(p.stock, p.minStock)).length;
 
   const filtered = products.filter((p) => {
     const matchSearch =
@@ -127,8 +128,8 @@ export default function ProductsPage() {
       p.brand?.name?.toLowerCase().includes(search.toLowerCase()) ||
       p.category?.name?.toLowerCase().includes(search.toLowerCase());
     if (!matchSearch) return false;
-    if (stockFilter === "out") return p.stock === 0;
-    if (stockFilter === "low") return p.stock > 0 && p.stock <= p.minStock;
+    if (stockFilter === "out") return isOutOfStock(p.stock);
+    if (stockFilter === "low") return isLowStock(p.stock, p.minStock);
     return true;
   });
 
@@ -231,7 +232,8 @@ export default function ProductsPage() {
                   {stockFilter === "out" ? "No out-of-stock products." : stockFilter === "low" ? "No low-stock products." : search ? "No products match your search." : "No products yet. Add one to get started."}
                 </td></tr>
               ) : visible.map((p) => {
-                const isLow = p.stock <= p.minStock;
+                const out = isOutOfStock(p.stock);
+                const low = isLowStock(p.stock, p.minStock);
                 return (
                   <tr key={p.id}>
                     <Cell col={COLUMNS[0]}>
@@ -244,8 +246,8 @@ export default function ProductsPage() {
                     <Cell col={COLUMNS[4]} className={styles.priceCell}>₹{p.price.toLocaleString("en-IN")}</Cell>
                     <Cell col={COLUMNS[5]} className={styles.mutedCell}>{p.gstRate}%</Cell>
                     <Cell col={COLUMNS[6]}>
-                      <span className={[styles.stockBadge, isLow ? styles.stockLow : styles.stockOk].join(" ")}>
-                        {p.stock} {p.unit}{isLow && " ⚠"}
+                      <span className={[styles.stockBadge, out ? styles.stockOut : low ? styles.stockLow : styles.stockOk].join(" ")}>
+                        {p.stock} {p.unit}{(out || low) && " ⚠"}
                       </span>
                     </Cell>
                     <Cell col={COLUMNS[7]} className={styles.metaCell}>{p.createdBy ?? "—"}</Cell>

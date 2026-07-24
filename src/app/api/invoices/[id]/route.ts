@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getInvoice } from "@/lib/db";
+import { getInvoice, getBusinessSettings } from "@/lib/db";
+import { deriveIsInterState } from "@/lib/gstLocation";
 import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
@@ -40,7 +41,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { items, notes, dueDate, isInterState, placeOfSupply, reverseCharge, status, expectedUpdatedAt } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, status, expectedUpdatedAt } = body;
 
     const existingBase = await prisma.invoice.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existingBase) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -150,7 +151,13 @@ export async function PUT(
       };
     });
 
-    const inter = Boolean(isInterState);
+    // Independently verify inter-state vs. intra-state from the business's
+    // own configured state rather than trusting the client-supplied flag —
+    // mirrors the same check in POST /api/invoices. Falls back to the
+    // client's value only if the business state isn't configured yet.
+    const biz = await getBusinessSettings();
+    const derivedIsInterState = deriveIsInterState(String(placeOfSupply), biz.state);
+    const inter = derivedIsInterState !== null ? derivedIsInterState : Boolean(clientIsInterState);
     const cgst = inter ? 0 : totalGst / 2;
     const sgst = inter ? 0 : totalGst / 2;
     const igst = inter ? totalGst : 0;

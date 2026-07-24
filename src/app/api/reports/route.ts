@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getReportSummary, getReportOutstanding, getReportStock } from "@/lib/db";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/apiAuth";
+import { isLowStock } from "@/lib/stockStatus";
 
 async function getSalesDashboard() {
   const now = new Date();
@@ -89,11 +90,11 @@ async function getPurchaseDashboard() {
 
   const [spendAgg, paidAgg, unpaidBills, overdueCount, recentBills, vendors] = await Promise.all([
     prisma.purchaseBill.aggregate({
-      where: { deletedAt: null, billDate: { gte: monthStart, lt: monthEnd } },
+      where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: monthStart, lt: monthEnd } },
       _sum: { total: true },
     }),
     prisma.purchaseBill.aggregate({
-      where: { deletedAt: null },
+      where: { deletedAt: null, status: { not: "cancelled" } },
       _sum: { paidAmount: true },
     }),
     prisma.purchaseBill.findMany({
@@ -110,7 +111,10 @@ async function getPurchaseDashboard() {
       include: { vendor: { select: { name: true } } },
     }),
     prisma.vendor.findMany({
-      include: { purchaseBills: { where: { deletedAt: null }, select: { total: true, paidAmount: true } } },
+      // Cancelled bills are excluded from vendor totals — their stock effect
+      // was reversed and the business generally never actually paid for
+      // them, so counting them here would overstate a vendor's real spend.
+      include: { purchaseBills: { where: { deletedAt: null, status: { not: "cancelled" } }, select: { total: true, paidAmount: true } } },
     }),
   ]);
 
@@ -181,7 +185,7 @@ async function getCombinedDashboard() {
     prisma.purchaseBill.findMany({ where: { deletedAt: null }, orderBy: { billDate: "desc" }, take: 5, include: { vendor: { select: { name: true } } } }),
     prisma.product.count({ where: { deletedAt: null } }).then(async () => {
       const prods = await prisma.product.findMany({ where: { deletedAt: null }, select: { stock: true, minStock: true } });
-      return prods.filter((p) => p.stock <= p.minStock).length;
+      return prods.filter((p) => isLowStock(p.stock, p.minStock)).length;
     }),
   ]);
 

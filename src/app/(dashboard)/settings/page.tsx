@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
 import { useBranding } from "@/lib/businessBranding";
 import { animateSection } from "@/lib/animateSection";
+import { useScrollToHash } from "@/lib/useScrollToHash";
 import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { patchCache } from "@/lib/useCache";
 import styles from "./settings.module.css";
@@ -107,6 +108,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const toast = useToast();
   const { setBranding } = useBranding();
+  useScrollToHash(!loading);
 
   // Each section below has its own independent edit state — editing one
   // does not disturb or require re-submitting the others.
@@ -586,7 +588,7 @@ export default function SettingsPage() {
       ) : (
         <>
           {/* ── Branding (Logo) ──────────────────────────────────────────── */}
-          <div {...animateSection(0, `card ${styles.cardPad}`)}>
+          <div id="branding" {...animateSection(0, `card ${styles.cardPad}`)}>
             <h2 className={styles.sectionTitle}>Branding</h2>
             <p className={styles.stateHint}>Shown on the sidebar, login screen, and invoices when enabled.</p>
             <div className={styles.emailFormGrid} style={{ alignItems: "center" }}>
@@ -636,7 +638,7 @@ export default function SettingsPage() {
           </div>
 
           {/* ── Business Identity ─────────────────────────────────────── */}
-          <div {...animateSection(1, `card ${styles.cardPad}`)}>
+          <div id="identity" {...animateSection(1, `card ${styles.cardPad}`)}>
             <SectionHeader title="Business Identity" editing={editingIdentity} onEdit={handleEditIdentity} />
             {!editingIdentity ? (
               <div className={styles.infoGrid}>
@@ -678,7 +680,7 @@ export default function SettingsPage() {
           </div>
 
           {/* ── Address ────────────────────────────────────────────────── */}
-          <div {...animateSection(2, `card ${styles.cardPad}`)}>
+          <div id="address" {...animateSection(2, `card ${styles.cardPad}`)}>
             <SectionHeader title="Address" editing={editingAddress} onEdit={handleEditAddress} />
             {!editingAddress ? (
               <>
@@ -723,7 +725,7 @@ export default function SettingsPage() {
           </div>
 
           {/* ── Bank Details ───────────────────────────────────────────── */}
-          <div {...animateSection(3, `card ${styles.cardPad}`)}>
+          <div id="bank-details" {...animateSection(3, `card ${styles.cardPad}`)}>
             <SectionHeader title="Bank Details" editing={editingBank} onEdit={handleEditBank} />
             {saved.bankAccountNumberDecryptFailed && <DecryptWarning what="bank account number" />}
             {!editingBank ? (
@@ -786,7 +788,7 @@ export default function SettingsPage() {
           </div>
 
           {/* ── Terms & Conditions ────────────────────────────────────────── */}
-          <div {...animateSection(4, `card ${styles.cardPad}`)}>
+          <div id="terms" {...animateSection(4, `card ${styles.cardPad}`)}>
             <SectionHeader title="Terms & Conditions" editing={editingTerms} onEdit={handleEditTerms} />
             {!editingTerms ? (
               <>
@@ -819,7 +821,7 @@ export default function SettingsPage() {
           </div>
 
           {/* ── Email Configuration card (always visible, own edit state) ── */}
-          <div {...animateSection(5, `card ${styles.cardPad}`)}>
+          <div id="email" {...animateSection(5, `card ${styles.cardPad}`)}>
             <div className={styles.emailCardHeader}>
               <div>
                 <h2 className={styles.emailCardTitle}>

@@ -14,8 +14,11 @@ async function getPurchaseSummary() {
   });
 
   const result = await Promise.all(months.map(async ({ start, end, label }) => {
+    // Cancelled bills are excluded — their stock effect was reversed and
+    // the business generally never actually paid for them, so including
+    // them here would overstate real monthly spend.
     const bills = await prisma.purchaseBill.findMany({
-      where: { deletedAt: null, billDate: { gte: start, lt: end } },
+      where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: start, lt: end } },
       select: { total: true, paidAmount: true },
     });
 
@@ -62,8 +65,9 @@ async function getPurchaseOutstanding(startDate?: string, endDate?: string) {
 }
 
 async function getPurchaseByCategory() {
+  // Cancelled bills are excluded — see getPurchaseSummary above for why.
   const bills = await prisma.purchaseBill.findMany({
-    where: { deletedAt: null },
+    where: { deletedAt: null, status: { not: "cancelled" } },
     select: { category: true, total: true },
   });
 

@@ -7,6 +7,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useTheme } from "@/lib/theme";
 import { useBranding } from "@/lib/businessBranding";
 import { ProtectedSection } from "@/lib/sections";
+import { NAV_GROUPS, BIN_NAV } from "@/lib/navigation";
 import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { GlobalSearch } from "./GlobalSearch";
@@ -113,62 +114,7 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
   ),
 };
 
-interface NavItem { href: string; label: string; iconKey: string; adminOnly: boolean; sectionRequired?: ProtectedSection; sectionsRequired?: ProtectedSection[]; }
-interface NavGroup { label: string | null; items: NavItem[]; }
-
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: null,
-    items: [
-      { href: "/dashboard", label: "Dashboard", iconKey: "dashboard", adminOnly: false },
-    ],
-  },
-  {
-    label: "SALES",
-    items: [
-      { href: "/sales",             label: "Sales Overview",    iconKey: "salesDashboard", adminOnly: false, sectionRequired: "sales_overview" },
-      { href: "/sales/customers",   label: "Customers",         iconKey: "customers",      adminOnly: false },
-      { href: "/sales/invoices",    label: "Invoices",          iconKey: "invoices",       adminOnly: false },
-      { href: "/sales/credit-notes", label: "Credit Notes",     iconKey: "creditNotes",    adminOnly: false },
-      { href: "/sales/payments",    label: "Payments Received", iconKey: "payments",       adminOnly: false, sectionRequired: "payments_received" },
-    ],
-  },
-  {
-    label: "PURCHASES",
-    items: [
-      { href: "/purchases",          label: "Purchase Overview", iconKey: "purchaseDashboard", adminOnly: false, sectionRequired: "purchase_overview" },
-      { href: "/purchases/vendors",  label: "Vendors",           iconKey: "vendors",            adminOnly: false },
-      { href: "/purchases/bills",    label: "Purchase Bills",    iconKey: "purchases",          adminOnly: false },
-      { href: "/purchases/payments", label: "Payments Made",     iconKey: "paymentsMade",       adminOnly: false, sectionRequired: "payments_made" },
-    ],
-  },
-  {
-    label: "CATALOG",
-    items: [
-      { href: "/products",   label: "Products",   iconKey: "products", adminOnly: false },
-      { href: "/brands",     label: "Brands",      iconKey: "brands",   adminOnly: false },
-      { href: "/categories", label: "Categories",  iconKey: "categories", adminOnly: false },
-    ],
-  },
-  {
-    label: "REPORTS",
-    items: [
-      { href: "/reports/sales",      label: "Sales Reports",    iconKey: "reportsSales",     adminOnly: false, sectionRequired: "reports_sales" },
-      { href: "/reports/purchases",  label: "Purchase Reports", iconKey: "reportsPurchases", adminOnly: false, sectionRequired: "reports_purchases" },
-      { href: "/reports/gst-reports", label: "GST Reports",     iconKey: "gstFiling",        adminOnly: false, sectionsRequired: ["reports_sales", "reports_purchases"] },
-    ],
-  },
-  {
-    label: "SYSTEM",
-    items: [
-      { href: "/admin",    label: "Admin",    iconKey: "admin",    adminOnly: true },
-      { href: "/settings", label: "Settings", iconKey: "settings", adminOnly: true },
-    ],
-  },
-];
-
 const allNavItems = NAV_GROUPS.flatMap((g) => g.items);
-const BIN_NAV = { href: "/bin", label: "Recycle Bin", iconKey: "bin", adminOnly: false };
 // These overview pages must only highlight when exactly on that path, not on sub-pages.
 const EXACT_MATCH_HREFS = new Set(["/dashboard", "/sales", "/purchases"]);
 

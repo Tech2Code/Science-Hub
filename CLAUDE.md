@@ -4,7 +4,9 @@
 
 # Project Overview
 
-Science Hub is a GST billing and inventory management web app for a science supplies business. It handles invoice creation with auto-numbering, customer management, product/stock tracking, payment recording, PDF generation, email delivery of invoices, purchases (vendors, purchase bills, payments), a stock movement ledger, a recycle bin, global search, and admin/staff role management with activity logging.
+Science Hub is a GST billing and inventory management web app for a science supplies business. It handles invoice creation with auto-numbering, customer management, product/stock tracking, payment recording, PDF generation, email delivery of invoices, purchases (vendors, purchase bills, payments), a stock movement ledger, a recycle bin, global search, credit notes, a GST filing package export, business branding, and role/section-based access management with activity logging.
+
+**Roles**: `admin` (full access, only role that reaches Settings/Admin/Permissions), `staff` (default — full read/write, subject to section grants below), `manager` (read-only — blocked from all create/edit/delete by `requireWriteAccess()`/`useCanWrite()`, otherwise same section-gated visibility as staff). See `src/lib/sections.ts` for the six grantable `ProtectedSection` keys (`sales_overview`, `purchase_overview`, `reports_sales`, `reports_purchases`, `payments_received`, `payments_made`) and `src/app/api/admin/permissions/route.ts` for how an admin grants them per-user via `SectionPermission` rows.
 
 ---
 
@@ -19,6 +21,8 @@ Science Hub is a GST billing and inventory management web app for a science supp
 - **Styling**: CSS Modules + CSS variables (light/dark theme via localStorage)
 - **Frontend Deployment**: Vercel
 - **Database Deployment**: Neon
+- **Route protection**: `middleware.ts` (project root) enforces a default-deny baseline on `/api/**` — any request without a valid session token is rejected before it reaches a route handler, except an explicit public allowlist (`/api/auth/*`, `/api/setup`, `/api/settings/branding`). This is in addition to, not a replacement for, each route's own `requireSession()`/`requireAdmin()`/`requireWriteAccess()`/`requireSectionAccess()` calls — it exists so a newly-added route is protected automatically even if a developer forgets to call one of those guards.
+- **Rate limiting**: `src/lib/rateLimit.ts` is an in-memory fixed-window counter — defense-in-depth, not a distributed guarantee (each serverless instance tracks its own counts, and a redeploy resets them). A Redis/Upstash-backed version was tried and reverted for now (2026-07-24) — if revisited later, re-add `@upstash/redis` and wire it in behind the same function signature so callers don't need to change.
 
 ---
 
@@ -123,6 +127,11 @@ src/
 prisma/schema.prisma, seed.ts
 ```
 
+**Not shown in the tree above but real, current features** (the tree predates them — treat this list as authoritative until the tree itself is redrawn):
+- Pages: `admin/permissions/page.tsx` (+ `PermissionManager.tsx`) — section-permission grant grid; `sales/credit-notes/page.tsx` — list of all credit notes (`Return` rows); `reports/gst-reports/page.tsx` — GST filing package generator/downloader.
+- API routes: `admin/permissions/route.ts` (GET/POST section grants), `credit-notes/route.ts` (GET all), `gst-filing/route.ts` (GET JSON or `?format=zip`, gated by `requireGstFilingAccess()` — admin or both `reports_sales`+`reports_purchases`), `settings/branding/route.ts` (GET, deliberately public — name/tagline/logo shown on the unauthenticated login page), `settings/logo/route.ts` (POST/DELETE, admin-only, magic-byte validated upload to Vercel Blob), `stock-movements/route.ts` (DELETE `?type=stock-ledger`, admin-only bulk-clear of ledger history — does not touch current stock), `export-xlsx/route.ts` (POST, generic rows→Excel export shared by Credit Notes/Sales/Purchase reports), `products/[id]/adjust-stock/route.ts` (POST, manual stock-adjustment — see Features Completed).
+- Lib: `sections.ts` (the six `ProtectedSection` keys + `ROUTE_SECTION_MAP`), `useCanWrite.ts` (client-side `role !== "manager"` check), `businessBranding.tsx` (`BrandingProvider`/`useBranding()`), `gstFiling.ts`/`gstFilingZip.ts` (builds the filing report/ZIP), `stockStatus.ts` (single shared `isOutOfStock`/`isLowStock`/`needsRestock` definition — use this instead of re-deriving the comparison inline), `gstLocation.ts` (`deriveIsInterState()` — server-side inter-state/intra-state derivation from place-of-supply vs. business state, used by both invoice create and edit instead of trusting the client's flag).
+
 **Note on routing**: pages were reorganized under `sales/` and `purchases/` groups (invoices/customers/payments → `sales/*`; vendors/bills/payments → `purchases/*`), but the **API routes were not renamed** — `/api/invoices`, `/api/customers`, `/api/payments`, `/api/vendors`, `/api/purchase-bills` all stay at their original top-level paths. Only the UI routing changed.
 
 **Sidebar nav groups** (`NAV_GROUPS` in `DashboardShell.tsx`): Dashboard · SALES (Overview, Customers, Invoices, Payments Received) · PURCHASES (Overview, Vendors, Purchase Bills, Payments Made) · CATALOG (Products, Brands, Categories) · REPORTS (Sales Reports, Purchase Reports) · SYSTEM (Admin, Settings — admin-only) · Recycle Bin (standalone).
@@ -136,9 +145,13 @@ prisma/schema.prisma, seed.ts
 | `src/lib/db.ts` | Holds plain Prisma helpers for the original invoices/customers/products/reports routes. Most newer routes (vendors, purchase-bills, search, etc.) write Prisma queries directly in the handler instead — match whichever pattern the file you're editing already uses. |
 | `src/lib/useCache.ts` | Client fetch + cache hook. `useFetch(url)` returns `{ data, loading, mutate }`. Call `mutate()` after mutations. `bustCache(url)` for one-off busting. Throws on non-2xx JSON instead of silently returning the error body as data. |
 | `src/lib/auth.ts` | NextAuth config. `NEXTAUTH_SECRET` must be a real secret in production. |
+| `src/lib/apiAuth.ts` | Four guards: `requireSession()`, `requireAdmin()`, `requireWriteAccess()` (blocks the `manager` role), `requireSectionAccess(section)` (checks `SectionPermission`, admin always bypasses). Call the right one at the top of every route. |
+| `middleware.ts` | Default-deny baseline for `/api/**` — see Tech Stack above. Update `PUBLIC_API_PREFIXES`/`PUBLIC_API_EXACT` there if you add a new genuinely-public route. |
 | `src/lib/validation.ts` | Shared `rules.*` validators (gstin, pan, ifsc, phone, etc.) and per-entity `validateXInput()` server-side validators — reuse these rather than writing new inline validation. |
-| `src/lib/stockMovement.ts` | Every stock-affecting mutation (invoice create/edit/delete, purchase bill create/edit/delete, returns, bin restore) must call `recordStockMovement()` inside the same Prisma transaction. |
-| `src/lib/crypto.ts` | Gmail app password and bank account number are encrypted at rest via this module. Passes through legacy unprefixed plaintext values. |
+| `src/lib/stockMovement.ts` | Every stock-affecting mutation (invoice create/edit/delete, purchase bill create/edit/delete, returns, bin restore, manual adjustment) must call `batchAdjustStock()` inside the same Prisma transaction — see the `StockMovementType` union in that file for the current, specific set of movement types (there is no generic `"adjustment"` type anymore). |
+| `src/lib/crypto.ts` | Gmail app password and bank account number are encrypted at rest via this module. Uses a dedicated `ENCRYPTION_KEY` when set (new writes prefixed `encv2:`), otherwise derives the key from `NEXTAUTH_SECRET` (legacy `enc:` prefix) — both prefixes are recognized on decrypt so introducing `ENCRYPTION_KEY` never breaks reading older values. Passes through legacy unprefixed plaintext values untouched. |
+| `src/lib/stockStatus.ts` | The single shared "is this product low/out of stock?" definition (`isOutOfStock`, `isLowStock`, `needsRestock`) — every dashboard, report, and product list page uses these instead of re-deriving the comparison inline, so the numbers always agree. |
+| `src/lib/gstLocation.ts` | `deriveIsInterState(placeOfSupply, businessState)` — the server independently verifies inter-state vs. intra-state rather than trusting the client-supplied `isInterState` flag; falls back to the client's value only if the business's state isn't configured yet. |
 | `prisma/schema.prisma` | Source of truth for the data model. Run `npx prisma migrate dev` after schema changes. |
 | `src/app/api/invoices/route.ts` | Invoice number format is `SH-{YEAR}-{0001}`, generated inside a Serializable transaction with retry-on-conflict. Don't break the sequence logic. |
 | `src/app/api/purchase-bills/route.ts` | Same auto-number pattern for `PB-{YEAR}-{0001}`. |
@@ -175,14 +188,18 @@ Browser → useFetch("/api/...") → API Route Handler → Prisma → Neon DB
 - **Do not** create a mutation route handler (POST/PUT/DELETE) without calling `revalidateTag` — lists will show stale data.
 - **Do not** change the invoice number format `SH-{YYYY}-{0001}` — it appears on printed invoices.
 - **Do not** remove the `postinstall` script from package.json — it generates the Prisma client on Vercel.
-- **Do not** mutate stock without going through `recordStockMovement()` in the same transaction — the ledger must stay authoritative.
-- **Do not** accept or delete arbitrary blob URLs for purchase-bill attachments — always go through `isPurchaseBillBlobUrl()` / `deleteAttachmentBlob()` in `blobStorage.ts`.
+- **Do not** mutate stock without going through `batchAdjustStock()` in the same transaction — the ledger must stay authoritative. Use the most specific `StockMovementType` for the action (see `stockMovement.ts`), not a generic catch-all.
+- **Do not** accept or delete arbitrary blob URLs for purchase-bill attachments or the business logo — always go through `isPurchaseBillBlobUrl()`/`isLogoBlobUrl()` + `deleteAttachmentBlob()` in `blobStorage.ts`.
+- **Do not** trust a client-supplied `isInterState` flag on invoice create/edit — always derive it server-side via `deriveIsInterState()` in `src/lib/gstLocation.ts` (falls back to the client's value only if the business's state isn't configured).
+- **Do not** re-derive "is this product low/out of stock?" inline — use `isOutOfStock()`/`isLowStock()`/`needsRestock()` from `src/lib/stockStatus.ts` so every screen agrees.
+- **Do not** add a new API route without either an existing `requireSession()`/`requireAdmin()`/`requireWriteAccess()`/`requireSectionAccess()` call in the handler, or adding it to `middleware.ts`'s public allowlist if it's genuinely meant to be public — the default-deny middleware will otherwise 401 it, which is the intended safety net, not a bug.
 
 ---
 
 ## Database Models (current)
 
-- **User** — id, name, email(unique), password(bcrypt), role(admin/staff), tokenVersion(Int), createdAt → invoices[], activityLogs[], resetTokens[], purchaseBillsCreated[], stockMovementsCreated[]
+- **User** — id, name, email(unique), password(bcrypt), role(admin/staff/**manager**), tokenVersion(Int), createdAt → invoices[], activityLogs[], resetTokens[], purchaseBillsCreated[], stockMovementsCreated[], **sectionPermissions[]**
+- **SectionPermission** — id, userId, section(one of 6 `ProtectedSection` keys), enabled(default false), createdAt, updatedAt — `@@unique([userId, section])`. See `src/lib/sections.ts`.
 - **PasswordResetToken** — id, userId, token(unique), expiresAt, usedAt?, createdAt
 - **ActivityLog** — id, userId, action, details, entityId?, entityType?, createdAt (indexes: userId, createdAt)
 - **Customer** — id, name, phone?, email?, address?, city?, state?, pincode?, gstin?, deletedAt?
@@ -192,13 +209,13 @@ Browser → useFetch("/api/...") → API Route Handler → Prisma → Neon DB
 - **Invoice** — invoiceNumber(unique, `SH-YYYY-0001`), date, dueDate?, customerId, userId, status(unpaid/partial/paid), subtotal, cgst, sgst, igst, total, paidAmount, notes?, isInterState, **placeOfSupply** String?, **reverseCharge** Boolean(default false), deletedAt?
 - **InvoiceItem** — invoiceId, productId, name, hsn(default ""), quantity, unit, price, discountPercent(default 0), discountAmount(default 0), gstRate, gstAmount, total
 - **Payment** — invoiceId, amount, method(default "cash"), reference?, date, notes?
-- **Return** / **ReturnItem** — invoice returns; restores stock, capped by the invoice's paid amount
+- **Return** / **ReturnItem** — invoice returns, i.e. **credit notes**; `Return.creditNoteNumber` (unique, nullable, `CN-YYYY-0001`) is the credit note's own auto-number; restores stock, capped by the invoice's paid amount and remaining returnable quantity
 - **BusinessSettings** — singleton row `id="singleton"`: name, tagline, email(printed), phone, address, city, state, pincode, gstin, **pan**, gmailUser, gmailAppPassword(encrypted), **bankName, bankAccountName, bankAccountNumber**(encrypted)**, bankIfsc, bankBranch**, **termsAndConditions**, updatedAt
 - **Vendor** — id, name, company?, gstin?, phone?, email?, address?, notes?, isActive(default true), deletedAt?
 - **PurchaseBill** — billNumber(unique, `PB-YYYY-0001`), vendorId, billDate, dueDate?, subtotal, taxAmount, discount, total, paidAmount, status(unpaid/partial/paid/cancelled), notes?, attachmentUrl?/attachmentName?(Vercel Blob), category?, createdByUserId, deletedAt? (indexes: vendorId, status, billDate)
 - **PurchaseBillItem** — purchaseBillId, productId?, name, quantity, unit(default "Nos"), purchasePrice, gstRate(default 0), gstAmount(default 0), total
 - **PurchasePayment** — purchaseBillId, amount, method(default "cash"), reference?, date, notes? (index: purchaseBillId)
-- **StockMovement** — productId?(nullable, `onDelete: SetNull`), **productName**(snapshot, default ""), type(purchase/sale/adjustment/return), quantity(signed), balanceAfter, reference?, notes?, purchaseBillId?, createdByUserId?, createdAt (indexes: productId, createdAt)
+- **StockMovement** — productId?(nullable, `onDelete: SetNull`), **productName**(snapshot, default ""), type — specific values only, see `StockMovementType` in `src/lib/stockMovement.ts` (`sale`, `sale_edit_reverse`, `sale_edit_apply`, `sale_delete_restore`, `sale_bin_restore`, `purchase`, `purchase_edit_reverse`, `purchase_edit_apply`, `purchase_cancel`, `purchase_uncancel`, `purchase_delete_restore`, `purchase_bin_restore`, `return`, `return_delete_reverse`, `return_bin_restore`, `manual` — **no generic `"adjustment"` type**), documentType(invoice/purchase_bill/credit_note/manual), quantity(signed), balanceAfter, reference?, notes?, purchaseBillId?, createdByUserId?, createdAt (indexes: productId+createdAt, createdAt, documentType)
 
 > ⚠️ Three distinct email concepts: `User.email` = login email · `BusinessSettings.email` = printed on invoices · `BusinessSettings.gmailUser` = Gmail used to send emails
 
@@ -210,13 +227,16 @@ Browser → useFetch("/api/...") → API Route Handler → Prisma → Neon DB
 |--------|------|-------------|
 | GET/POST | `/api/invoices` | List invoices (`?status`, `?customerId`) / create invoice — auto-numbers `SH-YYYY-0001`, requires `placeOfSupply`, optional inline customer creation, decrements stock + records `StockMovement` |
 | GET/PUT/DELETE | `/api/invoices/[id]` | Get / full edit (reverses+reapplies stock, re-validates returned-qty floor) / soft-delete (restores stock, double-delete safe) |
-| GET/POST | `/api/invoices/[id]/returns` | List returns for an invoice / create a return — validated against paid amount and remaining returnable qty inside a Serializable tx; restores stock |
+| GET/POST | `/api/invoices/[id]/returns` | List returns for an invoice / create a return (credit note, `CN-YYYY-0001`) — validated against paid amount and remaining returnable qty inside a Serializable tx; restores stock |
+| DELETE | `/api/invoices/[id]/returns/[returnId]` | Soft-delete a credit note; reverses its stock effect |
+| GET | `/api/credit-notes` | All credit notes (non-deleted `Return` rows) across every invoice |
 | POST | `/api/invoices/[id]/payment` | Record a payment, recompute `paidAmount`/status |
 | PUT | `/api/invoices/[id]/payment/[paymentId]` | Edit an existing payment, recompute invoice status |
 | GET/POST | `/api/customers` | List customers (with `createdBy`) / create customer |
 | GET/PUT/DELETE | `/api/customers/[id]` | Get / edit (blocked if in bin) / soft-delete (blocked if active invoices exist) |
 | GET/POST | `/api/products` | List (`?search`) with `createdBy` / create product |
-| GET/PUT/DELETE | `/api/products/[id]` | Get (incl. last 15 stock movements) / edit / soft-delete (blocked if used in invoice line items) |
+| GET/PUT/DELETE | `/api/products/[id]` | Get (incl. last 15 stock movements) / edit / soft-delete (blocked if used in invoice **or active purchase-bill** line items) |
+| POST | `/api/products/[id]/adjust-stock` | Manual stock correction after a physical count — requires a `notes` reason, writes a `"manual"` ledger row |
 | GET/POST | `/api/brands` | List (product counts, `createdBy`) / create brand |
 | GET/DELETE | `/api/brands/[id]` | Detail (assigned products) / soft-delete (blocked if products assigned or used in invoices) |
 | GET/POST | `/api/categories` | List (product counts) / create category |
@@ -228,15 +248,21 @@ Browser → useFetch("/api/...") → API Route Handler → Prisma → Neon DB
 | POST | `/api/purchase-bills/[id]/payment` | Record a payment, recompute status |
 | GET | `/api/purchase-bills/payments` | All purchase payments |
 | POST/DELETE | `/api/purchase-bills/upload` | Upload attachment to Vercel Blob (size/MIME/magic-byte validated) / delete an orphaned never-attached upload |
-| GET | `/api/purchase-reports` | `?type=summary\|outstanding\|category\|stock-ledger` |
-| GET | `/api/reports` | `?type=summary\|outstanding\|stock\|sales-dashboard\|purchase-dashboard\|combined-dashboard\|gst-summary` |
+| GET | `/api/purchase-reports` | `?type=summary\|outstanding\|category\|stock-ledger` — `summary`/`category` exclude cancelled bills from spend totals; `stock-ledger` returns the entire ledger (not purchase-only, despite the route name) |
+| GET | `/api/reports` | `?type=summary\|outstanding\|stock\|sales-dashboard\|purchase-dashboard\|combined-dashboard\|gst-summary` — `purchase-dashboard`'s Top Vendors, and monthly spend/paid aggregates, exclude cancelled bills |
+| GET | `/api/gst-filing` | GSTR-style filing package (Sales/Purchase Register, B2B/B2C split, Credit Notes, HSN Summary) for a date range — JSON, or `?format=zip`. Gated by `requireGstFilingAccess()`: admin, or both `reports_sales`+`reports_purchases` sections |
+| POST | `/api/export-xlsx` | Generic rows→`.xlsx` export shared by Credit Notes / Sales Reports / Purchase Reports (capped 20,000 rows / 50 cols) |
+| DELETE | `/api/stock-movements?type=stock-ledger` | Admin-only bulk-clear of ledger history rows — does not change current `Product.stock` |
 | GET | `/api/payments` | All sales payments |
 | GET | `/api/search` | Global search (`?q=`) across invoices/customers/products/vendors/purchase bills/brands/categories, 5 results per group |
 | GET | `/api/bin` | Auto-purges bin items older than 30 days, then lists remaining across 7 entity types with `daysLeft`/`deletedBy`/`protectedReason` |
 | POST/DELETE | `/api/bin/[type]/[id]` | Restore (re-applies stock, double-restore safe) / permanent-delete (admin-only, per-type FK checks, blob cleanup) |
 | DELETE | `/api/bin/empty` | Admin-only bulk-purge of every bin item at once |
 | GET/PUT | `/api/settings` | Get (non-admins don't see `gmailUser`) / update business settings incl. bank details, Gmail creds (encrypted at rest) |
+| GET | `/api/settings/branding` | Public, no auth — name/tagline/logoUrl only, needed on the unauthenticated login page |
+| POST/DELETE | `/api/settings/logo` | Admin-only logo upload/removal (Vercel Blob, size/MIME/magic-byte validated) |
 | GET | `/api/settings/ifsc-lookup/[code]` | Admin-only proxy to Razorpay's public IFSC directory (server-side, 5s timeout) |
+| GET/POST | `/api/admin/permissions` | Admin-only: list non-admin users' section grants / upsert one `(userId, section, enabled)` grant |
 | GET/POST | `/api/admin/users` | List users (invoice counts) / create user |
 | GET/PUT/DELETE | `/api/admin/users/[id]` | Manage a single user (admin) |
 | GET | `/api/admin/activity` | Activity log (`?userId`, `?limit` max 500, `?offset`) — admin only |
@@ -266,8 +292,9 @@ Browser → useFetch("/api/...") → API Route Handler → Prisma → Neon DB
 | Variable | Required | Notes |
 |----------|----------|-------|
 | `DATABASE_URL` | Yes | Neon PostgreSQL pooled connection string (`?pgbouncer=true&connection_limit=1` in production) |
-| `NEXTAUTH_SECRET` | Yes | Min 32 chars random secret. Also used to derive the key for `src/lib/crypto.ts` (Gmail app password / bank account number encryption). |
+| `NEXTAUTH_SECRET` | Yes | Min 32 chars random secret. Signs sessions; also derives the legacy `src/lib/crypto.ts` key when `ENCRYPTION_KEY` isn't set. |
 | `NEXTAUTH_URL` | Production | Full deployed URL, e.g. `https://your-app.vercel.app` |
+| `ENCRYPTION_KEY` | Optional | Dedicated key for encrypting secrets-at-rest (Gmail app password, bank account number) independently of `NEXTAUTH_SECRET`, so the two can be rotated separately. Without it, encryption still works exactly as before, keyed off `NEXTAUTH_SECRET`. |
 | `GMAIL_USER` / `GMAIL_APP_PASSWORD` | For email sending | Gmail address + App Password, used as fallback when `BusinessSettings.gmailUser`/`gmailAppPassword` aren't set |
 | `BLOB_READ_WRITE_TOKEN` | For purchase bill attachments | Vercel Blob token — auto-set on Vercel, pull locally with `vercel env pull`. Without it, attachment upload fails but everything else works. |
 
@@ -343,6 +370,14 @@ POST to `/api/setup` with `{ name, email, password }`. Refuses if any user alrea
 18. **Stock movement ledger** — `StockMovement` rows for every stock change (purchase, sale, adjustment, return), nullable `productId` with a name snapshot so history survives product deletion, running balance, tied to the invoice/purchase bill that caused it
 19. **Global search** — Cross-entity search (invoices, customers, products, vendors, purchase bills, brands, categories) from the topbar, debounced with request cancellation
 20. **Sidebar reorganization** — Nav grouped into Sales / Purchases / Catalog / Reports / System; pages moved under `sales/` and `purchases/` route segments (API paths unchanged)
+21. **Manager role & section permissions** — Third role, read-only (`requireWriteAccess()`/`useCanWrite()` block all mutations); admins grant/revoke six `ProtectedSection` keys per non-admin user via Admin → Permissions (`SectionPermission` rows), gating overview dashboards, reports, and payment-history pages
+22. **Credit notes** — Dedicated list page (`sales/credit-notes`) over all `Return` records, with its own auto-number (`CN-YYYY-0001`), search/sort/pagination, PDF, and Excel export
+23. **GST filing package** — `reports/gst-reports`: Sales/Purchase Register, B2B/B2C split, Credit Notes, HSN Summary, and a net-GST-payable summary for a chosen month or financial year, downloadable as a ZIP; gated to admin or users with both `reports_sales` and `reports_purchases`
+24. **Business branding** — Logo upload (admin-only, Vercel Blob), name/tagline shown on the sidebar, browser tab metadata, and the unauthenticated login/forgot-password pages via a public `/api/settings/branding` endpoint
+25. **Manual stock adjustment** — Product detail page "Adjust Stock" action for correcting a physical stock-take discrepancy; requires a reason, writes an audited `"manual"` ledger row (`/api/products/[id]/adjust-stock`)
+26. **Default-deny API middleware** — `middleware.ts` requires a valid session for all of `/api/**` except an explicit public allowlist, as a safety net alongside each route's own guard
+27. **Unified low-stock definition** — `src/lib/stockStatus.ts` is the single source of truth for "out of stock" vs. "low stock" across the dashboard, reports, and every product list/detail page
+28. **Server-verified inter-state GST** — Invoice create/edit independently derive `isInterState` from place-of-supply vs. the business's own configured state (`src/lib/gstLocation.ts`) rather than trusting the client-supplied flag
 
 ---
 
@@ -362,9 +397,10 @@ Nothing actively in progress — all recent features complete and deployed.
 
 ## Known Issues
 
-- Theme flicker on initial load (light/dark flash) — known, not yet fixed
+- ~~Theme flicker on initial load~~ — actually already fixed: `src/app/layout.tsx` has a pre-hydration inline script + `suppressHydrationWarning` that sets `.dark`/`--c-accent` before paint. This note was stale; leaving it struck through rather than silently deleting it in case there's a regression to watch for.
 - `src/lib/states.ts` currently only lists `["Delhi", "Haryana", "Uttar Pradesh"]` — the full India state list is commented out in the file
 - After schema changes (`prisma db push`/`migrate dev`), must stop dev server → `npx prisma generate` → restart. The generated client DLL is locked while the server is running.
+- `payment/[paymentId]` PUT (edit payment) previously had no database transaction, unlike every other money-mutating flow — fixed to use the same Serializable transaction + P2034 retry pattern as payment creation.
 
 ---
 

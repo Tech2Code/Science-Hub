@@ -11,6 +11,7 @@ import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { fetchCached, bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
+import { isLowStock } from "@/lib/stockStatus";
 import styles from "./view.module.css";
 
 interface BrandProduct {
@@ -102,7 +103,7 @@ export default function BrandViewPage() {
   // Rendered unconditionally (loading or loaded) so adding/removing a header
   // button, stat, or column only ever needs one edit — see SkeletonSwap.
   const products = brand?.products ?? [];
-  const lowStockCount = products.filter((p) => p.stock <= p.minStock).length;
+  const lowStockCount = products.filter((p) => isLowStock(p.stock, p.minStock)).length;
   const catalogValue = products.reduce((s, p) => s + p.price * p.stock, 0);
 
   return (
@@ -212,7 +213,7 @@ export default function BrandViewPage() {
                   </td>
                   <td data-label="SKU" className={styles.mutedCell}>{p.sku || "—"}</td>
                   <td data-label="Price" className="table-td-right">₹{p.price.toLocaleString("en-IN")}</td>
-                  <td data-label="Stock" className={`table-td-right ${p.stock <= p.minStock ? styles.stockLow : ""}`}>{p.stock}</td>
+                  <td data-label="Stock" className={`table-td-right ${isLowStock(p.stock, p.minStock) ? styles.stockLow : ""}`}>{p.stock}</td>
                 </tr>
               ))}
             </tbody>

@@ -11,6 +11,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
+import { useScrollToHash } from "@/lib/useScrollToHash";
 import styles from "./admin.module.css";
 
 interface User {
@@ -65,7 +66,7 @@ const ACTION_META: Record<string, { label: string; color: string; bg: string; bo
   record_purchase_payment:{ label: "Purchase Payment",       color: "var(--c-green-text)",  bg: "var(--c-green-bg)",  border: "var(--c-green-border)" },
   empty_bin:              { label: "Bin Emptied",            color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
   clear_activity_log:     { label: "Activity Log Cleared",   color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
-  factory_reset:          { label: "Factory Reset",          color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
+  manual_stock_adjustment:{ label: "Stock Adjusted",         color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -130,6 +131,7 @@ export default function AdminPage() {
   const router = useRouter();
   const isAdmin = session?.user?.role === "admin";
   const toast = useToast();
+  useScrollToHash(!!session);
 
   // Redirect non-admins immediately
   useEffect(() => {
@@ -184,12 +186,6 @@ export default function AdminPage() {
   const [clearLogsInput, setClearLogsInput] = useState("");
   const LOGS_LIMIT = 10;
   const CLEAR_LOGS_PHRASE = "DELETE ALL";
-
-  // ── Factory Reset ────────────────────────────────────────────
-  const [factoryResetConfirm, setFactoryResetConfirm] = useState(false);
-  const [factoryResetLoading, setFactoryResetLoading] = useState(false);
-  const [factoryResetInput, setFactoryResetInput] = useState("");
-  const FACTORY_RESET_PHRASE = "DELETE EVERYTHING";
 
   const loadLogs = useCallback(async (page: number, userId: string, search: string) => {
     setLogsLoading(true);
@@ -392,32 +388,6 @@ export default function AdminPage() {
     }
   }
 
-  async function runFactoryReset() {
-    if (factoryResetInput !== FACTORY_RESET_PHRASE) return;
-    setFactoryResetLoading(true);
-    try {
-      const res = await fetch("/api/admin/factory-reset", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirm: factoryResetInput }),
-      });
-      const data = await res.json().catch(() => ({}));
-      setFactoryResetLoading(false);
-      setFactoryResetConfirm(false);
-      setFactoryResetInput("");
-      if (!res.ok) {
-        toast({ type: "error", title: "Reset failed", message: data.error ?? "Could not reset app data." });
-        return;
-      }
-      toast({ type: "success", title: "App reset", message: "All business data and staff accounts have been permanently deleted." });
-      router.push("/dashboard");
-    } catch {
-      setFactoryResetLoading(false);
-      setFactoryResetConfirm(false);
-      toast({ type: "error", title: "Reset failed", message: "Network error. Please try again." });
-    }
-  }
-
   const selfId = session?.user?.id;
 
   const logsTotalPages = Math.max(1, Math.ceil(logsTotal / LOGS_LIMIT));
@@ -491,34 +461,6 @@ export default function AdminPage() {
         onCancel={() => { if (!clearLogsLoading) { setClearLogsConfirm(false); setClearLogsInput(""); } }}
       />
 
-      <ConfirmDialog
-        open={factoryResetConfirm}
-        title="Factory Reset"
-        message="Permanently delete every invoice, purchase bill, customer, product, vendor, brand, category, stock movement, activity log entry, and staff account. This cannot be undone."
-        confirmLabel="Delete Everything" variant="danger" loading={factoryResetLoading}
-        confirmDisabled={factoryResetInput !== FACTORY_RESET_PHRASE}
-        detail={
-          <div className={styles.clearLogsConfirm}>
-            <p>Business settings (name, address, GSTIN, bank details, Gmail configuration) and admin accounts are kept.</p>
-            <label htmlFor="factory-reset-confirm">
-              Type <strong>{FACTORY_RESET_PHRASE}</strong> to confirm
-            </label>
-            <Input
-              id="factory-reset-confirm"
-              type="text"
-              autoComplete="off"
-              autoFocus
-              className={styles.inp}
-              value={factoryResetInput}
-              onChange={e => setFactoryResetInput(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && factoryResetInput === FACTORY_RESET_PHRASE) runFactoryReset(); }}
-            />
-          </div>
-        }
-        onConfirm={runFactoryReset}
-        onCancel={() => { if (!factoryResetLoading) { setFactoryResetConfirm(false); setFactoryResetInput(""); } }}
-      />
-
       <div className="page-header">
         <div>
           <h1 className="page-title">Admin Panel</h1>
@@ -537,7 +479,7 @@ export default function AdminPage() {
         <div className={styles.mainCol}>
 
       {/* ── My Profile ─────────────────────────────────────────── */}
-      <div {...animateSection(0, "card")}>
+      <div id="profile" {...animateSection(0, "card")}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>My Profile</h2>
           {!editingProfile && !profileLoading && (
@@ -634,7 +576,7 @@ export default function AdminPage() {
       </div>
 
       {/* ── User Management ────────────────────────────────────── */}
-      <div {...animateSection(1, "card")}>
+      <div id="users" {...animateSection(1, "card")}>
         <div className={styles.sectionHeader}>
           <div>
             <h2 className={styles.sectionTitle}>User Management</h2>
@@ -797,7 +739,7 @@ export default function AdminPage() {
       </div>
 
       {/* ── Activity Log ───────────────────────────────────────── */}
-      <div {...animateSection(2, "card")}>
+      <div id="activity-log" {...animateSection(2, "card")}>
         <div className={styles.sectionHeaderWrap}>
           <div>
             <h2 className={styles.sectionTitle}>Activity Log</h2>
@@ -932,22 +874,6 @@ export default function AdminPage() {
           </div>
         )}
       </div>
-
-      {/* ── Danger Zone ─────────────────────────────────────────── */}
-      {(() => { const a = animateSection(3, "card"); return (
-      <div className={a.className} style={{ ...a.style, borderColor: "var(--c-red-border)" }}>
-        <div className={styles.sectionHeaderWrap}>
-          <div>
-            <h2 className={styles.sectionTitle} style={{ color: "var(--c-red)" }}>Danger Zone</h2>
-            <p className={styles.sectionSub}>Factory reset — wipes all business data, keeps admin accounts and business/Gmail settings</p>
-          </div>
-          <Button variant="dangerOutline" size="sm" onClick={() => { setFactoryResetInput(""); setFactoryResetConfirm(true); }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
-            Factory Reset
-          </Button>
-        </div>
-      </div>
-      ); })()}
 
       </div>{/* end main content column */}
 

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getInvoices } from "@/lib/db";
+import { getInvoices, getBusinessSettings } from "@/lib/db";
+import { deriveIsInterState } from "@/lib/gstLocation";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
     const user = auth.session.user;
 
     const body = await request.json();
-    const { items, notes, dueDate, isInterState, placeOfSupply, reverseCharge, customCustomer } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, customCustomer } = body;
     let { customerId } = body;
 
     if (!items || items.length === 0) {
@@ -41,6 +42,17 @@ export async function POST(request: NextRequest) {
     if (!placeOfSupply || !String(placeOfSupply).trim()) {
       return NextResponse.json({ error: "Place of supply is required" }, { status: 400 });
     }
+
+    // Independently verify inter-state vs. intra-state from the business's
+    // own configured state rather than trusting the client-supplied flag —
+    // the browser derives it the same way, so this only changes behavior
+    // if a request's isInterState doesn't actually match its place of
+    // supply. Falls back to the client's value only if the business state
+    // isn't configured yet (nothing to compare against).
+    const biz = await getBusinessSettings();
+    const derivedIsInterState = deriveIsInterState(String(placeOfSupply), biz.state);
+    const isInterState = derivedIsInterState !== null ? derivedIsInterState : Boolean(clientIsInterState);
+
     if (dueDate) {
       const parsedDueDate = new Date(dueDate);
       if (isNaN(parsedDueDate.getTime())) {

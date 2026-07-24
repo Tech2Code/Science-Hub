@@ -85,6 +85,12 @@
 }
 
 .stockLow {
+  --badge-bg: var(--c-amber-bg);
+  --badge-color: var(--c-amber-text);
+  --badge-border: var(--c-amber-border);
+}
+
+.stockOut {
   --badge-bg: var(--c-red-bg);
   --badge-color: var(--c-red-text);
   --badge-border: var(--c-red-border);

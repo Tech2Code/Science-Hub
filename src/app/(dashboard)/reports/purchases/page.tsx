@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
-import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
@@ -108,7 +107,6 @@ export default function PurchaseReportsPage() {
     }
   }, [session, router]);
 
-  const isAdmin = session?.user?.role === "admin";
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("outstanding");
   const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
@@ -119,30 +117,7 @@ export default function PurchaseReportsPage() {
   const { data: summaryData, loading: loadingSummary } = useFetch<SummaryRow[]>("/api/purchase-reports?type=summary");
   const { data: outstandingData, loading: loadingOut } = useFetch<OutstandingBill[]>(`/api/purchase-reports?type=outstanding${dateQuery}`);
   const { data: categoryData, loading: loadingCat } = useFetch<CategoryRow[]>("/api/purchase-reports?type=category");
-  const { data: ledgerData, loading: loadingLedger, mutate: mutateLedger } = useFetch<LedgerRow[]>("/api/purchase-reports?type=stock-ledger");
-
-  const [emptyLedgerOpen, setEmptyLedgerOpen] = useState(false);
-  const [emptyLedgerLoading, setEmptyLedgerLoading] = useState(false);
-
-  async function confirmEmptyLedger() {
-    setEmptyLedgerLoading(true);
-    try {
-      const res = await fetch("/api/stock-movements?type=stock-ledger", { method: "DELETE" });
-      const d = await res.json().catch(() => ({}));
-      setEmptyLedgerLoading(false);
-      setEmptyLedgerOpen(false);
-      if (res.ok) {
-        mutateLedger();
-        toast({ type: "success", title: "Stock ledger cleared", message: `${d.deleted ?? 0} record(s) permanently deleted.` });
-      } else {
-        toast({ type: "error", title: "Failed", message: d.error ?? "Could not clear stock ledger." });
-      }
-    } catch {
-      setEmptyLedgerLoading(false);
-      setEmptyLedgerOpen(false);
-      toast({ type: "error", title: "Failed", message: "Network error." });
-    }
-  }
+  const { data: ledgerData, loading: loadingLedger } = useFetch<LedgerRow[]>("/api/purchase-reports?type=stock-ledger");
 
   const summaryRows = summaryData ?? [];
   const outstanding = outstandingData ?? [];
@@ -243,17 +218,6 @@ export default function PurchaseReportsPage() {
 
   return (
     <div className="page-stack">
-      <ConfirmDialog
-        open={emptyLedgerOpen}
-        title="Empty Stock Ledger"
-        message={`Permanently delete all ${ledgerRows.length} stock movement record(s)? Product stock quantities are not affected — only this history log is cleared. This cannot be undone.`}
-        confirmLabel="Empty Ledger"
-        variant="danger"
-        loading={emptyLedgerLoading}
-        onConfirm={confirmEmptyLedger}
-        onCancel={() => { if (!emptyLedgerLoading) setEmptyLedgerOpen(false); }}
-      />
-
       <div className="page-header">
         <div>
           <h1 className="page-title">Purchase Reports</h1>
@@ -497,11 +461,6 @@ export default function PurchaseReportsPage() {
                 )}
                 {!loadingLedger && (
                   <ShowAllToggle total={filteredLedger.length} showAll={ledgerShowAll} onToggle={() => { setLedgerShowAll((v) => !v); setLedgerPage(1); }} />
-                )}
-                {isAdmin && !loadingLedger && ledgerRows.length > 0 && (
-                  <Button variant="dangerOutline" size="sm" onClick={() => setEmptyLedgerOpen(true)}>
-                    Empty Stock Ledger
-                  </Button>
                 )}
               </div>
             </div>

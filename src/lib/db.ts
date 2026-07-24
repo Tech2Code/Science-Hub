@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { safeDecrypt } from "@/lib/crypto";
+import { isLowStock } from "@/lib/stockStatus";
 
 export async function getBusinessSettings() {
   const settings = await prisma.businessSettings.upsert({
@@ -121,7 +122,7 @@ export async function getReportSummary() {
     where: { deletedAt: null },
     select: { stock: true, minStock: true },
   });
-  const lowStockCount = allProducts.filter((p) => p.stock <= p.minStock).length;
+  const lowStockCount = allProducts.filter((p) => isLowStock(p.stock, p.minStock)).length;
   const recent = await prisma.invoice.findMany({
     where: { deletedAt: null },
     orderBy: { date: "desc" },
@@ -186,5 +187,5 @@ export async function getReportStock() {
     orderBy: { stock: "asc" },
     include: { category: true, brand: true },
   });
-  return allProducts.filter((p) => p.stock <= p.minStock);
+  return allProducts.filter((p) => isLowStock(p.stock, p.minStock));
 }

@@ -146,6 +146,11 @@
 
 html { height: 100%; }
 
+/* Global-search deep links jump to #anchors inside dashboard pages (Settings,
+   Admin); offset them below the sticky topbar so the target isn't hidden. */
+#branding, #identity, #address, #bank-details, #terms, #email,
+#profile, #users, #activity-log { scroll-margin-top: 5.5rem; }
+
 body {
   height: 100%;
   background: var(--c-bg);

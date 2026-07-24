@@ -4,12 +4,15 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { FormField, Input, Textarea } from "@/components/ui/Input";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { fetchCached, bustCache } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
+import { needsRestock } from "@/lib/stockStatus";
+import { useCanWrite } from "@/lib/useCanWrite";
 import styles from "./view.module.css";
 
 interface StockMovement {
@@ -56,18 +59,73 @@ export default function ProductViewPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();
+  const canWrite = useCanWrite();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openingEdit, setOpeningEdit] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [adjustSaving, setAdjustSaving] = useState(false);
+  const [adjustStock, setAdjustStock] = useState("");
+  const [adjustNotes, setAdjustNotes] = useState("");
 
-  useEffect(() => {
-    fetchCached(`/api/products/${id}`)
+  function loadProduct() {
+    return fetchCached(`/api/products/${id}`)
       .then((d) => { setProduct(d as Product); setLoading(false); })
       .catch(() => { setError("Product not found."); setLoading(false); });
+  }
+
+  useEffect(() => {
+    loadProduct();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadProduct is redefined each render but only id should re-trigger the fetch
   }, [id]);
+
+  function openAdjustDialog() {
+    setAdjustStock(String(product?.stock ?? 0));
+    setAdjustNotes("");
+    setAdjustOpen(true);
+  }
+
+  async function handleAdjustStock() {
+    if (!product) return;
+    const parsed = Number(adjustStock);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+      toast({ type: "error", title: "Check the form", message: "New stock must be a whole number of 0 or more." });
+      return;
+    }
+    if (!adjustNotes.trim()) {
+      toast({ type: "error", title: "Check the form", message: "A reason is required for a manual stock adjustment." });
+      return;
+    }
+    if (parsed === product.stock) {
+      toast({ type: "error", title: "No change", message: "New stock is the same as the current stock." });
+      return;
+    }
+    setAdjustSaving(true);
+    try {
+      const res = await fetch(`/api/products/${id}/adjust-stock`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newStock: parsed, notes: adjustNotes.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setAdjustSaving(false);
+      if (res.ok) {
+        setAdjustOpen(false);
+        bustCache("/api/products");
+        bustCache(`/api/products/${id}`);
+        await loadProduct();
+        toast({ type: "success", title: "Stock adjusted", message: `"${product.name}" is now at ${data.stock} ${product.unit}.` });
+      } else {
+        toast({ type: "error", title: "Adjustment failed", message: data.error ?? "Could not adjust stock." });
+      }
+    } catch {
+      setAdjustSaving(false);
+      toast({ type: "error", title: "Adjustment failed", message: "Network error." });
+    }
+  }
 
   async function handleDelete() {
     if (!product) return;
@@ -97,7 +155,11 @@ export default function ProductViewPage() {
   // Rendered unconditionally (loading or loaded) so adding/removing a header
   // button, stat, or column only ever needs one edit — see SkeletonSwap.
   const movements = product?.stockMovements ?? [];
-  const isLow = !!product && product.stock <= product.minStock;
+  // "Below min" here deliberately covers both out-of-stock and low-stock —
+  // unlike the Products list's separate Low/Out tabs, this is a single
+  // "does current stock satisfy the minimum threshold?" indicator, and
+  // zero stock is certainly at-or-below that threshold.
+  const isLow = !!product && needsRestock(product.stock, product.minStock);
   const marginAmount = product?.purchasePrice != null ? product.price - product.purchasePrice : null;
   const marginPct = product?.purchasePrice != null && product.purchasePrice > 0
     ? (marginAmount! / product.purchasePrice) * 100
@@ -115,6 +177,39 @@ export default function ProductViewPage() {
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => { if (!deleting) setConfirmOpen(false); }}
+      />
+
+      <ConfirmDialog
+        open={adjustOpen}
+        title="Adjust Stock"
+        message={`Current stock: ${product?.stock ?? 0} ${product?.unit ?? ""}. Use this after a physical stock take to correct the recorded quantity — it will be logged in the stock ledger and activity log.`}
+        detail={
+          <div className={styles.adjustForm}>
+            <FormField label="New stock" required>
+              <Input
+                type="number"
+                min={0}
+                step={1}
+                value={adjustStock}
+                onChange={(e) => setAdjustStock(e.target.value)}
+                disabled={adjustSaving}
+              />
+            </FormField>
+            <FormField label="Reason" required hint={'e.g. "Physical count on 24 Jul found 3 fewer units"'}>
+              <Textarea
+                rows={3}
+                value={adjustNotes}
+                onChange={(e) => setAdjustNotes(e.target.value)}
+                disabled={adjustSaving}
+              />
+            </FormField>
+          </div>
+        }
+        confirmLabel="Save Adjustment"
+        cancelLabel="Cancel"
+        loading={adjustSaving}
+        onConfirm={handleAdjustStock}
+        onCancel={() => { if (!adjustSaving) setAdjustOpen(false); }}
       />
 
       <Breadcrumb items={product ? [{ label: "Products", href: "/products" }, { label: product.name }] : [{ label: "Products", href: "/products" }]} />
@@ -137,6 +232,12 @@ export default function ProductViewPage() {
             </div>
           </div>
           <div className={styles.headerActions}>
+            {canWrite && (
+              <Button variant="secondary" disabled={loading} onClick={openAdjustDialog}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+                Adjust Stock
+              </Button>
+            )}
             <Button variant="secondary" disabled={loading} onClick={() => { setOpeningEdit(true); router.push(`/products/edit/${id}`); }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               Edit

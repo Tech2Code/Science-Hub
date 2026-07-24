@@ -118,10 +118,19 @@ export async function DELETE(
     const { id } = await params;
     const product = await prisma.product.findUnique({ where: { id }, select: { name: true, sku: true, price: true, stock: true, unit: true } });
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
-    const invoiceItemCount = await prisma.invoiceItem.count({ where: { productId: id, invoice: { deletedAt: null } } });
+    const [invoiceItemCount, purchaseItemCount] = await Promise.all([
+      prisma.invoiceItem.count({ where: { productId: id, invoice: { deletedAt: null } } }),
+      prisma.purchaseBillItem.count({ where: { productId: id, purchaseBill: { deletedAt: null } } }),
+    ]);
     if (invoiceItemCount > 0) {
       return NextResponse.json(
         { error: `"${product.name}" is used in ${invoiceItemCount} invoice line item${invoiceItemCount > 1 ? "s" : ""} and cannot be deleted.` },
+        { status: 400 }
+      );
+    }
+    if (purchaseItemCount > 0) {
+      return NextResponse.json(
+        { error: `"${product.name}" is used in ${purchaseItemCount} purchase bill line item${purchaseItemCount > 1 ? "s" : ""} and cannot be deleted.` },
         { status: 400 }
       );
     }
