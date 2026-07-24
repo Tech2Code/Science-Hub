@@ -100,8 +100,18 @@ export async function GET() {
       }
     }
 
+    // Credit notes (returns) — nothing else references them, so always safe
+    // to purge outright; the stock reversal already happened at delete-time.
+    const oldReturns = await prisma.return.findMany({
+      where: { deletedAt: { not: null, lt: cutoff } },
+      select: { id: true },
+    });
+    if (oldReturns.length > 0) {
+      await prisma.return.deleteMany({ where: { id: { in: oldReturns.map((r) => r.id) } } });
+    }
+
     const purged = oldInvoices.length + oldPurchaseBills.length + oldProducts.length
-      + oldCustomers.length + oldBrands.length + oldCategories.length + oldVendors.length;
+      + oldCustomers.length + oldBrands.length + oldCategories.length + oldVendors.length + oldReturns.length;
     if (purged > 0) {
       revalidateTag("invoices", { expire: 0 });
       revalidateTag("customers", { expire: 0 });
@@ -114,7 +124,7 @@ export async function GET() {
     // Fetch remaining soft-deleted items
     const now = Date.now();
 
-    const [invoices, customers, products, brands, categories, vendors, purchaseBills] = await Promise.all([
+    const [invoices, customers, products, brands, categories, vendors, purchaseBills, returns] = await Promise.all([
       prisma.invoice.findMany({
         where: { deletedAt: { not: null } },
         select: { id: true, invoiceNumber: true, deletedAt: true, total: true, customer: { select: { name: true } } },
@@ -148,6 +158,14 @@ export async function GET() {
       prisma.purchaseBill.findMany({
         where: { deletedAt: { not: null } },
         select: { id: true, billNumber: true, deletedAt: true, total: true, vendor: { select: { name: true } } },
+        orderBy: { deletedAt: "desc" },
+      }),
+      prisma.return.findMany({
+        where: { deletedAt: { not: null } },
+        select: {
+          id: true, creditNoteNumber: true, deletedAt: true, total: true,
+          invoice: { select: { invoiceNumber: true, customer: { select: { name: true } } } },
+        },
         orderBy: { deletedAt: "desc" },
       }),
     ]);
@@ -188,6 +206,7 @@ export async function GET() {
       ...categories.map(c => c.id),
       ...vendors.map(v => v.id),
       ...purchaseBills.map(b => b.id),
+      ...returns.map(r => r.id),
     ];
     const deleteLogs = await prisma.activityLog.findMany({
       where: { entityId: { in: allIds }, action: { startsWith: "delete_" } },
@@ -204,7 +223,7 @@ export async function GET() {
 
     type BinItem = {
       id: string;
-      type: "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill";
+      type: "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill" | "return";
       name: string;
       meta: string;
       deletedAt: string;
@@ -299,6 +318,18 @@ export async function GET() {
           deletedAt: (b.deletedAt as Date).toISOString(),
           daysLeft: Math.max(0, 30 - daysSince),
           deletedBy: deletedByMap.get(b.id),
+        };
+      }),
+      ...returns.map((r) => {
+        const daysSince = Math.floor((now - (r.deletedAt as Date).getTime()) / (1000 * 60 * 60 * 24));
+        return {
+          id: r.id,
+          type: "return" as const,
+          name: r.creditNoteNumber ?? "Credit Note",
+          meta: `${r.invoice.invoiceNumber} • ${r.invoice.customer.name} • ₹${r.total.toLocaleString("en-IN")}`,
+          deletedAt: (r.deletedAt as Date).toISOString(),
+          daysLeft: Math.max(0, 30 - daysSince),
+          deletedBy: deletedByMap.get(r.id),
         };
       }),
     ];

@@ -64,6 +64,16 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
     </svg>
   ),
+  creditNotes: ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+      <polyline points="1 4 1 10 7 10" /><path strokeLinecap="round" strokeLinejoin="round" d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+    </svg>
+  ),
+  gstFiling: ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m-9 4h12a2 2 0 002-2V6.828a2 2 0 00-.586-1.414l-2.828-2.828A2 2 0 0014.172 2H6a2 2 0 00-2 2v14a2 2 0 002 2z" />
+    </svg>
+  ),
   admin: ({ className }) => (
     <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -103,7 +113,7 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
   ),
 };
 
-interface NavItem { href: string; label: string; iconKey: string; adminOnly: boolean; sectionRequired?: ProtectedSection; }
+interface NavItem { href: string; label: string; iconKey: string; adminOnly: boolean; sectionRequired?: ProtectedSection; sectionsRequired?: ProtectedSection[]; }
 interface NavGroup { label: string | null; items: NavItem[]; }
 
 const NAV_GROUPS: NavGroup[] = [
@@ -116,10 +126,11 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "SALES",
     items: [
-      { href: "/sales",           label: "Sales Overview",    iconKey: "salesDashboard", adminOnly: false, sectionRequired: "sales_overview" },
-      { href: "/sales/customers", label: "Customers",         iconKey: "customers",      adminOnly: false },
-      { href: "/sales/invoices",  label: "Invoices",          iconKey: "invoices",       adminOnly: false },
-      { href: "/sales/payments",  label: "Payments Received", iconKey: "payments",       adminOnly: false, sectionRequired: "payments_received" },
+      { href: "/sales",             label: "Sales Overview",    iconKey: "salesDashboard", adminOnly: false, sectionRequired: "sales_overview" },
+      { href: "/sales/customers",   label: "Customers",         iconKey: "customers",      adminOnly: false },
+      { href: "/sales/invoices",    label: "Invoices",          iconKey: "invoices",       adminOnly: false },
+      { href: "/sales/credit-notes", label: "Credit Notes",     iconKey: "creditNotes",    adminOnly: false },
+      { href: "/sales/payments",    label: "Payments Received", iconKey: "payments",       adminOnly: false, sectionRequired: "payments_received" },
     ],
   },
   {
@@ -142,8 +153,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "REPORTS",
     items: [
-      { href: "/reports/sales",     label: "Sales Reports",    iconKey: "reportsSales",     adminOnly: false, sectionRequired: "reports_sales" },
-      { href: "/reports/purchases", label: "Purchase Reports", iconKey: "reportsPurchases", adminOnly: false, sectionRequired: "reports_purchases" },
+      { href: "/reports/sales",      label: "Sales Reports",    iconKey: "reportsSales",     adminOnly: false, sectionRequired: "reports_sales" },
+      { href: "/reports/purchases",  label: "Purchase Reports", iconKey: "reportsPurchases", adminOnly: false, sectionRequired: "reports_purchases" },
+      { href: "/reports/gst-reports", label: "GST Reports",     iconKey: "gstFiling",        adminOnly: false, sectionsRequired: ["reports_sales", "reports_purchases"] },
     ],
   },
   {
@@ -374,9 +386,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {NAV_GROUPS.map((group) => {
             const visibleItems = group.items.filter((item) => {
               if (item.adminOnly && session?.user?.role !== "admin") return false;
-              if (item.sectionRequired) {
+              if (item.sectionRequired || item.sectionsRequired) {
                 if (session?.user?.role === "admin") return true;
-                return session?.user?.sections?.includes(item.sectionRequired) ?? false;
+                const required = item.sectionsRequired ?? [item.sectionRequired as ProtectedSection];
+                return required.every((s) => session?.user?.sections?.includes(s) ?? false);
               }
               return true;
             });

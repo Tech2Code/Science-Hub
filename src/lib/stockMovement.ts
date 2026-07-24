@@ -2,9 +2,29 @@ import { Prisma } from "@prisma/client";
 
 type TxClient = Prisma.TransactionClient;
 
+// Specific transaction types replace the old catch-all "adjustment" so the
+// ledger reads as an audit trail (which action produced this row) instead of
+// everything but the initial create/return being lumped together. documentType
+// says what kind of source document the row belongs to, independent of the
+// specific action taken on it.
+export type StockMovementType =
+  | "sale" | "sale_edit_reverse" | "sale_edit_apply" | "sale_delete_restore" | "sale_bin_restore"
+  | "purchase" | "purchase_edit_reverse" | "purchase_edit_apply" | "purchase_cancel" | "purchase_uncancel" | "purchase_delete_restore" | "purchase_bin_restore"
+  | "return" | "return_delete_reverse" | "return_bin_restore"
+  | "manual";
+
+export type StockMovementDocumentType = "invoice" | "purchase_bill" | "credit_note" | "manual";
+
+export const DOCUMENT_TYPE_BY_MOVEMENT_TYPE: Record<StockMovementType, StockMovementDocumentType> = {
+  sale: "invoice", sale_edit_reverse: "invoice", sale_edit_apply: "invoice", sale_delete_restore: "invoice", sale_bin_restore: "invoice",
+  purchase: "purchase_bill", purchase_edit_reverse: "purchase_bill", purchase_edit_apply: "purchase_bill", purchase_cancel: "purchase_bill", purchase_uncancel: "purchase_bill", purchase_delete_restore: "purchase_bill", purchase_bin_restore: "purchase_bill",
+  return: "credit_note", return_delete_reverse: "credit_note", return_bin_restore: "credit_note",
+  manual: "manual",
+};
+
 interface RecordStockMovementInput {
   productId: string;
-  type: "purchase" | "sale" | "adjustment" | "return";
+  type: StockMovementType;
   quantity: number; // signed: positive = stock in, negative = stock out
   balanceAfter: number;
   reference?: string;
@@ -28,6 +48,7 @@ export async function recordStockMovement(tx: TxClient, input: RecordStockMoveme
       productId: input.productId,
       productName,
       type: input.type,
+      documentType: DOCUMENT_TYPE_BY_MOVEMENT_TYPE[input.type],
       quantity: input.quantity,
       balanceAfter: input.balanceAfter,
       reference: input.reference ?? null,
@@ -51,7 +72,7 @@ interface StockDelta {
 }
 
 interface BatchStockMovementInput {
-  type: "purchase" | "sale" | "adjustment" | "return";
+  type: StockMovementType;
   reference?: string;
   notes?: string;
   purchaseBillId?: string;
@@ -106,6 +127,7 @@ export async function batchAdjustStock(
       productId: p.id,
       productName: p.name,
       type: movement.type,
+      documentType: DOCUMENT_TYPE_BY_MOVEMENT_TYPE[movement.type],
       quantity: deltaByProduct.get(p.id)!,
       balanceAfter: p.stock,
       reference: movement.reference ?? null,

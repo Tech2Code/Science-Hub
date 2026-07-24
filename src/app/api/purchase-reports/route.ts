@@ -92,7 +92,7 @@ async function getStockLedger() {
     orderBy: { createdAt: "desc" },
     take: 500,
     select: {
-      id: true, productId: true, productName: true, type: true, quantity: true,
+      id: true, productId: true, productName: true, type: true, documentType: true, quantity: true,
       balanceAfter: true, reference: true, notes: true, createdAt: true,
       purchaseBill: { select: { billNumber: true } },
     },
@@ -103,6 +103,7 @@ async function getStockLedger() {
     productId: m.productId,
     productName: m.productName || "(deleted product)",
     type: m.type,
+    documentType: m.documentType,
     quantity: m.quantity,
     balanceAfter: m.balanceAfter,
     reference: m.reference,

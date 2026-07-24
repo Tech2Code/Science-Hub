@@ -6,6 +6,8 @@ import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { assertInvoiceQuantitiesNotBelowReturned, InvoiceQuantityValidationError } from "@/lib/invoiceReturns";
+
+class InvoiceConflictError extends Error {}
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
@@ -102,6 +104,15 @@ export async function PUT(
         return NextResponse.json({ error: "Item discount must be between 0 and 100%" }, { status: 400 });
       }
     }
+    {
+      const seenProductIds = new Set<string>();
+      for (const item of items as { productId: string }[]) {
+        if (seenProductIds.has(item.productId)) {
+          return NextResponse.json({ error: "Each product can only appear once per invoice — combine duplicate lines into a single quantity instead." }, { status: 400 });
+        }
+        seenProductIds.add(item.productId);
+      }
+    }
 
     // Fetch product info for names/units
     const productIds = items.map((i: { productId: string }) => i.productId);
@@ -152,6 +163,21 @@ export async function PUT(
     else if (paidAmount > 0) newStatus = "partial";
 
     const { invoice, stockWarnings } = await prisma.$transaction(async (tx) => {
+      // Re-check the optimistic-lock condition atomically against the row,
+      // inside the transaction — the earlier check above ran as a separate
+      // query, leaving a race window where two concurrent edits could both
+      // pass it and the second would silently overwrite the first. This
+      // updateMany's WHERE re-evaluates under the row lock it takes, so a
+      // conflicting concurrent write is caught even without Serializable
+      // isolation.
+      if (expectedUpdatedAt) {
+        const guard = await tx.invoice.updateMany({
+          where: { id, updatedAt: existingBase.updatedAt },
+          data: { updatedAt: new Date() },
+        });
+        if (guard.count === 0) throw new InvoiceConflictError();
+      }
+
       // Must run before any mutation: an edited quantity can never drop
       // below what's already been returned against that product, otherwise
       // stock/ledger/accounting would be reconciled against units that no
@@ -170,7 +196,7 @@ export async function PUT(
         tx,
         oldItems.map((old) => ({ productId: old.productId, quantity: old.quantity })),
         {
-          type: "adjustment",
+          type: "sale_edit_reverse",
           reference: existing.invoiceNumber,
           notes: "Invoice edited — old items reversed",
           createdByUserId: auth.session.user.id,
@@ -209,7 +235,7 @@ export async function PUT(
           quantity: -item.quantity,
         })),
         {
-          type: "adjustment",
+          type: "sale_edit_apply",
           reference: existing.invoiceNumber,
           notes: "Invoice edited — new items applied",
           createdByUserId: auth.session.user.id,
@@ -232,6 +258,9 @@ export async function PUT(
   } catch (error) {
     if (error instanceof InvoiceQuantityValidationError) {
       return NextResponse.json({ error: error.message, errors: error.errors }, { status: 400 });
+    }
+    if (error instanceof InvoiceConflictError) {
+      return NextResponse.json({ error: "This invoice was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
     }
     console.error(error);
     if (error instanceof ProductNotFoundError) {
@@ -285,7 +314,7 @@ export async function DELETE(
         tx,
         items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
         {
-          type: "adjustment",
+          type: "sale_delete_restore",
           reference: inv.invoiceNumber,
           notes: "Invoice deleted",
           createdByUserId: auth.session.user.id,

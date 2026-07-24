@@ -92,6 +92,7 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
   // Collapsing back to icon-only on a desktop resize would otherwise leave
   // the expanded overlay's fixed positioning stuck on screen.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets stale expanded state from a prior mobile session so it doesn't reappear next time `mobile` flips back to true
     if (!mobile) setMobileExpanded(false);
   }, [mobile]);
 

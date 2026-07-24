@@ -34,7 +34,6 @@ export function BrandingProvider({ initial, children }: { initial: Branding; chi
       })
       .catch(() => {});
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time refresh on mount, not meant to re-run
   }, []);
 
   return (

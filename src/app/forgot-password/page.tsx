@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useBranding } from "@/lib/businessBranding";
-import { Input } from "@/components/ui/Input";
+import { Input, FormField } from "@/components/ui/Input";
 import styles from "../login/login.module.css";
 import { rules, validate } from "@/lib/validation";
 
@@ -89,21 +89,17 @@ export default function ForgotPasswordPage() {
               </p>
               {error && <div className={styles.errorBox}>{error}</div>}
               <form onSubmit={handleSubmit} className={styles.formStack} noValidate>
-                <div>
-                  <label htmlFor="email" className={styles.fieldLabel}>Email address</label>
+                <FormField label="Email address" error={emailError}>
                   <Input
                     id="email"
-                    type="email"
-                    required
+                    type="text"
                     autoComplete="email"
                     value={email}
                     onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError(""); }}
                     onBlur={handleEmailBlur}
                     placeholder="you@sciencehub.in"
-                    className={`${styles.input} ${emailError ? styles.inputError : ""}`}
                   />
-                  {emailError && <p className={styles.fieldError}>{emailError}</p>}
-                </div>
+                </FormField>
                 <button type="submit" className={styles.submitBtn} disabled={loading}>
                   {loading ? "Sending…" : "Send reset link"}
                 </button>

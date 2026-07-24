@@ -69,6 +69,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Item discount must be between 0 and 100%" }, { status: 400 });
       }
     }
+    {
+      const seenProductIds = new Set<string>();
+      for (const item of items as { productId: string }[]) {
+        if (seenProductIds.has(item.productId)) {
+          return NextResponse.json({ error: "Each product can only appear once per invoice — combine duplicate lines into a single quantity instead." }, { status: 400 });
+        }
+        seenProductIds.add(item.productId);
+      }
+    }
 
     // If no existing customer selected, create one from the custom details
     if (!customerId) {

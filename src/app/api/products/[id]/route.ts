@@ -23,7 +23,7 @@ export async function GET(
         stockMovements: {
           orderBy: { createdAt: "desc" },
           take: 15,
-          select: { id: true, type: true, quantity: true, balanceAfter: true, reference: true, notes: true, createdAt: true },
+          select: { id: true, type: true, documentType: true, quantity: true, balanceAfter: true, reference: true, notes: true, createdAt: true },
         },
       },
     });

@@ -13,7 +13,7 @@ const DB_NAME = "science-hub-pdf-cache";
 const STORE = "pdfs";
 const DB_VERSION = 1;
 
-export type PdfEntity = "invoice" | "purchase-bill";
+export type PdfEntity = "invoice" | "purchase-bill" | "return";
 
 interface CacheRecord {
   id: string;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireAdmin } from "@/lib/apiAuth";
+import { parsePaginationParams, buildSearchWhere } from "@/lib/apiPagination";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,23 +11,24 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId") || undefined;
-    const limitParam = parseInt(searchParams.get("limit") || "100");
-    const offsetParam = parseInt(searchParams.get("offset") || "0");
-    if (!Number.isFinite(limitParam) || limitParam < 0 || !Number.isFinite(offsetParam) || offsetParam < 0) {
-      return NextResponse.json({ error: "Invalid limit or offset" }, { status: 400 });
-    }
-    const limit  = Math.min(limitParam, 500);
-    const offset = offsetParam;
+    const pagination = parsePaginationParams(searchParams);
+    if (!pagination) return NextResponse.json({ error: "Invalid limit or offset" }, { status: 400 });
+    const { limit, offset } = pagination;
+
+    const where = {
+      ...(userId ? { userId } : {}),
+      ...buildSearchWhere(searchParams.get("search") ?? undefined, ["details", "user.name", "user.email"]),
+    };
 
     const [logs, total] = await Promise.all([
       prisma.activityLog.findMany({
-        where: userId ? { userId } : undefined,
+        where,
         include: { user: { select: { id: true, name: true, email: true, role: true } } },
         orderBy: { createdAt: "desc" },
         take: limit,
         skip: offset,
       }),
-      prisma.activityLog.count({ where: userId ? { userId } : undefined }),
+      prisma.activityLog.count({ where }),
     ]);
 
     return NextResponse.json({ logs, total });

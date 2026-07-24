@@ -100,6 +100,12 @@
   border: 1px solid #fecaca;
 }
 
+.typePillReturn {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
 .itemCount {
   font-size: 0.8125rem;
   color: var(--c-text-3);

@@ -93,6 +93,7 @@ export default function EditInvoicePage() {
       markClean({ isInterState: inter, placeOfSupply: pos, reverseCharge: rc, items: lineItems, notes: notesVal, dueDate: dueDateVal });
       setLoading(false);
     }).catch(() => { setError("Failed to load invoice."); setLoading(false); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- markClean is a fresh function each render (not memoized); only `id` should retrigger this fetch
   }, [id]);
 
   const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal } = computeInvoiceTotals(items);

@@ -13,7 +13,7 @@ import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
 import styles from "./bin.module.css";
 
-type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill";
+type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill" | "return";
 
 interface BinItem {
   id: string;
@@ -34,9 +34,10 @@ const TYPE_META: Record<BinType, { plural: string; pillCls: string }> = {
   category:      { plural: "Categories",    pillCls: styles.typePillCategory },
   vendor:        { plural: "Vendors",       pillCls: styles.typePillVendor },
   purchase_bill: { plural: "Purchase Bills", pillCls: styles.typePillPurchaseBill },
+  return:        { plural: "Credit Notes",  pillCls: styles.typePillReturn },
 };
 
-const TYPE_ORDER: BinType[] = ["invoice", "customer", "product", "brand", "category", "vendor", "purchase_bill"];
+const TYPE_ORDER: BinType[] = ["invoice", "customer", "product", "brand", "category", "vendor", "purchase_bill", "return"];
 
 function DaysLeftPill({ daysLeft }: { daysLeft: number }) {
   const red    = daysLeft <= 7;

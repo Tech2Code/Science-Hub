@@ -168,6 +168,7 @@ export default function SettingsPage() {
       .then(applyLoaded)
       .catch(() => {})
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyLoaded is a fresh function each render (not memoized); this must run once on mount only
   }, []);
 
   // Sends only the fields the caller is actually editing — never the full
@@ -384,7 +385,7 @@ export default function SettingsPage() {
   // sidebar-sized, with some headroom for retina displays.
   const LOGO_MAX_DIMENSION = 256;
   function downscaleImage(file: File, maxDim: number): Promise<File> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const img = new Image();
       const objectUrl = URL.createObjectURL(file);
       img.onload = () => {

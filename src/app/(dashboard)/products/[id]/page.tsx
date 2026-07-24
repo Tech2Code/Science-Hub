@@ -15,11 +15,23 @@ import styles from "./view.module.css";
 interface StockMovement {
   id: string;
   type: string;
+  documentType: string;
   quantity: number;
   balanceAfter: number;
   reference: string | null;
   notes: string | null;
   createdAt: string;
+}
+
+const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  invoice: "Invoice",
+  purchase_bill: "Purchase Bill",
+  credit_note: "Credit Note",
+  manual: "Manual",
+};
+
+function formatMovementType(type: string): string {
+  return type.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 interface Product {
   id: string;
@@ -182,6 +194,7 @@ export default function ProductViewPage() {
             <thead>
               <tr>
                 <th>Type</th>
+                <th>Document</th>
                 <th className="table-th-right">Quantity</th>
                 <th className="table-th-right">Balance After</th>
                 <th>Reference</th>
@@ -190,12 +203,13 @@ export default function ProductViewPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={5} rows={4} />
+                <TableSkeleton cols={6} rows={4} />
               ) : movements.length === 0 ? (
-                <tr><td colSpan={5} className={styles.emptyCell}>No stock movements recorded yet.</td></tr>
+                <tr><td colSpan={6} className={styles.emptyCell}>No stock movements recorded yet.</td></tr>
               ) : movements.map((m) => (
                 <tr key={m.id}>
-                  <td data-mobile-full data-label="Type"><span className={styles.typeBadge}>{m.type}</span></td>
+                  <td data-mobile-full data-label="Type"><span className={styles.typeBadge}>{formatMovementType(m.type)}</span></td>
+                  <td data-label="Document">{DOCUMENT_TYPE_LABELS[m.documentType] ?? m.documentType}</td>
                   <td data-label="Quantity" className={`table-td-right ${m.quantity >= 0 ? styles.qtyIn : styles.qtyOut}`}>
                     {m.quantity >= 0 ? "+" : ""}{m.quantity}
                   </td>

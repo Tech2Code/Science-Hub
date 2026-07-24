@@ -172,6 +172,8 @@ export default function AdminPage() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [logsTotal, setLogsTotal] = useState(0);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [logsNavDirection, setLogsNavDirection] = useState<"prev" | "next" | null>(null);
+  const [logsLoadedOnce, setLogsLoadedOnce] = useState(false);
   const [logsPage, setLogsPage] = useState(1);
   const [logsFilter, setLogsFilter] = useState(""); // filter by userId
   const [logsSearch, setLogsSearch] = useState(""); // text search
@@ -180,7 +182,7 @@ export default function AdminPage() {
   const [clearLogsConfirm, setClearLogsConfirm] = useState(false);
   const [clearLogsLoading, setClearLogsLoading] = useState(false);
   const [clearLogsInput, setClearLogsInput] = useState("");
-  const LOGS_LIMIT = 20;
+  const LOGS_LIMIT = 10;
   const CLEAR_LOGS_PHRASE = "DELETE ALL";
 
   // ── Factory Reset ────────────────────────────────────────────
@@ -189,14 +191,17 @@ export default function AdminPage() {
   const [factoryResetInput, setFactoryResetInput] = useState("");
   const FACTORY_RESET_PHRASE = "DELETE EVERYTHING";
 
-  const loadLogs = useCallback(async (page: number, userId: string) => {
+  const loadLogs = useCallback(async (page: number, userId: string, search: string) => {
     setLogsLoading(true);
     const offset = (page - 1) * LOGS_LIMIT;
     const qs = new URLSearchParams({ limit: String(LOGS_LIMIT), offset: String(offset) });
     if (userId) qs.set("userId", userId);
+    if (search) qs.set("search", search);
     const res = await fetch(`/api/admin/activity?${qs}`, { headers: { "x-no-loader": "1" } });
     const data = await res.json();
     setLogsLoading(false);
+    setLogsNavDirection(null);
+    setLogsLoadedOnce(true);
     if (res.ok) {
       setLogs(data.logs);
       setLogsTotal(data.total);
@@ -207,7 +212,17 @@ export default function AdminPage() {
   useEffect(() => { fetch("/api/admin/profile", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then(d => { setProfile(d); setProfileForm({ name: d.name, email: d.email }); }).finally(() => setProfileLoading(false)); }, []);
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => { if (!isAdmin) return; setUsersLoading(true); fetch("/api/admin/users", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then(setUsers).finally(() => setUsersLoading(false)); }, [isAdmin]);
-  useEffect(() => { if (isAdmin) loadLogs(1, logsFilter); }, [isAdmin, logsFilter, loadLogs]);
+  // logsSearch intentionally excluded — its own debounced effect below handles search changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (isAdmin) loadLogs(1, logsFilter, logsSearch.trim()); }, [isAdmin, logsFilter, loadLogs]);
+  const logsSearchMountedRef = useRef(false);
+  useEffect(() => {
+    if (!logsSearchMountedRef.current) { logsSearchMountedRef.current = true; return; }
+    if (!isAdmin) return;
+    const timer = setTimeout(() => loadLogs(1, logsFilter, logsSearch.trim()), 350);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logsSearch]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   async function saveProfile(e: React.FormEvent) {
@@ -407,10 +422,7 @@ export default function AdminPage() {
 
   const logsTotalPages = Math.max(1, Math.ceil(logsTotal / LOGS_LIMIT));
 
-  // Client-side text search filters the current page only
-  const visibleLogs = logsSearch
-    ? logs.filter(l => l.details.toLowerCase().includes(logsSearch.toLowerCase()) || l.user.name.toLowerCase().includes(logsSearch.toLowerCase()))
-    : logs;
+  const visibleLogs = logs;
 
   if (!isAdmin && session) return null; // redirect in effect
 
@@ -792,7 +804,7 @@ export default function AdminPage() {
             <p className={styles.sectionSub}>{logsTotal} total actions recorded</p>
           </div>
           <div className={styles.logsHeaderActions}>
-            <Button variant="secondary" size="sm" onClick={() => loadLogs(logsPage, logsFilter)}>
+            <Button variant="secondary" size="sm" onClick={() => loadLogs(logsPage, logsFilter, logsSearch.trim())}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
               Refresh
             </Button>
@@ -829,7 +841,7 @@ export default function AdminPage() {
         </div>
 
         <div className="table-wrap">
-          <table className="table-base">
+          <table className="table-base" style={logsLoading && logsLoadedOnce ? { opacity: 0.5 } : undefined}>
             <colgroup>
               <col className={styles.colUser} />
               <col className={styles.colAction} />
@@ -847,7 +859,7 @@ export default function AdminPage() {
               </tr>
             </thead>
             <tbody>
-              {logsLoading && logs.length === 0 ? (
+              {logsLoading && !logsLoadedOnce ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i}>
                     <td>
@@ -901,7 +913,8 @@ export default function AdminPage() {
               <Button
                 variant="secondary" size="sm"
                 disabled={logsLoading || logsPage <= 1}
-                onClick={() => loadLogs(logsPage - 1, logsFilter)}
+                loading={logsLoading && logsNavDirection === "prev"}
+                onClick={() => { setLogsNavDirection("prev"); loadLogs(logsPage - 1, logsFilter, logsSearch.trim()); }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
                 Prev
@@ -909,7 +922,8 @@ export default function AdminPage() {
               <Button
                 variant="secondary" size="sm"
                 disabled={logsLoading || logsPage >= logsTotalPages}
-                onClick={() => loadLogs(logsPage + 1, logsFilter)}
+                loading={logsLoading && logsNavDirection === "next"}
+                onClick={() => { setLogsNavDirection("next"); loadLogs(logsPage + 1, logsFilter, logsSearch.trim()); }}
               >
                 Next
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>

@@ -155,7 +155,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           tx,
           oldItems.filter(i => i.productId).map((old) => ({ productId: old.productId!, quantity: -old.quantity })),
           {
-            type: "adjustment",
+            type: "purchase_edit_reverse",
             reference: existing.billNumber,
             purchaseBillId: id,
             notes: "Purchase bill edited — old items reversed",
@@ -206,7 +206,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           tx,
           computedItems.filter(item => item.productId).map((item) => ({ productId: item.productId!, quantity: item.quantity })),
           {
-            type: "adjustment",
+            type: "purchase_edit_apply",
             reference: updated.billNumber,
             purchaseBillId: id,
             notes: "Purchase bill edited — new items applied",
@@ -227,7 +227,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             quantity: isCancelling ? -item.quantity : item.quantity,
           })),
           {
-            type: "adjustment",
+            type: isCancelling ? "purchase_cancel" : "purchase_uncancel",
             reference: updated.billNumber,
             purchaseBillId: id,
             notes: isCancelling ? "Purchase bill cancelled" : "Purchase bill un-cancelled",
@@ -287,7 +287,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
           tx,
           items.filter(i => i.productId).map((item) => ({ productId: item.productId!, quantity: -item.quantity })),
           {
-            type: "adjustment",
+            type: "purchase_delete_restore",
             reference: bill?.billNumber,
             purchaseBillId: id,
             notes: "Purchase bill deleted",

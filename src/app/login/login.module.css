@@ -12,9 +12,13 @@
      here too (e.g. PasswordInput) render with this page's fixed palette. */
   --c-bg-input: #f8fafc;
   --c-text: #0f172a;
+  --c-text-2: #334155;
   --c-text-4: #94a3b8;
   --c-border: #e2e8f0;
   --c-blue: #2563eb;
+  --c-red: #dc2626;
+  --c-red-border: #fca5a5;
+  --c-red-text: #dc2626;
 }
 
 .grid {
@@ -87,7 +91,9 @@
   font-size: 0.875rem;
 }
 
-.formStack { display: flex; flex-direction: column; gap: 1.25rem; }
+/* gap matches .form-card in globals.css — leaves room for FormField's
+   absolutely-positioned error message so it doesn't overlap the next field. */
+.formStack { display: flex; flex-direction: column; gap: 1.375rem; }
 
 .fieldLabel {
   display: block;
@@ -307,12 +313,4 @@
   padding: 0;
   font-size: inherit;
   text-decoration: underline;
-}
-.inputError {
-  border-color: var(--c-red, #dc2626);
-}
-.fieldError {
-  font-size: 0.8rem;
-  color: var(--c-red, #dc2626);
-  margin-top: 0.25rem;
 }

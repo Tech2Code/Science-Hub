@@ -191,15 +191,24 @@ model Payment {
 }
 
 model Return {
-  id        String       @id @default(cuid())
-  invoiceId String
-  invoice   Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  date      DateTime     @default(now())
-  notes     String?
-  createdAt DateTime     @default(now())
-  items     ReturnItem[]
+  id               String       @id @default(cuid())
+  invoiceId        String
+  invoice          Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  creditNoteNumber String?      @unique // "CN-YYYY-0001" — nullable so pre-existing returns aren't retroactively renumbered
+  date             DateTime     @default(now())
+  notes            String?
+  subtotal         Float        @default(0)
+  cgst             Float        @default(0)
+  sgst             Float        @default(0)
+  igst             Float        @default(0)
+  roundOff         Float        @default(0)
+  total            Float        @default(0)
+  createdAt        DateTime     @default(now())
+  deletedAt        DateTime?
+  items            ReturnItem[]
 
   @@index([invoiceId])
+  @@index([deletedAt])
 }
 
 model ReturnItem {
@@ -211,6 +220,8 @@ model ReturnItem {
   name      String
   quantity  Float
   price     Float
+  gstRate   Float    @default(0)
+  gstAmount Float    @default(0)
   total     Float
 }
 
@@ -331,7 +342,14 @@ model StockMovement {
   productId      String?
   product        Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
   productName    String        @default("")
-  type           String        // purchase | sale | adjustment | return | manual
+  // Specific action that produced this row — see StockMovementType in
+  // src/lib/stockMovement.ts for the full set (e.g. sale, sale_edit_reverse,
+  // purchase_cancel, return_bin_restore, manual). Never updated after
+  // creation — every stock-affecting action writes a new row instead.
+  type           String
+  // Source document kind, derived 1:1 from `type` (see
+  // DOCUMENT_TYPE_BY_MOVEMENT_TYPE) — invoice | purchase_bill | credit_note | manual
+  documentType   String        @default("")
   quantity       Float         // positive = stock in, negative = stock out
   balanceAfter   Float
   reference      String?
@@ -344,6 +362,7 @@ model StockMovement {
 
   @@index([productId, createdAt])
   @@index([createdAt])
+  @@index([documentType])
 }
 
 // ── Section Permissions (Access Control) ──────────────────────────────────────

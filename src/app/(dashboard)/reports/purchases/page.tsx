@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
+import { downloadXlsx } from "@/lib/downloadXlsx";
 import styles from "./purchaseReports.module.css";
 
 interface SummaryRow { month: string; count: number; totalSpend: number; paid: number; payable: number; }
@@ -24,7 +25,7 @@ interface OutstandingBill {
 }
 interface CategoryRow { category: string; count: number; totalSpend: number; pct: number; }
 interface LedgerRow {
-  id: string; productId: string | null; productName: string; type: string; quantity: number;
+  id: string; productId: string | null; productName: string; type: string; documentType: string; quantity: number;
   balanceAfter: number; reference: string | null; notes: string | null; billNumber: string | null; createdAt: string;
 }
 
@@ -66,13 +67,24 @@ const LEDGER_COLS: Column[] = [
   { label: "Date",       mobile: "label" },
   { label: "Product",    mobile: "label" },
   { label: "Type",       mobile: "label" },
+  { label: "Document",   mobile: "full+label" },
   { label: "Qty",        cls: "table-th-right", mobile: "label" },
   { label: "Balance",    cls: "table-th-right", mobile: "label" },
   { label: "Reference",  mobile: "full+label" },
 ];
 
 const LEDGER_TYPE_LABEL: Record<string, string> = {
-  purchase: "Purchase", sale: "Sale", adjustment: "Adjustment", return: "Return", manual: "Manual",
+  purchase: "Purchase", purchase_edit_reverse: "Purchase Edit (Reverse)", purchase_edit_apply: "Purchase Edit (Apply)",
+  purchase_cancel: "Purchase Cancel", purchase_uncancel: "Purchase Un-cancel", purchase_delete_restore: "Purchase Delete",
+  purchase_bin_restore: "Purchase Bin Restore",
+  sale: "Sale", sale_edit_reverse: "Sale Edit (Reverse)", sale_edit_apply: "Sale Edit (Apply)",
+  sale_delete_restore: "Sale Delete", sale_bin_restore: "Sale Bin Restore",
+  return: "Return", return_delete_reverse: "Return Delete", return_bin_restore: "Return Bin Restore",
+  adjustment: "Adjustment", manual: "Manual",
+};
+
+const DOCUMENT_TYPE_LABEL: Record<string, string> = {
+  invoice: "Invoice", purchase_bill: "Purchase Bill", credit_note: "Credit Note", manual: "Manual",
 };
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -81,30 +93,6 @@ const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigi
 // off into 1800s nonsense — no business data predates this.
 const MIN_REPORT_DATE = "2015-01-01";
 
-function toCsv(headers: string[], rows: (string | number)[][]) {
-  const escape = (v: string | number) => {
-    const s = String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  return [headers, ...rows].map(row => row.map(escape).join(",")).join("\n");
-}
-
-// Excel auto-detects date-shaped CSV text and converts it to its internal
-// date serial number, then shows "######" once the column is too narrow to
-// display that number — wrapping as ="..." forces Excel to treat the cell
-// as a literal text formula instead of a date.
-function csvDate(s: string) {
-  return s ? `="${s}"` : "";
-}
-
-function downloadCsv(filename: string, csv: string) {
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
 
 type Tab = "summary" | "outstanding" | "category" | "ledger";
 
@@ -168,6 +156,7 @@ export default function PurchaseReportsPage() {
     return (
       m.productName.toLowerCase().includes(q) ||
       m.type.toLowerCase().includes(q) ||
+      m.documentType.toLowerCase().includes(q) ||
       m.reference?.toLowerCase().includes(q) ||
       m.billNumber?.toLowerCase().includes(q)
     );
@@ -176,25 +165,72 @@ export default function PurchaseReportsPage() {
   const [ledgerShowAll, setLedgerShowAll] = useState(false);
   const { visible: visibleLedger } = usePagination(filteredLedger, ledgerPage, ledgerShowAll);
 
-  function exportOutstandingCsv() {
-    const csv = toCsv(
-      ["Bill No.", "Vendor", "Bill Date", "Due Date", "Aging", "Total", "Paid", "Balance", "Status"],
-      outstanding.map(b => [
-        b.billNumber, b.vendor.name,
-        csvDate(new Date(b.billDate).toLocaleDateString("en-IN")),
-        csvDate(b.dueDate ? new Date(b.dueDate).toLocaleDateString("en-IN") : ""),
-        b.aging, b.total, b.paidAmount, b.balance, b.status,
-      ])
-    );
-    downloadCsv("outstanding-bills.csv", csv);
+  const [exportingOutstanding, setExportingOutstanding] = useState(false);
+  const [exportingCategory, setExportingCategory] = useState(false);
+  const [exportingLedger, setExportingLedger] = useState(false);
+
+  async function exportOutstandingCsv() {
+    setExportingOutstanding(true);
+    try {
+      await downloadXlsx(
+        "outstanding-bills.xlsx",
+        "Outstanding Bills",
+        ["Bill No.", "Vendor", "Bill Date", "Due Date", "Aging", "Total", "Paid", "Balance", "Status"],
+        outstanding.map(b => [
+          b.billNumber, b.vendor.name,
+          new Date(b.billDate).toLocaleDateString("en-IN"),
+          b.dueDate ? new Date(b.dueDate).toLocaleDateString("en-IN") : "",
+          b.aging, b.total, b.paidAmount, b.balance, b.status,
+        ])
+      );
+    } catch {
+      toast({ type: "error", title: "Export failed", message: "Could not generate the Excel file." });
+    } finally {
+      setExportingOutstanding(false);
+    }
   }
 
-  function exportCategoryCsv() {
-    const csv = toCsv(
-      ["Category", "Bills", "Total Spend", "% of Total"],
-      categoryRows.map(r => [r.category, r.count, r.totalSpend, r.pct])
-    );
-    downloadCsv("spend-by-category.csv", csv);
+  async function exportCategoryCsv() {
+    setExportingCategory(true);
+    try {
+      await downloadXlsx(
+        "spend-by-category.xlsx",
+        "By Category",
+        ["Category", "Bills", "Total Spend", "% of Total"],
+        categoryRows.map(r => [r.category, r.count, r.totalSpend, r.pct])
+      );
+    } catch {
+      toast({ type: "error", title: "Export failed", message: "Could not generate the Excel file." });
+    } finally {
+      setExportingCategory(false);
+    }
+  }
+
+  async function exportLedgerCsv() {
+    setExportingLedger(true);
+    try {
+      await downloadXlsx(
+        "stock-movement-ledger.xlsx",
+        "Stock Ledger",
+        ["Date", "Time", "Product", "Type", "Document", "Quantity", "Balance After", "Reference", "Bill No.", "Notes"],
+        filteredLedger.map(m => [
+          new Date(m.createdAt).toLocaleDateString("en-IN"),
+          new Date(m.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+          m.productId ? m.productName : `${m.productName} (deleted)`,
+          LEDGER_TYPE_LABEL[m.type] ?? m.type,
+          DOCUMENT_TYPE_LABEL[m.documentType] ?? m.documentType,
+          m.quantity,
+          m.balanceAfter,
+          m.reference ?? "",
+          m.billNumber ?? "",
+          m.notes ?? "",
+        ])
+      );
+    } catch {
+      toast({ type: "error", title: "Export failed", message: "Could not generate the Excel file." });
+    } finally {
+      setExportingLedger(false);
+    }
   }
 
   const [outPage, setOutPage] = useState(1);
@@ -299,7 +335,7 @@ export default function PurchaseReportsPage() {
               </div>
               <div className={styles.headerActionsRow}>
                 {!loadingOut && outstanding.length > 0 && (
-                  <Button variant="secondary" size="sm" onClick={exportOutstandingCsv}>Export CSV</Button>
+                  <Button variant="secondary" size="sm" loading={exportingOutstanding} onClick={exportOutstandingCsv}>Export Excel</Button>
                 )}
                 {!loadingOut && (
                   <ShowAllToggle total={outstanding.length} showAll={outShowAll} onToggle={() => { setOutShowAll((v) => !v); setOutPage(1); }} />
@@ -414,7 +450,7 @@ export default function PurchaseReportsPage() {
                 <p className="card-header-sub">Total purchase spend grouped by category</p>
               </div>
               {!loadingCat && categoryRows.length > 0 && (
-                <Button variant="secondary" size="sm" onClick={exportCategoryCsv}>Export CSV</Button>
+                <Button variant="secondary" size="sm" loading={exportingCategory} onClick={exportCategoryCsv}>Export Excel</Button>
               )}
             </div>
             <div className="table-wrap">
@@ -456,6 +492,9 @@ export default function PurchaseReportsPage() {
                 </p>
               </div>
               <div className={styles.headerActionsRow}>
+                {!loadingLedger && filteredLedger.length > 0 && (
+                  <Button variant="secondary" size="sm" loading={exportingLedger} onClick={exportLedgerCsv}>Export Excel</Button>
+                )}
                 {!loadingLedger && (
                   <ShowAllToggle total={filteredLedger.length} showAll={ledgerShowAll} onToggle={() => { setLedgerShowAll((v) => !v); setLedgerPage(1); }} />
                 )}
@@ -495,11 +534,12 @@ export default function PurchaseReportsPage() {
                         )}
                       </Cell>
                       <Cell col={LEDGER_COLS[2]} className={styles.textMuted3}>{LEDGER_TYPE_LABEL[m.type] ?? m.type}</Cell>
-                      <Cell col={LEDGER_COLS[3]} className={m.quantity >= 0 ? styles.paidGreen : styles.balanceAmount}>
+                      <Cell col={LEDGER_COLS[3]} className={styles.textMuted3}>{DOCUMENT_TYPE_LABEL[m.documentType] ?? m.documentType}</Cell>
+                      <Cell col={LEDGER_COLS[4]} className={m.quantity >= 0 ? styles.paidGreen : styles.balanceAmount}>
                         {m.quantity >= 0 ? `+${m.quantity}` : m.quantity}
                       </Cell>
-                      <Cell col={LEDGER_COLS[4]} className={styles.textMuted2}>{m.balanceAfter}</Cell>
-                      <Cell col={LEDGER_COLS[5]} className={styles.textMuted4}>
+                      <Cell col={LEDGER_COLS[5]} className={styles.textMuted2}>{m.balanceAfter}</Cell>
+                      <Cell col={LEDGER_COLS[6]} className={styles.textMuted4}>
                         {m.billNumber ?? m.reference ?? "—"}
                       </Cell>
                     </tr>

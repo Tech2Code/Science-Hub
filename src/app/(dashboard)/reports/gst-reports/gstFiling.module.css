@@ -1,0 +1,150 @@
+.tabsRow {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--c-border);
+  padding: 0 1.25rem;
+}
+
+.tabBtn {
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--c-text-3);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.tabBtn.active {
+  font-weight: 600;
+  color: var(--c-blue);
+  border-bottom: 2px solid var(--c-blue);
+}
+
+.dateFilterRow {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  flex-wrap: wrap;
+  padding: 0.875rem 1.25rem;
+}
+
+.dateFilterLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--c-text-3);
+}
+
+.errorText {
+  margin: 0 1.25rem 1.25rem;
+  color: var(--c-red);
+  font-size: 0.8125rem;
+}
+
+.validationSummary {
+  padding: 0.875rem 1.25rem;
+}
+
+.validationBanner {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-bottom: 0.875rem;
+}
+
+.validationOk {
+  background: var(--c-green-bg);
+  color: var(--c-green-text);
+  border: 1px solid var(--c-green-border);
+}
+
+.validationWarning {
+  background: var(--c-amber-bg);
+  color: var(--c-amber-text, var(--c-amber));
+  border: 1px solid var(--c-amber-border);
+}
+
+.validationError {
+  background: var(--c-red-bg);
+  color: var(--c-red);
+  border: 1px solid var(--c-red-border);
+}
+
+.issueList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.issueList li {
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  background: var(--c-bg-sub);
+  border: 1px solid var(--c-border);
+}
+
+.issueBadge {
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 0.25rem;
+  margin-right: 0.5rem;
+}
+
+.issueError .issueBadge {
+  background: var(--c-red-bg);
+  color: var(--c-red);
+}
+
+.issueWarning .issueBadge {
+  background: var(--c-amber-bg);
+  color: var(--c-amber-text, var(--c-amber));
+  border: 1px solid var(--c-amber-border);
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  padding: 0.875rem 1.25rem;
+}
+
+.summaryCard {
+  padding: 1rem 1.125rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--c-border);
+  background: var(--c-bg-sub);
+}
+
+.summaryCardLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--c-text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 0.375rem;
+}
+
+.summaryCardValue {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--c-text);
+}
+
+.downloadRow {
+  padding: 0.875rem 1.25rem;
+}

@@ -20,7 +20,7 @@ export function PdfPreviewModal({ url, fileName, title, subtitle, onClose }: Pdf
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => { onCloseRef.current = onClose; });
 
   useEffect(() => {
     const ua = navigator.userAgent;

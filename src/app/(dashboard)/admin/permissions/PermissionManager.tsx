@@ -56,6 +56,7 @@ export function PermissionManager() {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount; fetchUsers sets loading/users/error state
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
   const isEnabled = (user: GrantableUser, section: string) =>
