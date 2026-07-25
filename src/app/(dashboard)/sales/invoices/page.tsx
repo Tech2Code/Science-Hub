@@ -7,6 +7,8 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { MonthYearFilter } from "@/components/ui/MonthYearFilter";
+import { matchesMonthYear, yearsFromDates } from "@/lib/dateFilter";
 import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
 import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenerator";
@@ -97,6 +99,8 @@ export default function InvoicesPage() {
   const canWrite = useCanWrite();
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [search, setSearch] = useState("");
+  const [month, setMonth] = useState("");
+  const [year, setYear] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
@@ -199,9 +203,11 @@ export default function InvoicesPage() {
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
   const invoices = data ?? [];
   const scoped = filter === "overdue" ? invoices.filter(isOverdue) : invoices;
+  const periodScoped = (month || year) ? scoped.filter((inv) => matchesMonthYear(inv.date, month, year)) : scoped;
+  const availableYears = yearsFromDates(invoices.map((inv) => inv.date));
 
   const filtered = search.trim()
-    ? scoped.filter((inv) => {
+    ? periodScoped.filter((inv) => {
         const q = search.toLowerCase();
         return (
           inv.invoiceNumber.toLowerCase().includes(q) ||
@@ -214,7 +220,7 @@ export default function InvoicesPage() {
           )
         );
       })
-    : scoped;
+    : periodScoped;
 
   const sorted = sortInvoices(filtered, sort);
 
@@ -333,6 +339,13 @@ export default function InvoicesPage() {
               onChange={(v) => { setSort(v); setPage(1); }}
               options={SORT_OPTIONS}
             />
+            <MonthYearFilter
+              month={month}
+              year={year}
+              years={availableYears}
+              onMonthChange={(v) => { setMonth(v); setPage(1); }}
+              onYearChange={(v) => { setYear(v); setPage(1); }}
+            />
           </div>
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
@@ -350,7 +363,7 @@ export default function InvoicesPage() {
                 <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
-                  {search.trim() ? `No invoices match "${search}".` : "No invoices found."}
+                  {search.trim() ? `No invoices match "${search}".` : (month || year) ? "No invoices found for this period." : "No invoices found."}
                 </td></tr>
               ) : visible.map((inv) => (
                 <tr key={inv.id}>

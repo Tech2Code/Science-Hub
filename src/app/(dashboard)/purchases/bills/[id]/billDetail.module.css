@@ -318,7 +318,7 @@
 }
 
 .itemsTable {
-  min-width: 520px;
+  min-width: 620px;
   table-layout: fixed;
 }
 
@@ -331,10 +331,11 @@
    auto let each row size its own cells independently, which is what let the
    header and values drift out of alignment. */
 .colNum       { width: 4%; }
-.colItem      { width: 30%; }
-.colQty       { width: 8%; }
-.colRate      { width: 12%; }
-.colDiscount  { width: 12%; }
+.colItem      { width: 24%; }
+.colHsn       { width: 9%; }
+.colQty       { width: 7%; }
+.colRate      { width: 11%; }
+.colDiscount  { width: 11%; }
 .colGstRate   { width: 8%; }
 .colGstAmt    { width: 12%; }
 .colTotal     { width: 14%; }

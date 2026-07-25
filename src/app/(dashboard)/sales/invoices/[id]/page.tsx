@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -1624,33 +1625,50 @@ export default function InvoiceDetailPage() {
                     <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{fmt(ri.total)}</td>
                   </tr>
                 ))}
-                <tr>
-                  <td colSpan={6} style={{ padding: "10px 20px", border: "1px solid var(--inv-bd)", borderTop: "none" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 20 }}>
-                      <div style={{ fontSize: 10, flex: 1 }}>
-                        <strong>Amount in words:</strong> {amountInWordsINR(creditNoteToRender.total)}
-                        {creditNoteToRender.notes && <div style={{ marginTop: 6 }}><strong>Notes:</strong> {creditNoteToRender.notes}</div>}
-                      </div>
-                      <div style={{ fontSize: 10, minWidth: 200 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}><span>Taxable Value</span><span>₹{fmt(creditNoteToRender.subtotal)}</span></div>
-                        {creditNoteToRender.igst > 0 ? (
-                          <div style={{ display: "flex", justifyContent: "space-between" }}><span>IGST</span><span>₹{fmt(creditNoteToRender.igst)}</span></div>
-                        ) : (
-                          <>
-                            <div style={{ display: "flex", justifyContent: "space-between" }}><span>CGST</span><span>₹{fmt(creditNoteToRender.cgst)}</span></div>
-                            <div style={{ display: "flex", justifyContent: "space-between" }}><span>SGST</span><span>₹{fmt(creditNoteToRender.sgst)}</span></div>
-                          </>
-                        )}
-                        {creditNoteToRender.roundOff !== 0 && (
-                          <div style={{ display: "flex", justifyContent: "space-between" }}><span>Round Off</span><span>₹{fmt(creditNoteToRender.roundOff)}</span></div>
-                        )}
-                        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, borderTop: "1px solid var(--inv-bd2)", marginTop: 4, paddingTop: 4 }}>
-                          <span>Total</span><span>₹{fmt(creditNoteToRender.total)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
+                {(() => {
+                  const cnTotalsRows = 1 + (creditNoteToRender.igst > 0 ? 1 : 2) + (creditNoteToRender.roundOff !== 0 ? 1 : 0) + 1;
+                  const cnLabelCell: CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 8px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" };
+                  const cnValueCell: CSSProperties = { ...cnLabelCell, textAlign: "right" };
+                  return (
+                    <>
+                      <tr>
+                        <td colSpan={4} rowSpan={cnTotalsRows} style={{ border: "1px solid var(--inv-bd)", padding: "10px 12px", verticalAlign: "top", fontSize: 9.5, color: "var(--inv-tx3)" }}>
+                          <div style={{ fontStyle: "italic" }}><strong>Amount in Words:</strong> {amountInWordsINR(creditNoteToRender.total)}</div>
+                          {creditNoteToRender.notes && <div style={{ marginTop: 6 }}><strong>Notes:</strong> {creditNoteToRender.notes}</div>}
+                        </td>
+                        <td style={cnLabelCell}>Taxable Value</td>
+                        <td style={cnValueCell}>₹{fmt(creditNoteToRender.subtotal)}</td>
+                      </tr>
+                      {creditNoteToRender.igst > 0 ? (
+                        <tr>
+                          <td style={cnLabelCell}>IGST</td>
+                          <td style={cnValueCell}>₹{fmt(creditNoteToRender.igst)}</td>
+                        </tr>
+                      ) : (
+                        <>
+                          <tr>
+                            <td style={cnLabelCell}>CGST</td>
+                            <td style={cnValueCell}>₹{fmt(creditNoteToRender.cgst)}</td>
+                          </tr>
+                          <tr>
+                            <td style={cnLabelCell}>SGST</td>
+                            <td style={cnValueCell}>₹{fmt(creditNoteToRender.sgst)}</td>
+                          </tr>
+                        </>
+                      )}
+                      {creditNoteToRender.roundOff !== 0 && (
+                        <tr>
+                          <td style={cnLabelCell}>Round Off</td>
+                          <td style={cnValueCell}>{creditNoteToRender.roundOff > 0 ? "+" : "−"}₹{fmt(Math.abs(creditNoteToRender.roundOff))}</td>
+                        </tr>
+                      )}
+                      <tr>
+                        <td style={{ ...cnLabelCell, fontWeight: 700, color: "var(--inv-tx)", background: "var(--inv-bg4)", fontSize: 12 }}>Total</td>
+                        <td style={{ ...cnValueCell, fontWeight: 700, color: "var(--inv-tx)", background: "var(--inv-bg4)", fontSize: 12 }}>₹{fmt(creditNoteToRender.total)}</td>
+                      </tr>
+                    </>
+                  );
+                })()}
               </tbody>
             </table>
           </div>

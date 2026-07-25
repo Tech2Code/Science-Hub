@@ -1,0 +1,29 @@
+.wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--c-text-3);
+  white-space: nowrap;
+}
+
+.select {
+  flex: none;
+  width: auto;
+  min-width: 8rem;
+}
+
+@media (max-width: 640px) {
+  .wrap {
+    width: 100%;
+  }
+  .select {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+  }
+}

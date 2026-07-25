@@ -6,6 +6,8 @@ import { useSession } from "next-auth/react";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { MonthYearFilter } from "@/components/ui/MonthYearFilter";
+import { matchesMonthYear, yearsFromDates } from "@/lib/dateFilter";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
@@ -92,6 +94,8 @@ export default function CreditNotesPage() {
   const creditNotes = data ?? [];
   const [exportingCsv, setExportingCsv] = useState(false);
   const [search, setSearch] = useState("");
+  const [month, setMonth] = useState("");
+  const [year, setYear] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
@@ -100,12 +104,17 @@ export default function CreditNotesPage() {
   // and loading id, so clicking one never shows the other as busy.
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const viewBusyRef = useRef(false);
   const downloadBusyRef = useRef(false);
+  const regenerateBusyRef = useRef(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewNote, setPdfPreviewNote] = useState<{ number: string; customer: string } | null>(null);
 
-  const filtered = creditNotes.filter((c) => {
+  const periodScoped = (month || year) ? creditNotes.filter((c) => matchesMonthYear(c.date, month, year)) : creditNotes;
+  const availableYears = yearsFromDates(creditNotes.map((c) => c.date));
+
+  const filtered = periodScoped.filter((c) => {
     const q = search.toLowerCase();
     if (!q) return true;
     const dateText = new Date(c.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toLowerCase();
@@ -197,6 +206,36 @@ export default function CreditNotesPage() {
     }
   }
 
+  // Bypasses the cache entirely — re-renders through the iframe and overwrites
+  // whatever variant was previously stored, then shows the fresh PDF so the
+  // user can confirm the regenerated output without a sign-out or hard cache clear.
+  async function handleRegeneratePdf(c: CreditNote) {
+    if (regenerateBusyRef.current) return;
+    regenerateBusyRef.current = true;
+    setRegeneratingId(c.id);
+    try {
+      const showLogo = settings?.showLogoOnInvoices !== false;
+      const variantKey = buildPdfVariantKey(undefined, { logo: showLogo, settings: settings?.updatedAt ?? "loading" });
+      const blob = await generatePdfViaIframe({
+        route: `/sales/invoices/${c.invoiceId}?creditNoteId=${c.id}`,
+        printAreaId: "credit-note-print-area",
+        includeLogo: true,
+      });
+      if (!blob) {
+        toast({ type: "error", title: "PDF failed", message: "Could not regenerate credit note PDF." });
+        return;
+      }
+      await setCachedPdf("return", c.id, variantKey, blob);
+      const url = URL.createObjectURL(blob);
+      setPdfPreviewUrl(url);
+      setPdfPreviewNote({ number: c.creditNoteNumber ?? "Credit Note", customer: c.invoice?.customer?.name ?? "" });
+      toast({ type: "success", title: "PDF regenerated", message: "Latest version cached and shown below." });
+    } finally {
+      setRegeneratingId(null);
+      regenerateBusyRef.current = false;
+    }
+  }
+
   async function handleDownloadPdf(c: CreditNote) {
     if (downloadBusyRef.current) return;
     downloadBusyRef.current = true;
@@ -222,6 +261,7 @@ export default function CreditNotesPage() {
     <>
       {viewingId && <OverlayLoader text="Preparing preview…" />}
       {downloadingId && <OverlayLoader text="Preparing download…" />}
+      {regeneratingId && <OverlayLoader text="Regenerating PDF…" />}
       {pdfPreviewUrl && pdfPreviewNote && (
         <PdfPreviewModal
           url={pdfPreviewUrl}
@@ -267,6 +307,13 @@ export default function CreditNotesPage() {
                 className={styles.searchInput}
               />
               <SortSelect ariaLabel="Sort credit notes" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
+              <MonthYearFilter
+                month={month}
+                year={year}
+                years={availableYears}
+                onMonthChange={(v) => { setMonth(v); setPage(1); }}
+                onYearChange={(v) => { setYear(v); setPage(1); }}
+              />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
               {!loading && isAdmin && creditNotes.length > 0 && (
@@ -289,7 +336,7 @@ export default function CreditNotesPage() {
                   <TableSkeleton cols={COLUMNS.length} />
                 ) : filtered.length === 0 ? (
                   <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
-                    {search ? "No credit notes match your search." : "No credit notes recorded yet."}
+                    {search ? "No credit notes match your search." : (month || year) ? "No credit notes found for this period." : "No credit notes recorded yet."}
                   </td></tr>
                 ) : visible.map((c) => (
                   <tr key={c.id}>
@@ -314,9 +361,13 @@ export default function CreditNotesPage() {
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                           View
                         </Button>
-                        <Button variant="secondary" size="sm" title="Download PDF" loading={downloadingId === c.id} disabled={viewingId === c.id} onClick={() => handleDownloadPdf(c)}>
+                        <Button variant="secondary" size="sm" title="Download PDF" loading={downloadingId === c.id} disabled={viewingId === c.id || regeneratingId === c.id} onClick={() => handleDownloadPdf(c)}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
                           PDF
+                        </Button>
+                        <Button variant="secondary" size="sm" title="Regenerate PDF (bypass cache)" loading={regeneratingId === c.id} disabled={viewingId === c.id || downloadingId === c.id} onClick={() => handleRegeneratePdf(c)}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>
+                          Regenerate
                         </Button>
                       </div>
                     </Cell>

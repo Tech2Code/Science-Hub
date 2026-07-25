@@ -15,6 +15,8 @@ import { Cell, type Column } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { MonthYearFilter } from "@/components/ui/MonthYearFilter";
+import { matchesMonthYear, yearsFromDates } from "@/lib/dateFilter";
 import { StatCardsRow } from "@/components/ui/StatCardsRow";
 import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
 import { animateSection } from "@/lib/animateSection";
@@ -98,6 +100,8 @@ export default function PurchasesPage() {
   const [openingEdit, setOpeningEdit] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [search, setSearch] = useState("");
+  const [month, setMonth] = useState("");
+  const [year, setYear] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
@@ -161,9 +165,11 @@ export default function PurchasesPage() {
   const { data, loading, patchData } = useFetch<PurchaseBill[]>(apiUrl);
   const bills = data ?? [];
   const scoped = filter === "overdue" ? bills.filter(isOverdue) : bills;
+  const periodScoped = (month || year) ? scoped.filter((b) => matchesMonthYear(b.billDate, month, year)) : scoped;
+  const availableYears = yearsFromDates(bills.map((b) => b.billDate));
 
   const filtered = search.trim()
-    ? scoped.filter(b => {
+    ? periodScoped.filter(b => {
         const q = search.toLowerCase();
         return (
           b.billNumber.toLowerCase().includes(q) ||
@@ -179,7 +185,7 @@ export default function PurchasesPage() {
           )
         );
       })
-    : scoped;
+    : periodScoped;
 
   const sorted = sortBills(filtered, sort);
 
@@ -293,6 +299,13 @@ export default function PurchasesPage() {
               onChange={(v) => { setSort(v); setPage(1); }}
               options={SORT_OPTIONS}
             />
+            <MonthYearFilter
+              month={month}
+              year={year}
+              years={availableYears}
+              onMonthChange={(v) => { setMonth(v); setPage(1); }}
+              onYearChange={(v) => { setYear(v); setPage(1); }}
+            />
           </div>
           {!loading && (
             <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />
@@ -308,7 +321,7 @@ export default function PurchasesPage() {
                 <TableSkeleton cols={COLUMNS.length} />
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
-                  {search.trim() ? `No bills match "${search}".` : "No purchase bills yet."}
+                  {search.trim() ? `No bills match "${search}".` : (month || year) ? "No purchase bills found for this period." : "No purchase bills yet."}
                 </td></tr>
               ) : visible.map(b => (
                 <tr key={b.id}>

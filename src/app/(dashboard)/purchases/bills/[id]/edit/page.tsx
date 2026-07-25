@@ -25,7 +25,7 @@ import { computeRoundOff } from "@/lib/roundOff";
 import styles from "./edit.module.css";
 
 interface BillItem {
-  id: string; name: string; quantity: number; unit: string;
+  id: string; name: string; hsn: string; quantity: number; unit: string;
   purchasePrice: number; discountPercent: number; gstRate: number; gstAmount: number; total: number;
   product: { id: string; name: string } | null;
 }
@@ -43,6 +43,7 @@ function loadedItemsToLineItems(items: BillItem[]): PurchaseBillLineItem[] {
     key: `loaded-${item.id ?? idx}`,
     productId: item.product?.id ?? "",
     name: item.name,
+    hsn: item.hsn ?? "",
     unit: item.unit,
     quantity: String(item.quantity),
     purchasePrice: String(item.purchasePrice),
@@ -225,6 +226,7 @@ export default function EditPurchaseBillPage() {
           return {
             productId:       i.productId || null,
             name:            i.name.trim(),
+            hsn:             i.hsn.trim(),
             unit:            i.unit,
             quantity:        toNum(i.quantity),
             purchasePrice:   toNum(i.purchasePrice),

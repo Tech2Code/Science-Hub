@@ -9,9 +9,11 @@ import { isFutureIstDate } from "@/lib/validation";
 import { computeRoundOff } from "@/lib/roundOff";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { purchaseBillLineBreakdown } from "@/lib/purchaseBillForm";
+import { getBusinessSettings } from "@/lib/db";
+import { deriveIsInterState } from "@/lib/gstLocation";
 
 const BILL_INCLUDE = {
-  vendor: { select: { id: true, name: true, company: true } },
+  vendor: { select: { id: true, name: true, company: true, state: true } },
   createdBy: { select: { id: true, name: true } },
   items: {
     include: {
@@ -113,7 +115,7 @@ export async function POST(req: NextRequest) {
     // applied to the line's gross amount before GST, same as sales invoices:
     // taxable value = gross - discount, GST computed on that taxable value.
     const computedItems = (items as {
-      productId?: string; name: string; quantity: number;
+      productId?: string; name: string; quantity: number; hsn?: string;
       unit?: string; purchasePrice: number; gstRate?: number; discountPercent?: number;
     }[]).map((item) => {
       const quantity = parseFloat(String(item.quantity));
@@ -122,7 +124,7 @@ export async function POST(req: NextRequest) {
       const discountPercent = parseFloat(String(item.discountPercent ?? 0));
       const { discountAmount, gstAmount, total, subtotal: itemSubtotal } =
         purchaseBillLineBreakdown(quantity, purchasePrice, gstRate, discountPercent);
-      return { ...item, quantity, purchasePrice, gstRate, discountPercent, discountAmount, gstAmount, total, itemSubtotal };
+      return { ...item, quantity, purchasePrice, gstRate, discountPercent, discountAmount, gstAmount, total, itemSubtotal, hsn: item.hsn ?? "" };
     });
     const subtotal = computedItems.reduce((s, i) => s + i.itemSubtotal, 0);
     const taxAmount = computedItems.reduce((s, i) => s + i.gstAmount, 0);
@@ -130,6 +132,19 @@ export async function POST(req: NextRequest) {
     if (Number.isNaN(parsedDiscount) || parsedDiscount < 0) {
       return NextResponse.json({ error: "Discount cannot be negative" }, { status: 400 });
     }
+
+    // A purchase's GST type is a fact of where the vendor is registered
+    // relative to the business — not something the preparer picks — so it's
+    // derived automatically from the vendor's own state, same reasoning
+    // sales invoices already use via deriveIsInterState (just with the
+    // vendor's state standing in for the invoice's placeOfSupply).
+    const vendorState: string | null = vendor.state;
+    const biz = await getBusinessSettings();
+    const derivedIsInterState = deriveIsInterState(vendorState ?? "", biz.state);
+    const isInterState = derivedIsInterState ?? false;
+    const cgst = isInterState ? 0 : taxAmount / 2;
+    const sgst = isInterState ? 0 : taxAmount / 2;
+    const igst = isInterState ? taxAmount : 0;
 
     const payAmt = payment?.amount ?? 0;
     const { roundOff, roundedTotal: billTotal } = computeRoundOff(subtotal + taxAmount - parsedDiscount);
@@ -159,6 +174,11 @@ export async function POST(req: NextRequest) {
             dueDate: dueDate ? new Date(dueDate) : null,
             subtotal,
             taxAmount,
+            isInterState,
+            placeOfSupply: vendorState,
+            cgst,
+            sgst,
+            igst,
             discount: parsedDiscount,
             total: billTotal,
             roundOff,
@@ -173,6 +193,7 @@ export async function POST(req: NextRequest) {
               create: computedItems.map((item) => ({
                 productId: item.productId || null,
                 name: item.name,
+                hsn: item.hsn,
                 quantity: item.quantity,
                 unit: item.unit ?? "Nos",
                 purchasePrice: item.purchasePrice,

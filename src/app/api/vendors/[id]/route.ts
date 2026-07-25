@@ -33,8 +33,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!auth.ok) return auth.response;
     const { id } = await params;
     const body = await req.json();
-    const { name, company, gstin, phone, email, address, notes, isActive, expectedUpdatedAt } = body;
-    const validationError = validateVendorInput({ name, phone, email, gstin });
+    const { name, company, gstin, phone, email, address, state, notes, isActive, expectedUpdatedAt } = body;
+    const validationError = validateVendorInput({ name, phone, email, gstin, state });
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
     const existing = await prisma.vendor.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
@@ -52,6 +52,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         name: name.trim(), company: company?.trim() || null,
         gstin: gstin?.trim() || null, phone: phone?.trim() || null,
         email: email?.trim() || null, address: address?.trim() || null,
+        state: state?.trim() || null,
         notes: notes?.trim() || null, isActive: isActive !== false,
       },
     });

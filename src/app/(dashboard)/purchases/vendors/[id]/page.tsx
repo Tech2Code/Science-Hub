@@ -20,7 +20,7 @@ interface Bill {
 }
 interface Vendor {
   id: string; name: string; company: string | null; gstin: string | null;
-  phone: string | null; email: string | null; address: string | null;
+  phone: string | null; email: string | null; address: string | null; state: string | null;
   notes: string | null; isActive: boolean; purchaseBills: Bill[];
 }
 
@@ -143,12 +143,18 @@ export default function VendorDetailPage() {
           </div>
         </div>
 
-        {!loading && (vendor?.address || vendor?.notes) && (
+        {!loading && (vendor?.address || vendor?.state || vendor?.notes) && (
           <div className={styles.detailsBlock}>
             {vendor?.address && (
               <div>
                 <div className={styles.detailLabel}>Address</div>
                 <p className={styles.detailText}>{vendor.address}</p>
+              </div>
+            )}
+            {vendor?.state && (
+              <div>
+                <div className={styles.detailLabel}>State</div>
+                <p className={styles.detailText}>{vendor.state}</p>
               </div>
             )}
             {vendor?.notes && (

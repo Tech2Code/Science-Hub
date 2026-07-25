@@ -1,14 +1,15 @@
 "use client";
 
-import { Input, Textarea, FormField } from "@/components/ui/Input";
+import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
+import { INDIA_STATES_FULL } from "@/lib/states";
 import type { VendorFormData } from "@/lib/vendorForm";
 import type { FormErrors } from "@/lib/validation";
 import styles from "./VendorFormFields.module.css";
 
 interface VendorFormFieldsProps {
   form: VendorFormData;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
   errors: FormErrors<{ name: string; company: string; gstin: string; phone: string; email: string; address: string }>;
   disabled?: boolean;
   phoneRequired?: boolean;
@@ -44,7 +45,14 @@ export function VendorFormFields({ form, onChange, errors, disabled, phoneRequir
       </FormField>
 
       <FormField label="Address" required={addressRequired} error={errors.address}>
-        <Textarea name="address" rows={2} value={form.address} onChange={onChange} placeholder="Street, city, state…" disabled={disabled} />
+        <Textarea name="address" rows={2} value={form.address} onChange={onChange} placeholder="Street, city…" disabled={disabled} />
+      </FormField>
+
+      <FormField label="State">
+        <Select name="state" value={form.state} onChange={onChange} disabled={disabled}>
+          <option value="">Select state</option>
+          {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
+        </Select>
       </FormField>
 
       <FormField label="Notes">

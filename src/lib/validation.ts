@@ -198,7 +198,7 @@ export function validateSettingsInput(input: {
 // `requireContactDetails` is set on creation only — existing vendors may
 // predate the phone/address requirement, so edits don't retroactively block on it.
 export function validateVendorInput(input: {
-  name?: string; phone?: string; email?: string; gstin?: string; address?: string;
+  name?: string; phone?: string; email?: string; gstin?: string; address?: string; state?: string;
 }, requireContactDetails = false): string | null {
   const name = (input.name ?? "").trim();
   if (!name) return "Vendor name is required.";

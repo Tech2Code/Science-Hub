@@ -36,7 +36,7 @@ export default function EditVendorPage() {
         const loaded: VendorFormData = {
           name: d.name ?? "", company: d.company ?? "", gstin: d.gstin ?? "",
           phone: d.phone ?? "", email: d.email ?? "", address: d.address ?? "",
-          notes: d.notes ?? "", isActive: d.isActive !== false,
+          state: d.state ?? "", notes: d.notes ?? "", isActive: d.isActive !== false,
         };
         setForm(loaded);
         setInitialForm(loaded);
@@ -46,7 +46,7 @@ export default function EditVendorPage() {
       .catch(() => { setLoading(false); });
   }, [id]);
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
+  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
     const { name, value, type } = e.target;
     const nextValue = normalizeVendorField(name, value);
     setForm(prev => ({ ...prev, [name]: type === "checkbox" ? (e.target as HTMLInputElement).checked : nextValue }));

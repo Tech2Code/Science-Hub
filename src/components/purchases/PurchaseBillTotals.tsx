@@ -22,7 +22,6 @@ interface PurchaseBillTotalsProps {
 export function PurchaseBillTotals({ sectionIndex, grossTotal, itemDiscountTotal, taxTotal, roundOff, grandTotal, discount, onDiscountChange }: PurchaseBillTotalsProps) {
   return (
     <div {...animateSection(sectionIndex, "form-card")}>
-      <div className={styles.totalsWrap}>
         <div className={styles.totalsAlignRight}>
           <div className={styles.totalsBox}>
             <div className={styles.totalsLine}>
@@ -52,7 +51,8 @@ export function PurchaseBillTotals({ sectionIndex, grossTotal, itemDiscountTotal
             </div>
           </div>
         </div>
-      </div>
+      {/* <div className={styles.totalsWrap}>
+      </div> */}
     </div>
   );
 }

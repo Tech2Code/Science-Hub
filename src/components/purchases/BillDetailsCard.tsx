@@ -9,11 +9,12 @@ import { useToast } from "@/components/ui/Toast";
 import { bustCache } from "@/lib/useCache";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
+import { INDIA_STATES_FULL } from "@/lib/states";
 import { PURCHASE_BILL_CATEGORIES, type PurchaseBillVendor } from "@/lib/purchaseBillForm";
 import styles from "./BillDetailsCard.module.css";
 
-type InlineVendorForm = { name: string; company: string; phone: string; email: string; gstin: string; address: string; [key: string]: string };
-const BLANK_INLINE_VENDOR: InlineVendorForm = { name: "", company: "", phone: "", email: "", gstin: "", address: "" };
+type InlineVendorForm = { name: string; company: string; phone: string; email: string; gstin: string; address: string; state: string; [key: string]: string };
+const BLANK_INLINE_VENDOR: InlineVendorForm = { name: "", company: "", phone: "", email: "", gstin: "", address: "", state: "" };
 
 interface BillDetailsCardProps {
   sectionIndex: number;
@@ -87,6 +88,7 @@ export function BillDetailsCard({
           phone:   ivForm.phone.trim() || null,
           email:   ivForm.email.trim() || null,
           address: ivForm.address.trim() || null,
+          state:   ivForm.state.trim() || null,
         }),
       });
       const data = await res.json();
@@ -169,6 +171,12 @@ export function BillDetailsCard({
               </FormField>
               <FormField label="Address" required error={ivFieldErrors.address}>
                 <Input value={ivForm.address} onChange={(e) => updateIvField("address", e.target.value)} placeholder="Street / locality" />
+              </FormField>
+              <FormField label="State">
+                <Select value={ivForm.state} onChange={(e) => updateIvField("state", e.target.value)}>
+                  <option value="">Select state</option>
+                  {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
+                </Select>
               </FormField>
             </div>
           </div>

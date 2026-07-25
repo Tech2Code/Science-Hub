@@ -121,6 +121,7 @@ export default function NewPurchaseBillPage() {
       return {
         productId:       i.productId || null,
         name:            i.name.trim(),
+        hsn:             i.hsn.trim(),
         unit:            i.unit,
         quantity:        toNum(i.quantity),
         purchasePrice:   toNum(i.purchasePrice),

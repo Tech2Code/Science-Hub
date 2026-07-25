@@ -69,6 +69,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
             unit: match.unit,
             purchasePrice: rate != null ? String(rate) : next[idx].purchasePrice,
             gstRate: String(match.gstRate),
+            hsn: match.hsn ?? "",
           };
           return next;
         });
@@ -133,6 +134,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
           unit: product.unit,
           purchasePrice: rate != null ? String(rate) : "",
           gstRate: String(product.gstRate),
+          hsn: product.hsn ?? "",
         };
       } else {
         next[idx] = { ...next[idx], productId: "", name: "" };
@@ -211,6 +213,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
           <colgroup>
             <col className={styles.colProduct} />
             <col className={styles.colName} />
+            <col className={styles.colHsn} />
             <col className={styles.colUnit} />
             <col className={styles.colQty} />
             <col className={styles.colRate} />
@@ -221,7 +224,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
           </colgroup>
           <thead>
             <tr>
-              {["Product (optional)", "Item Name", "Unit", "Qty", "Rate (₹)", "Discount", "GST %", "Amount", ""].map((h) => (
+              {["Product (optional)", "Item Name", "HSN/SAC", "Unit", "Qty", "Rate (₹)", "Discount", "GST %", "Amount", ""].map((h) => (
                 <th key={h} className={h === "Amount" ? styles.thRight : styles.th}>{h}</th>
               ))}
             </tr>
@@ -239,6 +242,9 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
                   </td>
                   <td className={styles.tdName}>
                     <Input sz="sm" value={item.name} onChange={(e) => handleItemChange(idx, "name", e.target.value)} placeholder="Item name" />
+                  </td>
+                  <td className={styles.tdHsn}>
+                    <Input sz="sm" value={item.hsn} onChange={(e) => handleItemChange(idx, "hsn", e.target.value)} placeholder="HSN/SAC" />
                   </td>
                   <td className={styles.tdUnit}>
                     <Select sz="sm" value={item.unit} onChange={(e) => handleItemChange(idx, "unit", e.target.value)}>

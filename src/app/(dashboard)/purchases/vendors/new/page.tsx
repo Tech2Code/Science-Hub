@@ -25,7 +25,7 @@ export default function NewVendorPage() {
   const [errors, setErrors] = useState<ReturnType<typeof validateVendorForm>>({});
   const [saving, setSaving] = useState(false);
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
+  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
     const { name, value, type } = e.target;
     const nextValue = normalizeVendorField(name, value);
     setForm(prev => ({ ...prev, [name]: type === "checkbox" ? (e.target as HTMLInputElement).checked : nextValue }));
