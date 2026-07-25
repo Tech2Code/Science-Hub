@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Input";
+import { rules, validate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { bustCache } from "@/lib/useCache";
@@ -34,6 +35,7 @@ export default function NewPurchaseBillPage() {
   const [saving,   setSaving]   = useState(false);
 
   const [vendorId,  setVendorId]  = useState("");
+  const [vendorError, setVendorError] = useState<string | undefined>(undefined);
   const [billDate,  setBillDate]  = useState(() => new Date().toISOString().slice(0, 10));
   const [dueDate,   setDueDate]   = useState("");
   const [category,  setCategory]  = useState("");
@@ -102,12 +104,14 @@ export default function NewPurchaseBillPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (attachmentUploading)                         { validationToast("Please wait for the attachment to finish uploading."); return; }
-    if (!vendorId)                                   { validationToast("Please select a vendor."); return; }
-    if (items.length === 0)                          { validationToast("Add at least one item."); return; }
-    if (items.some(i => !i.name.trim()))             { validationToast("All items must have a name."); return; }
-    if (items.some(i => toNum(i.quantity) <= 0))     { validationToast("All quantities must be greater than 0."); return; }
-    if (items.some(i => !i.purchasePrice.trim() || toNum(i.purchasePrice) <= 0)) { validationToast("All item prices must be greater than 0."); return; }
+    if (attachmentUploading)                                            { validationToast("Please wait for the attachment to finish uploading."); return; }
+    const vendorErr = validate(vendorId, rules.required("Please select a vendor."));
+    setVendorError(vendorErr ?? undefined);
+    if (vendorErr)                                                      { return; }
+    if (items.length === 0)                                             { validationToast("Add at least one item."); return; }
+    if (items.some(i => validate(i.name, rules.required())))            { validationToast("All items must have a name."); return; }
+    if (items.some(i => validate(i.quantity, rules.required(), rules.positiveNumber())))      { validationToast("All quantities must be greater than 0."); return; }
+    if (items.some(i => validate(i.purchasePrice, rules.required(), rules.positiveNumber()))) { validationToast("All item prices must be greater than 0."); return; }
     if (dueDate && dueDate < billDate)               { validationToast("Due date cannot be before the bill date."); return; }
     if (addPayment && toNum(payAmount) > 0 && payDate < billDate) { validationToast("Payment date cannot be before the bill date."); return; }
     if (addPayment && toNum(payAmount) > 0 && payDate > new Date().toISOString().slice(0, 10)) { validationToast("Payment date cannot be in the future."); return; }
@@ -181,14 +185,15 @@ export default function NewPurchaseBillPage() {
       <Breadcrumb items={[{ label: "Purchases", href: "/purchases/bills" }, { label: "New Purchase Bill" }]} />
       <h1 className="page-title">New Purchase Bill</h1>
 
-      <form onSubmit={handleSubmit} className="form-stack">
+      <form onSubmit={handleSubmit} className="form-stack" noValidate>
 
         <BillDetailsCard
           sectionIndex={0}
           vendors={vendors}
           vendorId={vendorId}
-          onVendorIdChange={setVendorId}
+          onVendorIdChange={(id) => { setVendorId(id); setVendorError(undefined); }}
           onVendorCreated={(v) => setVendors(prev => [...prev, v])}
+          vendorError={vendorError}
           category={category}
           onCategoryChange={setCategory}
           billDate={billDate}

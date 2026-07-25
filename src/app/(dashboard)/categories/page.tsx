@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { rules, validate } from "@/lib/validation";
 import styles from "./categories.module.css";
 
 interface Category {
@@ -79,7 +80,7 @@ export default function CategoriesPage() {
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     const name = newName.trim();
-    if (!name) return;
+    if (validate(name, rules.required("Category name is required."))) return;
     setSaving(true);
     const r = await fetch("/api/categories", {
       method: "POST",
@@ -109,7 +110,7 @@ export default function CategoriesPage() {
 
   async function handleRename(id: string) {
     const name = editingName.trim();
-    if (!name) return;
+    if (validate(name, rules.required("Category name is required."))) return;
     setRenaming(true);
     const r = await fetch(`/api/categories/${id}`, {
       method: "PUT",
@@ -193,7 +194,7 @@ export default function CategoriesPage() {
         <h2 className={styles.addCardTitle}>
           Add New Category
         </h2>
-        <form onSubmit={handleAdd} className={styles.addForm}>
+        <form onSubmit={handleAdd} className={styles.addForm} noValidate>
           <Input
             ref={inputRef}
             type="text"
@@ -253,7 +254,7 @@ export default function CategoriesPage() {
                           onChange={(e) => setEditingName(e.target.value)}
                           onKeyDown={(e) => { if (e.key === "Enter") handleRename(c.id); if (e.key === "Escape") setEditingId(null); }}
                         />
-                        <Button size="sm" variant="primary" onClick={() => handleRename(c.id)} disabled={!editingName.trim() || renaming}>Save</Button>
+                        <Button size="sm" variant="primary" onClick={() => handleRename(c.id)} disabled={!editingName.trim() || editingName.trim() === c.name || renaming}>Save</Button>
                         <Button size="sm" variant="secondary" onClick={() => setEditingId(null)} disabled={renaming}>Cancel</Button>
                       </div>
                     ) : (

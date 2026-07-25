@@ -1,6 +1,7 @@
 "use client";
 
 import { Input, Textarea, FormField } from "@/components/ui/Input";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import type { VendorFormData } from "@/lib/vendorForm";
 import type { FormErrors } from "@/lib/validation";
 import styles from "./VendorFormFields.module.css";
@@ -31,7 +32,7 @@ export function VendorFormFields({ form, onChange, errors, disabled, phoneRequir
 
       <div className="form-grid-2">
         <FormField label="Phone" required={phoneRequired} error={errors.phone}>
-          <Input name="phone" type="tel" inputMode="numeric" value={form.phone} onChange={onChange} placeholder="10-digit mobile" maxLength={10} disabled={disabled} />
+          <PhoneInput name="phone" value={form.phone} onChange={onChange} placeholder="10-digit mobile" disabled={disabled} />
         </FormField>
         <FormField label="Email" error={errors.email}>
           <Input name="email" type="email" value={form.email} onChange={onChange} placeholder="vendor@example.com" disabled={disabled} />

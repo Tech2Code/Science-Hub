@@ -85,6 +85,7 @@ export default function PurchaseBillDetailPage() {
   // Payment form
   const [showPayForm, setShowPayForm]   = useState(false);
   const [payAmount,   setPayAmount]     = useState("");
+  const [payAmountError, setPayAmountError] = useState<string | undefined>(undefined);
   const [payMethod,   setPayMethod]     = useState("Cash");
   const [payRef,      setPayRef]        = useState("");
   const [payDate,     setPayDate]       = useState(() => new Date().toISOString().slice(0, 10));
@@ -138,8 +139,9 @@ export default function PurchaseBillDetailPage() {
     if (!bill) return;
     const amount  = parseFloat(payAmount);
     const balance = bill.total - bill.paidAmount;
-    if (!payAmount || isNaN(amount) || amount <= 0) { toast({ type: "error", title: "Check form", message: "Enter a valid amount." }); return; }
-    if (amount > balance + 0.01) { toast({ type: "error", title: "Check form", message: `Amount exceeds outstanding balance of ₹${fmt(balance)}.` }); return; }
+    if (!payAmount || isNaN(amount) || amount <= 0) { setPayAmountError("Enter a valid amount."); return; }
+    if (amount > balance + 0.01) { setPayAmountError(`Amount exceeds outstanding balance of ₹${fmt(balance)}.`); return; }
+    setPayAmountError(undefined);
     if (payDate < bill.billDate.slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be before the bill date." }); return; }
     if (payDate > new Date().toISOString().slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be in the future." }); return; }
     setSubmitting(true);
@@ -589,12 +591,12 @@ export default function PurchaseBillDetailPage() {
               </span>
             </h3>
           </div>
-          <form onSubmit={handlePayment}>
+          <form onSubmit={handlePayment} noValidate>
             <div className={`form-grid-2 ${styles.marginBottom075}`}>
-              <FormField label="Amount (₹)" required>
+              <FormField label="Amount (₹)" required error={payAmountError}>
                 <div className={styles.amountRow}>
                   <Input type="number" min="0.01" step="0.01" max={balance}
-                    value={payAmount} onChange={e => setPayAmount(e.target.value)}
+                    value={payAmount} onChange={e => { setPayAmount(e.target.value); setPayAmountError(undefined); }}
                     placeholder={`Max ₹${fmt(balance)}`} autoFocus className={styles.amountInput} />
                   <button
                     type="button"
@@ -624,7 +626,7 @@ export default function PurchaseBillDetailPage() {
               </FormField>
             </div>
             <div className="form-actions">
-              <Button type="submit" variant="primary" disabled={submitting}>Save Payment</Button>
+              <Button type="submit" variant="primary" disabled={submitting || !payAmount.trim()}>Save Payment</Button>
               <Button type="button" variant="secondary" onClick={() => { setShowPayForm(false); }}>Cancel</Button>
             </div>
           </form>

@@ -90,12 +90,12 @@ export default function EditVendorPage() {
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "Edit Vendor" }]} />
       <h1 className="page-title">Edit Vendor</h1>
 
-      <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
+      <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
         <VendorFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} />
 
         <div className="form-actions-wrap">
           <div className="form-actions">
-            <Button type="submit" variant="primary" disabled={disabled || !hasChanges}>
+            <Button type="submit" variant="primary" disabled={disabled || !hasChanges || !form.name.trim()}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
               Update Vendor
             </Button>

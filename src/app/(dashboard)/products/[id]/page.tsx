@@ -208,6 +208,11 @@ export default function ProductViewPage() {
         confirmLabel="Save Adjustment"
         cancelLabel="Cancel"
         loading={adjustSaving}
+        confirmDisabled={
+          !adjustNotes.trim() ||
+          !Number.isFinite(Number(adjustStock)) || !Number.isInteger(Number(adjustStock)) || Number(adjustStock) < 0 ||
+          (product ? Number(adjustStock) === product.stock : false)
+        }
         onConfirm={handleAdjustStock}
         onCancel={() => { if (!adjustSaving) setAdjustOpen(false); }}
       />

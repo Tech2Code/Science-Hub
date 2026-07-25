@@ -19,6 +19,7 @@ import { StatCardsRow } from "@/components/ui/StatCardsRow";
 import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { useRouter } from "next/navigation";
 import styles from "./billsList.module.css";
 
 interface PurchaseBill {
@@ -93,6 +94,8 @@ const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2,
 
 export default function PurchasesPage() {
   const canWrite = useCanWrite();
+  const router = useRouter();
+  const [openingEdit, setOpeningEdit] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
@@ -225,6 +228,7 @@ export default function PurchasesPage() {
       onCancel={() => setDeleteTarget(null)}
     />
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
+    {openingEdit && <OverlayLoader text="Opening editor…" />}
 
     {pdfPreviewUrl && pdfPreviewBill && (
       <PdfPreviewModal
@@ -369,6 +373,18 @@ export default function PurchasesPage() {
                       <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" loading={pdfLoading === b.id} onClick={() => handleRegenerate(b)}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
                       </Button>
+                      {canWrite && (
+                        <Button
+                          variant="editOutline"
+                          size="sm"
+                          disabled={b.status === "paid" || b.status === "cancelled"}
+                          title={b.status === "paid" || b.status === "cancelled" ? `Bill is ${b.status} — nothing left to edit` : undefined}
+                          onClick={() => { setOpeningEdit(b.id); router.push(`/purchases/bills/${b.id}/edit`); }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          Edit
+                        </Button>
+                      )}
                       {canWrite && (<Button variant="dangerOutline" size="sm" onClick={() => setDeleteTarget(b)}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
                         Delete

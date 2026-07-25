@@ -247,7 +247,7 @@ export default function EditInvoicePage() {
         <h1 className="page-title">Edit Invoice — {invoice.invoiceNumber}</h1>
         <p className="page-sub">Editing is allowed only while the invoice is unpaid or partially paid.</p>
       </div>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <div className={styles.layout}>
           {/* Left column */}
           <div className={styles.leftCol}>

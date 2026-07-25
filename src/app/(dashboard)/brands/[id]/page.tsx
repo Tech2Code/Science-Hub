@@ -136,7 +136,7 @@ export default function BrandViewPage() {
                   onChange={(e) => setRenameValue(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") saveRename(); if (e.key === "Escape") setRenaming(false); }}
                 />
-                <Button size="sm" variant="primary" onClick={saveRename} disabled={!renameValue.trim() || savingRename}>Save</Button>
+                <Button size="sm" variant="primary" onClick={saveRename} disabled={!renameValue.trim() || renameValue.trim() === brand?.name || savingRename}>Save</Button>
                 <Button size="sm" variant="secondary" onClick={() => setRenaming(false)} disabled={savingRename}>Cancel</Button>
               </div>
             ) : (

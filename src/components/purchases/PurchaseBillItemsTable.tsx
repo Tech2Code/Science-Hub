@@ -238,7 +238,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
                     </Select>
                   </td>
                   <td className={styles.tdName}>
-                    <Input sz="sm" value={item.name} onChange={(e) => handleItemChange(idx, "name", e.target.value)} placeholder="Item name" required />
+                    <Input sz="sm" value={item.name} onChange={(e) => handleItemChange(idx, "name", e.target.value)} placeholder="Item name" />
                   </td>
                   <td className={styles.tdUnit}>
                     <Select sz="sm" value={item.unit} onChange={(e) => handleItemChange(idx, "unit", e.target.value)}>

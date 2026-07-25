@@ -11,6 +11,7 @@ import { bustCache } from "@/lib/useCache";
 import { invalidateCachedPdf } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
 import { useDirty } from "@/lib/useDirty";
+import { rules, validate } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { truncateFilename } from "@/lib/truncateFilename";
 import { BillDetailsCard } from "@/components/purchases/BillDetailsCard";
@@ -83,6 +84,7 @@ export default function EditPurchaseBillPage() {
   const [loadErr, setLoadErr] = useState("");
 
   const [vendorId,  setVendorId]  = useState("");
+  const [vendorError, setVendorError] = useState<string | undefined>(undefined);
   const [billDate,  setBillDate]  = useState("");
   const [dueDate,   setDueDate]   = useState("");
   const [category,  setCategory]  = useState("");
@@ -197,12 +199,14 @@ export default function EditPurchaseBillPage() {
     // disabled button doesn't stop Enter-key form submission from an input.
     if (!isDirty) { toast({ type: "error", title: "Nothing to save", message: "No changes have been made yet." }); return; }
     if (attachmentUploading) { toast({ type: "error", title: "Check form", message: "Please wait for the attachment to finish uploading." }); return; }
-    if (!vendorId) { toast({ type: "error", title: "Check form", message: "Please select a vendor." }); return; }
+    const vendorErr = validate(vendorId, rules.required("Please select a vendor."));
+    setVendorError(vendorErr ?? undefined);
+    if (vendorErr) return;
     if (!billDate) { toast({ type: "error", title: "Check form", message: "Bill date is required." }); return; }
-    if (items.length === 0)                      { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
-    if (items.some(i => !i.name.trim()))          { toast({ type: "error", title: "Check form", message: "All items must have a name." }); return; }
-    if (items.some(i => toNum(i.quantity) <= 0))  { toast({ type: "error", title: "Check form", message: "All quantities must be greater than 0." }); return; }
-    if (items.some(i => !i.purchasePrice.trim() || toNum(i.purchasePrice) <= 0)) { toast({ type: "error", title: "Check form", message: "All item prices must be greater than 0." }); return; }
+    if (items.length === 0)                                             { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
+    if (items.some(i => validate(i.name, rules.required())))            { toast({ type: "error", title: "Check form", message: "All items must have a name." }); return; }
+    if (items.some(i => validate(i.quantity, rules.required(), rules.positiveNumber())))      { toast({ type: "error", title: "Check form", message: "All quantities must be greater than 0." }); return; }
+    if (items.some(i => validate(i.purchasePrice, rules.required(), rules.positiveNumber()))) { toast({ type: "error", title: "Check form", message: "All item prices must be greater than 0." }); return; }
     if (dueDate && dueDate < billDate) { toast({ type: "error", title: "Check form", message: "Due date cannot be before the bill date." }); return; }
     setSaving(true);
     try {
@@ -338,14 +342,15 @@ export default function EditPurchaseBillPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="form-stack">
+      <form onSubmit={handleSubmit} className="form-stack" noValidate>
 
         <BillDetailsCard
           sectionIndex={1}
           vendors={vendors}
           vendorId={vendorId}
-          onVendorIdChange={setVendorId}
+          onVendorIdChange={(id) => { setVendorId(id); setVendorError(undefined); }}
           onVendorCreated={(v) => setVendors(prev => [...prev, v])}
+          vendorError={vendorError}
           category={category}
           onCategoryChange={setCategory}
           billDate={billDate}

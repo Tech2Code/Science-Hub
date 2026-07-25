@@ -194,6 +194,7 @@ export default function InvoiceDetailPage() {
   const [error, setError] = useState("");
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentForm, setPaymentForm] = useState({ amount: "", method: "Cash", reference: "" });
+  const [paymentAmountError, setPaymentAmountError] = useState<string | undefined>(undefined);
   const [addingPayment, setAddingPayment] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
@@ -270,9 +271,10 @@ export default function InvoiceDetailPage() {
   async function handleAddPayment(e: React.FormEvent) {
     e.preventDefault();
     const amtErr = validate(paymentForm.amount, rules.required("Amount is required."), rules.positiveNumber("Enter a valid amount greater than 0."));
-    if (amtErr) { toast({ type: "error", title: "Check form", message: amtErr }); return; }
+    if (amtErr) { setPaymentAmountError(amtErr); return; }
     const amt = parseFloat(paymentForm.amount);
-    if (amt > balance) { toast({ type: "error", title: "Check form", message: `Amount cannot exceed balance due (₹${fmt(balance)}).` }); return; }
+    if (amt > balance) { setPaymentAmountError(`Amount cannot exceed balance due (₹${fmt(balance)}).`); return; }
+    setPaymentAmountError(undefined);
     setAddingPayment(true);
     const res = await fetch(`/api/invoices/${id}/payment`, {
       method: "POST",
@@ -726,6 +728,7 @@ export default function InvoiceDetailPage() {
                 size="sm"
                 onClick={() => {
                   setPaymentForm({ amount: "", method: "Cash", reference: "" });
+                  setPaymentAmountError(undefined);
                   setShowPaymentForm(true);
                 }}
               >
@@ -827,15 +830,15 @@ export default function InvoiceDetailPage() {
         {showPaymentForm && (
           <div className={`card ${styles.paymentFormCard}`}>
             <h3 className={styles.paymentFormTitle}>Record Payment</h3>
-            <form onSubmit={handleAddPayment}>
+            <form onSubmit={handleAddPayment} noValidate>
               <div className={styles.paymentFormRow}>
-                <FormField label="Amount (₹)">
+                <FormField label="Amount (₹)" error={paymentAmountError}>
                   <div className={styles.paymentAmountRow}>
                     <Input
                       type="text"
                       inputMode="decimal"
                       value={paymentForm.amount}
-                      onChange={(e) => { setPaymentForm((p) => ({ ...p, amount: e.target.value.replace(/[^\d.]/g, "") })); }}
+                      onChange={(e) => { setPaymentForm((p) => ({ ...p, amount: e.target.value.replace(/[^\d.]/g, "") })); setPaymentAmountError(undefined); }}
                       placeholder={`e.g. ${balance.toFixed(2)}`}
                       sz="sm"
                       className={styles.paymentAmountInput}
@@ -872,7 +875,7 @@ export default function InvoiceDetailPage() {
                   />
                 </FormField>
                 <div className={styles.paymentFormBtnRow}>
-                  <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment} loading={addingPayment}>
+                  <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment || !paymentForm.amount.trim()} loading={addingPayment}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
                     Save Payment
                   </Button>
@@ -891,7 +894,7 @@ export default function InvoiceDetailPage() {
           <div className={styles.returnModalOverlayWrap}>
             <div className={styles.returnModalBackdrop} onClick={() => { if (!addingReturn) setShowReturnForm(false); }} />
             <div className={styles.returnModalBox}>
-              <form onSubmit={handleAddReturn} className={styles.returnModalForm}>
+              <form onSubmit={handleAddReturn} className={styles.returnModalForm} noValidate>
                 {/* Modal header */}
                 <div className={styles.returnModalHeader}>
                   <div className={styles.returnModalHeaderLeft}>
@@ -972,7 +975,7 @@ export default function InvoiceDetailPage() {
                 </div>
                 {/* Modal footer (pinned, outside the scrollable body) */}
                 <div className={styles.returnModalFooter}>
-                  <Button type="submit" variant="primary" size="sm" disabled={addingReturn || returnItems.length === 0} loading={addingReturn}>
+                  <Button type="submit" variant="primary" size="sm" disabled={addingReturn || !returnItems.some(ri => ri.selected && ri.qty > 0)} loading={addingReturn}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
                     Save Return
                   </Button>

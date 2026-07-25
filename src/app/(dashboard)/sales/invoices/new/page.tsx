@@ -9,6 +9,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { InvoiceOptionsRow } from "@/components/invoices/InvoiceOptionsRow";
 import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
 import { computeInvoiceTotals, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
@@ -225,7 +226,7 @@ export default function NewInvoicePage() {
         onCancel={() => setShowStockDialog(false)}
       />
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <div className={styles.layout}>
           {/* Left column */}
           <div className={styles.leftCol}>
@@ -309,10 +310,9 @@ export default function NewInvoicePage() {
                     {errMsg("name")}
                   </div>
                   <div className={styles.grid2}>
-                    <div>
-                      <Input type="tel" placeholder="Phone *" value={customCustomer.phone}
-                        onChange={(e) => { setCustomCustomer((p) => ({ ...p, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })); clearErr("phone"); }}
-                        className={errInput("phone")} />
+                    <div {...(customErrors.phone ? { "data-error": "" } : {})}>
+                      <PhoneInput value={customCustomer.phone} placeholder="10-digit mobile"
+                        onChange={(e) => { setCustomCustomer((p) => ({ ...p, phone: e.target.value })); clearErr("phone"); }} />
                       {errMsg("phone")}
                     </div>
                     <div>
