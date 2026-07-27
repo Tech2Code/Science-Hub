@@ -58,11 +58,11 @@ export default function EditInvoicePage() {
   useEffect(() => {
     Promise.all([
       fetchCached(`/api/invoices/${id}`),
-      fetchCached("/api/products").catch(() => []),
+      fetchCached("/api/products?pageSize=5000").catch(() => ({ data: [] })),
       fetchCached("/api/settings").catch(() => null),
     ]).then(([inv, prods, settings]) => {
       const invoice = inv as InvoiceData;
-      const products = prods as Product[];
+      const products = (prods as { data: Product[] }).data ?? [];
       setInvoice(invoice);
       setProducts(products);
       setBusinessState((settings as { state?: string } | null)?.state ?? "");

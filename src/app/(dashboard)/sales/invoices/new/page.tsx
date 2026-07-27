@@ -53,7 +53,8 @@ export default function NewInvoicePage() {
   const [stockOutItems, setStockOutItems] = useState<{ name: string; available: number; requested: number }[]>([]);
 
   useEffect(() => {
-    fetch("/api/customers", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((all: Customer[]) => {
+    fetch("/api/customers?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { data: Customer[] }) => {
+      const all = res.data ?? [];
       setCustomers(all);
       const prefillId = searchParams.get("customerId");
       if (prefillId) {
@@ -64,7 +65,7 @@ export default function NewInvoicePage() {
         }
       }
     }).catch(() => {});
-    fetch("/api/products", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then(setProducts).catch(() => {});
+    fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { data: Product[] }) => setProducts(res.data ?? [])).catch(() => {});
     fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((s) => setBusinessState(s?.state ?? "")).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount prefill from the initial URL, not meant to re-run on searchParams changes
   }, []);

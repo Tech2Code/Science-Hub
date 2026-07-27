@@ -109,12 +109,12 @@ export default function EditPurchaseBillPage() {
   useEffect(() => {
     Promise.all([
       fetch(`/api/purchase-bills/${id}`, { headers: { "x-no-loader": "1" } }).then(r => r.json()),
-      fetch("/api/vendors", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
-      fetch("/api/products", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
-    ]).then(([b, v, p]) => {
+      fetch("/api/vendors?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
+      fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
+    ]).then(([b, v, p]: [PurchaseBill, { data: PurchaseBillVendor[] }, { data: PurchaseBillProduct[] }]) => {
       setBill(b);
-      setVendors(v);
-      setProducts(p);
+      setVendors(v.data ?? []);
+      setProducts(p.data ?? []);
       setVendorId(b.vendorId ?? "");
       setBillDate(b.billDate ? b.billDate.slice(0, 10) : "");
       setDueDate(b.dueDate  ? b.dueDate.slice(0, 10)  : "");
