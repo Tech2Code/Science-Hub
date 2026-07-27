@@ -1,15 +1,16 @@
 ﻿"use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
@@ -29,6 +30,11 @@ interface Customer {
   createdBy?: string | null;
 }
 
+interface CustomerListResponse {
+  data: Customer[];
+  total: number;
+}
+
 type SortOption = "name_az" | "name_za" | "invoices_high" | "invoices_low" | "newest" | "oldest";
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "name_az",       label: "Name (A–Z)" },
@@ -38,19 +44,6 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "newest",        label: "Newest first" },
   { value: "oldest",        label: "Oldest first" },
 ];
-
-function sortCustomers(list: Customer[], sort: SortOption): Customer[] {
-  const arr = [...list];
-  switch (sort) {
-    case "name_za":       return arr.sort((a, b) => b.name.localeCompare(a.name));
-    case "invoices_high": return arr.sort((a, b) => (b._count?.invoices ?? 0) - (a._count?.invoices ?? 0));
-    case "invoices_low":  return arr.sort((a, b) => (a._count?.invoices ?? 0) - (b._count?.invoices ?? 0));
-    case "oldest":        return arr.sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
-    case "newest":        return arr.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
-    case "name_az":
-    default:              return arr.sort((a, b) => a.name.localeCompare(b.name));
-  }
-}
 
 const COLUMNS: Column[] = [
   { label: "Name",          mobile: "full+label" },
@@ -65,8 +58,6 @@ const COLUMNS: Column[] = [
 
 export default function CustomersPage() {
   const canWrite = useCanWrite();
-  const { data, loading, patchData } = useFetch<Customer[]>("/api/customers");
-  const customers = data ?? [];
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
@@ -79,6 +70,20 @@ export default function CustomersPage() {
   const toast = useToast();
   const router = useRouter();
 
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const pageSize = showAll ? 5000 : PAGE_SIZE;
+
+  const listParams = new URLSearchParams();
+  if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
+  listParams.set("sort", sort);
+  listParams.set("page", String(page));
+  listParams.set("pageSize", String(pageSize));
+  const apiUrl = `/api/customers?${listParams.toString()}`;
+
+  const { data, loading, mutate } = useFetch<CustomerListResponse>(apiUrl);
+  const customers = data?.data ?? [];
+  const total = data?.total ?? 0;
+
   function handleDelete(id: string, name: string) {
     setConfirmState({
       title: "Delete Customer",
@@ -90,7 +95,7 @@ export default function CustomersPage() {
         setDeleting(false);
         setConfirmState(null);
         if (res.ok) {
-          patchData((prev) => (prev ?? []).filter((c) => c.id !== id));
+          await mutate();
           toast({ type: "success", title: "Customer deleted", message: `"${name}" removed.` });
         } else {
           toast({ type: "error", title: "Delete failed", message: resBody.error ?? "Could not delete customer." });
@@ -99,22 +104,6 @@ export default function CustomersPage() {
     });
   }
 
-  const filtered = customers.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone?.includes(search) ||
-    c.email?.toLowerCase().includes(search.toLowerCase()) ||
-    c.gstin?.toLowerCase().includes(search.toLowerCase()) ||
-    c.city?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const sorted = sortCustomers(filtered, sort);
-
-  useEffect(() => {
-    const maxPage = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-    if (page > maxPage) setPage(maxPage); // eslint-disable-line react-hooks/set-state-in-effect -- clamps page back into range when filtering shrinks the result set
-  }, [sorted.length, page]);
-
-  const { visible } = usePagination(sorted, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
 
   return (
@@ -135,7 +124,7 @@ export default function CustomersPage() {
         <div>
           <h1 className="page-title">Customers</h1>
           <p className="page-sub">
-            {loading ? "Loading…" : search.trim() ? `${filtered.length} of ${customers.length} customers` : `${customers.length} total customers`}
+            {loading ? "Loading…" : `${total} total customers`}
           </p>
         </div>
         {canWrite && (<Button variant="primary" href="/sales/customers/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Customer</Button>)}
@@ -155,7 +144,7 @@ export default function CustomersPage() {
             <SortSelect ariaLabel="Sort customers" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
           {!loading && (
-            <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
+            <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
@@ -168,11 +157,11 @@ export default function CustomersPage() {
             <tbody>
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
-              ) : filtered.length === 0 ? (
+              ) : customers.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
                   {search ? "No customers match your search." : "No customers yet. Add one to get started."}
                 </td></tr>
-              ) : visible.map((c) => (
+              ) : customers.map((c) => (
                 <tr key={c.id}>
                   <Cell col={COLUMNS[0]}>
                     <Link href={`/sales/customers/${c.id}`} className={`${styles.nameCell} table-link`} title={c.name}>{c.name}</Link>
@@ -200,9 +189,9 @@ export default function CustomersPage() {
             </tbody>
           </table>
         </div>
-        {!loading && filtered.length > 0 && (
+        {!loading && total > 0 && (
           <Pagination
-            total={filtered.length}
+            total={total}
             page={page}
             showAll={showAll}
             onPage={setPage}

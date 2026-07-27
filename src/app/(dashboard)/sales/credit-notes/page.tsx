@@ -4,10 +4,10 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { MonthYearFilter } from "@/components/ui/MonthYearFilter";
-import { matchesMonthYear, yearsFromDates } from "@/lib/dateFilter";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
@@ -28,9 +28,22 @@ interface CreditNote {
   date: string;
   createdAt: string;
   subtotal: number; cgst: number; sgst: number; igst: number; total: number;
-  items: { id: string; name: string; quantity: number }[];
+  _count: { items: number };
   invoiceId: string;
   invoice: { invoiceNumber: string; customer: { name: string } };
+}
+
+interface CreditNoteListResponse {
+  data: CreditNote[];
+  total: number;
+}
+
+interface CreditNoteStats {
+  totalCreditNotes: number;
+  totalCredited: number;
+  periodCount: number;
+  periodCredited: number;
+  availableYears: number[];
 }
 
 interface BusinessSettings {
@@ -47,30 +60,6 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "customer_az", label: "Customer (A–Z)" },
   { value: "customer_za", label: "Customer (Z–A)" },
 ];
-
-// `date` is a calendar-date picked on the return form (no meaningful time —
-// it always lands on the same midnight), so two credit notes recorded on the
-// same date sort as ties on `date` alone. `createdAt` carries the real
-// creation instant, so it breaks those ties and keeps same-day notes ordered
-// by when they were actually recorded.
-function compareByDateThenCreatedAt(a: CreditNote, b: CreditNote): number {
-  const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
-  if (dateDiff !== 0) return dateDiff;
-  return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-}
-
-function sortCreditNotes(list: CreditNote[], sort: SortOption): CreditNote[] {
-  const arr = [...list];
-  switch (sort) {
-    case "oldest":      return arr.sort((a, b) => compareByDateThenCreatedAt(a, b));
-    case "amount_high": return arr.sort((a, b) => b.total - a.total);
-    case "amount_low":  return arr.sort((a, b) => a.total - b.total);
-    case "customer_az": return arr.sort((a, b) => (a.invoice?.customer?.name ?? "").localeCompare(b.invoice?.customer?.name ?? ""));
-    case "customer_za": return arr.sort((a, b) => (b.invoice?.customer?.name ?? "").localeCompare(a.invoice?.customer?.name ?? ""));
-    case "newest":
-    default:            return arr.sort((a, b) => compareByDateThenCreatedAt(b, a));
-  }
-}
 
 const COLUMNS: Column[] = [
   { label: "Date",            mobile: "label" },
@@ -89,9 +78,7 @@ export default function CreditNotesPage() {
   const isAdmin = session?.user?.role === "admin";
   const toast = useToast();
 
-  const { data, loading } = useFetch<CreditNote[]>("/api/credit-notes");
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
-  const creditNotes = data ?? [];
   const [exportingCsv, setExportingCsv] = useState(false);
   const [search, setSearch] = useState("");
   const [month, setMonth] = useState("");
@@ -111,43 +98,49 @@ export default function CreditNotesPage() {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewNote, setPdfPreviewNote] = useState<{ number: string; customer: string } | null>(null);
 
-  const periodScoped = (month || year) ? creditNotes.filter((c) => matchesMonthYear(c.date, month, year)) : creditNotes;
-  const availableYears = yearsFromDates(creditNotes.map((c) => c.date));
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const pageSize = showAll ? 5000 : PAGE_SIZE;
 
-  const filtered = periodScoped.filter((c) => {
-    const q = search.toLowerCase();
-    if (!q) return true;
-    const dateText = new Date(c.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toLowerCase();
-    const timeText = new Date(c.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }).toLowerCase();
-    return (
-      (c.invoice?.customer?.name ?? "").toLowerCase().includes(q) ||
-      (c.invoice?.invoiceNumber ?? "").toLowerCase().includes(q) ||
-      (c.creditNoteNumber ?? "").toLowerCase().includes(q) ||
-      dateText.includes(q) ||
-      timeText.includes(q)
-    );
-  });
+  const listParams = new URLSearchParams();
+  if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
+  if (month) listParams.set("month", month);
+  if (year) listParams.set("year", year);
+  listParams.set("sort", sort);
+  listParams.set("page", String(page));
+  listParams.set("pageSize", String(pageSize));
+  const apiUrl = `/api/credit-notes?${listParams.toString()}`;
 
-  const sorted = sortCreditNotes(filtered, sort);
-  const { visible } = usePagination(sorted, page, showAll);
+  const statsParams = new URLSearchParams();
+  if (month) statsParams.set("month", month);
+  if (year) statsParams.set("year", year);
+  const statsUrl = `/api/credit-notes/stats?${statsParams.toString()}`;
+
+  const { data, loading } = useFetch<CreditNoteListResponse>(apiUrl);
+  const { data: stats } = useFetch<CreditNoteStats>(statsUrl);
+  const creditNotes = data?.data ?? [];
+  const total = data?.total ?? 0;
+
+  const totalCreditNotes = stats?.totalCreditNotes ?? 0;
+  const totalCredited    = stats?.totalCredited ?? 0;
+  const periodCount       = stats?.periodCount ?? 0;
+  const periodCredited    = stats?.periodCredited ?? 0;
+  const availableYears    = stats?.availableYears ?? [];
+
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
-
-  const totalCredited = creditNotes.reduce((s, c) => s + c.total, 0);
-  const now = new Date();
-  const thisMonthNotes = creditNotes.filter((c) => {
-    const d = new Date(c.date);
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-  });
-  const thisMonthCredited = thisMonthNotes.reduce((s, c) => s + c.total, 0);
 
   async function exportCsv() {
     setExportingCsv(true);
     try {
+      const exportParams = new URLSearchParams(listParams);
+      exportParams.set("page", "1");
+      exportParams.set("pageSize", "5000");
+      const res = await fetch(`/api/credit-notes?${exportParams.toString()}`);
+      const exportData: CreditNoteListResponse = await res.json();
       await downloadXlsx(
         "credit-notes.xlsx",
         "Credit Notes",
         ["Date", "Time", "Credit Note No.", "Customer", "Invoice", "Taxable Value", "CGST", "SGST", "IGST", "Total"],
-        sorted.map(c => [
+        exportData.data.map(c => [
           new Date(c.date).toLocaleDateString("en-IN"),
           new Date(c.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
           c.creditNoteNumber ?? "—", c.invoice.customer.name, c.invoice.invoiceNumber,
@@ -276,21 +269,21 @@ export default function CreditNotesPage() {
           <div>
             <h1 className="page-title">Credit Notes</h1>
             <p className="page-sub">
-              {loading ? "Loading…" : `${creditNotes.length} credit note(s)`}
+              {loading ? "Loading…" : `${total} credit note${total === 1 ? "" : "s"}`}
             </p>
           </div>
         </div>
 
         {/* Dashboard cards */}
-        {(loading || creditNotes.length > 0) && (
+        {(loading || totalCreditNotes > 0 || total > 0) && (
           <StatCardsRow
             sectionIndex={0}
             loading={loading}
             cards={[
-              { label: "Total Credit Notes", value: String(creditNotes.length),        tone: "default" },
+              { label: "Total Credit Notes", value: String(totalCreditNotes),           tone: "default" },
               { label: "Total Credited",     value: `₹${fmt(totalCredited)}`,          tone: "warning" },
-              { label: "This Month",         value: String(thisMonthNotes.length),     tone: "default" },
-              { label: "Credited This Month", value: `₹${fmt(thisMonthCredited)}`,      tone: "warning" },
+              { label: month || year ? "Notes This Period" : "This Month", value: String(periodCount), tone: "default" },
+              { label: month || year ? "Credited This Period" : "Credited This Month", value: `₹${fmt(periodCredited)}`, tone: "warning" },
             ]}
           />
         )}
@@ -316,11 +309,11 @@ export default function CreditNotesPage() {
               />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-              {!loading && isAdmin && creditNotes.length > 0 && (
+              {!loading && isAdmin && total > 0 && (
                 <Button variant="secondary" size="sm" loading={exportingCsv} onClick={exportCsv}>Export Excel</Button>
               )}
               {!loading && (
-                <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
+                <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
               )}
             </div>
           </div>
@@ -334,11 +327,11 @@ export default function CreditNotesPage() {
               <tbody>
                 {loading ? (
                   <TableSkeleton cols={COLUMNS.length} />
-                ) : filtered.length === 0 ? (
+                ) : creditNotes.length === 0 ? (
                   <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                     {search ? "No credit notes match your search." : (month || year) ? "No credit notes found for this period." : "No credit notes recorded yet."}
                   </td></tr>
-                ) : visible.map((c) => (
+                ) : creditNotes.map((c) => (
                   <tr key={c.id}>
                     <Cell col={COLUMNS[0]} className={styles.dateCell}>
                       {new Date(c.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
@@ -353,7 +346,7 @@ export default function CreditNotesPage() {
                         {c.invoice?.invoiceNumber}
                       </Link>
                     </Cell>
-                    <Cell col={COLUMNS[4]}>{c.items.length} item{c.items.length !== 1 ? "s" : ""}</Cell>
+                    <Cell col={COLUMNS[4]}>{c._count.items} item{c._count.items !== 1 ? "s" : ""}</Cell>
                     <Cell col={COLUMNS[5]} className={styles.amountCell}>₹{fmt(c.total)}</Cell>
                     <Cell col={COLUMNS[6]}>
                       <div className="table-actions">
@@ -376,9 +369,9 @@ export default function CreditNotesPage() {
               </tbody>
             </table>
           </div>
-          {!loading && filtered.length > 0 && (
+          {!loading && total > 0 && (
             <Pagination
-              total={filtered.length}
+              total={total}
               page={page}
               showAll={showAll}
               onPage={setPage}

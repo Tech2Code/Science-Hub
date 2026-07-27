@@ -1,6 +1,6 @@
 @AGENTS.md
 
-<!-- AUTO-MAINTAINED PROJECT CONTINUITY DOCUMENT — updated 2026-07-10 -->
+<!-- AUTO-MAINTAINED PROJECT CONTINUITY DOCUMENT — updated 2026-07-27 -->
 
 # Project Overview
 
@@ -76,17 +76,21 @@ src/
       products/route.ts, [id]/route.ts
       vendors/route.ts, [id]/route.ts
       invoices/
-        route.ts                        # GET list / POST create (SH-YYYY-0001)
+        route.ts                        # GET list (paginated/searchable/sortable, {data,total}) / POST create (SH-YYYY-0001)
+        stats/route.ts                  # GET — summary totals over ALL matching invoices, independent of the list route's current page
         [id]/route.ts                   # GET/PUT/DELETE
         [id]/payment/route.ts, [id]/payment/[paymentId]/route.ts
         [id]/returns/route.ts           # GET/POST — returns capped by paid amount
       purchase-bills/
-        route.ts                        # GET list / POST create (PB-YYYY-0001)
+        route.ts                        # GET list (paginated/searchable/sortable, {data,total}) / POST create (PB-YYYY-0001)
+        stats/route.ts                  # GET — summary totals (total/paid/pending, overdue count, available years) over ALL matching bills
         [id]/route.ts                   # GET/PUT/DELETE
         [id]/payment/route.ts
-        payments/route.ts               # GET — all purchase payments
+        payments/route.ts               # GET — all purchase payments (paginated)
+        payments/stats/route.ts         # GET — total/count summary over ALL matching purchase payments
         upload/route.ts                 # POST/DELETE — Vercel Blob attachment (magic-byte validated)
-      payments/route.ts                 # GET — all sales payments
+      payments/route.ts                 # GET — all sales payments (paginated)
+      payments/stats/route.ts           # GET — total/count summary over ALL matching payments, independent of the list route's current page
       reports/route.ts                  # GET ?type=summary|outstanding|stock|sales-dashboard|purchase-dashboard|combined-dashboard|gst-summary
       purchase-reports/route.ts         # GET ?type=summary|outstanding|category|stock-ledger
       search/route.ts                   # GET ?q= — global search, 7 entity types
@@ -123,13 +127,17 @@ src/
     loading.tsx            # Full-screen loading component
     useCache.ts            # useFetch(url) — shared in-memory cache, subscriber map, mutate()/bustCache()
     useDirty.ts            # useDirty(values) — tracks form dirty state for Save button gating
+    useDebouncedValue.ts   # useDebouncedValue(value, delayMs) — debounces a list page's search input before it hits the API
+    listQuery.ts           # parsePageParams(searchParams, maxPageSize?) + monthYearToDateRange(month, year) — shared page/pageSize clamping and date-range parsing for every paginated list route
+    brandQuery.ts, categoryQuery.ts, creditNoteQuery.ts, paymentQuery.ts, purchaseBillQuery.ts, purchasePaymentQuery.ts, vendorQuery.ts
+                           # Per-entity buildXWhere()/buildXOrderBy() pairs — the list route and its companion /stats route both import the same builder so filter/sort semantics can't drift between them
   types/next-auth.d.ts
 prisma/schema.prisma, seed.ts
 ```
 
 **Not shown in the tree above but real, current features** (the tree predates them — treat this list as authoritative until the tree itself is redrawn):
 - Pages: `admin/permissions/page.tsx` (+ `PermissionManager.tsx`) — section-permission grant grid; `sales/credit-notes/page.tsx` — list of all credit notes (`Return` rows); `reports/gst-reports/page.tsx` — GST filing package generator/downloader.
-- API routes: `admin/permissions/route.ts` (GET/POST section grants), `credit-notes/route.ts` (GET all), `gst-filing/route.ts` (GET JSON or `?format=zip`, gated by `requireGstFilingAccess()` — admin or both `reports_sales`+`reports_purchases`), `settings/branding/route.ts` (GET, deliberately public — name/tagline/logo shown on the unauthenticated login page), `settings/logo/route.ts` (POST/DELETE, admin-only, magic-byte validated upload to Vercel Blob), `stock-movements/route.ts` (DELETE `?type=stock-ledger`, admin-only bulk-clear of ledger history — does not touch current stock), `export-xlsx/route.ts` (POST, generic rows→Excel export shared by Credit Notes/Sales/Purchase reports), `products/[id]/adjust-stock/route.ts` (POST, manual stock-adjustment — see Features Completed).
+- API routes: `admin/permissions/route.ts` (GET/POST section grants), `credit-notes/route.ts` (GET all, paginated/searchable), `credit-notes/stats/route.ts` (GET — summary totals over ALL matching credit notes), `products/stats/route.ts` (GET — stock/value summary over ALL matching products, independent of the list route's current page), `gst-filing/route.ts` (GET JSON or `?format=zip`, gated by `requireGstFilingAccess()` — admin or both `reports_sales`+`reports_purchases`), `settings/branding/route.ts` (GET, deliberately public — name/tagline/logo shown on the unauthenticated login page), `settings/logo/route.ts` (POST/DELETE, admin-only, magic-byte validated upload to Vercel Blob), `stock-movements/route.ts` (DELETE `?type=stock-ledger`, admin-only bulk-clear of ledger history — does not touch current stock), `export-xlsx/route.ts` (POST, generic rows→Excel export shared by Credit Notes/Sales/Purchase reports), `products/[id]/adjust-stock/route.ts` (POST, manual stock-adjustment — see Features Completed).
 - Lib: `sections.ts` (the six `ProtectedSection` keys + `ROUTE_SECTION_MAP`), `useCanWrite.ts` (client-side `role !== "manager"` check), `businessBranding.tsx` (`BrandingProvider`/`useBranding()`), `gstFiling.ts`/`gstFilingZip.ts` (builds the filing report/ZIP), `stockStatus.ts` (single shared `isOutOfStock`/`isLowStock`/`needsRestock` definition — use this instead of re-deriving the comparison inline), `gstLocation.ts` (`deriveIsInterState()` — server-side inter-state/intra-state derivation from place-of-supply vs. business state, used by both invoice create and edit instead of trusting the client's flag).
 
 **Note on routing**: pages were reorganized under `sales/` and `purchases/` groups (invoices/customers/payments → `sales/*`; vendors/bills/payments → `purchases/*`), but the **API routes were not renamed** — `/api/invoices`, `/api/customers`, `/api/payments`, `/api/vendors`, `/api/purchase-bills` all stay at their original top-level paths. Only the UI routing changed.
@@ -176,6 +184,8 @@ Browser → useFetch("/api/...") → API Route Handler → Prisma → Neon DB
 
 `revalidateTag(tag, { expire: 0 })` must be called after every mutation. Tags: `"invoices"`, `"customers"`, `"products"`, `"vendors"`, `"purchase-bills"`, `"reports"`. Reports are also busted on invoice/product/purchase-bill mutations since they aggregate that data.
 
+A `/stats` route has its own client-side cache key (`useFetch` caches by full URL, and a stats URL's query string differs from its list route's) — a list page that mutates data must call **both** `mutate()` (the list) and its stats hook's own `mutate()` (e.g. `mutateStats()`) after a write, or the stat cards go stale even though the list refreshes. See `sales/invoices/page.tsx` for the reference pattern (`Promise.all([mutate(), mutateStats()])`).
+
 ---
 
 ## Rules — Do Not
@@ -187,6 +197,8 @@ Browser → useFetch("/api/...") → API Route Handler → Prisma → Neon DB
 - **Do not** import from `src/lib/db.ts` or `src/lib/prisma.ts` in any client component — server-only modules.
 - **Do not** create a mutation route handler (POST/PUT/DELETE) without calling `revalidateTag` — lists will show stale data.
 - **Do not** change the invoice number format `SH-{YYYY}-{0001}` — it appears on printed invoices.
+- **Do not** hand-roll `where`/`orderBy`/pagination logic in a list route handler when a `*Query.ts` helper already exists for that entity (`brandQuery.ts`, `categoryQuery.ts`, `creditNoteQuery.ts`, `paymentQuery.ts`, `purchaseBillQuery.ts`, `purchasePaymentQuery.ts`, `vendorQuery.ts`, or `getInvoices()`/`getProducts()` in `db.ts`) — the matching `/stats` route imports the same builder, so a route-local reimplementation will drift and make the stat cards disagree with the list.
+- **Do not** write to `Invoice.balanceDue`, `PurchaseBill.balanceDue`, or `Product.isLowStock` from application code — they're real Postgres `GENERATED ALWAYS AS (...) STORED` columns computed by the database itself, not plain defaulted columns.
 - **Do not** remove the `postinstall` script from package.json — it generates the Prisma client on Vercel.
 - **Do not** mutate stock without going through `batchAdjustStock()` in the same transaction — the ledger must stay authoritative. Use the most specific `StockMovementType` for the action (see `stockMovement.ts`), not a generic catch-all.
 - **Do not** accept or delete arbitrary blob URLs for purchase-bill attachments or the business logo — always go through `isPurchaseBillBlobUrl()`/`isLogoBlobUrl()` + `deleteAttachmentBlob()` in `blobStorage.ts`.
@@ -211,14 +223,14 @@ Browser → useFetch("/api/...") → API Route Handler → Prisma → Neon DB
 - **Customer** — id, name, phone?, email?, address?, city?, state?, pincode?, gstin?, deletedAt?
 - **Category** — id, name(unique), deletedAt?
 - **Brand** — id, name(unique), deletedAt?
-- **Product** — id, name, description?, sku?(unique), barcode?, hsn?, unit(default "Nos"), price, purchasePrice?, gstRate(default 18), stock, minStock(default 5), maxStock?, reorderLevel?, categoryId?, brandId?, isActive(default true), deletedAt?
-- **Invoice** — invoiceNumber(unique, `SH-YYYY-0001`), date, dueDate?, customerId, userId, status(unpaid/partial/paid), subtotal, cgst, sgst, igst, total, paidAmount, notes?, isInterState, **placeOfSupply** String?, **reverseCharge** Boolean(default false), deletedAt?
+- **Product** — id, name, description?, sku?(unique), barcode?, hsn?, unit(default "Nos"), price, purchasePrice?, gstRate(default 18), stock, minStock(default 5), maxStock?, reorderLevel?, categoryId?, brandId?, isActive(default true), deletedAt?, **isLowStock** Boolean — real Postgres `GENERATED ALWAYS AS ("stock" > 0 AND "stock" <= "minStock") STORED` column, mirrors `src/lib/stockStatus.ts`'s `isLowStock()`; never write to it from app code
+- **Invoice** — invoiceNumber(unique, `SH-YYYY-0001`), date, dueDate?, customerId, userId, status(unpaid/partial/paid), subtotal, cgst, sgst, igst, total, paidAmount, notes?, isInterState, **placeOfSupply** String?, **reverseCharge** Boolean(default false), deletedAt?, **balanceDue** Float — real Postgres `GENERATED ALWAYS AS ("total" - "paidAmount") STORED` column, lets the invoices list sort server-side by outstanding balance; never write to it from app code
 - **InvoiceItem** — invoiceId, productId, name, hsn(default ""), quantity, unit, price, discountPercent(default 0), discountAmount(default 0), gstRate, gstAmount, total
 - **Payment** — invoiceId, amount, method(default "cash"), reference?, date, notes?
 - **Return** / **ReturnItem** — invoice returns, i.e. **credit notes**; `Return.creditNoteNumber` (unique, nullable, `CN-YYYY-0001`) is the credit note's own auto-number; restores stock, capped by the invoice's paid amount and remaining returnable quantity
 - **BusinessSettings** — singleton row `id="singleton"`: name, tagline, email(printed), phone, address, city, state, pincode, gstin, **pan**, gmailUser, gmailAppPassword(encrypted), **bankName, bankAccountName, bankAccountNumber**(encrypted)**, bankIfsc, bankBranch**, **termsAndConditions**, updatedAt
 - **Vendor** — id, name, company?, gstin?, phone?, email?, address?, notes?, isActive(default true), deletedAt?
-- **PurchaseBill** — billNumber(unique, `PB-YYYY-0001`), vendorId, billDate, dueDate?, subtotal, taxAmount, discount, total, paidAmount, status(unpaid/partial/paid/cancelled), notes?, attachmentUrl?/attachmentName?(Vercel Blob), category?, createdByUserId, deletedAt? (indexes: vendorId, status, billDate)
+- **PurchaseBill** — billNumber(unique, `PB-YYYY-0001`), vendorId, billDate, dueDate?, subtotal, taxAmount, discount, total, paidAmount, status(unpaid/partial/paid/cancelled), notes?, attachmentUrl?/attachmentName?(Vercel Blob), category?, createdByUserId, deletedAt?, **balanceDue** Float — real Postgres `GENERATED ALWAYS AS ("total" - "paidAmount") STORED` column, backs the `balance_high` sort option; never write to it from app code (indexes: vendorId, status, billDate)
 - **PurchaseBillItem** — purchaseBillId, productId?, name, quantity, unit(default "Nos"), purchasePrice, gstRate(default 0), gstAmount(default 0), total
 - **PurchasePayment** — purchaseBillId, amount, method(default "cash"), reference?, date, notes? (index: purchaseBillId)
 - **StockMovement** — productId?(nullable, `onDelete: SetNull`), **productName**(snapshot, default ""), type — specific values only, see `StockMovementType` in `src/lib/stockMovement.ts` (`sale`, `sale_edit_reverse`, `sale_edit_apply`, `sale_delete_restore`, `sale_bin_restore`, `purchase`, `purchase_edit_reverse`, `purchase_edit_apply`, `purchase_cancel`, `purchase_uncancel`, `purchase_delete_restore`, `purchase_bin_restore`, `return`, `return_delete_reverse`, `return_bin_restore`, `manual` — **no generic `"adjustment"` type**), documentType(invoice/purchase_bill/credit_note/manual), quantity(signed), balanceAfter, reference?, notes?, purchaseBillId?, createdByUserId?, createdAt (indexes: productId+createdAt, createdAt, documentType)
@@ -231,35 +243,41 @@ Browser → useFetch("/api/...") → API Route Handler → Prisma → Neon DB
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET/POST | `/api/invoices` | List invoices (`?status`, `?customerId`) / create invoice — auto-numbers `SH-YYYY-0001`, requires `placeOfSupply`, optional inline customer creation, decrements stock + records `StockMovement` |
+| GET/POST | `/api/invoices` | List invoices — paginated/searchable/sortable (`?status`, `?customerId`, `?search`, `?sort`, `?month`, `?year`, `?page`, `?pageSize`), returns `{data, total}` / create invoice — auto-numbers `SH-YYYY-0001`, requires `placeOfSupply`, optional inline customer creation, decrements stock + records `StockMovement` |
+| GET | `/api/invoices/stats` | Summary totals (outstanding/paid/etc.) over ALL invoices matching the same filters as the list route, independent of its current page |
 | GET/PUT/DELETE | `/api/invoices/[id]` | Get / full edit (reverses+reapplies stock, re-validates returned-qty floor) / soft-delete (restores stock, double-delete safe) |
 | GET/POST | `/api/invoices/[id]/returns` | List returns for an invoice / create a return (credit note, `CN-YYYY-0001`) — validated against paid amount and remaining returnable qty inside a Serializable tx; restores stock |
 | DELETE | `/api/invoices/[id]/returns/[returnId]` | Soft-delete a credit note; reverses its stock effect |
-| GET | `/api/credit-notes` | All credit notes (non-deleted `Return` rows) across every invoice |
+| GET | `/api/credit-notes` | Credit notes (non-deleted `Return` rows) across every invoice — paginated/searchable (`buildCreditNoteWhere`/`buildCreditNoteOrderBy` from `creditNoteQuery.ts`), returns `{data, total}` |
+| GET | `/api/credit-notes/stats` | Summary totals over ALL matching credit notes, independent of the list route's current page |
 | POST | `/api/invoices/[id]/payment` | Record a payment, recompute `paidAmount`/status |
 | PUT | `/api/invoices/[id]/payment/[paymentId]` | Edit an existing payment, recompute invoice status |
 | GET/POST | `/api/customers` | List customers (with `createdBy`) / create customer |
 | GET/PUT/DELETE | `/api/customers/[id]` | Get / edit (blocked if in bin) / soft-delete (blocked if active invoices exist) |
-| GET/POST | `/api/products` | List (`?search`) with `createdBy` / create product |
+| GET/POST | `/api/products` | List — paginated/searchable/sortable (`?search`, `?stockFilter`, `?sort`, `?page`, `?pageSize`, via `getProducts()` in `db.ts`), returns `{data, total}`, each row with `createdBy` / create product |
+| GET | `/api/products/stats` | Stock/value summary over ALL matching products, independent of the list route's current page |
 | GET/PUT/DELETE | `/api/products/[id]` | Get (incl. last 15 stock movements) / edit / soft-delete (blocked if used in invoice **or active purchase-bill** line items) |
 | POST | `/api/products/[id]/adjust-stock` | Manual stock correction after a physical count — requires a `notes` reason, writes a `"manual"` ledger row |
-| GET/POST | `/api/brands` | List (product counts, `createdBy`) / create brand |
+| GET/POST | `/api/brands` | List — paginated/searchable (`brandQuery.ts`), returns `{data, total}` (product counts, `createdBy`) / create brand |
 | GET/DELETE | `/api/brands/[id]` | Detail (assigned products) / soft-delete (blocked if products assigned or used in invoices) |
-| GET/POST | `/api/categories` | List (product counts) / create category |
+| GET/POST | `/api/categories` | List — paginated/searchable (`categoryQuery.ts`), returns `{data, total}` (product counts) / create category |
 | GET/PUT/DELETE | `/api/categories/[id]` | Detail / rename / soft-delete (same blocking rules as brands) |
-| GET/POST | `/api/vendors` | List (active bill counts) / create vendor (requires phone+address) |
+| GET/POST | `/api/vendors` | List — paginated/searchable (`vendorQuery.ts`), returns `{data, total}` (active bill counts) / create vendor (requires phone+address) |
 | GET/PUT/DELETE | `/api/vendors/[id]` | Detail (purchase bills) / edit / soft-delete (blocked if active bills exist) |
-| GET/POST | `/api/purchase-bills` | List (`?status`, `?vendorId`) / create — auto-numbers `PB-YYYY-0001`, server recomputes GST/totals, increments stock, optional inline payment |
+| GET/POST | `/api/purchase-bills` | List — paginated/searchable/sortable (`?status` incl. synthetic `overdue`, `?vendorId`, `?search`, `?sort` — `newest/oldest/vendor_az/vendor_za/amount_high/amount_low/balance_high`, `?month`, `?year`, `?page`, `?pageSize`, via `purchaseBillQuery.ts`), returns `{data, total}` / create — auto-numbers `PB-YYYY-0001`, server recomputes GST/totals, increments stock, optional inline payment |
+| GET | `/api/purchase-bills/stats` | Summary totals (total/paid/pending, overdue count, available years) over ALL matching bills, independent of the list route's current page |
 | GET/PUT/DELETE | `/api/purchase-bills/[id]` | Get / edit (reverses+reapplies stock; handles cancel/un-cancel; blocks item edits on paid/cancelled bills) / soft-delete (reverses stock, double-delete safe) |
 | POST | `/api/purchase-bills/[id]/payment` | Record a payment, recompute status |
-| GET | `/api/purchase-bills/payments` | All purchase payments |
+| GET | `/api/purchase-bills/payments` | Purchase payments — paginated (`purchasePaymentQuery.ts`), returns `{data, total}` |
+| GET | `/api/purchase-bills/payments/stats` | Total/count summary over ALL matching purchase payments, independent of the list route's current page |
 | POST/DELETE | `/api/purchase-bills/upload` | Upload attachment to Vercel Blob (size/MIME/magic-byte validated) / delete an orphaned never-attached upload |
 | GET | `/api/purchase-reports` | `?type=summary\|outstanding\|category\|stock-ledger` — `summary`/`category` exclude cancelled bills from spend totals; `stock-ledger` returns the entire ledger (not purchase-only, despite the route name) |
 | GET | `/api/reports` | `?type=summary\|outstanding\|stock\|sales-dashboard\|purchase-dashboard\|combined-dashboard\|gst-summary` — `purchase-dashboard`'s Top Vendors, and monthly spend/paid aggregates, exclude cancelled bills |
 | GET | `/api/gst-filing` | GSTR-style filing package (Sales/Purchase Register, B2B/B2C split, Credit Notes, HSN Summary) for a date range — JSON, or `?format=zip`. Gated by `requireGstFilingAccess()`: admin, or both `reports_sales`+`reports_purchases` sections |
 | POST | `/api/export-xlsx` | Generic rows→`.xlsx` export shared by Credit Notes / Sales Reports / Purchase Reports (capped 20,000 rows / 50 cols) |
 | DELETE | `/api/stock-movements?type=stock-ledger` | Admin-only bulk-clear of ledger history rows — does not change current `Product.stock` |
-| GET | `/api/payments` | All sales payments |
+| GET | `/api/payments` | Sales payments — paginated (`paymentQuery.ts`), returns `{data, total}` |
+| GET | `/api/payments/stats` | Total/count summary over ALL matching sales payments, independent of the list route's current page |
 | GET | `/api/search` | Global search (`?q=`) across invoices/customers/products/vendors/purchase bills/brands/categories, 5 results per group |
 | GET | `/api/bin` | Auto-purges bin items older than 30 days, then lists remaining across 7 entity types with `daysLeft`/`deletedBy`/`protectedReason` |
 | POST/DELETE | `/api/bin/[type]/[id]` | Restore (re-applies stock, double-restore safe) / permanent-delete (admin-only, per-type FK checks, blob cleanup) |
@@ -312,6 +330,12 @@ Browser → useFetch("/api/...") → API Route Handler → Prisma → Neon DB
 1. Write the Prisma query directly in the GET route handler (the prevailing pattern), or add a plain helper to `src/lib/db.ts` if it belongs alongside the existing invoices/customers/products/reports helpers
 2. Add `revalidateTag(tag, { expire: 0 })` calls to any mutation handlers that affect that data
 
+**Add a new paginated list endpoint** (the established pattern for every list route added since the pagination refactor — invoices, products, brands, categories, vendors, purchase-bills, purchase-bill payments, sales payments, credit notes):
+1. Add a `buildXWhere(filters)` / `buildXOrderBy(sort)` pair to a new or existing `src/lib/xQuery.ts` — never inline the filter/sort logic directly in the route handler, so the list route and its stats route can't drift
+2. In the list `route.ts`, parse query params with `parsePageParams(searchParams, maxPageSize?)` and `monthYearToDateRange(month, year)` from `src/lib/listQuery.ts`, call the builder, and return `{ data, total }` (not a bare array)
+3. Add a companion `stats/route.ts` under the same folder that reuses the *same* `buildXWhere()` to aggregate over every matching row — the list route's current page can no longer produce a correct total once results are paginated
+4. On the client, debounce the search input with `useDebouncedValue()` from `src/lib/useDebouncedValue.ts` before it hits the API
+
 **Add a new page:**
 1. Create `src/app/(dashboard)/<page>/page.tsx` with `"use client"` at top
 2. Use `useFetch("/api/<resource>")` for data, call `mutate()` to refresh after writes
@@ -351,6 +375,9 @@ POST to `/api/setup` with `{ name, email, password }`. Refuses if any user alrea
 - Secrets at rest (Gmail app password, bank account number) are AES-256-GCM encrypted via `src/lib/crypto.ts`, keyed off `NEXTAUTH_SECRET`; legacy unprefixed plaintext values still pass through
 - Purchase-bill attachment uploads validate magic bytes, not just declared MIME type; accepted/deletable blob URLs are allowlisted to the app's own storage path (`blobStorage.ts`)
 - UI routing (`sales/*`, `purchases/*`) was reorganized independently of the API surface — API paths stayed at their original top-level routes
+- List routes (invoices, products, brands, categories, vendors, purchase-bills, purchase-bill payments, sales payments, credit notes) moved from returning every matching row to server-side pagination (`{data, total}`), each with a companion `/stats` route for summary totals — a single page of paginated rows can no longer produce a correct total client-side
+- `Invoice.balanceDue`, `PurchaseBill.balanceDue`, and `Product.isLowStock` are real Postgres `GENERATED ALWAYS AS (...) STORED` columns (not app-computed), so a cross-column comparison/derivation can be filtered/sorted server-side via a plain equality/orderBy instead of needing raw SQL per query
+- `package.json`'s `build` script runs `prisma migrate deploy`, not `prisma db push` — required once real generated columns exist, since `db push`'s schema-diffing permanently conflicts with them (see Known Issues)
 
 ---
 
@@ -384,6 +411,8 @@ POST to `/api/setup` with `{ name, email, password }`. Refuses if any user alrea
 26. **Default-deny API middleware** — `middleware.ts` requires a valid session for all of `/api/**` except an explicit public allowlist, as a safety net alongside each route's own guard
 27. **Unified low-stock definition** — `src/lib/stockStatus.ts` is the single source of truth for "out of stock" vs. "low stock" across the dashboard, reports, and every product list/detail page
 28. **Server-verified inter-state GST** — Invoice create/edit independently derive `isInterState` from place-of-supply vs. the business's own configured state (`src/lib/gstLocation.ts`) rather than trusting the client-supplied flag
+29. **Server-side pagination for list routes** — Invoices, products, brands, categories, vendors, purchase bills, purchase-bill payments, sales payments, and credit notes list routes now accept `search`/`sort`/`page`/`pageSize` (and `month`/`year` where applicable), each backed by a shared per-entity `buildXWhere()`/`buildXOrderBy()` helper (`src/lib/*Query.ts`) plus `parsePageParams()`/`monthYearToDateRange()` (`src/lib/listQuery.ts`); each gained a companion `/stats` route for summary totals independent of the current page, and search inputs debounce via `src/lib/useDebouncedValue.ts`
+30. **DB-generated derived columns** — `Invoice.balanceDue`, `PurchaseBill.balanceDue` (`total - paidAmount`), and `Product.isLowStock` (`stock > 0 AND stock <= minStock`) are real Postgres `GENERATED ALWAYS AS (...) STORED` columns, letting a cross-column comparison be filtered/sorted server-side; required switching the `build` script from `prisma db push` to `prisma migrate deploy` (see Known Issues)
 
 ---
 
@@ -405,7 +434,8 @@ Nothing actively in progress — all recent features complete and deployed.
 
 - ~~Theme flicker on initial load~~ — actually already fixed: `src/app/layout.tsx` has a pre-hydration inline script + `suppressHydrationWarning` that sets `.dark`/`--c-accent` before paint. This note was stale; leaving it struck through rather than silently deleting it in case there's a regression to watch for.
 - `src/lib/states.ts` currently only lists `["Delhi", "Haryana", "Uttar Pradesh"]` — the full India state list is commented out in the file
-- After schema changes (`prisma db push`/`migrate dev`), must stop dev server → `npx prisma generate` → restart. The generated client DLL is locked while the server is running.
+- After schema changes (`prisma migrate dev`), must stop dev server → `npx prisma generate` → restart. The generated client DLL is locked while the server is running.
+- `package.json`'s `build` script runs `prisma migrate deploy` (applies committed migration files), not `prisma db push`. `db push` diffs the schema against the live DB and will permanently fail once a real Postgres `GENERATED ALWAYS AS (...) STORED` column exists (`Invoice.balanceDue`, `PurchaseBill.balanceDue`, `Product.isLowStock`) — Prisma's `@default(dbgenerated(...))` can't express a true stored-generated column, so `db push` always sees a false diff and tries to `ALTER COLUMN` a column Postgres won't let it touch. Always add new schema changes via `prisma migrate dev --name ...` (committed migration file), never rely on `db push` in this repo.
 - `payment/[paymentId]` PUT (edit payment) previously had no database transaction, unlike every other money-mutating flow — fixed to use the same Serializable transaction + P2034 retry pattern as payment creation.
 
 ---

@@ -3,7 +3,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
-import { bustCache } from "@/lib/useCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -85,7 +85,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
       const d = await res.json().catch(() => ({}));
       setQuickAddSaving(false);
       if (!res.ok) { toast({ type: "error", title: "Failed", message: d?.error ?? "Could not add product." }); return; }
-      bustCache("/api/products");
+      bustCachePrefix("/api/products");
       setProducts((prev) => [...prev, d]);
       addProduct(d);
       setShowQuickAddProduct(false);

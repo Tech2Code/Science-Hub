@@ -13,10 +13,10 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/Badge";
-import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { MonthYearFilter } from "@/components/ui/MonthYearFilter";
-import { matchesMonthYear, yearsFromDates } from "@/lib/dateFilter";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { StatCardsRow } from "@/components/ui/StatCardsRow";
 import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
 import { animateSection } from "@/lib/animateSection";
@@ -38,15 +38,23 @@ interface PurchaseBill {
   attachmentName: string | null;
   vendor: { id: string; name: string; company: string | null };
   createdBy: { id: string; name: string };
-  items: { name: string; product: { name: string; brand: { name: string } | null; category: { name: string } | null } | null }[];
+}
+
+interface PurchaseBillListResponse {
+  data: PurchaseBill[];
+  total: number;
+}
+
+interface PurchaseBillStats {
+  totalPurchase: number;
+  totalPaid: number;
+  totalPending: number;
+  overdueCount: number;
+  availableYears: number[];
 }
 
 type StatusFilter = "All" | "unpaid" | "partial" | "paid" | "cancelled" | "overdue";
 const STATUS_TABS: StatusFilter[] = ["All", "overdue", "unpaid", "partial", "paid", "cancelled"];
-
-function isOverdue(b: { status: string; dueDate: string | null }): boolean {
-  return b.status !== "paid" && b.status !== "cancelled" && !!b.dueDate && new Date(b.dueDate) < new Date();
-}
 
 type SortOption = "newest" | "oldest" | "vendor_az" | "vendor_za" | "amount_high" | "amount_low" | "balance_high";
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -58,27 +66,6 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "amount_low", label: "Amount (Low–High)" },
   { value: "balance_high", label: "Balance Due (High–Low)" },
 ];
-
-function sortBills(list: PurchaseBill[], sort: SortOption): PurchaseBill[] {
-  const arr = [...list];
-  switch (sort) {
-    case "oldest":
-      return arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    case "vendor_az":
-      return arr.sort((a, b) => a.vendor.name.localeCompare(b.vendor.name));
-    case "vendor_za":
-      return arr.sort((a, b) => b.vendor.name.localeCompare(a.vendor.name));
-    case "amount_high":
-      return arr.sort((a, b) => b.total - a.total);
-    case "amount_low":
-      return arr.sort((a, b) => a.total - b.total);
-    case "balance_high":
-      return arr.sort((a, b) => (b.total - b.paidAmount) - (a.total - a.paidAmount));
-    case "newest":
-    default:
-      return arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }
-}
 
 const COLUMNS: Column[] = [
   { label: "Bill No.",  mobile: "full+label" },
@@ -161,43 +148,35 @@ export default function PurchasesPage() {
     }
   }
 
-  const apiUrl = filter === "All" || filter === "overdue" ? "/api/purchase-bills" : `/api/purchase-bills?status=${filter}`;
-  const { data, loading, patchData } = useFetch<PurchaseBill[]>(apiUrl);
-  const bills = data ?? [];
-  const scoped = filter === "overdue" ? bills.filter(isOverdue) : bills;
-  const periodScoped = (month || year) ? scoped.filter((b) => matchesMonthYear(b.billDate, month, year)) : scoped;
-  const availableYears = yearsFromDates(bills.map((b) => b.billDate));
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const pageSize = showAll ? 2000 : PAGE_SIZE;
 
-  const filtered = search.trim()
-    ? periodScoped.filter(b => {
-        const q = search.toLowerCase();
-        return (
-          b.billNumber.toLowerCase().includes(q) ||
-          b.vendor.name.toLowerCase().includes(q) ||
-          (b.vendor.company ?? "").toLowerCase().includes(q) ||
-          (b.category ?? "").toLowerCase().includes(q) ||
-          b.createdBy.name.toLowerCase().includes(q) ||
-          b.items.some((i) =>
-            i.name.toLowerCase().includes(q) ||
-            i.product?.name?.toLowerCase().includes(q) ||
-            i.product?.brand?.name?.toLowerCase().includes(q) ||
-            i.product?.category?.name?.toLowerCase().includes(q)
-          )
-        );
-      })
-    : periodScoped;
+  const listParams = new URLSearchParams();
+  if (filter !== "All") listParams.set("status", filter);
+  if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
+  if (month) listParams.set("month", month);
+  if (year) listParams.set("year", year);
+  listParams.set("sort", sort);
+  listParams.set("page", String(page));
+  listParams.set("pageSize", String(pageSize));
+  const apiUrl = `/api/purchase-bills?${listParams.toString()}`;
 
-  const sorted = sortBills(filtered, sort);
+  const statsParams = new URLSearchParams();
+  if (filter !== "All") statsParams.set("status", filter);
+  if (month) statsParams.set("month", month);
+  if (year) statsParams.set("year", year);
+  const statsUrl = `/api/purchase-bills/stats?${statsParams.toString()}`;
 
-  const maxPage = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const clampedPage = Math.min(page, maxPage);
-  const { visible } = usePagination(sorted, clampedPage, showAll);
+  const { data, loading, mutate } = useFetch<PurchaseBillListResponse>(apiUrl);
+  const { data: stats, mutate: mutateStats } = useFetch<PurchaseBillStats>(statsUrl);
+  const bills = data?.data ?? [];
+  const total = data?.total ?? 0;
 
-  // Summary stats
-  const totalPurchase = bills.reduce((s, b) => s + b.total, 0);
-  const totalPaid     = bills.reduce((s, b) => s + b.paidAmount, 0);
-  const totalPending  = totalPurchase - totalPaid;
-  const overdue       = bills.filter(b => b.status !== "paid" && b.status !== "cancelled" && b.dueDate && new Date(b.dueDate) < new Date()).length;
+  const totalPurchase = stats?.totalPurchase ?? 0;
+  const totalPaid      = stats?.totalPaid ?? 0;
+  const totalPending   = stats?.totalPending ?? 0;
+  const overdue        = stats?.overdueCount ?? 0;
+  const availableYears = stats?.availableYears ?? [];
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -207,7 +186,7 @@ export default function PurchasesPage() {
       const res = await fetch(`/api/purchase-bills/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
-        patchData((prev) => (prev ?? []).filter((b) => b.id !== target.id));
+        await Promise.all([mutate(), mutateStats()]);
         invalidateCachedPdf("purchase-bill", target.id);
         toast({ type: "success", title: "Bill deleted", message: `${target.billNumber} removed.` });
       } else {
@@ -251,7 +230,7 @@ export default function PurchasesPage() {
         <div>
           <h1 className="page-title">Purchase Bills</h1>
           <p className="page-sub">
-            {loading ? "Loading…" : search.trim() ? `${filtered.length} of ${scoped.length} bills` : `${scoped.length} bills`}
+            {loading ? "Loading…" : `${total} bill${total === 1 ? "" : "s"}`}
           </p>
         </div>
         {canWrite && (<Button variant="primary" href="/purchases/bills/new">
@@ -261,7 +240,7 @@ export default function PurchasesPage() {
       </div>
 
       {/* Dashboard cards */}
-      {(loading || bills.length > 0) && (
+      {(loading || totalPurchase > 0 || total > 0) && (
         <StatCardsRow
           sectionIndex={0}
           loading={loading}
@@ -308,7 +287,7 @@ export default function PurchasesPage() {
             />
           </div>
           {!loading && (
-            <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />
+            <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
@@ -319,11 +298,11 @@ export default function PurchasesPage() {
             <tbody>
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
-              ) : filtered.length === 0 ? (
+              ) : bills.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search.trim() ? `No bills match "${search}".` : (month || year) ? "No purchase bills found for this period." : "No purchase bills yet."}
                 </td></tr>
-              ) : visible.map(b => (
+              ) : bills.map(b => (
                 <tr key={b.id}>
                   <Cell col={COLUMNS[0]}>
                     <a href={`/purchases/bills/${b.id}`} className={styles.billLink}>{b.billNumber}</a>
@@ -409,8 +388,8 @@ export default function PurchasesPage() {
             </tbody>
           </table>
         </div>
-        {!loading && filtered.length > 0 && (
-          <Pagination total={filtered.length} page={clampedPage} showAll={showAll} onPage={setPage} label="bills" />
+        {!loading && total > 0 && (
+          <Pagination total={total} page={page} showAll={showAll} onPage={setPage} label="bills" />
         )}
       </div>
     </div>

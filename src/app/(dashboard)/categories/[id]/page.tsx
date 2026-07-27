@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
-import { fetchCached, bustCache } from "@/lib/useCache";
+import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { isLowStock } from "@/lib/stockStatus";
@@ -60,7 +60,7 @@ export default function CategoryViewPage() {
       setSavingRename(false);
       if (res.ok) {
         setCategory((prev) => (prev ? { ...prev, name } : prev));
-        bustCache("/api/categories");
+        bustCachePrefix("/api/categories");
         setRenaming(false);
         toast({ type: "success", title: "Category renamed", message: `Renamed to "${name}".` });
       } else if (res.status === 409) {
@@ -84,7 +84,7 @@ export default function CategoryViewPage() {
       setDeleting(false);
       setConfirmOpen(false);
       if (res.ok) {
-        bustCache("/api/categories");
+        bustCachePrefix("/api/categories");
         toast({ type: "success", title: "Category deleted", message: `"${category.name}" moved to bin.` });
         router.push("/categories");
       } else {

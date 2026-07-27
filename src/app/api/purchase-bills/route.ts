@@ -11,6 +11,8 @@ import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { purchaseBillLineBreakdown } from "@/lib/purchaseBillForm";
 import { getBusinessSettings } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
+import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
+import { buildBillWhere, buildBillOrderBy, type PurchaseBillSort } from "@/lib/purchaseBillQuery";
 
 const BILL_INCLUDE = {
   vendor: { select: { id: true, name: true, company: true, state: true } },
@@ -29,6 +31,15 @@ const BILL_INCLUDE = {
   payments: { orderBy: { date: "desc" as const } },
 };
 
+// Lighter than BILL_INCLUDE (used by the detail route) — the list page
+// doesn't render payments or item/product/brand/category details, only
+// what's needed to display a row; search now happens in the `where` clause
+// server-side instead of needing those joins back in the response.
+const BILL_LIST_INCLUDE = {
+  vendor: { select: { id: true, name: true, company: true } },
+  createdBy: { select: { id: true, name: true } },
+};
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireSession();
@@ -37,18 +48,17 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const vendorId = searchParams.get("vendorId");
+    const search = searchParams.get("search") ?? undefined;
+    const sort = (searchParams.get("sort") ?? undefined) as PurchaseBillSort | undefined;
+    const dateRange = monthYearToDateRange(searchParams.get("month") ?? "", searchParams.get("year") ?? "");
+    const { skip, take } = parsePageParams(searchParams);
 
-    const bills = await prisma.purchaseBill.findMany({
-      where: {
-        deletedAt: null,
-        ...(status ? { status } : {}),
-        ...(vendorId ? { vendorId } : {}),
-      },
-      include: BILL_INCLUDE,
-      orderBy: { createdAt: "desc" },
-      take: 2000,
-    });
-    return NextResponse.json(bills);
+    const where = buildBillWhere({ status, vendorId, search, dateRange });
+    const [data, total] = await Promise.all([
+      prisma.purchaseBill.findMany({ where, include: BILL_LIST_INCLUDE, orderBy: buildBillOrderBy(sort), skip, take }),
+      prisma.purchaseBill.count({ where }),
+    ]);
+    return NextResponse.json({ data, total });
   } catch {
     return NextResponse.json({ error: "Failed to fetch purchase bills" }, { status: 500 });
   }

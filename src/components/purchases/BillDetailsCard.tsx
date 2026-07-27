@@ -6,7 +6,7 @@ import { Input, Select, Textarea, FormField } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { AttachmentPicker } from "@/components/purchases/AttachmentPicker";
 import { useToast } from "@/components/ui/Toast";
-import { bustCache } from "@/lib/useCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { INDIA_STATES_FULL } from "@/lib/states";
@@ -96,7 +96,7 @@ export function BillDetailsCard({
         onVendorCreated(data);
         onVendorIdChange(data.id);
         setShowVendorCreate(false);
-        bustCache("/api/vendors");
+        bustCachePrefix("/api/vendors");
         toast({ type: "success", title: "Vendor created", message: `${data.name} added and selected.` });
       } else {
         setIvError(data.error ?? "Failed to create vendor.");

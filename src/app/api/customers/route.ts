@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getCustomers } from "@/lib/db";
+import { getCustomers, type CustomerSort } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { validateCustomerInput } from "@/lib/validation";
+import { parsePageParams } from "@/lib/listQuery";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const auth = await requireSession();
     if (!auth.ok) return auth.response;
 
-    const customers = await getCustomers();
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search") ?? undefined;
+    const sort = (searchParams.get("sort") ?? undefined) as CustomerSort | undefined;
+    const { skip, take } = parsePageParams(searchParams, 5000);
+
+    const { data: customers, total } = await getCustomers(search, sort, skip, take);
     const ids = customers.map((c) => c.id);
     const logs = await prisma.activityLog.findMany({
       where: { entityId: { in: ids }, action: "add_customer" },
@@ -19,8 +25,8 @@ export async function GET() {
       orderBy: { createdAt: "asc" },
     });
     const createdByMap = new Map(logs.map((l) => [l.entityId, l.user.name]));
-    const result = customers.map((c) => ({ ...c, createdBy: createdByMap.get(c.id) ?? null }));
-    return NextResponse.json(result);
+    const data = customers.map((c) => ({ ...c, createdBy: createdByMap.get(c.id) ?? null }));
+    return NextResponse.json({ data, total });
   } catch (error) {
     console.error("GET /api/customers error:", error);
     return NextResponse.json({ error: "Failed to fetch customers" }, { status: 500 });

@@ -102,6 +102,12 @@ model Product {
   gstRate           Float              @default(18)
   stock             Int                @default(0)
   minStock          Int                @default(5)
+  // DB-generated (GENERATED ALWAYS AS (stock > 0 AND stock <= "minStock")
+  // STORED) — "low stock" compares two columns of the same row, which a
+  // plain Prisma `where` can't express directly; this lets the products
+  // list filter/count it server-side via a normal boolean equality check.
+  // Mirrors src/lib/stockStatus.ts's isLowStock() definition exactly.
+  isLowStock        Boolean            @default(dbgenerated("(stock > 0 AND stock <= \"minStock\")"))
   maxStock          Int?
   reorderLevel      Int?
   categoryId        String?
@@ -137,6 +143,11 @@ model Invoice {
   total         Float
   roundOff      Float         @default(0)
   paidAmount    Float         @default(0)
+  // DB-generated (GENERATED ALWAYS AS (total - "paidAmount") STORED) — lets
+  // "Balance Due (High-Low)" sort server-side via a normal orderBy instead of
+  // needing raw SQL just for that one sort option. Never written to by the
+  // app; Prisma omits dbgenerated() defaults from INSERT/UPDATE payloads.
+  balanceDue    Float         @default(dbgenerated("(total - \"paidAmount\")"))
   notes         String?
   isInterState  Boolean       @default(false)
   placeOfSupply String?
@@ -289,6 +300,9 @@ model PurchaseBill {
   total           Float
   roundOff        Float             @default(0)
   paidAmount      Float             @default(0)
+  // DB-generated (GENERATED ALWAYS AS (total - "paidAmount") STORED) — see
+  // the matching Invoice.balanceDue field for why this exists.
+  balanceDue      Float             @default(dbgenerated("(total - \"paidAmount\")"))
   status          String            @default("unpaid")   // unpaid | partial | paid | cancelled
   notes           String?
   attachmentUrl   String?

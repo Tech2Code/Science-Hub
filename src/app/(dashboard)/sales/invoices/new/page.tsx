@@ -14,7 +14,7 @@ import { InvoiceOptionsRow } from "@/components/invoices/InvoiceOptionsRow";
 import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
 import { computeInvoiceTotals, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
 import styles from "./new.module.css";
-import { bustCache } from "@/lib/useCache";
+import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate, validateForm, hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -144,10 +144,10 @@ export default function NewInvoicePage() {
     setSaving(false);
     if (res.ok) {
       const d = await res.json();
-      bustCache("/api/invoices");
+      bustCachePrefix("/api/invoices");
       bustCache("/api/reports?type=summary");
       bustCache("/api/reports?type=outstanding");
-      bustCache("/api/products");
+      bustCachePrefix("/api/products");
       toast({ type: "success", title: "Invoice created", message: "Invoice saved successfully." });
       if (d.stockWarnings?.length > 0) {
         toast({ type: "warning", title: "Stock went negative", message: d.stockWarnings.join(", ") });

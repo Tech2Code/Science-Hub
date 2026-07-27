@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
-import { fetchCached, bustCache } from "@/lib/useCache";
+import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { isLowStock } from "@/lib/stockStatus";
@@ -60,7 +60,7 @@ export default function BrandViewPage() {
       setSavingRename(false);
       if (res.ok) {
         setBrand((prev) => (prev ? { ...prev, name } : prev));
-        bustCache("/api/brands");
+        bustCachePrefix("/api/brands");
         setRenaming(false);
         toast({ type: "success", title: "Brand renamed", message: `Renamed to "${name}".` });
       } else if (res.status === 409) {
@@ -84,7 +84,7 @@ export default function BrandViewPage() {
       setDeleting(false);
       setConfirmOpen(false);
       if (res.ok) {
-        bustCache("/api/brands");
+        bustCachePrefix("/api/brands");
         toast({ type: "success", title: "Brand deleted", message: `"${brand.name}" moved to bin.` });
         router.push("/brands");
       } else {

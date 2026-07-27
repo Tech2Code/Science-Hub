@@ -8,7 +8,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { VendorFormFields } from "@/components/vendors/VendorFormFields";
 import { BLANK_VENDOR_FORM, validateVendorForm, normalizeVendorField, type VendorFormData } from "@/lib/vendorForm";
-import { bustCache } from "@/lib/useCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -45,7 +45,7 @@ export default function NewVendorPage() {
     });
     setSaving(false);
     if (res.ok) {
-      bustCache("/api/vendors");
+      bustCachePrefix("/api/vendors");
       toast({ type: "success", title: "Vendor created", message: `"${form.name}" added.` });
       router.push("/purchases/vendors");
     } else {

@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getInvoices, getBusinessSettings } from "@/lib/db";
+import { getInvoices, getBusinessSettings, type InvoiceSort } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
+import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,8 +19,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const customerId = searchParams.get("customerId");
-    const invoices = await getInvoices(status, customerId);
-    return NextResponse.json(invoices);
+    const search = searchParams.get("search") ?? undefined;
+    const sort = (searchParams.get("sort") ?? undefined) as InvoiceSort | undefined;
+    const dateRange = monthYearToDateRange(searchParams.get("month") ?? "", searchParams.get("year") ?? "");
+    const { skip, take } = parsePageParams(searchParams);
+
+    const { data, total } = await getInvoices({ status, customerId, search, dateRange }, sort, skip, take);
+    return NextResponse.json({ data, total });
   } catch (error) {
     console.error("GET /api/invoices error:", error);
     return NextResponse.json({ error: "Failed to fetch invoices" }, { status: 500 });

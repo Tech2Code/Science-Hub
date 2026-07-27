@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { CustomerFormFields } from "@/components/customers/CustomerFormFields";
 import { BLANK_CUSTOMER_FORM, validateCustomerForm, normalizeCustomerField, type CustomerFormData } from "@/lib/customerForm";
-import { bustCache } from "@/lib/useCache";
+import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -61,9 +61,9 @@ export default function EditCustomerPage() {
     });
     setSaving(false);
     if (res.ok) {
-      bustCache("/api/customers");
+      bustCachePrefix("/api/customers");
       bustCache(`/api/customers/${id}`);
-      bustCache("/api/invoices");
+      bustCachePrefix("/api/invoices");
       toast({ type: "success", title: "Customer updated", message: "Changes saved." });
       router.push(`/sales/customers/${id}`);
     }

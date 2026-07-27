@@ -8,7 +8,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { CustomerFormFields } from "@/components/customers/CustomerFormFields";
 import { BLANK_CUSTOMER_FORM, validateCustomerForm, normalizeCustomerField, type CustomerFormData } from "@/lib/customerForm";
-import { bustCache } from "@/lib/useCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -44,7 +44,7 @@ export default function NewCustomerPage() {
     });
     setSaving(false);
     if (res.ok) {
-      bustCache("/api/customers");
+      bustCachePrefix("/api/customers");
       toast({ type: "success", title: "Customer created", message: "New customer added." });
       router.push("/sales/customers");
     } else {

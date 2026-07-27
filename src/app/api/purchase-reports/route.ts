@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSectionAccess } from "@/lib/apiAuth";
+import { parsePageParams } from "@/lib/listQuery";
 
 async function getPurchaseSummary() {
   const now = new Date();
@@ -91,18 +93,41 @@ async function getPurchaseByCategory() {
     .sort((a, b) => b.totalSpend - a.totalSpend);
 }
 
-async function getStockLedger() {
-  const movements = await prisma.stockMovement.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 500,
-    select: {
-      id: true, productId: true, productName: true, type: true, documentType: true, quantity: true,
-      balanceAfter: true, reference: true, notes: true, createdAt: true,
-      purchaseBill: { select: { billNumber: true } },
-    },
-  });
+// Search matches the same fields the stock-ledger tab used to filter
+// client-side: product name, movement type, document type, reference, and
+// the purchase bill number (via the one relation this model carries).
+function buildStockLedgerWhere(search?: string): Prisma.StockMovementWhereInput {
+  if (!search?.trim()) return {};
+  const q = search.trim();
+  return {
+    OR: [
+      { productName: { contains: q, mode: "insensitive" } },
+      { type: { contains: q, mode: "insensitive" } },
+      { documentType: { contains: q, mode: "insensitive" } },
+      { reference: { contains: q, mode: "insensitive" } },
+      { purchaseBill: { billNumber: { contains: q, mode: "insensitive" } } },
+    ],
+  };
+}
 
-  return movements.map((m) => ({
+async function getStockLedger(search: string | undefined, skip: number, take: number) {
+  const where = buildStockLedgerWhere(search);
+  const [movements, total] = await Promise.all([
+    prisma.stockMovement.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      skip,
+      take,
+      select: {
+        id: true, productId: true, productName: true, type: true, documentType: true, quantity: true,
+        balanceAfter: true, reference: true, notes: true, createdAt: true,
+        purchaseBill: { select: { billNumber: true } },
+      },
+    }),
+    prisma.stockMovement.count({ where }),
+  ]);
+
+  const data = movements.map((m) => ({
     id: m.id,
     productId: m.productId,
     productName: m.productName || "(deleted product)",
@@ -115,6 +140,7 @@ async function getStockLedger() {
     billNumber: m.purchaseBill?.billNumber ?? null,
     createdAt: m.createdAt,
   }));
+  return { data, total };
 }
 
 export async function GET(request: NextRequest) {
@@ -136,7 +162,11 @@ export async function GET(request: NextRequest) {
     if (type === "summary")      return NextResponse.json(await getPurchaseSummary());
     if (type === "outstanding")  return NextResponse.json(await getPurchaseOutstanding(startDate, endDate));
     if (type === "category")     return NextResponse.json(await getPurchaseByCategory());
-    if (type === "stock-ledger") return NextResponse.json(await getStockLedger());
+    if (type === "stock-ledger") {
+      const search = searchParams.get("search") ?? undefined;
+      const { skip, take } = parsePageParams(searchParams, 5000);
+      return NextResponse.json(await getStockLedger(search, skip, take));
+    }
 
     return NextResponse.json({ error: `Unknown type: ${type}` }, { status: 400 });
   } catch (error) {

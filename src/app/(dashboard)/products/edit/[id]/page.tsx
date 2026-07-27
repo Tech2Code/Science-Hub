@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ProductFormFields } from "@/components/products/ProductFormFields";
 import { validateProductForm, hasProductFieldErrors, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
-import { bustCache } from "@/lib/useCache";
+import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./productEdit.module.css";
@@ -42,8 +42,8 @@ export default function EditProductPage() {
   useEffect(() => {
     Promise.all([
       fetch(`/api/products/${id}`, { headers: { "x-no-loader": "1" } }).then((r) => r.json()),
-      fetch("/api/brands", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).catch(() => []),
-      fetch("/api/categories", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).catch(() => []),
+      fetch("/api/brands?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => d.data ?? []).catch(() => []),
+      fetch("/api/categories?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => d.data ?? []).catch(() => []),
     ])
       .then(([product, b, c]) => {
         const loaded: ProductFormData = {
@@ -84,7 +84,7 @@ export default function EditProductPage() {
     });
     setSaving(false);
     if (res.ok) {
-      bustCache("/api/products");
+      bustCachePrefix("/api/products");
       bustCache("/api/reports?type=summary");
       bustCache("/api/reports?type=stock");
       toast({ type: "success", title: "Product updated", message: "Changes saved." });

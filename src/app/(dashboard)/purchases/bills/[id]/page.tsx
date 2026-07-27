@@ -11,7 +11,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Sk } from "@/components/ui/Skeleton";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
-import { bustCache } from "@/lib/useCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
@@ -108,7 +108,7 @@ export default function PurchaseBillDetailPage() {
       .catch(() => { setError("Failed to load purchase bill."); setLoading(false); });
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- fetch-on-id-change; load() sets loading/bill state
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch-on-id-change; load() sets loading/bill state
   useEffect(() => { load(); }, [id]);
 
   useEffect(() => {
@@ -156,7 +156,7 @@ export default function PurchaseBillDetailPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        bustCache("/api/purchase-bills");
+        bustCachePrefix("/api/purchase-bills");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Payment recorded", message: `₹${fmt(amount)} via ${payMethod}.` });
         setShowPayForm(false);
@@ -180,8 +180,8 @@ export default function PurchaseBillDetailPage() {
         body: JSON.stringify({ status: "cancelled" }),
       });
       if (res.ok) {
-        bustCache("/api/purchase-bills");
-        bustCache("/api/products");
+        bustCachePrefix("/api/purchase-bills");
+        bustCachePrefix("/api/products");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Bill cancelled", message: "Status updated to cancelled." });
         load();
@@ -201,8 +201,8 @@ export default function PurchaseBillDetailPage() {
     try {
       const res = await fetch(`/api/purchase-bills/${id}`, { method: "DELETE" });
       if (res.ok) {
-        bustCache("/api/purchase-bills");
-        bustCache("/api/products");
+        bustCachePrefix("/api/purchase-bills");
+        bustCachePrefix("/api/products");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Deleted", message: "Purchase bill moved to bin." });
         router.push("/purchases/bills");

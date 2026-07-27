@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import styles from "./view.module.css";
 import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
-import { fetchCached, bustCache } from "@/lib/useCache";
+import { fetchCached, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 
@@ -50,7 +50,7 @@ export default function CustomerViewPage() {
       setDeleting(false);
       setConfirmOpen(false);
       if (res.ok) {
-        bustCache("/api/customers");
+        bustCachePrefix("/api/customers");
         toast({ type: "success", title: "Customer deleted", message: `"${customer.name}" moved to bin.` });
         router.push("/sales/customers");
       } else {

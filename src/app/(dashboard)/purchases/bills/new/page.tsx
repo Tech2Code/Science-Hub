@@ -8,7 +8,7 @@ import { Input, Select, FormField } from "@/components/ui/Input";
 import { rules, validate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
-import { bustCache } from "@/lib/useCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { BillDetailsCard } from "@/components/purchases/BillDetailsCard";
@@ -166,8 +166,8 @@ export default function NewPurchaseBillPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        bustCache("/api/purchase-bills");
-        bustCache("/api/products");
+        bustCachePrefix("/api/purchase-bills");
+        bustCachePrefix("/api/products");
         toast({ type: "success", title: "Bill created", message: `${data.billNumber} saved.` });
         router.push(`/purchases/bills/${data.id}`);
       } else {

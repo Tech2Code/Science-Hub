@@ -4,7 +4,7 @@ import { useState, useCallback, type Dispatch, type SetStateAction } from "react
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
-import { bustCache } from "@/lib/useCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import {
   PURCHASE_BILL_UNITS, PURCHASE_BILL_GST_RATES, PURCHASE_BILL_MARGIN_PRESETS,
@@ -182,7 +182,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
           if (i !== -1) next[i] = { ...next[i], productId: data.id };
           return next;
         });
-        bustCache("/api/products");
+        bustCachePrefix("/api/products");
         toast({ type: "success", title: "Saved to catalog", message: `${data.name} added as a product.` });
       } else {
         toast({ type: "error", title: "Failed", message: data.error ?? "Could not save to catalog." });

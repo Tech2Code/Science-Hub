@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/Input";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
-import { useFetch, bustCache } from "@/lib/useCache";
+import { useFetch, bustCachePrefix } from "@/lib/useCache";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { animateSection } from "@/lib/animateSection";
@@ -26,6 +27,11 @@ interface Category {
   _count: { products: number };
 }
 
+interface CategoryListResponse {
+  data: Category[];
+  total: number;
+}
+
 type SortOption = "name_az" | "name_za" | "products_high" | "products_low" | "newest" | "oldest";
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "newest",        label: "Newest first" },
@@ -35,19 +41,6 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "products_high", label: "Products (High–Low)" },
   { value: "products_low",  label: "Products (Low–High)" },
 ];
-
-function sortCategories(list: Category[], sort: SortOption): Category[] {
-  const arr = [...list];
-  switch (sort) {
-    case "name_za":       return arr.sort((a, b) => b.name.localeCompare(a.name));
-    case "products_high": return arr.sort((a, b) => b._count.products - a._count.products);
-    case "products_low":  return arr.sort((a, b) => a._count.products - b._count.products);
-    case "oldest":        return arr.sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
-    case "newest":        return arr.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
-    case "name_az":
-    default:              return arr.sort((a, b) => a.name.localeCompare(b.name));
-  }
-}
 
 const COLUMNS: Column[] = [
   { label: "#",             mobile: "hide" },
@@ -59,8 +52,6 @@ const COLUMNS: Column[] = [
 export default function CategoriesPage() {
   const canWrite = useCanWrite();
   const router = useRouter();
-  const { data, loading, patchData } = useFetch<Category[]>("/api/categories");
-  const categories = data ?? [];
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
@@ -77,6 +68,20 @@ export default function CategoriesPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const pageSize = showAll ? 5000 : PAGE_SIZE;
+
+  const listParams = new URLSearchParams();
+  if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
+  listParams.set("sort", sort);
+  listParams.set("page", String(page));
+  listParams.set("pageSize", String(pageSize));
+  const apiUrl = `/api/categories?${listParams.toString()}`;
+
+  const { data, loading, mutate } = useFetch<CategoryListResponse>(apiUrl);
+  const categories = data?.data ?? [];
+  const total = data?.total ?? 0;
+
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     const name = newName.trim();
@@ -88,12 +93,8 @@ export default function CategoriesPage() {
       body: JSON.stringify({ name }),
     });
     if (r.ok) {
-      const created = await r.json();
       setNewName("");
-      // The create response doesn't include _count (a brand-new category
-      // always starts at 0 products) — merge it straight into the list
-      // instead of waiting on a full refetch.
-      patchData((prev) => [...(prev ?? []), { ...created, _count: { products: 0 } }]);
+      await mutate();
       toast({ type: "success", title: "Category added", message: `"${name}" added to catalog.` });
     } else {
       const d = await r.json();
@@ -121,11 +122,11 @@ export default function CategoriesPage() {
     setRenaming(false);
     if (r.ok) {
       setEditingId(null);
-      patchData((prev) => (prev ?? []).map((c) => (c.id === id ? { ...c, name } : c)));
+      await mutate();
       toast({ type: "success", title: "Category renamed", message: `Renamed to "${name}".` });
       router.push(`/categories/${id}`);
     } else if (r.status === 409) {
-      bustCache("/api/categories");
+      bustCachePrefix("/api/categories");
       toast({ type: "error", title: "Update conflict", message: d.error ?? "This category was changed by someone else. Please reload and try again." });
     } else {
       toast({ type: "error", title: "Rename failed", message: d.error ?? "Could not rename category." });
@@ -143,7 +144,7 @@ export default function CategoriesPage() {
         setDeleting(false);
         setConfirmState(null);
         if (res.ok) {
-          patchData((prev) => (prev ?? []).filter((c) => c.id !== id));
+          await mutate();
           toast({ type: "success", title: "Category deleted", message: `"${name}" moved to bin.` });
         } else {
           toast({ type: "error", title: "Cannot delete category", message: d.error ?? "Could not delete category." });
@@ -152,19 +153,7 @@ export default function CategoriesPage() {
     });
   }
 
-  const filtered = categories.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const sorted = sortCategories(filtered, sort);
-  const { visible } = usePagination(sorted, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
-
-  useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- clamps page back into range after a delete shrinks the list
-    if (page > totalPages) setPage(totalPages);
-  }, [sorted.length, page]);
 
   return (
     <>
@@ -185,7 +174,7 @@ export default function CategoriesPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Categories</h1>
-          <p className="page-sub">{loading ? "Loading…" : `${categories.length} categories in catalog`}</p>
+          <p className="page-sub">{loading ? "Loading…" : `${total} categories in catalog`}</p>
         </div>
       </div>
 
@@ -224,7 +213,7 @@ export default function CategoriesPage() {
             <SortSelect ariaLabel="Sort categories" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
           {!loading && (
-            <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
+            <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
@@ -237,11 +226,11 @@ export default function CategoriesPage() {
             <tbody>
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
-              ) : filtered.length === 0 ? (
+              ) : categories.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search ? "No categories match your search." : "No categories yet. Add one above."}
                 </td></tr>
-              ) : visible.map((c, i) => (
+              ) : categories.map((c, i) => (
                 <tr key={c.id}>
                   <Cell col={COLUMNS[0]} className={styles.indexCell}>{i + 1}</Cell>
                   <Cell col={COLUMNS[1]}>
@@ -290,9 +279,9 @@ export default function CategoriesPage() {
             </tbody>
           </table>
         </div>
-        {!loading && filtered.length > 0 && (
+        {!loading && total > 0 && (
           <Pagination
-            total={filtered.length}
+            total={total}
             page={page}
             showAll={showAll}
             onPage={setPage}

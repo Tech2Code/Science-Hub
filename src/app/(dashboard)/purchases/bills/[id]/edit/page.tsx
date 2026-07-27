@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { StatusBadge } from "@/components/ui/Badge";
-import { bustCache } from "@/lib/useCache";
+import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { invalidateCachedPdf } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
 import { useDirty } from "@/lib/useDirty";
@@ -245,9 +245,9 @@ export default function EditPurchaseBillPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        bustCache("/api/purchase-bills");
+        bustCachePrefix("/api/purchase-bills");
         bustCache(`/api/purchase-bills/${id}`);
-        bustCache("/api/products");
+        bustCachePrefix("/api/products");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Bill updated", message: "Changes saved successfully." });
         router.push(`/purchases/bills/${id}`);

@@ -7,10 +7,11 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
 import { downloadXlsx } from "@/lib/downloadXlsx";
@@ -117,28 +118,24 @@ export default function PurchaseReportsPage() {
   const { data: summaryData, loading: loadingSummary } = useFetch<SummaryRow[]>("/api/purchase-reports?type=summary");
   const { data: outstandingData, loading: loadingOut } = useFetch<OutstandingBill[]>(`/api/purchase-reports?type=outstanding${dateQuery}`);
   const { data: categoryData, loading: loadingCat } = useFetch<CategoryRow[]>("/api/purchase-reports?type=category");
-  const { data: ledgerData, loading: loadingLedger } = useFetch<LedgerRow[]>("/api/purchase-reports?type=stock-ledger");
 
   const summaryRows = summaryData ?? [];
   const outstanding = outstandingData ?? [];
   const categoryRows = categoryData ?? [];
-  const ledgerRows = ledgerData ?? [];
 
   const [ledgerSearch, setLedgerSearch] = useState("");
-  const filteredLedger = ledgerRows.filter((m) => {
-    const q = ledgerSearch.toLowerCase();
-    if (!q) return true;
-    return (
-      m.productName.toLowerCase().includes(q) ||
-      m.type.toLowerCase().includes(q) ||
-      m.documentType.toLowerCase().includes(q) ||
-      m.reference?.toLowerCase().includes(q) ||
-      m.billNumber?.toLowerCase().includes(q)
-    );
-  });
   const [ledgerPage, setLedgerPage] = useState(1);
   const [ledgerShowAll, setLedgerShowAll] = useState(false);
-  const { visible: visibleLedger } = usePagination(filteredLedger, ledgerPage, ledgerShowAll);
+  const debouncedLedgerSearch = useDebouncedValue(ledgerSearch, 300);
+  const ledgerPageSize = ledgerShowAll ? 5000 : PAGE_SIZE;
+
+  const ledgerParams = new URLSearchParams({ type: "stock-ledger" });
+  if (debouncedLedgerSearch.trim()) ledgerParams.set("search", debouncedLedgerSearch.trim());
+  ledgerParams.set("page", String(ledgerPage));
+  ledgerParams.set("pageSize", String(ledgerPageSize));
+  const { data: ledgerResponse, loading: loadingLedger } = useFetch<{ data: LedgerRow[]; total: number }>(`/api/purchase-reports?${ledgerParams.toString()}`);
+  const filteredLedger = ledgerResponse?.data ?? [];
+  const ledgerTotal = ledgerResponse?.total ?? 0;
 
   const [exportingOutstanding, setExportingOutstanding] = useState(false);
   const [exportingCategory, setExportingCategory] = useState(false);
@@ -184,11 +181,15 @@ export default function PurchaseReportsPage() {
   async function exportLedgerCsv() {
     setExportingLedger(true);
     try {
+      const exportParams = new URLSearchParams({ type: "stock-ledger", page: "1", pageSize: "5000" });
+      if (debouncedLedgerSearch.trim()) exportParams.set("search", debouncedLedgerSearch.trim());
+      const res = await fetch(`/api/purchase-reports?${exportParams.toString()}`);
+      const exportData: { data: LedgerRow[]; total: number } = await res.json();
       await downloadXlsx(
         "stock-movement-ledger.xlsx",
         "Stock Ledger",
         ["Date", "Time", "Product", "Type", "Document", "Quantity", "Balance After", "Reference", "Bill No.", "Notes"],
-        filteredLedger.map(m => [
+        exportData.data.map(m => [
           new Date(m.createdAt).toLocaleDateString("en-IN"),
           new Date(m.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
           m.productId ? m.productName : `${m.productName} (deleted)`,
@@ -451,16 +452,16 @@ export default function PurchaseReportsPage() {
               <div>
                 <h2 className="card-header-title">Stock Movement Ledger</h2>
                 <p className="card-header-sub">
-                  Full history of stock changes (purchase, sale, adjustment, return) — most recent 500. Records for deleted
+                  Full history of stock changes (purchase, sale, adjustment, return). Records for deleted
                   products remain here permanently for audit purposes.
                 </p>
               </div>
               <div className={styles.headerActionsRow}>
-                {!loadingLedger && filteredLedger.length > 0 && (
+                {!loadingLedger && ledgerTotal > 0 && (
                   <Button variant="secondary" size="sm" loading={exportingLedger} onClick={exportLedgerCsv}>Export Excel</Button>
                 )}
                 {!loadingLedger && (
-                  <ShowAllToggle total={filteredLedger.length} showAll={ledgerShowAll} onToggle={() => { setLedgerShowAll((v) => !v); setLedgerPage(1); }} />
+                  <ShowAllToggle total={ledgerTotal} showAll={ledgerShowAll} onToggle={() => { setLedgerShowAll((v) => !v); setLedgerPage(1); }} />
                 )}
               </div>
             </div>
@@ -480,7 +481,7 @@ export default function PurchaseReportsPage() {
                 <tbody>
                   {loadingLedger ? <TableSkeleton cols={LEDGER_COLS.length} /> : filteredLedger.length === 0 ? (
                     <tr><td colSpan={LEDGER_COLS.length} className="table-empty-cell">{ledgerSearch ? "No stock movements match your search." : "No stock movements recorded."}</td></tr>
-                  ) : visibleLedger.map((m) => (
+                  ) : filteredLedger.map((m) => (
                     <tr key={m.id}>
                       <Cell col={LEDGER_COLS[0]} className={styles.textMuted3}>
                         {new Date(m.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
@@ -506,8 +507,8 @@ export default function PurchaseReportsPage() {
                 </tbody>
               </table>
             </div>
-            {!loadingLedger && filteredLedger.length > 0 && (
-              <Pagination total={filteredLedger.length} page={ledgerPage} showAll={ledgerShowAll} onPage={setLedgerPage} label="movements" />
+            {!loadingLedger && ledgerTotal > 0 && (
+              <Pagination total={ledgerTotal} page={ledgerPage} showAll={ledgerShowAll} onPage={setLedgerPage} label="movements" />
             )}
           </>
         )}

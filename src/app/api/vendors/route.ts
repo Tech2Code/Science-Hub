@@ -4,19 +4,31 @@ import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { validateVendorInput } from "@/lib/validation";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
+import { parsePageParams } from "@/lib/listQuery";
+import { buildVendorWhere, buildVendorOrderBy, type VendorSort } from "@/lib/vendorQuery";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const auth = await requireSession();
     if (!auth.ok) return auth.response;
 
-    const vendors = await prisma.vendor.findMany({
-      where: { deletedAt: null },
-      orderBy: { name: "asc" },
-      include: { _count: { select: { purchaseBills: { where: { deletedAt: null } } } } },
-      take: 2000,
-    });
-    return NextResponse.json(vendors);
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search") ?? undefined;
+    const sort = (searchParams.get("sort") ?? undefined) as VendorSort | undefined;
+    const { skip, take } = parsePageParams(searchParams, 2000);
+
+    const where = buildVendorWhere(search);
+    const [data, total] = await Promise.all([
+      prisma.vendor.findMany({
+        where,
+        orderBy: buildVendorOrderBy(sort),
+        skip,
+        take,
+        include: { _count: { select: { purchaseBills: { where: { deletedAt: null } } } } },
+      }),
+      prisma.vendor.count({ where }),
+    ]);
+    return NextResponse.json({ data, total });
   } catch {
     return NextResponse.json({ error: "Failed to fetch vendors" }, { status: 500 });
   }

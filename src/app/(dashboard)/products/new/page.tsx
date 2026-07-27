@@ -8,7 +8,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ProductFormFields } from "@/components/products/ProductFormFields";
 import { validateProductForm, hasProductFieldErrors, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
-import { bustCache } from "@/lib/useCache";
+import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./productNew.module.css";
@@ -34,8 +34,8 @@ export default function NewProductPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch("/api/brands", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then(setBrands).catch(() => {});
-    fetch("/api/categories", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then(setCategories).catch(() => {});
+    fetch("/api/brands?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setBrands(d.data ?? [])).catch(() => {});
+    fetch("/api/categories?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setCategories(d.data ?? [])).catch(() => {});
   }, []);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
@@ -65,7 +65,7 @@ export default function NewProductPage() {
     });
     setSaving(false);
     if (res.ok) {
-      bustCache("/api/products");
+      bustCachePrefix("/api/products");
       bustCache("/api/reports?type=summary");
       bustCache("/api/reports?type=stock");
       toast({ type: "success", title: "Product created", message: "New product added to catalog." });

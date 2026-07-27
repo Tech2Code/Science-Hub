@@ -4,18 +4,30 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
+import { parsePageParams } from "@/lib/listQuery";
+import { buildBrandWhere, buildBrandOrderBy, type BrandSort } from "@/lib/brandQuery";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const auth = await requireSession();
     if (!auth.ok) return auth.response;
 
-    const brands = await prisma.brand.findMany({
-      where: { deletedAt: null },
-      orderBy: { name: "asc" },
-      take: 5000,
-      include: { _count: { select: { products: { where: { deletedAt: null } } } } },
-    });
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search") ?? undefined;
+    const sort = (searchParams.get("sort") ?? undefined) as BrandSort | undefined;
+    const { skip, take } = parsePageParams(searchParams, 5000);
+
+    const where = buildBrandWhere(search);
+    const [brands, total] = await Promise.all([
+      prisma.brand.findMany({
+        where,
+        orderBy: buildBrandOrderBy(sort),
+        skip,
+        take,
+        include: { _count: { select: { products: { where: { deletedAt: null } } } } },
+      }),
+      prisma.brand.count({ where }),
+    ]);
     const ids = brands.map((b) => b.id);
     const logs = await prisma.activityLog.findMany({
       where: { entityId: { in: ids }, action: "add_brand" },
@@ -23,7 +35,7 @@ export async function GET() {
       orderBy: { createdAt: "asc" },
     });
     const logMap = new Map(logs.map((l) => [l.entityId, l]));
-    const result = brands.map((b) => {
+    const data = brands.map((b) => {
       const log = logMap.get(b.id);
       return {
         ...b,
@@ -31,7 +43,7 @@ export async function GET() {
         createdAt: b.createdAt ?? log?.createdAt ?? null,
       };
     });
-    return NextResponse.json(result);
+    return NextResponse.json({ data, total });
   } catch (error) {
     console.error("GET /api/brands error:", error);
     return NextResponse.json({ error: "Failed to fetch brands" }, { status: 500 });

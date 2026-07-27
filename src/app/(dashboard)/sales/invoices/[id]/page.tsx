@@ -5,7 +5,7 @@ import type { CSSProperties } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
-import { fetchCached, bustCache, useFetch } from "@/lib/useCache";
+import { fetchCached, bustCache, bustCachePrefix, useFetch } from "@/lib/useCache";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
@@ -349,8 +349,8 @@ export default function InvoiceDetailPage() {
         setReturns(prev => [created, ...prev]);
         setShowReturnForm(false);
         bustCache(`/api/invoices/${id}`);
-        bustCache("/api/products");
-        bustCache("/api/credit-notes");
+        bustCachePrefix("/api/products");
+        bustCachePrefix("/api/credit-notes");
         toast({ type: "success", title: "Return recorded", message: `${selected.length} item(s) returned.` });
       } else {
         const d = await res.json().catch(() => ({}));
@@ -371,8 +371,8 @@ export default function InvoiceDetailPage() {
         setReturns(prev => prev.filter(r => r.id !== returnDeleteConfirm.id));
         invalidateCachedPdf("return", returnDeleteConfirm.id);
         bustCache(`/api/invoices/${id}`);
-        bustCache("/api/products");
-        bustCache("/api/credit-notes");
+        bustCachePrefix("/api/products");
+        bustCachePrefix("/api/credit-notes");
         toast({ type: "success", title: "Deleted", message: "Credit note moved to bin." });
       } else {
         const d = await res.json().catch(() => ({}));

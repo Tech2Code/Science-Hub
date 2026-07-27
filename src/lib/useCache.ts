@@ -105,6 +105,22 @@ export function bustCache(url: string) {
   cache.delete(url);
 }
 
+/**
+ * Invalidate every cached URL starting with `prefix` — for list endpoints
+ * that now carry query params (page/search/sort/filter), a single
+ * `bustCachePrefix("/api/products")` call only ever matched the bare, param-less
+ * URL and silently missed every parameterized variant actually in use,
+ * leaving the list showing stale data after a create/edit/delete elsewhere
+ * in the app. Use this instead whenever busting a paginated list's cache
+ * from outside the page that owns it (e.g. a "new"/"edit" page navigating
+ * back).
+ */
+export function bustCachePrefix(prefix: string) {
+  for (const key of cache.keys()) {
+    if (key === prefix || key.startsWith(`${prefix}?`)) cache.delete(key);
+  }
+}
+
 /** Directly patch a cached URL's data from outside a component (e.g. a "new"/"edit" page updating the list it's about to navigate back to). No-op if that URL was never cached. */
 export function patchCache<T>(url: string, updater: (prev: T | null) => T) {
   publish(url, updater((cache.has(url) ? cache.get(url) : null) as T | null));

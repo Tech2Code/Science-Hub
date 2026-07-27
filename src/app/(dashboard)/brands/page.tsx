@@ -1,17 +1,18 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { Input } from "@/components/ui/Input";
 import { rules, validate } from "@/lib/validation";
-import { useFetch, bustCache } from "@/lib/useCache";
+import { useFetch, bustCachePrefix } from "@/lib/useCache";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { animateSection } from "@/lib/animateSection";
@@ -27,6 +28,11 @@ interface Brand {
   createdBy?: string | null;
 }
 
+interface BrandListResponse {
+  data: Brand[];
+  total: number;
+}
+
 type SortOption = "name_az" | "name_za" | "products_high" | "products_low" | "newest" | "oldest";
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "name_az",       label: "Name (A–Z)" },
@@ -36,19 +42,6 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "newest",        label: "Newest first" },
   { value: "oldest",        label: "Oldest first" },
 ];
-
-function sortBrands(list: Brand[], sort: SortOption): Brand[] {
-  const arr = [...list];
-  switch (sort) {
-    case "name_za":       return arr.sort((a, b) => b.name.localeCompare(a.name));
-    case "products_high": return arr.sort((a, b) => b._count.products - a._count.products);
-    case "products_low":  return arr.sort((a, b) => a._count.products - b._count.products);
-    case "oldest":        return arr.sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
-    case "newest":        return arr.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
-    case "name_az":
-    default:              return arr.sort((a, b) => a.name.localeCompare(b.name));
-  }
-}
 
 const COLUMNS: Column[] = [
   { label: "#",          mobile: "hide" },
@@ -62,8 +55,6 @@ const COLUMNS: Column[] = [
 export default function BrandsPage() {
   const canWrite = useCanWrite();
   const router = useRouter();
-  const { data, loading, patchData } = useFetch<Brand[]>("/api/brands");
-  const brands = data ?? [];
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
@@ -80,6 +71,20 @@ export default function BrandsPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const pageSize = showAll ? 5000 : PAGE_SIZE;
+
+  const listParams = new URLSearchParams();
+  if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
+  listParams.set("sort", sort);
+  listParams.set("page", String(page));
+  listParams.set("pageSize", String(pageSize));
+  const apiUrl = `/api/brands?${listParams.toString()}`;
+
+  const { data, loading, mutate } = useFetch<BrandListResponse>(apiUrl);
+  const brands = data?.data ?? [];
+  const total = data?.total ?? 0;
+
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     const name = newName.trim();
@@ -91,11 +96,8 @@ export default function BrandsPage() {
       body: JSON.stringify({ name }),
     });
     if (r.ok) {
-      const created = await r.json();
       setNewName("");
-      // The create response already has the full record — merge it straight
-      // into the list instead of waiting on a full refetch.
-      patchData((prev) => [...(prev ?? []), created]);
+      await mutate();
       toast({ type: "success", title: "Brand added", message: `"${name}" added to catalog.` });
     } else {
       const d = await r.json();
@@ -123,10 +125,10 @@ export default function BrandsPage() {
     setRenaming(false);
     if (r.ok) {
       setEditingId(null);
-      patchData((prev) => (prev ?? []).map((b) => (b.id === id ? { ...b, name, updatedAt: d.updatedAt ?? b.updatedAt } : b)));
+      await mutate();
       toast({ type: "success", title: "Brand renamed", message: `Renamed to "${name}".` });
     } else if (r.status === 409) {
-      bustCache("/api/brands");
+      bustCachePrefix("/api/brands");
       toast({ type: "error", title: "Update conflict", message: d.error ?? "This brand was changed by someone else. Please reload and try again." });
     } else {
       toast({ type: "error", title: "Rename failed", message: d.error ?? "Could not rename brand." });
@@ -144,7 +146,7 @@ export default function BrandsPage() {
         setDeleting(false);
         setConfirmState(null);
         if (res.ok) {
-          patchData((prev) => (prev ?? []).filter((b) => b.id !== id));
+          await mutate();
           toast({ type: "success", title: "Brand deleted", message: `"${name}" moved to bin.` });
         } else {
           toast({ type: "error", title: "Cannot delete brand", message: d.error ?? "Could not delete brand." });
@@ -153,19 +155,7 @@ export default function BrandsPage() {
     });
   }
 
-  const filtered = brands.filter((b) =>
-    b.name.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const sorted = sortBrands(filtered, sort);
-  const { visible } = usePagination(sorted, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
-
-  useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- clamps page back into range after a delete shrinks the list
-    if (page > totalPages) setPage(totalPages);
-  }, [sorted.length, page]);
 
   return (
     <>
@@ -186,7 +176,7 @@ export default function BrandsPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Brands</h1>
-          <p className="page-sub">{loading ? "Loading…" : `${brands.length} brands in catalog`}</p>
+          <p className="page-sub">{loading ? "Loading…" : `${total} brands in catalog`}</p>
         </div>
       </div>
 
@@ -225,7 +215,7 @@ export default function BrandsPage() {
             <SortSelect ariaLabel="Sort brands" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
           {!loading && (
-            <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
+            <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
@@ -238,11 +228,11 @@ export default function BrandsPage() {
             <tbody>
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
-              ) : filtered.length === 0 ? (
+              ) : brands.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search ? "No brands match your search." : "No brands yet. Add one above."}
                 </td></tr>
-              ) : visible.map((b, i) => (
+              ) : brands.map((b, i) => (
                 <tr key={b.id}>
                   <Cell col={COLUMNS[0]} className={styles.indexCell}>{i + 1}</Cell>
                   <Cell col={COLUMNS[1]}>
@@ -295,9 +285,9 @@ export default function BrandsPage() {
             </tbody>
           </table>
         </div>
-        {!loading && filtered.length > 0 && (
+        {!loading && total > 0 && (
           <Pagination
-            total={filtered.length}
+            total={total}
             page={page}
             showAll={showAll}
             onPage={setPage}

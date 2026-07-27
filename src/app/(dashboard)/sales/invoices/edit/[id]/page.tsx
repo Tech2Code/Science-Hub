@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Sk } from "@/components/ui/Skeleton";
-import { fetchCached, bustCache } from "@/lib/useCache";
+import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { invalidateCachedPdf } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
@@ -149,7 +149,7 @@ export default function EditInvoicePage() {
     if (res.ok) {
       const d = await res.json();
       bustCache(`/api/invoices/${id}`);
-      bustCache("/api/products");
+      bustCachePrefix("/api/products");
       invalidateCachedPdf("invoice", id);
       toast({ type: "success", title: "Invoice updated", message: "Changes saved." });
       if (d.stockWarnings?.length > 0) {

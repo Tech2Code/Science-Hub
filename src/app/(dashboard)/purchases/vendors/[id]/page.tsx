@@ -9,7 +9,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { OverlayLoader } from "@/components/ui/Spinner";
-import { fetchCached, bustCache } from "@/lib/useCache";
+import { fetchCached, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./vendorDetail.module.css";
@@ -52,7 +52,7 @@ export default function VendorDetailPage() {
       setDeleting(false);
       setConfirmOpen(false);
       if (res.ok) {
-        bustCache("/api/vendors");
+        bustCachePrefix("/api/vendors");
         toast({ type: "success", title: "Vendor deleted", message: `"${vendor.name}" moved to bin.` });
         router.push("/purchases/vendors");
       } else {

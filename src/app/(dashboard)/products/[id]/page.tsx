@@ -8,7 +8,7 @@ import { FormField, Input, Textarea } from "@/components/ui/Input";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
-import { fetchCached, bustCache } from "@/lib/useCache";
+import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { needsRestock } from "@/lib/stockStatus";
@@ -114,7 +114,7 @@ export default function ProductViewPage() {
       setAdjustSaving(false);
       if (res.ok) {
         setAdjustOpen(false);
-        bustCache("/api/products");
+        bustCachePrefix("/api/products");
         bustCache(`/api/products/${id}`);
         await loadProduct();
         toast({ type: "success", title: "Stock adjusted", message: `"${product.name}" is now at ${data.stock} ${product.unit}.` });
@@ -136,7 +136,7 @@ export default function ProductViewPage() {
       setDeleting(false);
       setConfirmOpen(false);
       if (res.ok) {
-        bustCache("/api/products");
+        bustCachePrefix("/api/products");
         toast({ type: "success", title: "Product deleted", message: `"${product.name}" moved to bin.` });
         router.push("/products");
       } else {
