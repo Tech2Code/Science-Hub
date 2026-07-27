@@ -8,7 +8,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ProductFormFields } from "@/components/products/ProductFormFields";
 import { validateProductForm, hasProductFieldErrors, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
-import { bustCache } from "@/lib/useCache";
+import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./productNew.module.css";
@@ -34,8 +34,8 @@ export default function NewProductPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch("/api/brands", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then(setBrands).catch(() => {});
-    fetch("/api/categories", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then(setCategories).catch(() => {});
+    fetch("/api/brands?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setBrands(d.data ?? [])).catch(() => {});
+    fetch("/api/categories?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setCategories(d.data ?? [])).catch(() => {});
   }, []);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
@@ -65,7 +65,7 @@ export default function NewProductPage() {
     });
     setSaving(false);
     if (res.ok) {
-      bustCache("/api/products");
+      bustCachePrefix("/api/products");
       bustCache("/api/reports?type=summary");
       bustCache("/api/reports?type=stock");
       toast({ type: "success", title: "Product created", message: "New product added to catalog." });
@@ -83,11 +83,11 @@ export default function NewProductPage() {
         <h1 className="page-title">Add Product</h1>
         <p className="page-sub">Add a product or item to your catalog</p>
       </div>
-      <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
+      <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
         <ProductFormFields form={form} onChange={handleChange} fieldErrors={fieldErrors} brands={brands} categories={categories} />
 
         <div className="form-actions">
-          <Button type="submit" variant="primary" disabled={saving}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Save Product</Button>
+          <Button type="submit" variant="primary" disabled={saving || !form.name.trim() || !form.price.trim()}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Save Product</Button>
           <Button variant="secondary" href="/products"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
         </div>
       </form>

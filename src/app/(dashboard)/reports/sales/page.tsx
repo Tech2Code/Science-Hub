@@ -9,9 +9,11 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { Input } from "@/components/ui/Input";
+import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
+import { downloadXlsx } from "@/lib/downloadXlsx";
 import styles from "./salesReports.module.css";
 
 interface SummaryRow { invoicesThisMonth: number; revenueThisMonth: number; totalRevenue: number; totalCollected: number; outstandingTotal: number; pendingCount: number; }
@@ -46,33 +48,9 @@ const MIN_REPORT_DATE = "2015-01-01";
 
 type Tab = "summary" | "outstanding" | "gst";
 
-function toCsv(headers: string[], rows: (string | number)[][]) {
-  const escape = (v: string | number) => {
-    const s = String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  return [headers, ...rows].map(row => row.map(escape).join(",")).join("\n");
-}
-
-// Excel auto-detects date-shaped CSV text and converts it to its internal
-// date serial number, then shows "######" once the column is too narrow to
-// display that number — wrapping as ="..." forces Excel to treat the cell
-// as a literal text formula instead of a date.
-function csvDate(s: string) {
-  return s ? `="${s}"` : "";
-}
-
-function downloadCsv(filename: string, csv: string) {
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
 export default function SalesReportsPage() {
   const { data: session } = useSession();
+  const toast = useToast();
   const router = useRouter();
   useEffect(() => {
     if (!session) return;
@@ -96,25 +74,44 @@ export default function SalesReportsPage() {
   const outstanding = outstandingData ?? [];
   const gstRows = gstData ?? [];
 
-  function exportOutstandingCsv() {
-    const csv = toCsv(
-      ["Invoice No.", "Customer", "Invoice Date", "Due Date", "Total", "Paid", "Balance", "Status"],
-      outstanding.map(inv => [
-        inv.invoiceNumber, inv.customer.name,
-        csvDate(new Date(inv.date).toLocaleDateString("en-IN")),
-        csvDate(inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("en-IN") : ""),
-        inv.total, inv.paidAmount, inv.total - inv.paidAmount, inv.status,
-      ])
-    );
-    downloadCsv("outstanding-invoices.csv", csv);
+  const [exportingOutstanding, setExportingOutstanding] = useState(false);
+  const [exportingGst, setExportingGst] = useState(false);
+
+  async function exportOutstandingCsv() {
+    setExportingOutstanding(true);
+    try {
+      await downloadXlsx(
+        "outstanding-invoices.xlsx",
+        "Outstanding Invoices",
+        ["Invoice No.", "Customer", "Invoice Date", "Due Date", "Total", "Paid", "Balance", "Status"],
+        outstanding.map(inv => [
+          inv.invoiceNumber, inv.customer.name,
+          new Date(inv.date).toLocaleDateString("en-IN"),
+          inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("en-IN") : "",
+          inv.total, inv.paidAmount, inv.total - inv.paidAmount, inv.status,
+        ])
+      );
+    } catch {
+      toast({ type: "error", title: "Export failed", message: "Could not generate the Excel file." });
+    } finally {
+      setExportingOutstanding(false);
+    }
   }
 
-  function exportGstCsv() {
-    const csv = toCsv(
-      ["Month", "Taxable Value", "CGST", "SGST", "IGST", "Total GST"],
-      gstRows.map(r => [r.month, r.taxableValue, r.cgst, r.sgst, r.igst, r.cgst + r.sgst + r.igst])
-    );
-    downloadCsv("gst-summary.csv", csv);
+  async function exportGstCsv() {
+    setExportingGst(true);
+    try {
+      await downloadXlsx(
+        "gst-summary.xlsx",
+        "GST Summary",
+        ["Month", "Taxable Value", "CGST", "SGST", "IGST", "Total GST"],
+        gstRows.map(r => [r.month, r.taxableValue, r.cgst, r.sgst, r.igst, r.cgst + r.sgst + r.igst])
+      );
+    } catch {
+      toast({ type: "error", title: "Export failed", message: "Could not generate the Excel file." });
+    } finally {
+      setExportingGst(false);
+    }
   }
 
   const [outPage, setOutPage] = useState(1);
@@ -207,7 +204,7 @@ export default function SalesReportsPage() {
               </div>
               <div className={styles.headerActionsRow}>
                 {!loadingOut && outstanding.length > 0 && (
-                  <Button variant="secondary" size="sm" onClick={exportOutstandingCsv}>Export CSV</Button>
+                  <Button variant="secondary" size="sm" loading={exportingOutstanding} onClick={exportOutstandingCsv}>Export Excel</Button>
                 )}
                 {!loadingOut && (
                   <ShowAllToggle total={outstanding.length} showAll={outShowAll} onToggle={() => { setOutShowAll((v) => !v); setOutPage(1); }} />
@@ -294,7 +291,7 @@ export default function SalesReportsPage() {
                 <p className="card-header-sub">Monthly GST breakdown across all invoices</p>
               </div>
               {!loadingGst && gstRows.length > 0 && (
-                <Button variant="secondary" size="sm" onClick={exportGstCsv}>Export CSV</Button>
+                <Button variant="secondary" size="sm" loading={exportingGst} onClick={exportGstCsv}>Export Excel</Button>
               )}
             </div>
             <div className="table-wrap">

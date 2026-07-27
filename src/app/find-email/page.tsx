@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBranding } from "@/lib/businessBranding";
-import { Input } from "@/components/ui/Input";
+import { Input, FormField } from "@/components/ui/Input";
 import styles from "../login/login.module.css";
 import pageStyles from "./findEmail.module.css";
 import { rules, validate } from "@/lib/validation";
@@ -21,12 +21,19 @@ export default function FindEmailPage() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<Result[] | null>(null);
   const [error, setError] = useState("");
+  const [nameError, setNameError] = useState("");
+
+  function handleNameBlur() {
+    const err = validate(name, rules.required("Please enter your name."), rules.minLength(2, "Name must be at least 2 characters."));
+    setNameError(err ?? "");
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const nameErr = validate(name, rules.required("Please enter your name."), rules.minLength(2, "Name must be at least 2 characters."));
-    if (nameErr) { setError(nameErr); return; }
+    if (nameErr) { setNameError(nameErr); return; }
     setError("");
+    setNameError("");
     setResults(null);
     setLoading(true);
     try {
@@ -72,20 +79,18 @@ export default function FindEmailPage() {
 
           {error && <div className={styles.errorBox}>{error}</div>}
 
-          <form onSubmit={handleSubmit} className={styles.formStack}>
-            <div>
-              <label htmlFor="name" className={styles.fieldLabel}>Your name</label>
+          <form onSubmit={handleSubmit} className={styles.formStack} noValidate>
+            <FormField label="Your name" error={nameError}>
               <Input
                 id="name"
                 type="text"
-                required
                 autoComplete="name"
                 value={name}
-                onChange={(e) => { setName(e.target.value); setResults(null); setError(""); }}
+                onChange={(e) => { setName(e.target.value); setResults(null); if (nameError) setNameError(""); }}
+                onBlur={handleNameBlur}
                 placeholder="e.g. Enter Your Name"
-                className={styles.input}
               />
-            </div>
+            </FormField>
             <button type="submit" className={styles.submitBtn} disabled={loading}>
               {loading ? "Searching…" : "Find my email"}
             </button>

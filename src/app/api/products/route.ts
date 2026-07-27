@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getProducts } from "@/lib/db";
+import { getProducts, type ProductSort, type ProductStockFilter } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { validateProductInput, validateNumericField } from "@/lib/validation";
+import { parsePageParams } from "@/lib/listQuery";
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +15,11 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search");
-    const products = await getProducts(search);
+    const stockFilter = (searchParams.get("stockFilter") ?? undefined) as ProductStockFilter | undefined;
+    const sort = (searchParams.get("sort") ?? undefined) as ProductSort | undefined;
+    const { skip, take } = parsePageParams(searchParams, 5000);
+
+    const { data: products, total } = await getProducts({ search, stockFilter }, sort, skip, take);
     const ids = products.map((p) => p.id);
     const logs = await prisma.activityLog.findMany({
       where: { entityId: { in: ids }, action: "add_product" },
@@ -22,8 +27,8 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: "asc" },
     });
     const createdByMap = new Map(logs.map((l) => [l.entityId, l.user.name]));
-    const result = products.map((p) => ({ ...p, createdBy: createdByMap.get(p.id) ?? null }));
-    return NextResponse.json(result);
+    const data = products.map((p) => ({ ...p, createdBy: createdByMap.get(p.id) ?? null }));
+    return NextResponse.json({ data, total });
   } catch (error) {
     console.error("GET /api/products error:", error);
     return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });

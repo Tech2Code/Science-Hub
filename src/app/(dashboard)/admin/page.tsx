@@ -11,6 +11,8 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
+import { useScrollToHash } from "@/lib/useScrollToHash";
+import { useDirty } from "@/lib/useDirty";
 import styles from "./admin.module.css";
 
 interface User {
@@ -65,7 +67,7 @@ const ACTION_META: Record<string, { label: string; color: string; bg: string; bo
   record_purchase_payment:{ label: "Purchase Payment",       color: "var(--c-green-text)",  bg: "var(--c-green-bg)",  border: "var(--c-green-border)" },
   empty_bin:              { label: "Bin Emptied",            color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
   clear_activity_log:     { label: "Activity Log Cleared",   color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
-  factory_reset:          { label: "Factory Reset",          color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
+  manual_stock_adjustment:{ label: "Stock Adjusted",         color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -130,6 +132,7 @@ export default function AdminPage() {
   const router = useRouter();
   const isAdmin = session?.user?.role === "admin";
   const toast = useToast();
+  useScrollToHash(!!session);
 
   // Redirect non-admins immediately
   useEffect(() => {
@@ -143,12 +146,15 @@ export default function AdminPage() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: "", email: "" });
+  const profileDirty = useDirty(profileForm);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [profileFieldErrors, setProfileFieldErrors] = useState<{ name?: string; email?: string }>({});
   const [changingPw, setChangingPw] = useState(false);
   const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
   const [pwSaving, setPwSaving] = useState(false);
   const [pwMsg, setPwMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [pwFieldErrors, setPwFieldErrors] = useState<{ current?: string; next?: string; confirm?: string }>({});
 
   // ── User Management ───────────────────────────────────────────
   const [users, setUsers] = useState<User[]>([]);
@@ -163,8 +169,10 @@ export default function AdminPage() {
   const emailCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState({ name: "", email: "", role: "staff" as Role, newPassword: "" });
+  const editFormDirty = useDirty(editForm);
   const [editSaving, setEditSaving] = useState(false);
   const [editMsg, setEditMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [editFieldErrors, setEditFieldErrors] = useState<{ name?: string; email?: string; newPassword?: string }>({});
   const [deleteConfirm, setDeleteConfirm] = useState<User | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -172,6 +180,8 @@ export default function AdminPage() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [logsTotal, setLogsTotal] = useState(0);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [logsNavDirection, setLogsNavDirection] = useState<"prev" | "next" | null>(null);
+  const [logsLoadedOnce, setLogsLoadedOnce] = useState(false);
   const [logsPage, setLogsPage] = useState(1);
   const [logsFilter, setLogsFilter] = useState(""); // filter by userId
   const [logsSearch, setLogsSearch] = useState(""); // text search
@@ -180,23 +190,20 @@ export default function AdminPage() {
   const [clearLogsConfirm, setClearLogsConfirm] = useState(false);
   const [clearLogsLoading, setClearLogsLoading] = useState(false);
   const [clearLogsInput, setClearLogsInput] = useState("");
-  const LOGS_LIMIT = 20;
+  const LOGS_LIMIT = 10;
   const CLEAR_LOGS_PHRASE = "DELETE ALL";
 
-  // ── Factory Reset ────────────────────────────────────────────
-  const [factoryResetConfirm, setFactoryResetConfirm] = useState(false);
-  const [factoryResetLoading, setFactoryResetLoading] = useState(false);
-  const [factoryResetInput, setFactoryResetInput] = useState("");
-  const FACTORY_RESET_PHRASE = "DELETE EVERYTHING";
-
-  const loadLogs = useCallback(async (page: number, userId: string) => {
+  const loadLogs = useCallback(async (page: number, userId: string, search: string) => {
     setLogsLoading(true);
     const offset = (page - 1) * LOGS_LIMIT;
     const qs = new URLSearchParams({ limit: String(LOGS_LIMIT), offset: String(offset) });
     if (userId) qs.set("userId", userId);
+    if (search) qs.set("search", search);
     const res = await fetch(`/api/admin/activity?${qs}`, { headers: { "x-no-loader": "1" } });
     const data = await res.json();
     setLogsLoading(false);
+    setLogsNavDirection(null);
+    setLogsLoadedOnce(true);
     if (res.ok) {
       setLogs(data.logs);
       setLogsTotal(data.total);
@@ -204,21 +211,39 @@ export default function AdminPage() {
     }
   }, []);
 
-  useEffect(() => { fetch("/api/admin/profile", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then(d => { setProfile(d); setProfileForm({ name: d.name, email: d.email }); }).finally(() => setProfileLoading(false)); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- profileDirty.markClean is stable in intent (only sets a baseline snapshot); this must run once on mount only
+  useEffect(() => { fetch("/api/admin/profile", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then(d => { setProfile(d); const initial = { name: d.name, email: d.email }; setProfileForm(initial); profileDirty.markClean(initial); }).finally(() => setProfileLoading(false)); }, []);
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => { if (!isAdmin) return; setUsersLoading(true); fetch("/api/admin/users", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then(setUsers).finally(() => setUsersLoading(false)); }, [isAdmin]);
-  useEffect(() => { if (isAdmin) loadLogs(1, logsFilter); }, [isAdmin, logsFilter, loadLogs]);
+  // logsSearch intentionally excluded — its own debounced effect below handles search changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (isAdmin) loadLogs(1, logsFilter, logsSearch.trim()); }, [isAdmin, logsFilter, loadLogs]);
+  const logsSearchMountedRef = useRef(false);
+  useEffect(() => {
+    if (!logsSearchMountedRef.current) { logsSearchMountedRef.current = true; return; }
+    if (!isAdmin) return;
+    const timer = setTimeout(() => loadLogs(1, logsFilter, logsSearch.trim()), 350);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logsSearch]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
     const nameErr  = validate(profileForm.name,  rules.required("Name is required."));
     const emailErr = validate(profileForm.email, rules.required("Email is required."), rules.email());
-    if (nameErr || emailErr) { setProfileMsg({ type: "err", text: nameErr ?? emailErr ?? "" }); return; }
+    if (nameErr || emailErr) { setProfileFieldErrors({ name: nameErr ?? undefined, email: emailErr ?? undefined }); return; }
+    setProfileFieldErrors({});
     setProfileSaving(true); setProfileMsg(null);
     const res = await fetch("/api/admin/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(profileForm) });
     const data = await res.json(); setProfileSaving(false);
-    if (!res.ok) { setProfileMsg({ type: "err", text: data.error }); return; }
+    if (!res.ok) {
+      const msg: string = data.error ?? "Could not update profile.";
+      if (/email/i.test(msg)) setProfileFieldErrors({ email: msg });
+      else if (/name/i.test(msg)) setProfileFieldErrors({ name: msg });
+      else setProfileMsg({ type: "err", text: msg });
+      return;
+    }
     setProfile(data); setEditingProfile(false); setProfileMsg(null);
     await updateSession({ name: data.name, email: data.email, role: data.role });
     toast({ type: "success", title: "Profile updated", message: "Your name and email have been saved." });
@@ -229,12 +254,19 @@ export default function AdminPage() {
     const curErr  = validate(pwForm.current, rules.required("Current password is required."));
     const nextErr = validate(pwForm.next,    rules.required("New password is required."), rules.minLength(8, "Password must be at least 8 characters."));
     const confErr = validate(pwForm.confirm, rules.required("Please confirm your new password."), rules.passwordMatch(pwForm.next));
-    if (curErr || nextErr || confErr) { setPwMsg({ type: "err", text: curErr ?? nextErr ?? confErr ?? "" }); return; }
+    if (curErr || nextErr || confErr) { setPwFieldErrors({ current: curErr ?? undefined, next: nextErr ?? undefined, confirm: confErr ?? undefined }); return; }
+    setPwFieldErrors({});
     setPwSaving(true); setPwMsg(null);
     const res = await fetch("/api/admin/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword: pwForm.current, newPassword: pwForm.next }) });
     const data = await res.json(); setPwSaving(false);
-    if (!res.ok) { setPwMsg({ type: "err", text: data.error }); return; }
-    setPwForm({ current: "", next: "", confirm: "" }); setChangingPw(false); setPwMsg(null);
+    if (!res.ok) {
+      const msg: string = data.error ?? "Could not update password.";
+      if (/current password/i.test(msg)) setPwFieldErrors({ current: msg });
+      else if (/new password/i.test(msg)) setPwFieldErrors({ next: msg });
+      else setPwMsg({ type: "err", text: msg });
+      return;
+    }
+    setPwForm({ current: "", next: "", confirm: "" }); setChangingPw(false); setPwMsg(null); setPwFieldErrors({});
     toast({ type: "success", title: "Password changed", message: "Your new password is active." });
   }
 
@@ -283,12 +315,21 @@ export default function AdminPage() {
     const emailErr = validate(addForm.email,           rules.required("Email is required."), rules.email());
     const pwErr    = validate(addForm.password,        rules.required("Password is required."), rules.minLength(8, "Password must be at least 8 characters."));
     const confErr  = validate(addForm.confirmPassword, rules.required("Please confirm the password."), rules.passwordMatch(addForm.password));
-    if (nameErr || emailErr || pwErr || confErr) { setAddMsg({ type: "err", text: nameErr ?? emailErr ?? pwErr ?? confErr ?? "" }); return; }
+    if (nameErr || emailErr || pwErr || confErr) {
+      setAddFieldErrors(prev => ({ ...prev, name: nameErr ?? undefined, email: emailErr ?? undefined, password: pwErr ?? undefined, confirmPassword: confErr ?? undefined }));
+      return;
+    }
     setAddSaving(true); setAddMsg(null);
     const res = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(addForm) });
     const data = await res.json(); setAddSaving(false);
-    if (!res.ok) { setAddMsg({ type: "err", text: data.error }); return; }
-    setUsers(prev => [...prev, data]); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddOpen(false); setAddMsg(null);
+    if (!res.ok) {
+      const msg: string = data.error ?? "Failed to add user.";
+      if (/email/i.test(msg)) setAddFieldErrors(prev => ({ ...prev, email: msg }));
+      else if (/name/i.test(msg)) setAddFieldErrors(prev => ({ ...prev, name: msg }));
+      else setAddMsg({ type: "err", text: msg });
+      return;
+    }
+    setUsers(prev => [...prev, data]); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddOpen(false); setAddMsg(null); setAddFieldErrors({});
     toast({ type: "success", title: "User created", message: `"${data.name}" added to the system.` });
   }
 
@@ -298,14 +339,22 @@ export default function AdminPage() {
     const nameErr  = validate(editForm.name,        rules.required("Name is required."));
     const emailErr = validate(editForm.email,       rules.required("Email is required."), rules.email());
     const pwErr    = editForm.newPassword ? validate(editForm.newPassword, rules.minLength(8, "New password must be at least 8 characters.")) : null;
-    if (nameErr || emailErr || pwErr) { setEditMsg({ type: "err", text: nameErr ?? emailErr ?? pwErr ?? "" }); return; }
+    if (nameErr || emailErr || pwErr) { setEditFieldErrors({ name: nameErr ?? undefined, email: emailErr ?? undefined, newPassword: pwErr ?? undefined }); return; }
+    setEditFieldErrors({});
     setEditSaving(true); setEditMsg(null);
     const body: Record<string, string> = { name: editForm.name, email: editForm.email, role: editForm.role };
     if (editForm.newPassword) body.newPassword = editForm.newPassword;
     const res = await fetch(`/api/admin/users/${editUser.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const data = await res.json(); setEditSaving(false);
-    if (!res.ok) { setEditMsg({ type: "err", text: data.error }); return; }
-    setUsers(prev => prev.map(u => u.id === data.id ? data : u)); setEditUser(null); setEditMsg(null);
+    if (!res.ok) {
+      const msg: string = data.error ?? "Could not update user.";
+      if (/email/i.test(msg)) setEditFieldErrors({ email: msg });
+      else if (/name/i.test(msg)) setEditFieldErrors({ name: msg });
+      else if (/password/i.test(msg)) setEditFieldErrors({ newPassword: msg });
+      else setEditMsg({ type: "err", text: msg });
+      return;
+    }
+    setUsers(prev => prev.map(u => u.id === data.id ? data : u)); setEditUser(null); setEditMsg(null); setEditFieldErrors({});
     toast({ type: "success", title: "User updated", message: `${data.name}'s details saved.` });
   }
 
@@ -377,40 +426,11 @@ export default function AdminPage() {
     }
   }
 
-  async function runFactoryReset() {
-    if (factoryResetInput !== FACTORY_RESET_PHRASE) return;
-    setFactoryResetLoading(true);
-    try {
-      const res = await fetch("/api/admin/factory-reset", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirm: factoryResetInput }),
-      });
-      const data = await res.json().catch(() => ({}));
-      setFactoryResetLoading(false);
-      setFactoryResetConfirm(false);
-      setFactoryResetInput("");
-      if (!res.ok) {
-        toast({ type: "error", title: "Reset failed", message: data.error ?? "Could not reset app data." });
-        return;
-      }
-      toast({ type: "success", title: "App reset", message: "All business data and staff accounts have been permanently deleted." });
-      router.push("/dashboard");
-    } catch {
-      setFactoryResetLoading(false);
-      setFactoryResetConfirm(false);
-      toast({ type: "error", title: "Reset failed", message: "Network error. Please try again." });
-    }
-  }
-
   const selfId = session?.user?.id;
 
   const logsTotalPages = Math.max(1, Math.ceil(logsTotal / LOGS_LIMIT));
 
-  // Client-side text search filters the current page only
-  const visibleLogs = logsSearch
-    ? logs.filter(l => l.details.toLowerCase().includes(logsSearch.toLowerCase()) || l.user.name.toLowerCase().includes(logsSearch.toLowerCase()))
-    : logs;
+  const visibleLogs = logs;
 
   if (!isAdmin && session) return null; // redirect in effect
 
@@ -479,34 +499,6 @@ export default function AdminPage() {
         onCancel={() => { if (!clearLogsLoading) { setClearLogsConfirm(false); setClearLogsInput(""); } }}
       />
 
-      <ConfirmDialog
-        open={factoryResetConfirm}
-        title="Factory Reset"
-        message="Permanently delete every invoice, purchase bill, customer, product, vendor, brand, category, stock movement, activity log entry, and staff account. This cannot be undone."
-        confirmLabel="Delete Everything" variant="danger" loading={factoryResetLoading}
-        confirmDisabled={factoryResetInput !== FACTORY_RESET_PHRASE}
-        detail={
-          <div className={styles.clearLogsConfirm}>
-            <p>Business settings (name, address, GSTIN, bank details, Gmail configuration) and admin accounts are kept.</p>
-            <label htmlFor="factory-reset-confirm">
-              Type <strong>{FACTORY_RESET_PHRASE}</strong> to confirm
-            </label>
-            <Input
-              id="factory-reset-confirm"
-              type="text"
-              autoComplete="off"
-              autoFocus
-              className={styles.inp}
-              value={factoryResetInput}
-              onChange={e => setFactoryResetInput(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && factoryResetInput === FACTORY_RESET_PHRASE) runFactoryReset(); }}
-            />
-          </div>
-        }
-        onConfirm={runFactoryReset}
-        onCancel={() => { if (!factoryResetLoading) { setFactoryResetConfirm(false); setFactoryResetInput(""); } }}
-      />
-
       <div className="page-header">
         <div>
           <h1 className="page-title">Admin Panel</h1>
@@ -525,11 +517,11 @@ export default function AdminPage() {
         <div className={styles.mainCol}>
 
       {/* ── My Profile ─────────────────────────────────────────── */}
-      <div {...animateSection(0, "card")}>
+      <div id="profile" {...animateSection(0, "card")}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>My Profile</h2>
           {!editingProfile && !profileLoading && (
-            <Button variant="secondary" size="sm" onClick={() => { setEditingProfile(true); setChangingPw(false); setProfileMsg(null); }}>
+            <Button variant="secondary" size="sm" onClick={() => { profileDirty.markClean(profileForm); setEditingProfile(true); setChangingPw(false); setProfileMsg(null); setProfileFieldErrors({}); }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               Edit Profile
             </Button>
@@ -550,15 +542,19 @@ export default function AdminPage() {
               </div>
             </div>
           ) : editingProfile ? (
-            <form onSubmit={saveProfile} className={styles.formCol}>
+            <form onSubmit={saveProfile} className={styles.formCol} noValidate>
               <div className={styles.fg2}>
-                <FormField label="Full Name" required><Input className={styles.inp} value={profileForm.name} onChange={e => setProfileForm(p => ({ ...p, name: e.target.value }))} required /></FormField>
-                <FormField label="Login Email — used to sign in to this app" required><Input className={styles.inp} type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} required /></FormField>
+                <FormField label="Full Name" required error={profileFieldErrors.name}>
+                  <Input className={`${styles.inp} ${profileFieldErrors.name ? styles.inpError : ""}`} value={profileForm.name} onChange={e => { setProfileForm(p => ({ ...p, name: e.target.value })); setProfileFieldErrors(prev => ({ ...prev, name: undefined })); }} />
+                </FormField>
+                <FormField label="Login Email — used to sign in to this app" required error={profileFieldErrors.email}>
+                  <Input className={`${styles.inp} ${profileFieldErrors.email ? styles.inpError : ""}`} type="email" value={profileForm.email} onChange={e => { setProfileForm(p => ({ ...p, email: e.target.value })); setProfileFieldErrors(prev => ({ ...prev, email: undefined })); }} />
+                </FormField>
               </div>
               {profileMsg && <Msg m={profileMsg} />}
               <div className={styles.formActions}>
-                <Button type="button" variant="secondary" size="sm" onClick={() => { setEditingProfile(false); setProfileForm({ name: profile!.name, email: profile!.email }); }}>Cancel</Button>
-                <Button type="submit" variant="primary" size="sm" disabled={profileSaving}>Save Changes</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={() => { setEditingProfile(false); setProfileForm({ name: profile!.name, email: profile!.email }); setProfileFieldErrors({}); }}>Cancel</Button>
+                <Button type="submit" variant="primary" size="sm" disabled={profileSaving || !profileDirty.isDirty || !profileForm.name.trim() || !profileForm.email.trim()}>Save Changes</Button>
               </div>
             </form>
           ) : (
@@ -598,23 +594,29 @@ export default function AdminPage() {
               <div className={styles.footerSub}>Change your login password</div>
             </div>
             {!changingPw && (
-              <Button variant="secondary" size="sm" onClick={() => { setChangingPw(true); setEditingProfile(false); setPwMsg(null); }}>
+              <Button variant="secondary" size="sm" onClick={() => { setChangingPw(true); setEditingProfile(false); setPwMsg(null); setPwFieldErrors({}); }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
                 Change Password
               </Button>
             )}
           </div>
           {changingPw && (
-            <form onSubmit={savePassword} className={styles.pwFormSpacing}>
+            <form onSubmit={savePassword} className={styles.pwFormSpacing} noValidate>
               <div className={styles.fg3pw}>
-                <FormField label="Current Password" required><Input className={styles.inp} type="password" value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))} required placeholder="••••••••" autoComplete="current-password" /></FormField>
-                <FormField label="New Password" required><Input className={styles.inp} type="password" value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))} required placeholder="min. 8 characters" autoComplete="new-password" /></FormField>
-                <FormField label="Confirm Password" required><Input className={styles.inp} type="password" value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} required placeholder="repeat new password" autoComplete="new-password" /></FormField>
+                <FormField label="Current Password" required error={pwFieldErrors.current}>
+                  <Input className={`${styles.inp} ${pwFieldErrors.current ? styles.inpError : ""}`} type="password" value={pwForm.current} onChange={e => { setPwForm(p => ({ ...p, current: e.target.value })); setPwFieldErrors(prev => ({ ...prev, current: undefined })); }} placeholder="••••••••" autoComplete="current-password" />
+                </FormField>
+                <FormField label="New Password" required error={pwFieldErrors.next}>
+                  <Input className={`${styles.inp} ${pwFieldErrors.next ? styles.inpError : ""}`} type="password" value={pwForm.next} onChange={e => { setPwForm(p => ({ ...p, next: e.target.value })); setPwFieldErrors(prev => ({ ...prev, next: undefined })); }} placeholder="min. 8 characters" autoComplete="new-password" />
+                </FormField>
+                <FormField label="Confirm Password" required error={pwFieldErrors.confirm}>
+                  <Input className={`${styles.inp} ${pwFieldErrors.confirm ? styles.inpError : ""}`} type="password" value={pwForm.confirm} onChange={e => { setPwForm(p => ({ ...p, confirm: e.target.value })); setPwFieldErrors(prev => ({ ...prev, confirm: undefined })); }} placeholder="repeat new password" autoComplete="new-password" />
+                </FormField>
               </div>
               {pwMsg && <Msg m={pwMsg} />}
               <div className={styles.formActions}>
-                <Button type="button" variant="secondary" size="sm" onClick={() => { setChangingPw(false); setPwForm({ current: "", next: "", confirm: "" }); setPwMsg(null); }}>Cancel</Button>
-                <Button type="submit" variant="primary" size="sm" disabled={pwSaving}>Update Password</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={() => { setChangingPw(false); setPwForm({ current: "", next: "", confirm: "" }); setPwMsg(null); setPwFieldErrors({}); }}>Cancel</Button>
+                <Button type="submit" variant="primary" size="sm" disabled={pwSaving || !pwForm.current.trim() || !pwForm.next.trim() || !pwForm.confirm.trim()}>Update Password</Button>
               </div>
             </form>
           )}
@@ -622,14 +624,14 @@ export default function AdminPage() {
       </div>
 
       {/* ── User Management ────────────────────────────────────── */}
-      <div {...animateSection(1, "card")}>
+      <div id="users" {...animateSection(1, "card")}>
         <div className={styles.sectionHeader}>
           <div>
             <h2 className={styles.sectionTitle}>User Management</h2>
             <p className={styles.sectionSub}>{users.length} user{users.length !== 1 ? "s" : ""} in the system</p>
           </div>
           {!addOpen && (
-            <Button variant="primary" size="sm" onClick={() => { setAddOpen(true); setEditUser(null); setAddMsg(null); }}>
+            <Button variant="primary" size="sm" onClick={() => { setAddOpen(true); setEditUser(null); setAddMsg(null); setAddFieldErrors({}); }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Add User
             </Button>
@@ -639,27 +641,28 @@ export default function AdminPage() {
         {addOpen && (
           <div className={styles.inlineForm}>
             <div className={styles.inlineFormTitle}>New User</div>
-            <form onSubmit={addUser} className={styles.formColTight}>
+            <form onSubmit={addUser} className={styles.formColTight} noValidate>
               <div className={styles.fg4}>
                 <FormField label="Full Name" required error={addFieldErrors.name}>
-                  <Input className={`${styles.inp} ${addFieldErrors.name ? styles.inpError : ""}`} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} required placeholder="Jane Smith" />
+                  <Input className={`${styles.inp} ${addFieldErrors.name ? styles.inpError : ""}`} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} placeholder="Jane Smith" />
                 </FormField>
                 <FormField label="Email" required error={addFieldErrors.email}>
                   <div className={styles.emailWrap}>
-                    <Input className={`${styles.inp} ${addFieldErrors.email ? styles.inpError : ""}`} type="email" value={addForm.email} onChange={e => handleAddFormChange("email", e.target.value)} required placeholder="jane@example.com" />
+                    <Input className={`${styles.inp} ${addFieldErrors.email ? styles.inpError : ""}`} type="email" value={addForm.email} onChange={e => handleAddFormChange("email", e.target.value)} placeholder="jane@example.com" />
                     {emailCheckLoading && <span className={styles.emailChecking}>checking…</span>}
                   </div>
                 </FormField>
                 <FormField label="Password" required error={addFieldErrors.password}>
-                  <PasswordInput className={styles.inp} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} required placeholder="min. 8 characters" autoComplete="new-password" />
+                  <PasswordInput className={styles.inp} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} placeholder="min. 8 characters" autoComplete="new-password" />
                 </FormField>
                 <FormField
                   label="Re-enter Password"
                   required
                   error={addFieldErrors.confirmPassword}
                   hint={!addFieldErrors.confirmPassword && addForm.confirmPassword && addForm.password === addForm.confirmPassword ? "✓ Passwords match" : undefined}
+                  hintSuccess
                 >
-                  <PasswordInput className={styles.inp} value={addForm.confirmPassword} onChange={e => handleAddFormChange("confirmPassword", e.target.value)} required placeholder="repeat password" autoComplete="new-password" />
+                  <PasswordInput className={styles.inp} value={addForm.confirmPassword} onChange={e => handleAddFormChange("confirmPassword", e.target.value)} placeholder="repeat password" autoComplete="new-password" />
                 </FormField>
                 <FormField label="Role">
                   <Select className={`${styles.inp} ${styles.inpCursor}`} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>
@@ -672,7 +675,7 @@ export default function AdminPage() {
               {addMsg && <Msg m={addMsg} />}
               <div className={styles.formActions}>
                 <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}>Cancel</Button>
-                <Button type="submit" variant="primary" size="sm" disabled={addSaving || !!addFieldErrors.name || !!addFieldErrors.email || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
+                <Button type="submit" variant="primary" size="sm" disabled={addSaving || !addForm.name.trim() || !addForm.email.trim() || !addForm.password.trim() || !addForm.confirmPassword.trim() || !!addFieldErrors.name || !!addFieldErrors.email || !!addFieldErrors.password || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
               </div>
             </form>
           </div>
@@ -682,10 +685,14 @@ export default function AdminPage() {
         {editUser && (
           <div className={styles.inlineForm}>
             <div className={styles.inlineFormTitle}>Edit: {editUser.name}</div>
-            <form onSubmit={saveEdit} className={styles.formCol}>
+            <form onSubmit={saveEdit} className={styles.formCol} noValidate>
               <div className={styles.fg3}>
-                <FormField label="Full Name" required><Input className={styles.inp} value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} required /></FormField>
-                <FormField label="Email" required><Input className={styles.inp} type="email" value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} required /></FormField>
+                <FormField label="Full Name" required error={editFieldErrors.name}>
+                  <Input className={`${styles.inp} ${editFieldErrors.name ? styles.inpError : ""}`} value={editForm.name} onChange={e => { setEditForm(p => ({ ...p, name: e.target.value })); setEditFieldErrors(prev => ({ ...prev, name: undefined })); }} />
+                </FormField>
+                <FormField label="Email" required error={editFieldErrors.email}>
+                  <Input className={`${styles.inp} ${editFieldErrors.email ? styles.inpError : ""}`} type="email" value={editForm.email} onChange={e => { setEditForm(p => ({ ...p, email: e.target.value })); setEditFieldErrors(prev => ({ ...prev, email: undefined })); }} />
+                </FormField>
                 <FormField label="Role">
                   <Select className={`${styles.inp} ${styles.inpCursor}`} value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value as Role }))}>
                     <option value="staff">Staff</option>
@@ -697,13 +704,15 @@ export default function AdminPage() {
               <div className={styles.pwSection}>
                 <div className={styles.pwSectionHint}>New password — leave blank to keep current</div>
                 <div className={styles.maxW20}>
-                  <FormField label="New Password"><Input className={styles.inp} type="password" value={editForm.newPassword} onChange={e => setEditForm(p => ({ ...p, newPassword: e.target.value }))} placeholder="min. 8 characters" autoComplete="new-password" /></FormField>
+                  <FormField label="New Password" error={editFieldErrors.newPassword}>
+                    <Input className={`${styles.inp} ${editFieldErrors.newPassword ? styles.inpError : ""}`} type="password" value={editForm.newPassword} onChange={e => { setEditForm(p => ({ ...p, newPassword: e.target.value })); setEditFieldErrors(prev => ({ ...prev, newPassword: undefined })); }} placeholder="min. 8 characters" autoComplete="new-password" />
+                  </FormField>
                 </div>
               </div>
               {editMsg && <Msg m={editMsg} />}
               <div className={styles.formActions}>
-                <Button type="button" variant="secondary" size="sm" onClick={() => { setEditUser(null); setEditMsg(null); }}>Cancel</Button>
-                <Button type="submit" variant="primary" size="sm" disabled={editSaving}>Save Changes</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={() => { setEditUser(null); setEditMsg(null); setEditFieldErrors({}); }}>Cancel</Button>
+                <Button type="submit" variant="primary" size="sm" disabled={editSaving || !editFormDirty.isDirty || !editForm.name.trim() || !editForm.email.trim()}>Save Changes</Button>
               </div>
             </form>
           </div>
@@ -765,7 +774,7 @@ export default function AdminPage() {
                         <span className={styles.selfNote}>Use My Profile above</span>
                       ) : (
                         <div className="table-actions">
-                          <Button variant="editOutline" size="sm" onClick={() => { setEditUser(u); setEditForm({ name: u.name, email: u.email, role: u.role as Role, newPassword: "" }); setEditMsg(null); setAddOpen(false); }}>
+                          <Button variant="editOutline" size="sm" onClick={() => { const initial = { name: u.name, email: u.email, role: u.role as Role, newPassword: "" }; setEditUser(u); setEditForm(initial); editFormDirty.markClean(initial); setEditMsg(null); setEditFieldErrors({}); setAddOpen(false); }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             Edit
                           </Button>
@@ -785,14 +794,14 @@ export default function AdminPage() {
       </div>
 
       {/* ── Activity Log ───────────────────────────────────────── */}
-      <div {...animateSection(2, "card")}>
+      <div id="activity-log" {...animateSection(2, "card")}>
         <div className={styles.sectionHeaderWrap}>
           <div>
             <h2 className={styles.sectionTitle}>Activity Log</h2>
             <p className={styles.sectionSub}>{logsTotal} total actions recorded</p>
           </div>
           <div className={styles.logsHeaderActions}>
-            <Button variant="secondary" size="sm" onClick={() => loadLogs(logsPage, logsFilter)}>
+            <Button variant="secondary" size="sm" onClick={() => loadLogs(logsPage, logsFilter, logsSearch.trim())}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
               Refresh
             </Button>
@@ -829,7 +838,7 @@ export default function AdminPage() {
         </div>
 
         <div className="table-wrap">
-          <table className="table-base">
+          <table className="table-base" style={logsLoading && logsLoadedOnce ? { opacity: 0.5 } : undefined}>
             <colgroup>
               <col className={styles.colUser} />
               <col className={styles.colAction} />
@@ -847,7 +856,7 @@ export default function AdminPage() {
               </tr>
             </thead>
             <tbody>
-              {logsLoading && logs.length === 0 ? (
+              {logsLoading && !logsLoadedOnce ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i}>
                     <td>
@@ -901,7 +910,8 @@ export default function AdminPage() {
               <Button
                 variant="secondary" size="sm"
                 disabled={logsLoading || logsPage <= 1}
-                onClick={() => loadLogs(logsPage - 1, logsFilter)}
+                loading={logsLoading && logsNavDirection === "prev"}
+                onClick={() => { setLogsNavDirection("prev"); loadLogs(logsPage - 1, logsFilter, logsSearch.trim()); }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
                 Prev
@@ -909,7 +919,8 @@ export default function AdminPage() {
               <Button
                 variant="secondary" size="sm"
                 disabled={logsLoading || logsPage >= logsTotalPages}
-                onClick={() => loadLogs(logsPage + 1, logsFilter)}
+                loading={logsLoading && logsNavDirection === "next"}
+                onClick={() => { setLogsNavDirection("next"); loadLogs(logsPage + 1, logsFilter, logsSearch.trim()); }}
               >
                 Next
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
@@ -918,22 +929,6 @@ export default function AdminPage() {
           </div>
         )}
       </div>
-
-      {/* ── Danger Zone ─────────────────────────────────────────── */}
-      {(() => { const a = animateSection(3, "card"); return (
-      <div className={a.className} style={{ ...a.style, borderColor: "var(--c-red-border)" }}>
-        <div className={styles.sectionHeaderWrap}>
-          <div>
-            <h2 className={styles.sectionTitle} style={{ color: "var(--c-red)" }}>Danger Zone</h2>
-            <p className={styles.sectionSub}>Factory reset — wipes all business data, keeps admin accounts and business/Gmail settings</p>
-          </div>
-          <Button variant="dangerOutline" size="sm" onClick={() => { setFactoryResetInput(""); setFactoryResetConfirm(true); }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
-            Factory Reset
-          </Button>
-        </div>
-      </div>
-      ); })()}
 
       </div>{/* end main content column */}
 

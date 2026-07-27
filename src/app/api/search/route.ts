@@ -1,8 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/apiAuth";
+import { NAV_GROUPS, BIN_NAV, SETTINGS_SUBSECTIONS, ADMIN_SUBSECTIONS } from "@/lib/navigation";
 
 const PER_GROUP_LIMIT = 5;
+const PAGES_LIMIT = 8;
+
+/**
+ * Matches every navigable page and settings sub-section a session is
+ * allowed to see against the query, by label/title + keywords. Sourced
+ * from `@/lib/navigation` — the same registry the sidebar renders from —
+ * so any page/setting added there is automatically searchable here too.
+ */
+function matchPages(q: string, session: { user: { role: string; sections: string[] } }) {
+  const needle = q.toLowerCase();
+  const { role, sections } = session.user;
+  const isAdmin = role === "admin";
+  const userSections = Array.isArray(sections) ? sections : [];
+
+  const canSeeSections = (required?: string[]) =>
+    !required || isAdmin || required.every((s) => userSections.includes(s));
+
+  const navResults = [...NAV_GROUPS.flatMap((g) => g.items), BIN_NAV]
+    .filter((item) => !(item.adminOnly && !isAdmin))
+    .filter((item) => canSeeSections(item.sectionsRequired ?? (item.sectionRequired ? [item.sectionRequired] : undefined)))
+    .filter((item) => item.label.toLowerCase().includes(needle) || item.keywords?.some((k) => k.toLowerCase().includes(needle)))
+    .map((item) => ({ id: item.href, title: item.label, subtitle: "Page", href: item.href }));
+
+  const subsectionResults = [...SETTINGS_SUBSECTIONS, ...ADMIN_SUBSECTIONS]
+    .filter((item) => !(item.adminOnly && !isAdmin))
+    .filter((item) => item.title.toLowerCase().includes(needle) || item.keywords?.some((k) => k.toLowerCase().includes(needle)))
+    .map((item) => ({ id: item.href, title: item.title, subtitle: item.href.startsWith("/admin") ? "Admin setting" : "Setting", href: item.href }));
+
+  return [...navResults, ...subsectionResults].slice(0, PAGES_LIMIT);
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -75,6 +106,11 @@ export async function GET(request: NextRequest) {
     ]);
 
     const groups = [
+      {
+        type: "page",
+        label: "Pages & Settings",
+        items: matchPages(q, auth.session),
+      },
       {
         type: "invoice",
         label: "Invoices",

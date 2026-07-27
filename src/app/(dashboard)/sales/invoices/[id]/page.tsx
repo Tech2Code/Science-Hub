@@ -1,10 +1,11 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import type { CSSProperties } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
-import { fetchCached, bustCache, useFetch } from "@/lib/useCache";
+import { fetchCached, bustCache, bustCachePrefix, useFetch } from "@/lib/useCache";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
@@ -13,7 +14,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
-import { getCachedPdf, setCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
+import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { amountInWordsINR } from "@/lib/numberToWords";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
@@ -29,7 +30,9 @@ interface Payment {
 }
 interface ReturnRecord {
   id: string; date: string; notes: string | null; createdAt: string;
-  items: { id: string; name: string; quantity: number; price: number; total: number; productId: string | null }[];
+  creditNoteNumber: string | null;
+  subtotal: number; cgst: number; sgst: number; igst: number; roundOff: number; total: number;
+  items: { id: string; name: string; quantity: number; price: number; gstRate: number; gstAmount: number; total: number; productId: string | null }[];
 }
 interface ReturnFormItem {
   productId: string; name: string; price: number; selected: boolean; qty: number; maxQty: number; qtyText: string;
@@ -192,6 +195,7 @@ export default function InvoiceDetailPage() {
   const [error, setError] = useState("");
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentForm, setPaymentForm] = useState({ amount: "", method: "Cash", reference: "" });
+  const [paymentAmountError, setPaymentAmountError] = useState<string | undefined>(undefined);
   const [addingPayment, setAddingPayment] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
@@ -212,9 +216,14 @@ export default function InvoiceDetailPage() {
   const [returnNotes, setReturnNotes] = useState("");
   const [returnDate, setReturnDate] = useState("");
   const [addingReturn, setAddingReturn] = useState(false);
+  const [returnDeleteConfirm, setReturnDeleteConfirm] = useState<ReturnRecord | null>(null);
+  const [deletingReturn, setDeletingReturn] = useState(false);
+  const [creditNoteToRender, setCreditNoteToRender] = useState<ReturnRecord | null>(null);
+  const [creditNoteDownloadingId, setCreditNoteDownloadingId] = useState<string | null>(null);
   const [openingEdit, setOpeningEdit] = useState(false);
   const toast = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   async function load(force = false) {
     try {
@@ -224,8 +233,9 @@ export default function InvoiceDetailPage() {
     setLoading(false);
   }
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- fetch-on-id-change; load() sets invoice/settings/loading state
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-id-change; load() sets invoice/settings/loading state
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load() is redefined every render but reads only `id`, already in the dep array
   }, [id]);
 
   useEffect(() => {
@@ -238,6 +248,19 @@ export default function InvoiceDetailPage() {
       .catch(() => { });
   }, [id]);
 
+  // Lets the Credit Notes list page's View/Download buttons reuse this page's
+  // own #credit-note-print-area via the hidden-iframe PDF generator (same
+  // trick the Invoices list page uses for its own PDF buttons) — a
+  // ?creditNoteId=<returnId> URL loaded in that iframe auto-mounts the
+  // matching return's print area without any click needed.
+  useEffect(() => {
+    const wantedId = searchParams.get("creditNoteId");
+    if (!wantedId || returns.length === 0) return;
+    const match = returns.find(r => r.id === wantedId);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time auto-mount driven by the iframe's URL, not a derived-state sync
+    if (match) setCreditNoteToRender(match);
+  }, [returns, searchParams]);
+
   // Set page title to invoice number so browser Ctrl+P / Save as PDF uses the right filename
   useEffect(() => {
     if (!invoice) return;
@@ -249,9 +272,10 @@ export default function InvoiceDetailPage() {
   async function handleAddPayment(e: React.FormEvent) {
     e.preventDefault();
     const amtErr = validate(paymentForm.amount, rules.required("Amount is required."), rules.positiveNumber("Enter a valid amount greater than 0."));
-    if (amtErr) { toast({ type: "error", title: "Check form", message: amtErr }); return; }
+    if (amtErr) { setPaymentAmountError(amtErr); return; }
     const amt = parseFloat(paymentForm.amount);
-    if (amt > balance) { toast({ type: "error", title: "Check form", message: `Amount cannot exceed balance due (₹${fmt(balance)}).` }); return; }
+    if (amt > balance) { setPaymentAmountError(`Amount cannot exceed balance due (₹${fmt(balance)}).`); return; }
+    setPaymentAmountError(undefined);
     setAddingPayment(true);
     const res = await fetch(`/api/invoices/${id}/payment`, {
       method: "POST",
@@ -325,7 +349,8 @@ export default function InvoiceDetailPage() {
         setReturns(prev => [created, ...prev]);
         setShowReturnForm(false);
         bustCache(`/api/invoices/${id}`);
-        bustCache("/api/products");
+        bustCachePrefix("/api/products");
+        bustCachePrefix("/api/credit-notes");
         toast({ type: "success", title: "Return recorded", message: `${selected.length} item(s) returned.` });
       } else {
         const d = await res.json().catch(() => ({}));
@@ -335,6 +360,65 @@ export default function InvoiceDetailPage() {
       toast({ type: "error", title: "Network error", message: "Please try again." });
     }
     setAddingReturn(false);
+  }
+
+  async function handleDeleteReturn() {
+    if (!returnDeleteConfirm) return;
+    setDeletingReturn(true);
+    try {
+      const res = await fetch(`/api/invoices/${id}/returns/${returnDeleteConfirm.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setReturns(prev => prev.filter(r => r.id !== returnDeleteConfirm.id));
+        invalidateCachedPdf("return", returnDeleteConfirm.id);
+        bustCache(`/api/invoices/${id}`);
+        bustCachePrefix("/api/products");
+        bustCachePrefix("/api/credit-notes");
+        toast({ type: "success", title: "Deleted", message: "Credit note moved to bin." });
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to delete credit note." });
+      }
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Please try again." });
+    }
+    setDeletingReturn(false);
+    setReturnDeleteConfirm(null);
+  }
+
+  // Cached by return id + a variant key derived from whatever can actually
+  // change the rendered PDF (logo/business settings) — a credit note itself
+  // is never edited after creation, so once generated it's reused as-is
+  // until settings change or the note is deleted (see invalidateCachedPdf
+  // in handleDeleteReturn), instead of re-rendering on every click.
+  async function getOrRenderCreditNotePdf(ret: ReturnRecord): Promise<Blob | null> {
+    const showLogo = settings?.showLogoOnInvoices !== false;
+    const variantKey = buildPdfVariantKey(undefined, { logo: showLogo, settings: settings?.updatedAt ?? "loading" });
+    const cached = await getCachedPdf("return", ret.id, variantKey);
+    if (cached) return cached;
+
+    setCreditNoteToRender(ret);
+    // Wait for the hidden print area to actually mount/paint before
+    // html2canvas reads it off the DOM — same two-frame + fonts wait used
+    // by the main invoice PDF download.
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await document.fonts.ready;
+    const el = document.getElementById("credit-note-print-area");
+    const blob = el ? await generateInvoicePdfBlob(el, { logoUrl: showLogo ? settings?.logoUrl || undefined : undefined }) : null;
+    setCreditNoteToRender(null);
+    if (blob) setCachedPdf("return", ret.id, variantKey, blob);
+    return blob;
+  }
+
+  async function handleDownloadCreditNotePdf(ret: ReturnRecord) {
+    setCreditNoteDownloadingId(ret.id);
+    const blob = await getOrRenderCreditNotePdf(ret);
+    setCreditNoteDownloadingId(null);
+    if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate credit note PDF." }); return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${ret.creditNoteNumber ?? "Credit-Note"}.pdf`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
 
   async function generatePdfBlob(copyLabels?: string[]): Promise<Blob | null> {
@@ -593,6 +677,16 @@ export default function InvoiceDetailPage() {
         onConfirm={handleDelete}
         onCancel={() => { if (!deleting) setDeleteConfirm(false); }}
       />
+      <ConfirmDialog
+        open={returnDeleteConfirm !== null}
+        title="Delete Credit Note"
+        message={`Move credit note ${returnDeleteConfirm?.creditNoteNumber ?? ""} to bin? This reverses the stock it restored. You can restore it within 30 days.`}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deletingReturn}
+        onConfirm={handleDeleteReturn}
+        onCancel={() => { if (!deletingReturn) setReturnDeleteConfirm(null); }}
+      />
       <PdfCopyDialog
         open={pdfCopyDialogOpen}
         loading={pdfDownloading}
@@ -603,16 +697,18 @@ export default function InvoiceDetailPage() {
       {pdfPrinting && <OverlayLoader text="Preparing PDF…" />}
       {addingPayment && <OverlayLoader text="Saving payment…" />}
       {addingReturn && <OverlayLoader text="Saving return…" />}
+      {deletingReturn && <OverlayLoader text="Deleting credit note…" />}
+      {creditNoteToRender && <OverlayLoader text="Preparing credit note PDF…" />}
       {openingEdit && <OverlayLoader text="Opening editor…" />}
 
       <style>{`
-        #invoice-print-area {
+        #invoice-print-area, #credit-note-print-area {
           --inv-bg:#fff;--inv-bg2:#f8fafc;--inv-bg3:#f1f5f9;--inv-bg4:#e2e8f0;
           --inv-bd:#475569;--inv-bd2:#94a3b8;
           --inv-tx:#0f172a;--inv-tx2:#334155;--inv-tx3:#64748b;
           --inv-brand:#1e3a8a;--inv-green:#059669;--inv-blue:#2563eb;--inv-red:#dc2626;
         }
-        .dark #invoice-print-area {
+        .dark #invoice-print-area, .dark #credit-note-print-area {
           --inv-bg:#0f172a;--inv-bg2:#1e293b;--inv-bg3:#1e293b;--inv-bg4:#334155;
           --inv-bd:#475569;--inv-bd2:#334155;
           --inv-tx:#f1f5f9;--inv-tx2:#cbd5e1;--inv-tx3:#94a3b8;
@@ -633,6 +729,7 @@ export default function InvoiceDetailPage() {
                 size="sm"
                 onClick={() => {
                   setPaymentForm({ amount: "", method: "Cash", reference: "" });
+                  setPaymentAmountError(undefined);
                   setShowPaymentForm(true);
                 }}
               >
@@ -734,15 +831,15 @@ export default function InvoiceDetailPage() {
         {showPaymentForm && (
           <div className={`card ${styles.paymentFormCard}`}>
             <h3 className={styles.paymentFormTitle}>Record Payment</h3>
-            <form onSubmit={handleAddPayment}>
+            <form onSubmit={handleAddPayment} noValidate>
               <div className={styles.paymentFormRow}>
-                <FormField label="Amount (₹)">
+                <FormField label="Amount (₹)" error={paymentAmountError}>
                   <div className={styles.paymentAmountRow}>
                     <Input
                       type="text"
                       inputMode="decimal"
                       value={paymentForm.amount}
-                      onChange={(e) => { setPaymentForm((p) => ({ ...p, amount: e.target.value.replace(/[^\d.]/g, "") })); }}
+                      onChange={(e) => { setPaymentForm((p) => ({ ...p, amount: e.target.value.replace(/[^\d.]/g, "") })); setPaymentAmountError(undefined); }}
                       placeholder={`e.g. ${balance.toFixed(2)}`}
                       sz="sm"
                       className={styles.paymentAmountInput}
@@ -779,7 +876,7 @@ export default function InvoiceDetailPage() {
                   />
                 </FormField>
                 <div className={styles.paymentFormBtnRow}>
-                  <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment} loading={addingPayment}>
+                  <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment || !paymentForm.amount.trim()} loading={addingPayment}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
                     Save Payment
                   </Button>
@@ -798,7 +895,7 @@ export default function InvoiceDetailPage() {
           <div className={styles.returnModalOverlayWrap}>
             <div className={styles.returnModalBackdrop} onClick={() => { if (!addingReturn) setShowReturnForm(false); }} />
             <div className={styles.returnModalBox}>
-              <form onSubmit={handleAddReturn} className={styles.returnModalForm}>
+              <form onSubmit={handleAddReturn} className={styles.returnModalForm} noValidate>
                 {/* Modal header */}
                 <div className={styles.returnModalHeader}>
                   <div className={styles.returnModalHeaderLeft}>
@@ -879,7 +976,7 @@ export default function InvoiceDetailPage() {
                 </div>
                 {/* Modal footer (pinned, outside the scrollable body) */}
                 <div className={styles.returnModalFooter}>
-                  <Button type="submit" variant="primary" size="sm" disabled={addingReturn || returnItems.length === 0} loading={addingReturn}>
+                  <Button type="submit" variant="primary" size="sm" disabled={addingReturn || !returnItems.some(ri => ri.selected && ri.qty > 0)} loading={addingReturn}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
                     Save Return
                   </Button>
@@ -1355,10 +1452,17 @@ export default function InvoiceDetailPage() {
                 // always colSpan 8), and Qty×Rate|Amount lands on the same boundary
                 // as Payment History's Reference|Amount divider (also now fixed,
                 // since both boundaries above are fixed for both supply types).
-                const itemCols = 6;
+                const itemCols = 4;
                 const qtyRateCols = 2;
+                const gstCols = 2;
                 const amountCols = invoice.isInterState ? 2 : 4;
                 const bd: React.CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 10px", fontSize: 10 };
+                const totalSubtotal = returns.reduce((s, r) => s + r.subtotal, 0);
+                const totalCgst = returns.reduce((s, r) => s + r.cgst, 0);
+                const totalSgst = returns.reduce((s, r) => s + r.sgst, 0);
+                const totalIgst = returns.reduce((s, r) => s + r.igst, 0);
+                const totalRoundOff = returns.reduce((s, r) => s + r.roundOff, 0);
+                const totalReturnedAmt = returns.reduce((s, r) => s + r.total, 0);
                 return (
                   <tbody>
                     <tr>
@@ -1370,6 +1474,7 @@ export default function InvoiceDetailPage() {
                       <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date &amp; Time</td>
                       <td colSpan={itemCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Item</td>
                       <td colSpan={qtyRateCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Qty × List Price</td>
+                      <td colSpan={gstCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>GST</td>
                       <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
                     </tr>
                     {returns.map((ret) =>
@@ -1377,20 +1482,49 @@ export default function InvoiceDetailPage() {
                         <tr key={`${ret.id}-${ri.id}`}>
                           {riIdx === 0 && (
                             <td colSpan={2} rowSpan={ret.items.length} style={{ ...bd, color: "var(--inv-tx2)", verticalAlign: "top" }}>
+                              {ret.creditNoteNumber && <div style={{ fontWeight: 600, color: "var(--inv-tx)" }}>{ret.creditNoteNumber}</div>}
                               {parseDate(ret.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
                               {ret.notes ? <div style={{ fontSize: 10, color: "var(--inv-tx3)", marginTop: 2 }}>{ret.notes}</div> : null}
                             </td>
                           )}
                           <td colSpan={itemCols} style={{ ...bd, color: "var(--inv-tx2)" }}>{ri.name}</td>
                           <td colSpan={qtyRateCols} style={{ ...bd, color: "var(--inv-tx3)" }}>{ri.quantity} × ₹{fmt(ri.price)}</td>
+                          <td colSpan={gstCols} style={{ ...bd, textAlign: "right", color: "var(--inv-tx3)" }}>{ri.gstRate}% ({fmt(ri.gstAmount)})</td>
                           <td colSpan={amountCols} style={{ ...bd, textAlign: "right", color: "var(--inv-red)", fontWeight: 600 }}>−{fmt(ri.total)}</td>
                         </tr>
                       ))
                     )}
                     <tr>
+                      <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>Taxable Value</td>
+                      <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(totalSubtotal)}</td>
+                    </tr>
+                    {totalIgst > 0 ? (
+                      <tr>
+                        <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>IGST</td>
+                        <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(totalIgst)}</td>
+                      </tr>
+                    ) : (
+                      <>
+                        <tr>
+                          <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>CGST</td>
+                          <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(totalCgst)}</td>
+                        </tr>
+                        <tr>
+                          <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>SGST</td>
+                          <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(totalSgst)}</td>
+                        </tr>
+                      </>
+                    )}
+                    {totalRoundOff !== 0 && (
+                      <tr>
+                        <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>Round Off</td>
+                        <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>{totalRoundOff > 0 ? "−" : "+"}{fmt(Math.abs(totalRoundOff))}</td>
+                      </tr>
+                    )}
+                    <tr>
                       <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Total Returned</td>
                       <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-red)", fontWeight: 700, textAlign: "right" }}>
-                        −{fmt(returns.reduce((s, r) => s + r.items.reduce((ss, ri) => ss + ri.total, 0), 0))}
+                        −{fmt(totalReturnedAmt)}
                       </td>
                     </tr>
                   </tbody>
@@ -1419,6 +1553,127 @@ export default function InvoiceDetailPage() {
 
         </div>
 
+        {/* Credit note print area — mounted off-screen only while a credit
+            note PDF is being generated, fed to the same generateInvoicePdfBlob()
+            pipeline as the main invoice via #credit-note-print-area. */}
+        {creditNoteToRender && (
+          <div id="credit-note-print-area" style={{
+            position: "absolute", left: -9999, top: 0,
+            width: 700, background: "var(--inv-bg)", color: "var(--inv-tx)",
+          }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10.5 }}>
+              <tbody>
+                <tr>
+                  <td colSpan={6} style={{ padding: 0 }}>
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 14, padding: "10px 20px",
+                      border: "1px solid var(--inv-bd)",
+                    }}>
+                      {settings?.showLogoOnInvoices !== false && (
+                        <div style={{ flexShrink: 0, width: 60, height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element -- html2canvas needs a plain <img>, swapped to a data URL during PDF generation */}
+                          <img src={settings?.logoUrl || "/logo.png"} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                        </div>
+                      )}
+                      <div style={{ flex: 1, textAlign: "center" }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--inv-tx2)", marginBottom: 3 }}>
+                          Credit Note
+                        </div>
+                        <div style={{ fontSize: 17, fontWeight: 800, color: "var(--inv-tx)", marginBottom: 3 }}>{settings?.name}</div>
+                        {(settings?.address || settings?.city || settings?.state || settings?.pincode) && (
+                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", marginBottom: 2 }}>
+                            {[settings?.address, settings?.city, settings?.state, settings?.pincode].filter(Boolean).join(", ")}
+                          </div>
+                        )}
+                        {(settings?.gstin || settings?.pan) && (
+                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", fontFamily: "monospace" }}>
+                            {[settings?.gstin && `GSTIN - ${settings.gstin}`, settings?.pan && `PAN - ${settings.pan}`].filter(Boolean).join("   ")}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td colSpan={6} style={{ padding: "10px 20px", border: "1px solid var(--inv-bd)", borderTop: "none" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+                      <div>
+                        <div><strong>Credit Note No.:</strong> {creditNoteToRender.creditNoteNumber ?? "—"}</div>
+                        <div><strong>Date:</strong> {parseDate(creditNoteToRender.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
+                        <div><strong>Against Invoice:</strong> {invoice.invoiceNumber} ({parseDate(invoice.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })})</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div><strong>Customer:</strong> {invoice.customer.name}</div>
+                        {invoice.customer.gstin && <div style={{ fontFamily: "monospace" }}>GSTIN: {invoice.customer.gstin}</div>}
+                        {invoice.customer.address && <div>{[invoice.customer.address, invoice.customer.city, invoice.customer.state].filter(Boolean).join(", ")}</div>}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                <tr style={{ background: "var(--inv-bg2)" }}>
+                  {["Item", "Qty", "Rate", "GST %", "GST Amt", "Total"].map((h, i) => (
+                    <td key={h} style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", fontWeight: 700, fontSize: 9.5, textAlign: i === 0 ? "left" : "right" }}>{h}</td>
+                  ))}
+                </tr>
+                {creditNoteToRender.items.map((ri) => (
+                  <tr key={ri.id}>
+                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)" }}>{ri.name}</td>
+                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{ri.quantity}</td>
+                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{fmt(ri.price)}</td>
+                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{ri.gstRate}%</td>
+                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{fmt(ri.gstAmount)}</td>
+                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{fmt(ri.total)}</td>
+                  </tr>
+                ))}
+                {(() => {
+                  const cnTotalsRows = 1 + (creditNoteToRender.igst > 0 ? 1 : 2) + (creditNoteToRender.roundOff !== 0 ? 1 : 0) + 1;
+                  const cnLabelCell: CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 8px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" };
+                  const cnValueCell: CSSProperties = { ...cnLabelCell, textAlign: "right" };
+                  return (
+                    <>
+                      <tr>
+                        <td colSpan={4} rowSpan={cnTotalsRows} style={{ border: "1px solid var(--inv-bd)", padding: "10px 12px", verticalAlign: "top", fontSize: 9.5, color: "var(--inv-tx3)" }}>
+                          <div style={{ fontStyle: "italic" }}><strong>Amount in Words:</strong> {amountInWordsINR(creditNoteToRender.total)}</div>
+                          {creditNoteToRender.notes && <div style={{ marginTop: 6 }}><strong>Notes:</strong> {creditNoteToRender.notes}</div>}
+                        </td>
+                        <td style={cnLabelCell}>Taxable Value</td>
+                        <td style={cnValueCell}>₹{fmt(creditNoteToRender.subtotal)}</td>
+                      </tr>
+                      {creditNoteToRender.igst > 0 ? (
+                        <tr>
+                          <td style={cnLabelCell}>IGST</td>
+                          <td style={cnValueCell}>₹{fmt(creditNoteToRender.igst)}</td>
+                        </tr>
+                      ) : (
+                        <>
+                          <tr>
+                            <td style={cnLabelCell}>CGST</td>
+                            <td style={cnValueCell}>₹{fmt(creditNoteToRender.cgst)}</td>
+                          </tr>
+                          <tr>
+                            <td style={cnLabelCell}>SGST</td>
+                            <td style={cnValueCell}>₹{fmt(creditNoteToRender.sgst)}</td>
+                          </tr>
+                        </>
+                      )}
+                      {creditNoteToRender.roundOff !== 0 && (
+                        <tr>
+                          <td style={cnLabelCell}>Round Off</td>
+                          <td style={cnValueCell}>{creditNoteToRender.roundOff > 0 ? "+" : "−"}₹{fmt(Math.abs(creditNoteToRender.roundOff))}</td>
+                        </tr>
+                      )}
+                      <tr>
+                        <td style={{ ...cnLabelCell, fontWeight: 700, color: "var(--inv-tx)", background: "var(--inv-bg4)", fontSize: 12 }}>Total</td>
+                        <td style={{ ...cnValueCell, fontWeight: 700, color: "var(--inv-tx)", background: "var(--inv-bg4)", fontSize: 12 }}>₹{fmt(creditNoteToRender.total)}</td>
+                      </tr>
+                    </>
+                  );
+                })()}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* Payment history */}
         {invoice.payments.length > 0 && (() => {
           const METHOD_STYLE: Record<string, { bg: string; color: string; border: string }> = {
@@ -1431,8 +1686,12 @@ export default function InvoiceDetailPage() {
             Other: { bg: "var(--c-bg-sub)", color: "var(--c-text-3)", border: "var(--c-border)" },
           };
           const paidTotal = invoice.payments.reduce((s, p) => s + p.amount, 0);
-          const totalReturned = returns.reduce((s, r) => s + r.items.reduce((ss, ri) => ss + ri.total, 0), 0);
-          const netPaid = paidTotal - totalReturned;
+          const totalReturned = returns.reduce((s, r) => s + r.total, 0);
+          // Grand Total already bakes in roundOff (subtotal + tax + roundOff),
+          // so netting it out of "net paid" too shows the reconciled figure
+          // net of both what was returned and the sub-rupee rounding cushion.
+          const roundOffAdj = invoice.roundOff;
+          const netPaid = paidTotal - totalReturned - roundOffAdj;
           const paidPct = Math.min(100, (paidTotal / invoice.total) * 100);
 
           return (
@@ -1471,9 +1730,16 @@ export default function InvoiceDetailPage() {
                     <div>
                       <div className={styles.historyStatLabel}>Total Paid</div>
                       <div className={`${styles.historyStatValue} ${styles.historyStatValueGreen}`}>₹{fmt(paidTotal)}</div>
-                      {totalReturned > 0 && (
+                      {(totalReturned > 0 || roundOffAdj !== 0) && (
                         <div className={styles.historyNetLine}>
-                          <span className={styles.historyNetLineOrange}>− ₹{fmt(totalReturned)}</span>
+                          {totalReturned > 0 && (
+                            <span className={styles.historyNetLineOrange}>− ₹{fmt(totalReturned)} returned</span>
+                          )}
+                          {roundOffAdj !== 0 && (
+                            <span className={styles.historyNetLineOrange}>
+                              {totalReturned > 0 ? ", " : ""}{roundOffAdj > 0 ? "− " : "+ "}₹{fmt(Math.abs(roundOffAdj))} round off
+                            </span>
+                          )}
                           <span className={styles.historyNetLineNet}> = ₹{fmt(netPaid)}</span>
                           <span> net</span>
                         </div>
@@ -1543,7 +1809,7 @@ export default function InvoiceDetailPage() {
 
         {/* Returns history */}
         {returns.length > 0 && (() => {
-          const totalReturned = returns.reduce((s, r) => s + r.items.reduce((ss, ri) => ss + ri.total, 0), 0);
+          const totalReturned = returns.reduce((s, r) => s + r.total, 0);
           return (
             <div {...animateSection(1, `card ${styles.returnsHistoryCard}`)}>
               <div className={styles.returnsHistoryHeader}>
@@ -1578,14 +1844,34 @@ export default function InvoiceDetailPage() {
                   <div key={ret.id} className={ridx < returns.length - 1 ? styles.returnEntry : styles.returnEntryLast}>
                     <div className={styles.returnEntryHead}>
                       <div className={styles.returnEntryHeadLeft}>
+                        {ret.creditNoteNumber && <span className={styles.creditNoteNumberBadge}>{ret.creditNoteNumber}</span>}
                         <span className={styles.returnEntryDate}>
                           {parseDate(ret.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
                         </span>
                         {ret.notes && <span className={styles.returnEntryNotes}>— {ret.notes}</span>}
                       </div>
-                      <span className={styles.returnEntryTotal}>
-                        ₹{fmt(ret.items.reduce((s, ri) => s + ri.total, 0))}
-                      </span>
+                      <div className={styles.returnEntryHeadRight}>
+                        <span className={styles.returnEntryTotal}>₹{fmt(ret.total)}</span>
+                        <button
+                          type="button"
+                          className={styles.returnDeleteBtn}
+                          title="Download credit note PDF"
+                          disabled={creditNoteDownloadingId === ret.id}
+                          onClick={() => handleDownloadCreditNotePdf(ret)}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                        </button>
+                        {canWrite && (
+                          <button
+                            type="button"
+                            className={styles.returnDeleteBtn}
+                            title="Delete credit note"
+                            onClick={() => setReturnDeleteConfirm(ret)}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className={styles.returnItemsGroup}>
                       {ret.items.map(ri => (
@@ -1594,10 +1880,15 @@ export default function InvoiceDetailPage() {
                             {ri.name}
                             <span className={styles.returnLineItemQty}> ×{ri.quantity}</span>
                             <span className={styles.returnLineItemPrice}> @ ₹{fmt(ri.price)}</span>
+                            {ri.gstRate > 0 && <span className={styles.returnLineItemPrice}> + {ri.gstRate}% GST</span>}
                           </span>
                           <span className={styles.returnLineItemTotal}>₹{fmt(ri.total)}</span>
                         </div>
                       ))}
+                    </div>
+                    <div className={styles.returnTaxSummary}>
+                      Taxable ₹{fmt(ret.subtotal)}
+                      {ret.igst > 0 ? ` · IGST ₹${fmt(ret.igst)}` : ` · CGST ₹${fmt(ret.cgst)} · SGST ₹${fmt(ret.sgst)}`}
                     </div>
                   </div>
                 ))}

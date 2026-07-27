@@ -55,10 +55,6 @@ export const rules = {
 
   passwordMatch: (other: string, msg = "Passwords do not match."): Validator =>
     (v) => v === other ? null : msg,
-
-  // Looser than phone10 — allows an optional country code/format like "+91-9968597044".
-  phoneFlexible: (msg = "Enter a valid phone number."): Validator =>
-    (v) => !v.trim() || /^\+?[\d\s-]{7,20}$/.test(v.trim()) ? null : msg,
 };
 
 // Run a list of validators in order, return the first error or null.
@@ -184,7 +180,7 @@ export function validateSettingsInput(input: {
   return (
     validate(input.pan ?? "", rules.maxLength(10), rules.pan()) ||
     validate(input.termsAndConditions ?? "", rules.maxLength(2000)) ||
-    validate(input.phone ?? "", rules.phoneFlexible()) ||
+    validate(input.phone ?? "", rules.phone10()) ||
     validate(input.pincode ?? "", rules.pincode()) ||
     validate(input.gstin ?? "", rules.maxLength(15), rules.gstin()) ||
     (isBankSectionUpdate
@@ -202,7 +198,7 @@ export function validateSettingsInput(input: {
 // `requireContactDetails` is set on creation only — existing vendors may
 // predate the phone/address requirement, so edits don't retroactively block on it.
 export function validateVendorInput(input: {
-  name?: string; phone?: string; email?: string; gstin?: string; address?: string;
+  name?: string; phone?: string; email?: string; gstin?: string; address?: string; state?: string;
 }, requireContactDetails = false): string | null {
   const name = (input.name ?? "").trim();
   if (!name) return "Vendor name is required.";

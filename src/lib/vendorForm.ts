@@ -1,11 +1,11 @@
 import { rules, validateForm, type FormErrors } from "@/lib/validation";
 
 export interface VendorFormData {
-  name: string; company: string; gstin: string; phone: string; email: string; address: string; notes: string; isActive: boolean;
+  name: string; company: string; gstin: string; phone: string; email: string; address: string; state: string; notes: string; isActive: boolean;
 }
 
 export const BLANK_VENDOR_FORM: VendorFormData = {
-  name: "", company: "", gstin: "", phone: "", email: "", address: "", notes: "", isActive: true,
+  name: "", company: "", gstin: "", phone: "", email: "", address: "", state: "", notes: "", isActive: true,
 };
 
 type VendorStrFields = { name: string; company: string; gstin: string; phone: string; email: string; address: string; [key: string]: string; };

@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { CustomerFormFields } from "@/components/customers/CustomerFormFields";
 import { BLANK_CUSTOMER_FORM, validateCustomerForm, normalizeCustomerField, type CustomerFormData } from "@/lib/customerForm";
-import { bustCache } from "@/lib/useCache";
+import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -61,9 +61,9 @@ export default function EditCustomerPage() {
     });
     setSaving(false);
     if (res.ok) {
-      bustCache("/api/customers");
+      bustCachePrefix("/api/customers");
       bustCache(`/api/customers/${id}`);
-      bustCache("/api/invoices");
+      bustCachePrefix("/api/invoices");
       toast({ type: "success", title: "Customer updated", message: "Changes saved." });
       router.push(`/sales/customers/${id}`);
     }
@@ -114,12 +114,12 @@ export default function EditCustomerPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
+      <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
         <CustomerFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} />
 
         <div className="form-actions-wrap">
           <div className="form-actions">
-            <Button type="submit" variant="primary" disabled={disabled || noChanges}>
+            <Button type="submit" variant="primary" disabled={disabled || noChanges || !form.name.trim()}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Customer
             </Button>
             <Button variant="secondary" href={`/sales/customers/${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>

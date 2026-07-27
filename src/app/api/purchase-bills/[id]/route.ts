@@ -7,9 +7,11 @@ import { deleteAttachmentBlob, isPurchaseBillBlobUrl } from "@/lib/blobStorage";
 import { computeRoundOff } from "@/lib/roundOff";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { purchaseBillLineBreakdown } from "@/lib/purchaseBillForm";
+import { getBusinessSettings } from "@/lib/db";
+import { deriveIsInterState } from "@/lib/gstLocation";
 
 const BILL_INCLUDE = {
-  vendor: { select: { id: true, name: true, company: true, phone: true, email: true, gstin: true, address: true } },
+  vendor: { select: { id: true, name: true, company: true, phone: true, email: true, gstin: true, address: true, state: true } },
   createdBy: { select: { id: true, name: true } },
   items: { include: { product: { select: { id: true, name: true, unit: true } } } },
   payments: { orderBy: { date: "desc" as const } },
@@ -71,7 +73,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // when items aren't being edited so the update below only touches items
     // when the caller actually sent a new set.
     let computedItems: Array<{
-      productId?: string; name: string; quantity: number;
+      productId?: string; name: string; quantity: number; hsn: string;
       unit?: string; purchasePrice: number; gstRate: number;
       discountPercent: number; discountAmount: number; gstAmount: number; total: number; itemSubtotal: number;
     }> | undefined;
@@ -92,7 +94,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       // Discount is applied to the line's gross amount before GST, same as
       // sales invoices and the POST route above.
       computedItems = (items as {
-        productId?: string; name: string; quantity: number;
+        productId?: string; name: string; quantity: number; hsn?: string;
         unit?: string; purchasePrice: number; gstRate?: number; discountPercent?: number;
       }[]).map((item) => {
         const quantity = parseFloat(String(item.quantity));
@@ -101,11 +103,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         const discountPercent = parseFloat(String(item.discountPercent ?? 0));
         const { discountAmount, gstAmount, total, subtotal: itemSubtotal } =
           purchaseBillLineBreakdown(quantity, purchasePrice, gstRate, discountPercent);
-        return { ...item, quantity, purchasePrice, gstRate, discountPercent, discountAmount, gstAmount, total, itemSubtotal };
+        return { ...item, quantity, purchasePrice, gstRate, discountPercent, discountAmount, gstAmount, total, itemSubtotal, hsn: item.hsn ?? "" };
       });
       subtotal = computedItems.reduce((s, i) => s + i.itemSubtotal, 0);
       taxAmount = computedItems.reduce((s, i) => s + i.gstAmount, 0);
     }
+
+    // Re-derive the GST type on every edit (cheap, and keeps it correct if
+    // the vendor was switched or the vendor's own state was corrected after
+    // this bill was created) — same reasoning as the POST route.
+    const effectiveVendorId = vendorId || existing.vendorId;
+    const effectiveVendor = await prisma.vendor.findUnique({ where: { id: effectiveVendorId }, select: { state: true } });
+    const biz = await getBusinessSettings();
+    const derivedIsInterState = deriveIsInterState(effectiveVendor?.state ?? "", biz.state);
+    const isInterState = derivedIsInterState ?? false;
+    const effectiveTaxAmount = taxAmount !== undefined ? taxAmount : existing.taxAmount;
+    const cgst = isInterState ? 0 : effectiveTaxAmount / 2;
+    const sgst = isInterState ? 0 : effectiveTaxAmount / 2;
+    const igst = isInterState ? effectiveTaxAmount : 0;
 
     const effectiveDiscount = discount !== undefined ? discount : existing.discount;
     const rawTotal = subtotal !== undefined && taxAmount !== undefined
@@ -155,7 +170,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           tx,
           oldItems.filter(i => i.productId).map((old) => ({ productId: old.productId!, quantity: -old.quantity })),
           {
-            type: "adjustment",
+            type: "purchase_edit_reverse",
             reference: existing.billNumber,
             purchaseBillId: id,
             notes: "Purchase bill edited — old items reversed",
@@ -173,6 +188,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           ...(dueDate !== undefined && { dueDate: dueDate ? new Date(dueDate) : null }),
           ...(subtotal !== undefined && { subtotal }),
           ...(taxAmount !== undefined && { taxAmount }),
+          isInterState,
+          placeOfSupply: effectiveVendor?.state ?? null,
+          cgst,
+          sgst,
+          igst,
           ...(discount !== undefined && { discount }),
           total,
           roundOff,
@@ -186,6 +206,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
               create: computedItems.map(item => ({
                 productId: item.productId || null,
                 name: item.name,
+                hsn: item.hsn,
                 quantity: item.quantity,
                 unit: item.unit ?? "Nos",
                 purchasePrice: item.purchasePrice,
@@ -206,7 +227,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           tx,
           computedItems.filter(item => item.productId).map((item) => ({ productId: item.productId!, quantity: item.quantity })),
           {
-            type: "adjustment",
+            type: "purchase_edit_apply",
             reference: updated.billNumber,
             purchaseBillId: id,
             notes: "Purchase bill edited — new items applied",
@@ -227,7 +248,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             quantity: isCancelling ? -item.quantity : item.quantity,
           })),
           {
-            type: "adjustment",
+            type: isCancelling ? "purchase_cancel" : "purchase_uncancel",
             reference: updated.billNumber,
             purchaseBillId: id,
             notes: isCancelling ? "Purchase bill cancelled" : "Purchase bill un-cancelled",
@@ -287,7 +308,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
           tx,
           items.filter(i => i.productId).map((item) => ({ productId: item.productId!, quantity: -item.quantity })),
           {
-            type: "adjustment",
+            type: "purchase_delete_restore",
             reference: bill?.billNumber,
             purchaseBillId: id,
             notes: "Purchase bill deleted",

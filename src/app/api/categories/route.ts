@@ -4,20 +4,32 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
+import { parsePageParams } from "@/lib/listQuery";
+import { buildCategoryWhere, buildCategoryOrderBy, type CategorySort } from "@/lib/categoryQuery";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const auth = await requireSession();
     if (!auth.ok) return auth.response;
 
-    const categories = await prisma.category.findMany({
-      where: { deletedAt: null },
-      orderBy: { name: "asc" },
-      take: 5000,
-      include: { _count: { select: { products: { where: { deletedAt: null } } } } },
-    });
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search") ?? undefined;
+    const sort = (searchParams.get("sort") ?? undefined) as CategorySort | undefined;
+    const { skip, take } = parsePageParams(searchParams, 5000);
 
-    return NextResponse.json(categories);
+    const where = buildCategoryWhere(search);
+    const [data, total] = await Promise.all([
+      prisma.category.findMany({
+        where,
+        orderBy: buildCategoryOrderBy(sort),
+        skip,
+        take,
+        include: { _count: { select: { products: { where: { deletedAt: null } } } } },
+      }),
+      prisma.category.count({ where }),
+    ]);
+
+    return NextResponse.json({ data, total });
   } catch (error) {
     console.error("GET /api/categories error:", error);
     return NextResponse.json({ error: "Failed to fetch categories" }, { status: 500 });

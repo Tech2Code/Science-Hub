@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { Input } from "@/components/ui/Input";
-import { useFetch } from "@/lib/useCache";
+import { rules, validate } from "@/lib/validation";
+import { useFetch, bustCachePrefix } from "@/lib/useCache";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { animateSection } from "@/lib/animateSection";
@@ -21,8 +23,14 @@ interface Brand {
   id: string;
   name: string;
   createdAt?: string;
+  updatedAt?: string;
   _count: { products: number };
   createdBy?: string | null;
+}
+
+interface BrandListResponse {
+  data: Brand[];
+  total: number;
 }
 
 type SortOption = "name_az" | "name_za" | "products_high" | "products_low" | "newest" | "oldest";
@@ -34,19 +42,6 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "newest",        label: "Newest first" },
   { value: "oldest",        label: "Oldest first" },
 ];
-
-function sortBrands(list: Brand[], sort: SortOption): Brand[] {
-  const arr = [...list];
-  switch (sort) {
-    case "name_za":       return arr.sort((a, b) => b.name.localeCompare(a.name));
-    case "products_high": return arr.sort((a, b) => b._count.products - a._count.products);
-    case "products_low":  return arr.sort((a, b) => a._count.products - b._count.products);
-    case "oldest":        return arr.sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
-    case "newest":        return arr.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
-    case "name_az":
-    default:              return arr.sort((a, b) => a.name.localeCompare(b.name));
-  }
-}
 
 const COLUMNS: Column[] = [
   { label: "#",          mobile: "hide" },
@@ -60,8 +55,6 @@ const COLUMNS: Column[] = [
 export default function BrandsPage() {
   const canWrite = useCanWrite();
   const router = useRouter();
-  const { data, loading, patchData } = useFetch<Brand[]>("/api/brands");
-  const brands = data ?? [];
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
@@ -69,15 +62,33 @@ export default function BrandsPage() {
   const [saving, setSaving] = useState(false);
   const [openingView, setOpeningView] = useState(false);
   const [newName, setNewName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [editingUpdatedAt, setEditingUpdatedAt] = useState<string | undefined>(undefined);
+  const [renaming, setRenaming] = useState(false);
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const pageSize = showAll ? 5000 : PAGE_SIZE;
+
+  const listParams = new URLSearchParams();
+  if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
+  listParams.set("sort", sort);
+  listParams.set("page", String(page));
+  listParams.set("pageSize", String(pageSize));
+  const apiUrl = `/api/brands?${listParams.toString()}`;
+
+  const { data, loading, mutate } = useFetch<BrandListResponse>(apiUrl);
+  const brands = data?.data ?? [];
+  const total = data?.total ?? 0;
+
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     const name = newName.trim();
-    if (!name) return;
+    if (validate(name, rules.required("Brand name is required."))) return;
     setSaving(true);
     const r = await fetch("/api/brands", {
       method: "POST",
@@ -85,17 +96,43 @@ export default function BrandsPage() {
       body: JSON.stringify({ name }),
     });
     if (r.ok) {
-      const created = await r.json();
       setNewName("");
-      // The create response already has the full record — merge it straight
-      // into the list instead of waiting on a full refetch.
-      patchData((prev) => [...(prev ?? []), created]);
+      await mutate();
       toast({ type: "success", title: "Brand added", message: `"${name}" added to catalog.` });
     } else {
       const d = await r.json();
       toast({ type: "error", title: "Failed", message: d.error ?? "Failed to add brand" });
     }
     setSaving(false);
+  }
+
+  function startRename(brand: Brand) {
+    setEditingId(brand.id);
+    setEditingName(brand.name);
+    setEditingUpdatedAt(brand.updatedAt);
+  }
+
+  async function handleRename(id: string) {
+    const name = editingName.trim();
+    if (!name) return;
+    setRenaming(true);
+    const r = await fetch(`/api/brands/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, expectedUpdatedAt: editingUpdatedAt }),
+    });
+    const d = await r.json().catch(() => ({}));
+    setRenaming(false);
+    if (r.ok) {
+      setEditingId(null);
+      await mutate();
+      toast({ type: "success", title: "Brand renamed", message: `Renamed to "${name}".` });
+    } else if (r.status === 409) {
+      bustCachePrefix("/api/brands");
+      toast({ type: "error", title: "Update conflict", message: d.error ?? "This brand was changed by someone else. Please reload and try again." });
+    } else {
+      toast({ type: "error", title: "Rename failed", message: d.error ?? "Could not rename brand." });
+    }
   }
 
   function handleDelete(id: string, name: string) {
@@ -109,7 +146,7 @@ export default function BrandsPage() {
         setDeleting(false);
         setConfirmState(null);
         if (res.ok) {
-          patchData((prev) => (prev ?? []).filter((b) => b.id !== id));
+          await mutate();
           toast({ type: "success", title: "Brand deleted", message: `"${name}" moved to bin.` });
         } else {
           toast({ type: "error", title: "Cannot delete brand", message: d.error ?? "Could not delete brand." });
@@ -118,23 +155,11 @@ export default function BrandsPage() {
     });
   }
 
-  const filtered = brands.filter((b) =>
-    b.name.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const sorted = sortBrands(filtered, sort);
-  const { visible } = usePagination(sorted, page, showAll);
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
-
-  useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- clamps page back into range after a delete shrinks the list
-    if (page > totalPages) setPage(totalPages);
-  }, [sorted.length, page]);
 
   return (
     <>
-    {saving && <OverlayLoader text="Adding…" />}
+    {(saving || renaming) && <OverlayLoader text={renaming ? "Renaming…" : "Adding…"} />}
     {openingView && <OverlayLoader text="Opening…" />}
     <div className="page-stack">
       <ConfirmDialog
@@ -151,7 +176,7 @@ export default function BrandsPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Brands</h1>
-          <p className="page-sub">{loading ? "Loading…" : `${brands.length} brands in catalog`}</p>
+          <p className="page-sub">{loading ? "Loading…" : `${total} brands in catalog`}</p>
         </div>
       </div>
 
@@ -160,7 +185,7 @@ export default function BrandsPage() {
         <h2 className={styles.addCardTitle}>
           Add New Brand
         </h2>
-        <form onSubmit={handleAdd} className={styles.addForm}>
+        <form onSubmit={handleAdd} className={styles.addForm} noValidate>
           <Input
             ref={inputRef}
             type="text"
@@ -190,7 +215,7 @@ export default function BrandsPage() {
             <SortSelect ariaLabel="Sort brands" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
           {!loading && (
-            <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
+            <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
@@ -203,15 +228,29 @@ export default function BrandsPage() {
             <tbody>
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
-              ) : filtered.length === 0 ? (
+              ) : brands.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search ? "No brands match your search." : "No brands yet. Add one above."}
                 </td></tr>
-              ) : visible.map((b, i) => (
+              ) : brands.map((b, i) => (
                 <tr key={b.id}>
                   <Cell col={COLUMNS[0]} className={styles.indexCell}>{i + 1}</Cell>
                   <Cell col={COLUMNS[1]}>
-                    <Link href={`/brands/${b.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`} title={b.name}>{b.name}</Link>
+                    {editingId === b.id ? (
+                      <div className={styles.editingRow}>
+                        <Input
+                          sz="sm"
+                          autoFocus
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") handleRename(b.id); if (e.key === "Escape") setEditingId(null); }}
+                        />
+                        <Button size="sm" variant="primary" onClick={() => handleRename(b.id)} disabled={!editingName.trim() || editingName.trim() === b.name || renaming}>Save</Button>
+                        <Button size="sm" variant="secondary" onClick={() => setEditingId(null)} disabled={renaming}>Cancel</Button>
+                      </div>
+                    ) : (
+                      <Link href={`/brands/${b.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`} title={b.name}>{b.name}</Link>
+                    )}
                   </Cell>
                   <Cell col={COLUMNS[2]} className={styles.mutedCell}>{b.createdBy ?? "—"}</Cell>
                   <Cell col={COLUMNS[3]} className={styles.mutedCell}>
@@ -223,27 +262,32 @@ export default function BrandsPage() {
                     </span>
                   </Cell>
                   <Cell col={COLUMNS[5]}>
-                    <div className="table-actions">
-                      <Button variant="viewOutline" size="sm" onClick={() => { setOpeningView(true); router.push(`/brands/${b.id}`); }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View
-                      </Button>
-                      {canWrite && (<Button
-                        variant="dangerOutline"
-                        size="sm"
-                        onClick={() => handleDelete(b.id, b.name)}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete
-                      </Button>)}
-                    </div>
+                    {editingId !== b.id && (
+                      <div className="table-actions">
+                        <Button variant="viewOutline" size="sm" onClick={() => { setOpeningView(true); router.push(`/brands/${b.id}`); }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View
+                        </Button>
+                        {canWrite && (<Button variant="editOutline" size="sm" onClick={() => startRename(b)}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Rename
+                        </Button>)}
+                        {canWrite && (<Button
+                          variant="dangerOutline"
+                          size="sm"
+                          onClick={() => handleDelete(b.id, b.name)}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete
+                        </Button>)}
+                      </div>
+                    )}
                   </Cell>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        {!loading && filtered.length > 0 && (
+        {!loading && total > 0 && (
           <Pagination
-            total={filtered.length}
+            total={total}
             page={page}
             showAll={showAll}
             onPage={setPage}

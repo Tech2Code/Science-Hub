@@ -1,0 +1,19 @@
+-- AlterTable
+ALTER TABLE "Return" ADD COLUMN     "cgst" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "creditNoteNumber" TEXT,
+ADD COLUMN     "deletedAt" TIMESTAMP(3),
+ADD COLUMN     "igst" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "roundOff" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "sgst" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "subtotal" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "total" DOUBLE PRECISION NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "ReturnItem" ADD COLUMN     "gstAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "gstRate" DOUBLE PRECISION NOT NULL DEFAULT 0;
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Return_creditNoteNumber_key" ON "Return"("creditNoteNumber");
+
+-- CreateIndex
+CREATE INDEX "Return_deletedAt_idx" ON "Return"("deletedAt");

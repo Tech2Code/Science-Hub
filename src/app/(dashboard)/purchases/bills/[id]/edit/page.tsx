@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { StatusBadge } from "@/components/ui/Badge";
-import { bustCache } from "@/lib/useCache";
+import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { invalidateCachedPdf } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
 import { useDirty } from "@/lib/useDirty";
+import { rules, validate } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { truncateFilename } from "@/lib/truncateFilename";
 import { BillDetailsCard } from "@/components/purchases/BillDetailsCard";
@@ -24,7 +25,7 @@ import { computeRoundOff } from "@/lib/roundOff";
 import styles from "./edit.module.css";
 
 interface BillItem {
-  id: string; name: string; quantity: number; unit: string;
+  id: string; name: string; hsn: string; quantity: number; unit: string;
   purchasePrice: number; discountPercent: number; gstRate: number; gstAmount: number; total: number;
   product: { id: string; name: string } | null;
 }
@@ -42,6 +43,7 @@ function loadedItemsToLineItems(items: BillItem[]): PurchaseBillLineItem[] {
     key: `loaded-${item.id ?? idx}`,
     productId: item.product?.id ?? "",
     name: item.name,
+    hsn: item.hsn ?? "",
     unit: item.unit,
     quantity: String(item.quantity),
     purchasePrice: String(item.purchasePrice),
@@ -83,6 +85,7 @@ export default function EditPurchaseBillPage() {
   const [loadErr, setLoadErr] = useState("");
 
   const [vendorId,  setVendorId]  = useState("");
+  const [vendorError, setVendorError] = useState<string | undefined>(undefined);
   const [billDate,  setBillDate]  = useState("");
   const [dueDate,   setDueDate]   = useState("");
   const [category,  setCategory]  = useState("");
@@ -106,12 +109,12 @@ export default function EditPurchaseBillPage() {
   useEffect(() => {
     Promise.all([
       fetch(`/api/purchase-bills/${id}`, { headers: { "x-no-loader": "1" } }).then(r => r.json()),
-      fetch("/api/vendors", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
-      fetch("/api/products", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
-    ]).then(([b, v, p]) => {
+      fetch("/api/vendors?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
+      fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
+    ]).then(([b, v, p]: [PurchaseBill, { data: PurchaseBillVendor[] }, { data: PurchaseBillProduct[] }]) => {
       setBill(b);
-      setVendors(v);
-      setProducts(p);
+      setVendors(v.data ?? []);
+      setProducts(p.data ?? []);
       setVendorId(b.vendorId ?? "");
       setBillDate(b.billDate ? b.billDate.slice(0, 10) : "");
       setDueDate(b.dueDate  ? b.dueDate.slice(0, 10)  : "");
@@ -197,12 +200,14 @@ export default function EditPurchaseBillPage() {
     // disabled button doesn't stop Enter-key form submission from an input.
     if (!isDirty) { toast({ type: "error", title: "Nothing to save", message: "No changes have been made yet." }); return; }
     if (attachmentUploading) { toast({ type: "error", title: "Check form", message: "Please wait for the attachment to finish uploading." }); return; }
-    if (!vendorId) { toast({ type: "error", title: "Check form", message: "Please select a vendor." }); return; }
+    const vendorErr = validate(vendorId, rules.required("Please select a vendor."));
+    setVendorError(vendorErr ?? undefined);
+    if (vendorErr) return;
     if (!billDate) { toast({ type: "error", title: "Check form", message: "Bill date is required." }); return; }
-    if (items.length === 0)                      { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
-    if (items.some(i => !i.name.trim()))          { toast({ type: "error", title: "Check form", message: "All items must have a name." }); return; }
-    if (items.some(i => toNum(i.quantity) <= 0))  { toast({ type: "error", title: "Check form", message: "All quantities must be greater than 0." }); return; }
-    if (items.some(i => !i.purchasePrice.trim() || toNum(i.purchasePrice) <= 0)) { toast({ type: "error", title: "Check form", message: "All item prices must be greater than 0." }); return; }
+    if (items.length === 0)                                             { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
+    if (items.some(i => validate(i.name, rules.required())))            { toast({ type: "error", title: "Check form", message: "All items must have a name." }); return; }
+    if (items.some(i => validate(i.quantity, rules.required(), rules.positiveNumber())))      { toast({ type: "error", title: "Check form", message: "All quantities must be greater than 0." }); return; }
+    if (items.some(i => validate(i.purchasePrice, rules.required(), rules.positiveNumber()))) { toast({ type: "error", title: "Check form", message: "All item prices must be greater than 0." }); return; }
     if (dueDate && dueDate < billDate) { toast({ type: "error", title: "Check form", message: "Due date cannot be before the bill date." }); return; }
     setSaving(true);
     try {
@@ -221,6 +226,7 @@ export default function EditPurchaseBillPage() {
           return {
             productId:       i.productId || null,
             name:            i.name.trim(),
+            hsn:             i.hsn.trim(),
             unit:            i.unit,
             quantity:        toNum(i.quantity),
             purchasePrice:   toNum(i.purchasePrice),
@@ -239,9 +245,9 @@ export default function EditPurchaseBillPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        bustCache("/api/purchase-bills");
+        bustCachePrefix("/api/purchase-bills");
         bustCache(`/api/purchase-bills/${id}`);
-        bustCache("/api/products");
+        bustCachePrefix("/api/products");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Bill updated", message: "Changes saved successfully." });
         router.push(`/purchases/bills/${id}`);
@@ -338,14 +344,15 @@ export default function EditPurchaseBillPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="form-stack">
+      <form onSubmit={handleSubmit} className="form-stack" noValidate>
 
         <BillDetailsCard
           sectionIndex={1}
           vendors={vendors}
           vendorId={vendorId}
-          onVendorIdChange={setVendorId}
+          onVendorIdChange={(id) => { setVendorId(id); setVendorError(undefined); }}
           onVendorCreated={(v) => setVendors(prev => [...prev, v])}
+          vendorError={vendorError}
           category={category}
           onCategoryChange={setCategory}
           billDate={billDate}

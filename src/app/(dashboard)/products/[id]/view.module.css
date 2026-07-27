@@ -164,3 +164,11 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
+
+.adjustForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  text-align: left;
+  margin-top: 0.5rem;
+}

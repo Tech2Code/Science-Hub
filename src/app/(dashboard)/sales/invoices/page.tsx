@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
+import { MonthYearFilter } from "@/components/ui/MonthYearFilter";
 import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenerator";
 import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
@@ -33,7 +35,19 @@ interface Invoice {
   total: number;
   paidAmount: number;
   status: string;
-  items: { name: string; product: { name: string; brand: { name: string } | null; category: { name: string } | null } | null }[];
+}
+
+interface InvoiceListResponse {
+  data: Invoice[];
+  total: number;
+}
+
+interface InvoiceStats {
+  totalInvoiced: number;
+  totalPaid: number;
+  totalPending: number;
+  overdueCount: number;
+  availableYears: number[];
 }
 
 interface BusinessSettings {
@@ -59,27 +73,6 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "balance_high", label: "Balance Due (High–Low)" },
 ];
 
-function sortInvoices(list: Invoice[], sort: SortOption): Invoice[] {
-  const arr = [...list];
-  switch (sort) {
-    case "oldest":
-      return arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    case "customer_az":
-      return arr.sort((a, b) => (a.customer?.name ?? "").localeCompare(b.customer?.name ?? ""));
-    case "customer_za":
-      return arr.sort((a, b) => (b.customer?.name ?? "").localeCompare(a.customer?.name ?? ""));
-    case "amount_high":
-      return arr.sort((a, b) => b.total - a.total);
-    case "amount_low":
-      return arr.sort((a, b) => a.total - b.total);
-    case "balance_high":
-      return arr.sort((a, b) => (b.total - b.paidAmount) - (a.total - a.paidAmount));
-    case "newest":
-    default:
-      return arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }
-}
-
 const COLUMNS: Column[] = [
   { label: "Invoice No.", mobile: "full+label" },
   { label: "Date",        mobile: "label" },
@@ -97,6 +90,8 @@ export default function InvoicesPage() {
   const canWrite = useCanWrite();
   const [filter, setFilter] = useState<StatusFilter>("All");
   const [search, setSearch] = useState("");
+  const [month, setMonth] = useState("");
+  const [year, setYear] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
@@ -194,40 +189,36 @@ export default function InvoicesPage() {
     setPdfDialogInvoice(null);
   }
 
-  const apiUrl = filter === "All" || filter === "overdue" ? "/api/invoices" : `/api/invoices?status=${filter}`;
-  const { data, loading, patchData } = useFetch<Invoice[]>(apiUrl);
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const pageSize = showAll ? 2000 : PAGE_SIZE;
+
+  const listParams = new URLSearchParams();
+  if (filter !== "All") listParams.set("status", filter);
+  if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
+  if (month) listParams.set("month", month);
+  if (year) listParams.set("year", year);
+  listParams.set("sort", sort);
+  listParams.set("page", String(page));
+  listParams.set("pageSize", String(pageSize));
+  const apiUrl = `/api/invoices?${listParams.toString()}`;
+
+  const statsParams = new URLSearchParams();
+  if (filter !== "All") statsParams.set("status", filter);
+  if (month) statsParams.set("month", month);
+  if (year) statsParams.set("year", year);
+  const statsUrl = `/api/invoices/stats?${statsParams.toString()}`;
+
+  const { data, loading, mutate } = useFetch<InvoiceListResponse>(apiUrl);
+  const { data: stats, mutate: mutateStats } = useFetch<InvoiceStats>(statsUrl);
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
-  const invoices = data ?? [];
-  const scoped = filter === "overdue" ? invoices.filter(isOverdue) : invoices;
+  const invoices = data?.data ?? [];
+  const total = data?.total ?? 0;
 
-  const filtered = search.trim()
-    ? scoped.filter((inv) => {
-        const q = search.toLowerCase();
-        return (
-          inv.invoiceNumber.toLowerCase().includes(q) ||
-          inv.customer?.name?.toLowerCase().includes(q) ||
-          inv.items?.some((i) =>
-            i.name.toLowerCase().includes(q) ||
-            i.product?.name?.toLowerCase().includes(q) ||
-            i.product?.brand?.name?.toLowerCase().includes(q) ||
-            i.product?.category?.name?.toLowerCase().includes(q)
-          )
-        );
-      })
-    : scoped;
-
-  const sorted = sortInvoices(filtered, sort);
-
-  const maxPage = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const clampedPage = Math.min(page, maxPage);
-
-  const { visible } = usePagination(sorted, clampedPage, showAll);
-
-  // Summary stats
-  const totalInvoiced = invoices.reduce((s, inv) => s + inv.total, 0);
-  const totalPaid     = invoices.reduce((s, inv) => s + inv.paidAmount, 0);
-  const totalPending  = totalInvoiced - totalPaid;
-  const overdue       = invoices.filter(inv => inv.status !== "paid" && inv.dueDate && new Date(inv.dueDate) < new Date()).length;
+  const totalInvoiced = stats?.totalInvoiced ?? 0;
+  const totalPaid     = stats?.totalPaid ?? 0;
+  const totalPending  = stats?.totalPending ?? 0;
+  const overdue       = stats?.overdueCount ?? 0;
+  const availableYears = stats?.availableYears ?? [];
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -237,7 +228,7 @@ export default function InvoicesPage() {
       const res = await fetch(`/api/invoices/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
-        patchData((prev) => (prev ?? []).filter((inv) => inv.id !== target.id));
+        await Promise.all([mutate(), mutateStats()]);
         invalidateCachedPdf("invoice", target.id);
         toast({ type: "success", title: "Moved to bin", message: `${target.invoiceNumber} moved to bin. You can restore it within 30 days.` });
       } else {
@@ -288,14 +279,14 @@ export default function InvoicesPage() {
         <div>
           <h1 className="page-title">Invoices</h1>
           <p className="page-sub">
-            {loading ? "Loading…" : search.trim() ? `${filtered.length} of ${scoped.length} invoices` : `${scoped.length} invoices`}
+            {loading ? "Loading…" : `${total} invoice${total === 1 ? "" : "s"}`}
           </p>
         </div>
         {canWrite && (<Button variant="primary" href="/sales/invoices/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>)}
       </div>
 
       {/* Dashboard cards */}
-      {(loading || invoices.length > 0) && (
+      {(loading || totalInvoiced > 0 || total > 0) && (
         <StatCardsRow
           sectionIndex={0}
           loading={loading}
@@ -333,9 +324,16 @@ export default function InvoicesPage() {
               onChange={(v) => { setSort(v); setPage(1); }}
               options={SORT_OPTIONS}
             />
+            <MonthYearFilter
+              month={month}
+              year={year}
+              years={availableYears}
+              onMonthChange={(v) => { setMonth(v); setPage(1); }}
+              onYearChange={(v) => { setYear(v); setPage(1); }}
+            />
           </div>
           {!loading && (
-            <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
+            <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
@@ -348,11 +346,11 @@ export default function InvoicesPage() {
             <tbody>
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
-              ) : filtered.length === 0 ? (
+              ) : invoices.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
-                  {search.trim() ? `No invoices match "${search}".` : "No invoices found."}
+                  {search.trim() ? `No invoices match "${search}".` : (month || year) ? "No invoices found for this period." : "No invoices found."}
                 </td></tr>
-              ) : visible.map((inv) => (
+              ) : invoices.map((inv) => (
                 <tr key={inv.id}>
                   <Cell col={COLUMNS[0]}>
                     <a href={`/sales/invoices/${inv.id}`} className={styles.invoiceLink}>
@@ -418,10 +416,10 @@ export default function InvoicesPage() {
             </tbody>
           </table>
         </div>
-        {!loading && filtered.length > 0 && (
+        {!loading && total > 0 && (
           <Pagination
-            total={filtered.length}
-            page={clampedPage}
+            total={total}
+            page={page}
             showAll={showAll}
             onPage={setPage}
             label="invoices"

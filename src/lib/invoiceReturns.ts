@@ -30,7 +30,7 @@ export async function assertInvoiceQuantitiesNotBelowReturned(
   editedItems: InvoiceLineForValidation[]
 ): Promise<void> {
   const returnItems = await tx.returnItem.findMany({
-    where: { return: { invoiceId } },
+    where: { return: { invoiceId, deletedAt: null } },
     select: { productId: true, quantity: true, name: true },
   });
   if (returnItems.length === 0) return;
@@ -46,11 +46,19 @@ export async function assertInvoiceQuantitiesNotBelowReturned(
   }
   if (returnedByProduct.size === 0) return;
 
-  const editedByProduct = new Map(
-    editedItems
-      .filter((item): item is InvoiceLineForValidation & { productId: string } => !!item.productId)
-      .map((item) => [item.productId, item])
-  );
+  // Sum quantities across lines rather than keying the last one — an invoice
+  // can carry the same product as two separate line items, and taking only
+  // the last would understate (or overstate) how much of it actually remains.
+  const editedByProduct = new Map<string, InvoiceLineForValidation & { productId: string }>();
+  for (const item of editedItems) {
+    if (!item.productId) continue;
+    const existing = editedByProduct.get(item.productId);
+    if (existing) {
+      existing.quantity += item.quantity;
+    } else {
+      editedByProduct.set(item.productId, { ...item, productId: item.productId });
+    }
+  }
 
   const errors: string[] = [];
   for (const [productId, returned] of returnedByProduct) {

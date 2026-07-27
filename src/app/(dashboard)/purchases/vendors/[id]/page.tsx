@@ -9,7 +9,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { OverlayLoader } from "@/components/ui/Spinner";
-import { fetchCached, bustCache } from "@/lib/useCache";
+import { fetchCached, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./vendorDetail.module.css";
@@ -20,7 +20,7 @@ interface Bill {
 }
 interface Vendor {
   id: string; name: string; company: string | null; gstin: string | null;
-  phone: string | null; email: string | null; address: string | null;
+  phone: string | null; email: string | null; address: string | null; state: string | null;
   notes: string | null; isActive: boolean; purchaseBills: Bill[];
 }
 
@@ -52,7 +52,7 @@ export default function VendorDetailPage() {
       setDeleting(false);
       setConfirmOpen(false);
       if (res.ok) {
-        bustCache("/api/vendors");
+        bustCachePrefix("/api/vendors");
         toast({ type: "success", title: "Vendor deleted", message: `"${vendor.name}" moved to bin.` });
         router.push("/purchases/vendors");
       } else {
@@ -71,8 +71,15 @@ export default function VendorDetailPage() {
   // Rendered unconditionally (loading or loaded) so adding/removing a header
   // button, stat, or column only ever needs one edit — see SkeletonSwap.
   const bills = vendor?.purchaseBills ?? [];
-  const totalBilled = bills.reduce((s, b) => s + b.total, 0);
-  const totalPaid   = bills.reduce((s, b) => s + b.paidAmount, 0);
+  // Cancelled bills still show in the table below (for a full history) but
+  // are excluded from the spend totals — their stock effect was reversed
+  // and they generally were never actually paid for, so counting them here
+  // would overstate this vendor's real spend, matching the same exclusion
+  // applied to the Purchases dashboard's "Top Vendors" and the category
+  // spend report.
+  const billsForTotals = bills.filter((b) => b.status !== "cancelled");
+  const totalBilled = billsForTotals.reduce((s, b) => s + b.total, 0);
+  const totalPaid   = billsForTotals.reduce((s, b) => s + b.paidAmount, 0);
   const balance     = totalBilled - totalPaid;
 
   return (
@@ -136,12 +143,18 @@ export default function VendorDetailPage() {
           </div>
         </div>
 
-        {!loading && (vendor?.address || vendor?.notes) && (
+        {!loading && (vendor?.address || vendor?.state || vendor?.notes) && (
           <div className={styles.detailsBlock}>
             {vendor?.address && (
               <div>
                 <div className={styles.detailLabel}>Address</div>
                 <p className={styles.detailText}>{vendor.address}</p>
+              </div>
+            )}
+            {vendor?.state && (
+              <div>
+                <div className={styles.detailLabel}>State</div>
+                <p className={styles.detailText}>{vendor.state}</p>
               </div>
             )}
             {vendor?.notes && (

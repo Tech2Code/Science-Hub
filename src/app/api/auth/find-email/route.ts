@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit, getClientIp } from "@/lib/rateLimit";
+import { rules, validate } from "@/lib/validation";
 
 function maskEmail(email: string): string {
   const [local, domain] = email.split("@");
@@ -12,8 +13,12 @@ function maskEmail(email: string): string {
 export async function POST(req: NextRequest) {
   try {
     const { name } = await req.json();
-    if (!name || typeof name !== "string" || name.trim().length < 2) {
-      return NextResponse.json({ error: "Enter at least 2 characters." }, { status: 400 });
+    if (typeof name !== "string") {
+      return NextResponse.json({ error: "Enter your name." }, { status: 400 });
+    }
+    const nameErr = validate(name, rules.required("Please enter your name."), rules.minLength(2, "Name must be at least 2 characters."));
+    if (nameErr) {
+      return NextResponse.json({ error: nameErr }, { status: 400 });
     }
 
     const limit = rateLimit(`find-email:${getClientIp(req)}`, 10, 15 * 60 * 1000);

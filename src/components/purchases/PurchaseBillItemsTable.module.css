@@ -13,14 +13,15 @@
 /* ── Items table ───────────────────────────────── */
 .itemsTableWrap { overflow-x: auto; }
 
-.colProduct  { width: 16%; }
-.colName     { width: 16%; }
-.colUnit     { width: 12%; }
-.colQty      { width: 10%; }
-.colRate     { width: 9%; }
-.colDiscount { width: 11%; }
-.colGst      { width: 9%; }
-.colAmount   { width: 11%; }
+.colProduct  { width: 14%; }
+.colName     { width: 14%; }
+.colHsn      { width: 8%; }
+.colUnit     { width: 10%; }
+.colQty      { width: 9%; }
+.colRate     { width: 8%; }
+.colDiscount { width: 10%; }
+.colGst      { width: 8%; }
+.colAmount   { width: 10%; }
 .colAction   { width: 1.25rem; }
 
 .itemsTable {
@@ -30,7 +31,7 @@
      the % widths squeezing headers/fields into an unreadable, overlapping
      mess — .itemsTableWrap's overflow-x:auto lets the row scroll sideways
      on mobile instead. */
-  min-width: 760px;
+  min-width: 840px;
 }
 
 .itemsTable thead tr { border-bottom: 1px solid var(--c-border); }
@@ -51,16 +52,17 @@
 }
 .thRight { composes: th; text-align: right; }
 
-.itemRow { border-bottom: 1px solid var(--c-border-light, var(--c-border)); }
+.itemRow ~ .itemRow { border-top: 1px solid var(--c-border-light, var(--c-border)); }
 
-.tdProduct { padding: 0.4rem 0.5rem; width: 16%; max-width: 10rem; overflow: hidden; }
-.tdName { padding: 0.4rem 0.5rem; width: 16%; }
-.tdUnit { padding: 0.4rem 0.5rem; width: 12%; }
-.tdQty { padding: 0.4rem 0.5rem; width: 10%; }
-.tdRate { padding: 0.4rem 0.5rem; width: 9%; }
-.tdDiscount { padding: 0.4rem 0.5rem; width: 11%; }
-.tdGst { padding: 0.4rem 0.5rem; width: 9%; }
-.tdAmount { padding: 0.4rem 0.5rem; text-align: right; font-weight: 500; white-space: nowrap; width: 11%; }
+.tdProduct { padding: 0.4rem 0.5rem; width: 14%; max-width: 10rem; overflow: hidden; }
+.tdName { padding: 0.4rem 0.5rem; width: 14%; }
+.tdHsn { padding: 0.4rem 0.5rem; width: 8%; }
+.tdUnit { padding: 0.4rem 0.5rem; width: 10%; }
+.tdQty { padding: 0.4rem 0.5rem; width: 9%; }
+.tdRate { padding: 0.4rem 0.5rem; width: 8%; }
+.tdDiscount { padding: 0.4rem 0.5rem; width: 10%; }
+.tdGst { padding: 0.4rem 0.5rem; width: 8%; }
+.tdAmount { padding: 0.4rem 0.5rem; text-align: right; font-weight: 500; white-space: nowrap; width: 10%; }
 .tdAction { padding: 0.4rem 0.25rem; width: 1.25rem; }
 
 .numInputRight { text-align: right; }

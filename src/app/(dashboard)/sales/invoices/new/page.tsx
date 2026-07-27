@@ -9,11 +9,12 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { InvoiceOptionsRow } from "@/components/invoices/InvoiceOptionsRow";
 import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
 import { computeInvoiceTotals, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
 import styles from "./new.module.css";
-import { bustCache } from "@/lib/useCache";
+import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate, validateForm, hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -52,7 +53,8 @@ export default function NewInvoicePage() {
   const [stockOutItems, setStockOutItems] = useState<{ name: string; available: number; requested: number }[]>([]);
 
   useEffect(() => {
-    fetch("/api/customers", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((all: Customer[]) => {
+    fetch("/api/customers?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { data: Customer[] }) => {
+      const all = res.data ?? [];
       setCustomers(all);
       const prefillId = searchParams.get("customerId");
       if (prefillId) {
@@ -63,7 +65,7 @@ export default function NewInvoicePage() {
         }
       }
     }).catch(() => {});
-    fetch("/api/products", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then(setProducts).catch(() => {});
+    fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { data: Product[] }) => setProducts(res.data ?? [])).catch(() => {});
     fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((s) => setBusinessState(s?.state ?? "")).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount prefill from the initial URL, not meant to re-run on searchParams changes
   }, []);
@@ -143,10 +145,10 @@ export default function NewInvoicePage() {
     setSaving(false);
     if (res.ok) {
       const d = await res.json();
-      bustCache("/api/invoices");
+      bustCachePrefix("/api/invoices");
       bustCache("/api/reports?type=summary");
       bustCache("/api/reports?type=outstanding");
-      bustCache("/api/products");
+      bustCachePrefix("/api/products");
       toast({ type: "success", title: "Invoice created", message: "Invoice saved successfully." });
       if (d.stockWarnings?.length > 0) {
         toast({ type: "warning", title: "Stock went negative", message: d.stockWarnings.join(", ") });
@@ -225,7 +227,7 @@ export default function NewInvoicePage() {
         onCancel={() => setShowStockDialog(false)}
       />
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <div className={styles.layout}>
           {/* Left column */}
           <div className={styles.leftCol}>
@@ -309,10 +311,9 @@ export default function NewInvoicePage() {
                     {errMsg("name")}
                   </div>
                   <div className={styles.grid2}>
-                    <div>
-                      <Input type="tel" placeholder="Phone *" value={customCustomer.phone}
-                        onChange={(e) => { setCustomCustomer((p) => ({ ...p, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })); clearErr("phone"); }}
-                        className={errInput("phone")} />
+                    <div {...(customErrors.phone ? { "data-error": "" } : {})}>
+                      <PhoneInput value={customCustomer.phone} placeholder="10-digit mobile"
+                        onChange={(e) => { setCustomCustomer((p) => ({ ...p, phone: e.target.value })); clearErr("phone"); }} />
                       {errMsg("phone")}
                     </div>
                     <div>

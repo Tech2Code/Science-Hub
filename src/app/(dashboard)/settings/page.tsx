@@ -3,10 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, FormField } from "@/components/ui/Input";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
 import { useBranding } from "@/lib/businessBranding";
 import { animateSection } from "@/lib/animateSection";
+import { useScrollToHash } from "@/lib/useScrollToHash";
+import { useDirty } from "@/lib/useDirty";
 import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { patchCache } from "@/lib/useCache";
 import styles from "./settings.module.css";
@@ -107,20 +110,26 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const toast = useToast();
   const { setBranding } = useBranding();
+  useScrollToHash(!loading);
 
   // Each section below has its own independent edit state — editing one
   // does not disturb or require re-submitting the others.
 
   const [editingIdentity, setEditingIdentity] = useState(false);
   const [identityForm, setIdentityForm] = useState<IdentityForm>({ name: "", tagline: "", email: "", phone: "", gstin: "", pan: "" });
+  const identityDirty = useDirty(identityForm);
   const [savingIdentity, setSavingIdentity] = useState(false);
+  const [identityErrors, setIdentityErrors] = useState<Partial<Record<keyof IdentityForm, string>>>({});
 
   const [editingAddress, setEditingAddress] = useState(false);
   const [addressForm, setAddressForm] = useState<AddressForm>({ address: "", city: "", state: "", pincode: "" });
+  const addressDirty = useDirty(addressForm);
   const [savingAddress, setSavingAddress] = useState(false);
+  const [addressErrors, setAddressErrors] = useState<Partial<Record<keyof AddressForm, string>>>({});
 
   const [editingBank, setEditingBank] = useState(false);
   const [bankForm, setBankForm] = useState<BankForm>({ bankName: "", bankAccountName: "", bankAccountNumber: "", bankIfsc: "", bankBranch: "" });
+  const bankDirty = useDirty(bankForm);
   const [savingBank, setSavingBank] = useState(false);
   const [bankErrors, setBankErrors] = useState<Partial<Record<keyof BankForm, string>>>({});
   const [ifscLookup, setIfscLookup] = useState<{ status: "idle" | "loading" | "found" | "error"; label?: string }>({ status: "idle" });
@@ -129,12 +138,16 @@ export default function SettingsPage() {
   // Email config has its own independent edit state
   const [editingEmail, setEditingEmail] = useState(false);
   const [emailForm, setEmailForm] = useState({ gmailUser: "", gmailAppPassword: "" });
+  const emailDirty = useDirty(emailForm);
   const [savingEmail, setSavingEmail] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [emailErrors, setEmailErrors] = useState<{ gmailUser?: string; gmailAppPassword?: string }>({});
 
   const [editingTerms, setEditingTerms] = useState(false);
   const [termsForm, setTermsForm] = useState("");
+  const termsDirty = useDirty(termsForm);
   const [savingTerms, setSavingTerms] = useState(false);
+  const [termsError, setTermsError] = useState<string | undefined>(undefined);
 
   const [logoUploading, setLogoUploading] = useState(false);
   const [savingBranding, setSavingBranding] = useState(false);
@@ -168,6 +181,7 @@ export default function SettingsPage() {
       .then(applyLoaded)
       .catch(() => {})
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyLoaded is a fresh function each render (not memoized); this must run once on mount only
   }, []);
 
   // Sends only the fields the caller is actually editing — never the full
@@ -198,23 +212,29 @@ export default function SettingsPage() {
   // ── Business Identity ───────────────────────────────────────────────────
 
   function handleEditIdentity() {
-    setIdentityForm({ name: saved.name, tagline: saved.tagline, email: saved.email, phone: saved.phone, gstin: saved.gstin, pan: saved.pan });
+    // Older saved values may include formatting (dashes/spaces/a country
+    // code) from before this field was capped to a plain 10-digit mobile
+    // number — keep only the last 10 digits so it displays cleanly in the
+    // now-fixed-width PhoneInput instead of showing raw punctuation.
+    const initial = { name: saved.name, tagline: saved.tagline, email: saved.email, phone: saved.phone.replace(/\D/g, "").slice(-10), gstin: saved.gstin, pan: saved.pan };
+    setIdentityForm(initial);
+    identityDirty.markClean(initial);
+    setIdentityErrors({});
     setEditingIdentity(true);
   }
-  function handleCancelIdentity() { setEditingIdentity(false); }
+  function handleCancelIdentity() { setEditingIdentity(false); setIdentityErrors({}); }
 
   async function handleSaveIdentity(e: React.FormEvent) {
     e.preventDefault();
-    const nameErr  = validate(identityForm.name,  rules.required("Business name cannot be empty."));
-    const emailErr = validate(identityForm.email, rules.email());
-    const phoneErr = validate(identityForm.phone, rules.phoneFlexible());
-    const gstErr   = validate(identityForm.gstin, rules.maxLength(15), rules.gstin());
-    const panErr   = validate(identityForm.pan, rules.maxLength(10), rules.pan());
-    if (nameErr)  { toast({ type: "error", title: "Name required", message: nameErr });  return; }
-    if (emailErr) { toast({ type: "error", title: "Invalid email", message: emailErr }); return; }
-    if (phoneErr) { toast({ type: "error", title: "Invalid phone", message: phoneErr }); return; }
-    if (gstErr)   { toast({ type: "error", title: "Invalid GSTIN", message: gstErr });   return; }
-    if (panErr)   { toast({ type: "error", title: "Invalid PAN", message: panErr });     return; }
+    const errors: Partial<Record<keyof IdentityForm, string>> = {
+      name:  validate(identityForm.name,  rules.required("Business name cannot be empty.")) ?? undefined,
+      email: validate(identityForm.email, rules.email()) ?? undefined,
+      phone: validate(identityForm.phone, rules.phone10()) ?? undefined,
+      gstin: validate(identityForm.gstin, rules.maxLength(15), rules.gstin()) ?? undefined,
+      pan:   validate(identityForm.pan, rules.maxLength(10), rules.pan()) ?? undefined,
+    };
+    setIdentityErrors(errors);
+    if (Object.values(errors).some(Boolean)) return;
     setSavingIdentity(true);
     const result = await putSettings(identityForm);
     if (result.ok) {
@@ -232,15 +252,19 @@ export default function SettingsPage() {
   // ── Address ──────────────────────────────────────────────────────────────
 
   function handleEditAddress() {
-    setAddressForm({ address: saved.address, city: saved.city, state: saved.state, pincode: saved.pincode });
+    const initial = { address: saved.address, city: saved.city, state: saved.state, pincode: saved.pincode };
+    setAddressForm(initial);
+    addressDirty.markClean(initial);
+    setAddressErrors({});
     setEditingAddress(true);
   }
-  function handleCancelAddress() { setEditingAddress(false); }
+  function handleCancelAddress() { setEditingAddress(false); setAddressErrors({}); }
 
   async function handleSaveAddress(e: React.FormEvent) {
     e.preventDefault();
     const pinErr = validate(addressForm.pincode, rules.pincode());
-    if (pinErr) { toast({ type: "error", title: "Invalid pincode", message: pinErr }); return; }
+    if (pinErr) { setAddressErrors({ pincode: pinErr }); return; }
+    setAddressErrors({});
     setSavingAddress(true);
     const result = await putSettings(addressForm);
     if (result.ok) {
@@ -258,10 +282,12 @@ export default function SettingsPage() {
   // ── Bank Details ────────────────────────────────────────────────────────
 
   function handleEditBank() {
-    setBankForm({
+    const initial = {
       bankName: saved.bankName, bankAccountName: saved.bankAccountName,
       bankAccountNumber: saved.bankAccountNumber, bankIfsc: saved.bankIfsc, bankBranch: saved.bankBranch,
-    });
+    };
+    setBankForm(initial);
+    bankDirty.markClean(initial);
     setBankErrors({});
     setIfscLookup({ status: "idle" });
     setEditingBank(true);
@@ -305,8 +331,8 @@ export default function SettingsPage() {
       setIfscLookup({ status: "found", label: `${data.bank}${data.branch ? ` — ${data.branch}` : ""}${data.city ? `, ${data.city}` : ""}` });
       setBankForm((f) => ({
         ...f,
-        bankName: f.bankName || data.bank || f.bankName,
-        bankBranch: f.bankBranch || data.branch || f.bankBranch,
+        bankName: data.bank || f.bankName,
+        bankBranch: data.branch || f.bankBranch,
       }));
     } catch {
       if (ifscRequestRef.current !== value) return;
@@ -329,10 +355,7 @@ export default function SettingsPage() {
       bankBranch: validate(bankForm.bankBranch, rules.required("Branch is required.")) ?? undefined,
     };
     setBankErrors(errors);
-    if (Object.values(errors).some(Boolean)) {
-      toast({ type: "error", title: "Check bank details", message: "Please fix the highlighted fields." });
-      return;
-    }
+    if (Object.values(errors).some(Boolean)) return;
     setSavingBank(true);
     const result = await putSettings(bankForm);
     if (result.ok) {
@@ -352,14 +375,17 @@ export default function SettingsPage() {
 
   function handleEditTerms() {
     setTermsForm(saved.termsAndConditions);
+    termsDirty.markClean(saved.termsAndConditions);
+    setTermsError(undefined);
     setEditingTerms(true);
   }
-  function handleCancelTerms() { setEditingTerms(false); }
+  function handleCancelTerms() { setEditingTerms(false); setTermsError(undefined); }
 
   async function handleSaveTerms(e: React.FormEvent) {
     e.preventDefault();
     const termsErr = validate(termsForm, rules.maxLength(2000));
-    if (termsErr) { toast({ type: "error", title: "Too long", message: termsErr }); return; }
+    if (termsErr) { setTermsError(termsErr); return; }
+    setTermsError(undefined);
     setSavingTerms(true);
     const result = await putSettings({ termsAndConditions: termsForm });
     if (result.ok) {
@@ -384,7 +410,7 @@ export default function SettingsPage() {
   // sidebar-sized, with some headroom for retina displays.
   const LOGO_MAX_DIMENSION = 256;
   function downscaleImage(file: File, maxDim: number): Promise<File> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const img = new Image();
       const objectUrl = URL.createObjectURL(file);
       img.onload = () => {
@@ -485,25 +511,27 @@ export default function SettingsPage() {
   // ── Email config ──────────────────────────────────────────────────────────
 
   function handleEditEmail() {
-    setEmailForm({ gmailUser: saved.gmailUser, gmailAppPassword: "" });
+    const initial = { gmailUser: saved.gmailUser, gmailAppPassword: "" };
+    setEmailForm(initial);
+    emailDirty.markClean(initial);
     setConfirmClear(false);
+    setEmailErrors({});
     setEditingEmail(true);
   }
 
   function handleCancelEmail() {
     setEmailForm({ gmailUser: "", gmailAppPassword: "" });
     setConfirmClear(false);
+    setEmailErrors({});
     setEditingEmail(false);
   }
 
   async function handleSaveEmail(e: React.FormEvent) {
     e.preventDefault();
     const gmailErr = validate(emailForm.gmailUser, rules.required("Enter a Gmail address."), rules.email("Enter a valid Gmail address."));
-    if (gmailErr) { toast({ type: "error", title: "Gmail required", message: gmailErr }); return; }
-    if (!saved.gmailAppPasswordSet && !emailForm.gmailAppPassword) {
-      toast({ type: "error", title: "App Password required", message: "No existing password — enter one to enable email." });
-      return;
-    }
+    const pwErr = !saved.gmailAppPasswordSet && !emailForm.gmailAppPassword ? "No existing password — enter one to enable email." : undefined;
+    if (gmailErr || pwErr) { setEmailErrors({ gmailUser: gmailErr ?? undefined, gmailAppPassword: pwErr }); return; }
+    setEmailErrors({});
     setSavingEmail(true);
     const result = await putSettings({
       gmailUser: emailForm.gmailUser.trim(),
@@ -585,7 +613,7 @@ export default function SettingsPage() {
       ) : (
         <>
           {/* ── Branding (Logo) ──────────────────────────────────────────── */}
-          <div {...animateSection(0, `card ${styles.cardPad}`)}>
+          <div id="branding" {...animateSection(0, `card ${styles.cardPad}`)}>
             <h2 className={styles.sectionTitle}>Branding</h2>
             <p className={styles.stateHint}>Shown on the sidebar, login screen, and invoices when enabled.</p>
             <div className={styles.emailFormGrid} style={{ alignItems: "center" }}>
@@ -635,7 +663,7 @@ export default function SettingsPage() {
           </div>
 
           {/* ── Business Identity ─────────────────────────────────────── */}
-          <div {...animateSection(1, `card ${styles.cardPad}`)}>
+          <div id="identity" {...animateSection(1, `card ${styles.cardPad}`)}>
             <SectionHeader title="Business Identity" editing={editingIdentity} onEdit={handleEditIdentity} />
             {!editingIdentity ? (
               <div className={styles.infoGrid}>
@@ -647,37 +675,37 @@ export default function SettingsPage() {
                 <InfoRow label="PAN" value={saved.pan} mono />
               </div>
             ) : (
-              <form onSubmit={handleSaveIdentity}>
+              <form onSubmit={handleSaveIdentity} noValidate>
                 <div className={styles.formGrid}>
-                  <FormField label="Business Name" required>
-                    <Input value={identityForm.name} onChange={(e) => setIdentityForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Science Hub" required />
+                  <FormField label="Business Name" required error={identityErrors.name}>
+                    <Input value={identityForm.name} onChange={(e) => { setIdentityForm((f) => ({ ...f, name: e.target.value })); setIdentityErrors((p) => ({ ...p, name: undefined })); }} placeholder="e.g. Science Hub" />
                   </FormField>
                   <FormField label="Tagline">
                     <Input value={identityForm.tagline} onChange={(e) => setIdentityForm((f) => ({ ...f, tagline: e.target.value }))} placeholder="e.g. Industrial & Laboratory Solutions" />
                   </FormField>
-                  <FormField label="Business Email (on invoices)">
-                    <Input type="email" value={identityForm.email} onChange={(e) => setIdentityForm((f) => ({ ...f, email: e.target.value }))} placeholder="e.g. info@sciencehub.com" />
+                  <FormField label="Business Email (on invoices)" error={identityErrors.email}>
+                    <Input type="email" value={identityForm.email} onChange={(e) => { setIdentityForm((f) => ({ ...f, email: e.target.value })); setIdentityErrors((p) => ({ ...p, email: undefined })); }} placeholder="e.g. info@sciencehub.com" />
                   </FormField>
-                  <FormField label="Phone">
-                    <Input value={identityForm.phone} onChange={(e) => setIdentityForm((f) => ({ ...f, phone: e.target.value.replace(/[^\d+\-\s]/g, "") }))} placeholder="e.g. +91-9968597044" maxLength={20} />
+                  <FormField label="Phone" error={identityErrors.phone}>
+                    <PhoneInput value={identityForm.phone} onChange={(e) => { setIdentityForm((f) => ({ ...f, phone: e.target.value })); setIdentityErrors((p) => ({ ...p, phone: undefined })); }} placeholder="10-digit mobile" />
                   </FormField>
-                  <FormField label="GSTIN">
-                    <Input value={identityForm.gstin} onChange={(e) => setIdentityForm((f) => ({ ...f, gstin: e.target.value }))} placeholder="e.g. 07AAAAA0000A1Z5" className={styles.gstinInput} maxLength={15} />
+                  <FormField label="GSTIN" error={identityErrors.gstin}>
+                    <Input value={identityForm.gstin} onChange={(e) => { setIdentityForm((f) => ({ ...f, gstin: e.target.value })); setIdentityErrors((p) => ({ ...p, gstin: undefined })); }} placeholder="e.g. 07AAAAA0000A1Z5" className={styles.gstinInput} maxLength={15} />
                   </FormField>
-                  <FormField label="PAN">
-                    <Input value={identityForm.pan} onChange={(e) => setIdentityForm((f) => ({ ...f, pan: e.target.value.toUpperCase() }))} placeholder="e.g. AAAAA0000A" className={styles.gstinInput} maxLength={10} />
+                  <FormField label="PAN" error={identityErrors.pan}>
+                    <Input value={identityForm.pan} onChange={(e) => { setIdentityForm((f) => ({ ...f, pan: e.target.value.toUpperCase() })); setIdentityErrors((p) => ({ ...p, pan: undefined })); }} placeholder="e.g. AAAAA0000A" className={styles.gstinInput} maxLength={10} />
                   </FormField>
                 </div>
                 <div className={styles.formActionsRow}>
                   <Button type="button" variant="secondary" disabled={savingIdentity} onClick={handleCancelIdentity}>Cancel</Button>
-                  <Button type="submit" variant="primary" disabled={savingIdentity}>{savingIdentity ? "Saving…" : "Save Changes"}</Button>
+                  <Button type="submit" variant="primary" disabled={savingIdentity || !identityDirty.isDirty || !identityForm.name.trim()}>{savingIdentity ? "Saving…" : "Save Changes"}</Button>
                 </div>
               </form>
             )}
           </div>
 
           {/* ── Address ────────────────────────────────────────────────── */}
-          <div {...animateSection(2, `card ${styles.cardPad}`)}>
+          <div id="address" {...animateSection(2, `card ${styles.cardPad}`)}>
             <SectionHeader title="Address" editing={editingAddress} onEdit={handleEditAddress} />
             {!editingAddress ? (
               <>
@@ -695,7 +723,7 @@ export default function SettingsPage() {
                 )}
               </>
             ) : (
-              <form onSubmit={handleSaveAddress}>
+              <form onSubmit={handleSaveAddress} noValidate>
                 <p className={styles.stateHint}>
                   The <strong>State</strong> field determines intra-state (CGST+SGST) vs inter-state (IGST) for new invoices.
                 </p>
@@ -709,20 +737,20 @@ export default function SettingsPage() {
                   <FormField label="State">
                     <Input value={addressForm.state} onChange={(e) => setAddressForm((f) => ({ ...f, state: e.target.value }))} placeholder="e.g. Delhi" />
                   </FormField>
-                  <FormField label="Pincode">
-                    <Input value={addressForm.pincode} onChange={(e) => setAddressForm((f) => ({ ...f, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) }))} placeholder="e.g. 110039" maxLength={6} />
+                  <FormField label="Pincode" error={addressErrors.pincode}>
+                    <Input value={addressForm.pincode} onChange={(e) => { setAddressForm((f) => ({ ...f, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })); setAddressErrors({}); }} placeholder="e.g. 110039" maxLength={6} />
                   </FormField>
                 </div>
                 <div className={styles.formActionsRow}>
                   <Button type="button" variant="secondary" disabled={savingAddress} onClick={handleCancelAddress}>Cancel</Button>
-                  <Button type="submit" variant="primary" disabled={savingAddress}>{savingAddress ? "Saving…" : "Save Changes"}</Button>
+                  <Button type="submit" variant="primary" disabled={savingAddress || !addressDirty.isDirty}>{savingAddress ? "Saving…" : "Save Changes"}</Button>
                 </div>
               </form>
             )}
           </div>
 
           {/* ── Bank Details ───────────────────────────────────────────── */}
-          <div {...animateSection(3, `card ${styles.cardPad}`)}>
+          <div id="bank-details" {...animateSection(3, `card ${styles.cardPad}`)}>
             <SectionHeader title="Bank Details" editing={editingBank} onEdit={handleEditBank} />
             {saved.bankAccountNumberDecryptFailed && <DecryptWarning what="bank account number" />}
             {!editingBank ? (
@@ -737,55 +765,54 @@ export default function SettingsPage() {
                 </div>
               </>
             ) : (
-              <form onSubmit={handleSaveBank}>
+              <form onSubmit={handleSaveBank} noValidate>
                 <p className={styles.stateHint}>
                   Printed on every invoice so customers can pay by bank transfer. Only admins can edit these.
                 </p>
                 <div className={styles.formGrid}>
-                  <FormField label="Bank Name" required>
-                    <Input value={bankForm.bankName} onChange={(e) => setBankForm((f) => ({ ...f, bankName: toTitleCase(e.target.value) }))} placeholder="e.g. HDFC Bank" required />
+                  <FormField label="Bank Name" required error={bankErrors.bankName}>
+                    <Input value={bankForm.bankName} onChange={(e) => { setBankForm((f) => ({ ...f, bankName: toTitleCase(e.target.value) })); setBankErrors((p) => ({ ...p, bankName: undefined })); }} placeholder="e.g. HDFC Bank" />
                   </FormField>
                   <FormField label="Account Holder Name">
                     <Input value={bankForm.bankAccountName} onChange={(e) => setBankForm((f) => ({ ...f, bankAccountName: e.target.value }))} placeholder="e.g. Science Hub" />
                   </FormField>
-                  <FormField label="Account Number" required>
-                    <Input value={bankForm.bankAccountNumber} onChange={(e) => setBankForm((f) => ({ ...f, bankAccountNumber: e.target.value.replace(/\D/g, "").slice(0, 18) }))} placeholder="e.g. 123456789012" className={styles.gstinInput} maxLength={18} required />
+                  <FormField label="Account Number" required error={bankErrors.bankAccountNumber}>
+                    <Input value={bankForm.bankAccountNumber} onChange={(e) => { setBankForm((f) => ({ ...f, bankAccountNumber: e.target.value.replace(/\D/g, "").slice(0, 18) })); setBankErrors((p) => ({ ...p, bankAccountNumber: undefined })); }} placeholder="e.g. 123456789012" className={styles.gstinInput} maxLength={18} />
                   </FormField>
-                  <div>
-                    <FormField
-                      label="IFSC Code"
-                      required
-                      error={bankErrors.bankIfsc}
-                      hint={ifscLookup.status === "loading" ? "Checking IFSC…" : undefined}
-                    >
-                      <Input
-                        value={bankForm.bankIfsc}
-                        onChange={handleBankIfscChange}
-                        onBlur={(e) => handleBankIfscBlur(e.target.value)}
-                        placeholder="e.g. HDFC0001234"
-                        className={styles.gstinInput}
-                        maxLength={11}
-                        required
-                      />
-                    </FormField>
-                    {ifscLookup.status === "found" && !bankErrors.bankIfsc && (
-                      <p className={styles.ifscFoundHint}>✓ {ifscLookup.label}</p>
-                    )}
-                  </div>
-                  <FormField label="Branch" required>
-                    <Input value={bankForm.bankBranch} onChange={(e) => setBankForm((f) => ({ ...f, bankBranch: toTitleCase(e.target.value) }))} placeholder="e.g. Noida" required />
+                  <FormField
+                    label="IFSC Code"
+                    required
+                    error={bankErrors.bankIfsc}
+                    hint={
+                      ifscLookup.status === "loading" ? "Checking IFSC…" :
+                      ifscLookup.status === "found" && !bankErrors.bankIfsc ? `✓ ${ifscLookup.label}` :
+                      undefined
+                    }
+                    hintSuccess={ifscLookup.status === "found" && !bankErrors.bankIfsc}
+                  >
+                    <Input
+                      value={bankForm.bankIfsc}
+                      onChange={handleBankIfscChange}
+                      onBlur={(e) => handleBankIfscBlur(e.target.value)}
+                      placeholder="e.g. HDFC0001234"
+                      className={styles.gstinInput}
+                      maxLength={11}
+                    />
+                  </FormField>
+                  <FormField label="Branch" required error={bankErrors.bankBranch}>
+                    <Input value={bankForm.bankBranch} onChange={(e) => { setBankForm((f) => ({ ...f, bankBranch: toTitleCase(e.target.value) })); setBankErrors((p) => ({ ...p, bankBranch: undefined })); }} placeholder="e.g. Noida" />
                   </FormField>
                 </div>
                 <div className={styles.formActionsRow}>
                   <Button type="button" variant="secondary" disabled={savingBank} onClick={handleCancelBank}>Cancel</Button>
-                  <Button type="submit" variant="primary" disabled={savingBank}>{savingBank ? "Saving…" : "Save Changes"}</Button>
+                  <Button type="submit" variant="primary" disabled={savingBank || !bankDirty.isDirty || !bankForm.bankName.trim() || !bankForm.bankAccountNumber.trim() || !bankForm.bankIfsc.trim() || !bankForm.bankBranch.trim()}>{savingBank ? "Saving…" : "Save Changes"}</Button>
                 </div>
               </form>
             )}
           </div>
 
           {/* ── Terms & Conditions ────────────────────────────────────────── */}
-          <div {...animateSection(4, `card ${styles.cardPad}`)}>
+          <div id="terms" {...animateSection(4, `card ${styles.cardPad}`)}>
             <SectionHeader title="Terms & Conditions" editing={editingTerms} onEdit={handleEditTerms} />
             {!editingTerms ? (
               <>
@@ -799,26 +826,26 @@ export default function SettingsPage() {
                 )}
               </>
             ) : (
-              <form onSubmit={handleSaveTerms}>
+              <form onSubmit={handleSaveTerms} noValidate>
                 <p className={styles.stateHint}>One point per line — each line becomes a numbered item on the invoice.</p>
-                <FormField label="Terms & Conditions">
+                <FormField label="Terms & Conditions" error={termsError}>
                   <Textarea
                     value={termsForm}
-                    onChange={(e) => setTermsForm(e.target.value)}
+                    onChange={(e) => { setTermsForm(e.target.value); setTermsError(undefined); }}
                     rows={6}
                     placeholder={"e.g. Interest @ 24%p.a would be charged after 45 days of Invoice\nMaterial sold strictly for lab use only"}
                   />
                 </FormField>
                 <div className={styles.formActionsRow}>
                   <Button type="button" variant="secondary" disabled={savingTerms} onClick={handleCancelTerms}>Cancel</Button>
-                  <Button type="submit" variant="primary" disabled={savingTerms}>{savingTerms ? "Saving…" : "Save Changes"}</Button>
+                  <Button type="submit" variant="primary" disabled={savingTerms || !termsDirty.isDirty}>{savingTerms ? "Saving…" : "Save Changes"}</Button>
                 </div>
               </form>
             )}
           </div>
 
           {/* ── Email Configuration card (always visible, own edit state) ── */}
-          <div {...animateSection(5, `card ${styles.cardPad}`)}>
+          <div id="email" {...animateSection(5, `card ${styles.cardPad}`)}>
             <div className={styles.emailCardHeader}>
               <div>
                 <h2 className={styles.emailCardTitle}>
@@ -856,7 +883,7 @@ export default function SettingsPage() {
               )
             ) : (
               /* Inline edit sub-mode */
-              <form onSubmit={handleSaveEmail}>
+              <form onSubmit={handleSaveEmail} noValidate>
                 <div className={styles.appPasswordHintBox}>
                   <p className={styles.appPasswordHintText}>
                     Use a Gmail address with{" "}
@@ -882,20 +909,19 @@ export default function SettingsPage() {
                 </div>
 
                 <div className={styles.emailFormGrid}>
-                  <FormField label="Gmail Address (send-from — not your login email)">
+                  <FormField label="Gmail Address (send-from — not your login email)" error={emailErrors.gmailUser}>
                     <Input
                       type="email"
                       value={emailForm.gmailUser}
-                      onChange={(e) => setEmailForm((f) => ({ ...f, gmailUser: e.target.value }))}
+                      onChange={(e) => { setEmailForm((f) => ({ ...f, gmailUser: e.target.value })); setEmailErrors((p) => ({ ...p, gmailUser: undefined })); }}
                       placeholder="yourbusiness@gmail.com"
-                      required
                     />
                   </FormField>
-                  <FormField label={saved.gmailAppPasswordSet ? "New App Password (leave blank to keep current)" : "App Password"}>
+                  <FormField label={saved.gmailAppPasswordSet ? "New App Password (leave blank to keep current)" : "App Password"} error={emailErrors.gmailAppPassword}>
                     <Input
                       type="password"
                       value={emailForm.gmailAppPassword}
-                      onChange={(e) => setEmailForm((f) => ({ ...f, gmailAppPassword: e.target.value }))}
+                      onChange={(e) => { setEmailForm((f) => ({ ...f, gmailAppPassword: e.target.value })); setEmailErrors((p) => ({ ...p, gmailAppPassword: undefined })); }}
                       placeholder={saved.gmailAppPasswordSet ? "Leave blank to keep existing" : "16-character App Password"}
                       autoComplete="new-password"
                     />
@@ -931,7 +957,7 @@ export default function SettingsPage() {
                     <Button type="button" variant="secondary" disabled={savingEmail} onClick={handleCancelEmail}>
                       Cancel
                     </Button>
-                    <Button type="submit" variant="primary" disabled={savingEmail}>
+                    <Button type="submit" variant="primary" disabled={savingEmail || !emailDirty.isDirty || !emailForm.gmailUser.trim()}>
                       {savingEmail ? "Saving…" : "Save Credentials"}
                     </Button>
                   </div>

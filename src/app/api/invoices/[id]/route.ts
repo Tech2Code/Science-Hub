@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getInvoice } from "@/lib/db";
+import { getInvoice, getBusinessSettings } from "@/lib/db";
+import { deriveIsInterState } from "@/lib/gstLocation";
 import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { assertInvoiceQuantitiesNotBelowReturned, InvoiceQuantityValidationError } from "@/lib/invoiceReturns";
+
+class InvoiceConflictError extends Error {}
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
@@ -38,7 +41,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { items, notes, dueDate, isInterState, placeOfSupply, reverseCharge, status, expectedUpdatedAt } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, status, expectedUpdatedAt } = body;
 
     const existingBase = await prisma.invoice.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existingBase) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -102,6 +105,15 @@ export async function PUT(
         return NextResponse.json({ error: "Item discount must be between 0 and 100%" }, { status: 400 });
       }
     }
+    {
+      const seenProductIds = new Set<string>();
+      for (const item of items as { productId: string }[]) {
+        if (seenProductIds.has(item.productId)) {
+          return NextResponse.json({ error: "Each product can only appear once per invoice — combine duplicate lines into a single quantity instead." }, { status: 400 });
+        }
+        seenProductIds.add(item.productId);
+      }
+    }
 
     // Fetch product info for names/units
     const productIds = items.map((i: { productId: string }) => i.productId);
@@ -139,7 +151,13 @@ export async function PUT(
       };
     });
 
-    const inter = Boolean(isInterState);
+    // Independently verify inter-state vs. intra-state from the business's
+    // own configured state rather than trusting the client-supplied flag —
+    // mirrors the same check in POST /api/invoices. Falls back to the
+    // client's value only if the business state isn't configured yet.
+    const biz = await getBusinessSettings();
+    const derivedIsInterState = deriveIsInterState(String(placeOfSupply), biz.state);
+    const inter = derivedIsInterState !== null ? derivedIsInterState : Boolean(clientIsInterState);
     const cgst = inter ? 0 : totalGst / 2;
     const sgst = inter ? 0 : totalGst / 2;
     const igst = inter ? totalGst : 0;
@@ -152,6 +170,21 @@ export async function PUT(
     else if (paidAmount > 0) newStatus = "partial";
 
     const { invoice, stockWarnings } = await prisma.$transaction(async (tx) => {
+      // Re-check the optimistic-lock condition atomically against the row,
+      // inside the transaction — the earlier check above ran as a separate
+      // query, leaving a race window where two concurrent edits could both
+      // pass it and the second would silently overwrite the first. This
+      // updateMany's WHERE re-evaluates under the row lock it takes, so a
+      // conflicting concurrent write is caught even without Serializable
+      // isolation.
+      if (expectedUpdatedAt) {
+        const guard = await tx.invoice.updateMany({
+          where: { id, updatedAt: existingBase.updatedAt },
+          data: { updatedAt: new Date() },
+        });
+        if (guard.count === 0) throw new InvoiceConflictError();
+      }
+
       // Must run before any mutation: an edited quantity can never drop
       // below what's already been returned against that product, otherwise
       // stock/ledger/accounting would be reconciled against units that no
@@ -170,7 +203,7 @@ export async function PUT(
         tx,
         oldItems.map((old) => ({ productId: old.productId, quantity: old.quantity })),
         {
-          type: "adjustment",
+          type: "sale_edit_reverse",
           reference: existing.invoiceNumber,
           notes: "Invoice edited — old items reversed",
           createdByUserId: auth.session.user.id,
@@ -209,7 +242,7 @@ export async function PUT(
           quantity: -item.quantity,
         })),
         {
-          type: "adjustment",
+          type: "sale_edit_apply",
           reference: existing.invoiceNumber,
           notes: "Invoice edited — new items applied",
           createdByUserId: auth.session.user.id,
@@ -232,6 +265,9 @@ export async function PUT(
   } catch (error) {
     if (error instanceof InvoiceQuantityValidationError) {
       return NextResponse.json({ error: error.message, errors: error.errors }, { status: 400 });
+    }
+    if (error instanceof InvoiceConflictError) {
+      return NextResponse.json({ error: "This invoice was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
     }
     console.error(error);
     if (error instanceof ProductNotFoundError) {
@@ -285,7 +321,7 @@ export async function DELETE(
         tx,
         items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
         {
-          type: "adjustment",
+          type: "sale_delete_restore",
           reference: inv.invoiceNumber,
           notes: "Invoice deleted",
           createdByUserId: auth.session.user.id,

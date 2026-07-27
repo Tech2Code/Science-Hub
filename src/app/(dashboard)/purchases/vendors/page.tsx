@@ -6,10 +6,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
-import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
@@ -29,6 +30,11 @@ interface Vendor {
   _count: { purchaseBills: number };
 }
 
+interface VendorListResponse {
+  data: Vendor[];
+  total: number;
+}
+
 type SortOption = "name_az" | "name_za" | "bills_high" | "bills_low" | "newest" | "oldest";
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "newest",     label: "Newest first" },
@@ -38,19 +44,6 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "bills_high", label: "Bills (High–Low)" },
   { value: "bills_low",  label: "Bills (Low–High)" },
 ];
-
-function sortVendors(list: Vendor[], sort: SortOption): Vendor[] {
-  const arr = [...list];
-  switch (sort) {
-    case "name_za":    return arr.sort((a, b) => b.name.localeCompare(a.name));
-    case "bills_high": return arr.sort((a, b) => b._count.purchaseBills - a._count.purchaseBills);
-    case "bills_low":  return arr.sort((a, b) => a._count.purchaseBills - b._count.purchaseBills);
-    case "oldest":     return arr.sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
-    case "newest":     return arr.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
-    case "name_az":
-    default:           return arr.sort((a, b) => a.name.localeCompare(b.name));
-  }
-}
 
 const COLUMNS: Column[] = [
   { label: "Vendor",  mobile: "full+label" },
@@ -64,8 +57,6 @@ const COLUMNS: Column[] = [
 
 export default function VendorsPage() {
   const canWrite = useCanWrite();
-  const { data, loading, patchData } = useFetch<Vendor[]>("/api/vendors");
-  const vendors = data ?? [];
   const toast = useToast();
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
@@ -76,23 +67,19 @@ export default function VendorsPage() {
   const [openingEditId, setOpeningEditId] = useState<string | null>(null);
   const router = useRouter();
 
-  const filtered = search.trim()
-    ? vendors.filter(v => {
-        const q = search.toLowerCase();
-        return (
-          v.name.toLowerCase().includes(q) ||
-          (v.company ?? "").toLowerCase().includes(q) ||
-          (v.gstin ?? "").toLowerCase().includes(q) ||
-          (v.phone ?? "").includes(q) ||
-          (v.email ?? "").toLowerCase().includes(q)
-        );
-      })
-    : vendors;
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const pageSize = showAll ? 2000 : PAGE_SIZE;
 
-  const sorted = sortVendors(filtered, sort);
-  const maxPage = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const clampedPage = Math.min(page, maxPage);
-  const { visible } = usePagination(sorted, clampedPage, showAll);
+  const listParams = new URLSearchParams();
+  if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
+  listParams.set("sort", sort);
+  listParams.set("page", String(page));
+  listParams.set("pageSize", String(pageSize));
+  const apiUrl = `/api/vendors?${listParams.toString()}`;
+
+  const { data, loading, mutate } = useFetch<VendorListResponse>(apiUrl);
+  const vendors = data?.data ?? [];
+  const total = data?.total ?? 0;
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -102,7 +89,7 @@ export default function VendorsPage() {
       const res = await fetch(`/api/vendors/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
-        patchData((prev) => (prev ?? []).filter((v) => v.id !== target.id));
+        await mutate();
         toast({ type: "success", title: "Vendor deleted", message: `"${target.name}" removed.` });
       } else {
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete vendor." });
@@ -134,7 +121,7 @@ export default function VendorsPage() {
         <div>
           <h1 className="page-title">Vendors</h1>
           <p className="page-sub">
-            {loading ? "Loading…" : search.trim() ? `${filtered.length} of ${vendors.length} vendors` : `${vendors.length} vendors`}
+            {loading ? "Loading…" : `${total} vendors`}
           </p>
         </div>
         {canWrite && (<Button variant="primary" href="/purchases/vendors/new">
@@ -157,7 +144,7 @@ export default function VendorsPage() {
             <SortSelect ariaLabel="Sort vendors" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
           {!loading && (
-            <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />
+            <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
@@ -168,11 +155,11 @@ export default function VendorsPage() {
             <tbody>
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
-              ) : filtered.length === 0 ? (
+              ) : vendors.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search.trim() ? `No vendors match "${search}".` : "No vendors yet. Add your first vendor."}
                 </td></tr>
-              ) : visible.map(v => (
+              ) : vendors.map(v => (
                 <tr key={v.id}>
                   <Cell col={COLUMNS[0]}>
                     <Link href={`/purchases/vendors/${v.id}`} className={`${styles.nameCell} table-link`} title={v.name}>{v.name}</Link>
@@ -214,8 +201,8 @@ export default function VendorsPage() {
             </tbody>
           </table>
         </div>
-        {!loading && filtered.length > 0 && (
-          <Pagination total={filtered.length} page={clampedPage} showAll={showAll} onPage={setPage} label="vendors" />
+        {!loading && total > 0 && (
+          <Pagination total={total} page={page} showAll={showAll} onPage={setPage} label="vendors" />
         )}
       </div>
     </div>

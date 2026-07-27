@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { Input } from "@/components/ui/Input";
 import { useFetch } from "@/lib/useCache";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { Cell, type Column } from "@/components/ui/Table";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./salesPayments.module.css";
@@ -22,9 +23,18 @@ interface Payment {
   invoiceId: string;
   invoice: {
     invoiceNumber: string;
-    total: number;
     customer: { name: string };
   };
+}
+
+interface PaymentListResponse {
+  data: Payment[];
+  total: number;
+}
+
+interface PaymentStats {
+  totalCollected: number;
+  totalCount: number;
 }
 
 type SortOption = "newest" | "oldest" | "amount_high" | "amount_low" | "customer_az" | "customer_za";
@@ -36,19 +46,6 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "customer_az", label: "Customer (A–Z)" },
   { value: "customer_za", label: "Customer (Z–A)" },
 ];
-
-function sortPayments(list: Payment[], sort: SortOption): Payment[] {
-  const arr = [...list];
-  switch (sort) {
-    case "oldest":      return arr.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    case "amount_high": return arr.sort((a, b) => b.amount - a.amount);
-    case "amount_low":  return arr.sort((a, b) => a.amount - b.amount);
-    case "customer_az": return arr.sort((a, b) => a.invoice.customer.name.localeCompare(b.invoice.customer.name));
-    case "customer_za": return arr.sort((a, b) => b.invoice.customer.name.localeCompare(a.invoice.customer.name));
-    case "newest":
-    default:            return arr.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }
-}
 
 const METHOD_CLASS: Record<string, string> = {
   Cash: "methodCash",
@@ -81,25 +78,28 @@ export default function PaymentsPage() {
     }
   }, [session, router]);
 
-  const { data, loading } = useFetch<Payment[]>("/api/payments");
-  const payments = data ?? [];
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
 
-  const filtered = payments.filter((p) =>
-    p.invoice.customer.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.invoice.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-    p.method.toLowerCase().includes(search.toLowerCase()) ||
-    (p.reference ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const pageSize = showAll ? 5000 : PAGE_SIZE;
 
-  const sorted = sortPayments(filtered, sort);
-  const { visible } = usePagination(sorted, page, showAll);
+  const listParams = new URLSearchParams();
+  if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
+  listParams.set("sort", sort);
+  listParams.set("page", String(page));
+  listParams.set("pageSize", String(pageSize));
+  const apiUrl = `/api/payments?${listParams.toString()}`;
+
+  const { data, loading } = useFetch<PaymentListResponse>(apiUrl);
+  const { data: stats } = useFetch<PaymentStats>("/api/payments/stats");
+  const payments = data?.data ?? [];
+  const total = data?.total ?? 0;
+  const totalCollected = stats?.totalCollected ?? 0;
+
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
-
-  const totalCollected = payments.reduce((s, p) => s + p.amount, 0);
 
   return (
     <div className="page-stack">
@@ -107,7 +107,7 @@ export default function PaymentsPage() {
         <div>
           <h1 className="page-title">Payments</h1>
           <p className="page-sub">
-            {loading ? "Loading…" : `${payments.length} payments · Total collected ₹${totalCollected.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            {loading ? "Loading…" : `${total} payments · Total collected ₹${totalCollected.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </p>
         </div>
       </div>
@@ -126,7 +126,7 @@ export default function PaymentsPage() {
             <SortSelect ariaLabel="Sort payments" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
           {!loading && (
-            <ShowAllToggle total={filtered.length} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
+            <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
@@ -139,11 +139,11 @@ export default function PaymentsPage() {
             <tbody>
               {loading ? (
                 <TableSkeleton cols={COLUMNS.length} />
-              ) : filtered.length === 0 ? (
+              ) : payments.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search ? "No payments match your search." : "No payments recorded yet."}
                 </td></tr>
-              ) : visible.map((p) => {
+              ) : payments.map((p) => {
                 const methodClass = styles[METHOD_CLASS[p.method] ?? METHOD_CLASS.Other];
                 return (
                   <tr key={p.id}>
@@ -176,9 +176,9 @@ export default function PaymentsPage() {
             </tbody>
           </table>
         </div>
-        {!loading && filtered.length > 0 && (
+        {!loading && total > 0 && (
           <Pagination
-            total={filtered.length}
+            total={total}
             page={page}
             showAll={showAll}
             onPage={setPage}

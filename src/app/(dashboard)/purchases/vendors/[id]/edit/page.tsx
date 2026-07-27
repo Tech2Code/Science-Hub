@@ -8,7 +8,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { VendorFormFields } from "@/components/vendors/VendorFormFields";
 import { BLANK_VENDOR_FORM, validateVendorForm, normalizeVendorField, type VendorFormData } from "@/lib/vendorForm";
-import { bustCache } from "@/lib/useCache";
+import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -36,7 +36,7 @@ export default function EditVendorPage() {
         const loaded: VendorFormData = {
           name: d.name ?? "", company: d.company ?? "", gstin: d.gstin ?? "",
           phone: d.phone ?? "", email: d.email ?? "", address: d.address ?? "",
-          notes: d.notes ?? "", isActive: d.isActive !== false,
+          state: d.state ?? "", notes: d.notes ?? "", isActive: d.isActive !== false,
         };
         setForm(loaded);
         setInitialForm(loaded);
@@ -46,7 +46,7 @@ export default function EditVendorPage() {
       .catch(() => { setLoading(false); });
   }, [id]);
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
+  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
     const { name, value, type } = e.target;
     const nextValue = normalizeVendorField(name, value);
     setForm(prev => ({ ...prev, [name]: type === "checkbox" ? (e.target as HTMLInputElement).checked : nextValue }));
@@ -66,7 +66,7 @@ export default function EditVendorPage() {
     });
     setSaving(false);
     if (res.ok) {
-      bustCache("/api/vendors");
+      bustCachePrefix("/api/vendors");
       toast({ type: "success", title: "Vendor updated", message: "Changes saved." });
       router.push(`/purchases/vendors/${id}`);
     } else if (res.status === 409) {
@@ -90,12 +90,12 @@ export default function EditVendorPage() {
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "Edit Vendor" }]} />
       <h1 className="page-title">Edit Vendor</h1>
 
-      <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
+      <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
         <VendorFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} />
 
         <div className="form-actions-wrap">
           <div className="form-actions">
-            <Button type="submit" variant="primary" disabled={disabled || !hasChanges}>
+            <Button type="submit" variant="primary" disabled={disabled || !hasChanges || !form.name.trim()}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
               Update Vendor
             </Button>

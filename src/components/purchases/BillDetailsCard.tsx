@@ -3,16 +3,18 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Input";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { AttachmentPicker } from "@/components/purchases/AttachmentPicker";
 import { useToast } from "@/components/ui/Toast";
-import { bustCache } from "@/lib/useCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
+import { INDIA_STATES_FULL } from "@/lib/states";
 import { PURCHASE_BILL_CATEGORIES, type PurchaseBillVendor } from "@/lib/purchaseBillForm";
 import styles from "./BillDetailsCard.module.css";
 
-type InlineVendorForm = { name: string; company: string; phone: string; email: string; gstin: string; address: string; [key: string]: string };
-const BLANK_INLINE_VENDOR: InlineVendorForm = { name: "", company: "", phone: "", email: "", gstin: "", address: "" };
+type InlineVendorForm = { name: string; company: string; phone: string; email: string; gstin: string; address: string; state: string; [key: string]: string };
+const BLANK_INLINE_VENDOR: InlineVendorForm = { name: "", company: "", phone: "", email: "", gstin: "", address: "", state: "" };
 
 interface BillDetailsCardProps {
   sectionIndex: number;
@@ -20,6 +22,7 @@ interface BillDetailsCardProps {
   vendorId: string;
   onVendorIdChange: (id: string) => void;
   onVendorCreated: (vendor: PurchaseBillVendor) => void;
+  vendorError?: string;
   category: string;
   onCategoryChange: (category: string) => void;
   billDate: string;
@@ -39,7 +42,7 @@ interface BillDetailsCardProps {
 // Notes / Attachment — shared by the New Purchase Bill and Edit Purchase
 // Bill pages so the two forms can't drift apart.
 export function BillDetailsCard({
-  sectionIndex, vendors, vendorId, onVendorIdChange, onVendorCreated,
+  sectionIndex, vendors, vendorId, onVendorIdChange, onVendorCreated, vendorError,
   category, onCategoryChange, billDate, onBillDateChange, dueDate, onDueDateChange,
   notes, onNotesChange, attachmentUploading, attachmentName, attachmentUrl,
   onAttachmentFileChange, onAttachmentRemove,
@@ -85,6 +88,7 @@ export function BillDetailsCard({
           phone:   ivForm.phone.trim() || null,
           email:   ivForm.email.trim() || null,
           address: ivForm.address.trim() || null,
+          state:   ivForm.state.trim() || null,
         }),
       });
       const data = await res.json();
@@ -92,7 +96,7 @@ export function BillDetailsCard({
         onVendorCreated(data);
         onVendorIdChange(data.id);
         setShowVendorCreate(false);
-        bustCache("/api/vendors");
+        bustCachePrefix("/api/vendors");
         toast({ type: "success", title: "Vendor created", message: `${data.name} added and selected.` });
       } else {
         setIvError(data.error ?? "Failed to create vendor.");
@@ -108,7 +112,7 @@ export function BillDetailsCard({
       <h2 className="form-section-title">Bill Details</h2>
 
       <div className="form-grid-2">
-        <FormField label="Vendor" required>
+        <FormField label="Vendor" required error={vendorError}>
           <Select value={vendorId} onChange={(e) => { onVendorIdChange(e.target.value); if (e.target.value) setShowVendorCreate(false); }}>
             <option value="">Select a vendor…</option>
             {vendors.map((v) => (
@@ -160,13 +164,19 @@ export function BillDetailsCard({
                 <Input value={ivForm.gstin} onChange={(e) => updateIvField("gstin", e.target.value)} placeholder="22AAAAA0000A1Z5" maxLength={15} mono />
               </FormField>
               <FormField label="Phone" required error={ivFieldErrors.phone}>
-                <Input type="tel" inputMode="numeric" value={ivForm.phone} onChange={(e) => updateIvField("phone", e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="10-digit mobile" maxLength={10} />
+                <PhoneInput value={ivForm.phone} onChange={(e) => updateIvField("phone", e.target.value)} placeholder="10-digit mobile" />
               </FormField>
               <FormField label="Email" error={ivFieldErrors.email}>
                 <Input type="email" value={ivForm.email} onChange={(e) => updateIvField("email", e.target.value)} placeholder="vendor@example.com" />
               </FormField>
               <FormField label="Address" required error={ivFieldErrors.address}>
                 <Input value={ivForm.address} onChange={(e) => updateIvField("address", e.target.value)} placeholder="Street / locality" />
+              </FormField>
+              <FormField label="State">
+                <Select value={ivForm.state} onChange={(e) => updateIvField("state", e.target.value)}>
+                  <option value="">Select state</option>
+                  {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
+                </Select>
               </FormField>
             </div>
           </div>

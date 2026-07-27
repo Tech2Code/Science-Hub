@@ -1,0 +1,13 @@
+-- AlterTable
+ALTER TABLE "PurchaseBill" ADD COLUMN     "cgst" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "igst" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "isInterState" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "placeOfSupply" TEXT,
+ADD COLUMN     "sgst" DOUBLE PRECISION NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "PurchaseBillItem" ADD COLUMN     "hsn" TEXT NOT NULL DEFAULT '';
+
+-- AlterTable
+ALTER TABLE "Vendor" ADD COLUMN     "state" TEXT;
+

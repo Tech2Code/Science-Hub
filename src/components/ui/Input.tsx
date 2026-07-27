@@ -46,10 +46,11 @@ interface FieldProps {
   label: string;
   required?: boolean;
   hint?: string;
+  hintSuccess?: boolean;
   error?: string;
   children: React.ReactNode;
 }
-export function FormField({ label, required, hint, error, children }: FieldProps) {
+export function FormField({ label, required, hint, hintSuccess, error, children }: FieldProps) {
   const generatedId = useId();
   const child = React.isValidElement(children)
     ? (children as React.ReactElement<{ id?: string }>)
@@ -74,7 +75,7 @@ export function FormField({ label, required, hint, error, children }: FieldProps
           {error}
         </p>
       )}
-      {!error && hint && <p className={styles.hint}>{hint}</p>}
+      {!error && hint && <p className={`${styles.hint} ${hintSuccess ? styles.hintSuccess : ""}`}>{hint}</p>}
     </div>
   );
 }

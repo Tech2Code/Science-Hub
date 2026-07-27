@@ -1,0 +1,69 @@
+.wrap {
+  display: flex;
+  align-items: stretch;
+  border-radius: var(--c-radius-sm, 0.5rem);
+  border: 1px solid var(--c-border, #e2e8f0);
+  background: var(--c-bg-input, #f8fafc);
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.wrap:focus-within {
+  border-color: var(--c-blue, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* Matches Input.module.css's [data-error] pattern so FormField's error
+   state (a data-error attribute on the wrapping div) styles this the
+   same way a plain <Input> would be styled. */
+[data-error] .wrap {
+  border-color: var(--c-red-border, #fca5a5);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.09);
+}
+[data-error] .wrap:focus-within {
+  border-color: var(--c-red, #dc2626);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
+}
+
+.prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 0.625rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--c-text-3, #475569);
+  background: var(--c-bg-sub, rgba(0, 0, 0, 0.03));
+  border-right: 1px solid var(--c-border, #e2e8f0);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.75rem 1rem;
+  border: none;
+  background: transparent;
+  color: var(--c-text, #0f172a);
+  font-size: 0.875rem;
+  font-family: inherit;
+  outline: none;
+}
+
+@media (max-width: 767px) {
+  .input {
+    padding: 0.625rem 0.875rem;
+    font-size: 0.875rem;
+  }
+}
+
+.input::placeholder { color: var(--c-text-4, #94a3b8); }
+.input:disabled { opacity: 0.6; cursor: not-allowed; }
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+  -webkit-text-fill-color: var(--c-text, #0f172a) !important;
+  caret-color: var(--c-text, #0f172a);
+  transition: background-color 5000s ease-in-out 0s;
+}

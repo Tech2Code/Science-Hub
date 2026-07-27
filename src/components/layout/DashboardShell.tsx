@@ -7,6 +7,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useTheme } from "@/lib/theme";
 import { useBranding } from "@/lib/businessBranding";
 import { ProtectedSection } from "@/lib/sections";
+import { NAV_GROUPS, BIN_NAV } from "@/lib/navigation";
 import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { GlobalSearch } from "./GlobalSearch";
@@ -64,6 +65,16 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
     </svg>
   ),
+  creditNotes: ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+      <polyline points="1 4 1 10 7 10" /><path strokeLinecap="round" strokeLinejoin="round" d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+    </svg>
+  ),
+  gstFiling: ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m-9 4h12a2 2 0 002-2V6.828a2 2 0 00-.586-1.414l-2.828-2.828A2 2 0 0014.172 2H6a2 2 0 00-2 2v14a2 2 0 002 2z" />
+    </svg>
+  ),
   admin: ({ className }) => (
     <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -103,60 +114,7 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
   ),
 };
 
-interface NavItem { href: string; label: string; iconKey: string; adminOnly: boolean; sectionRequired?: ProtectedSection; }
-interface NavGroup { label: string | null; items: NavItem[]; }
-
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: null,
-    items: [
-      { href: "/dashboard", label: "Dashboard", iconKey: "dashboard", adminOnly: false },
-    ],
-  },
-  {
-    label: "SALES",
-    items: [
-      { href: "/sales",           label: "Sales Overview",    iconKey: "salesDashboard", adminOnly: false, sectionRequired: "sales_overview" },
-      { href: "/sales/customers", label: "Customers",         iconKey: "customers",      adminOnly: false },
-      { href: "/sales/invoices",  label: "Invoices",          iconKey: "invoices",       adminOnly: false },
-      { href: "/sales/payments",  label: "Payments Received", iconKey: "payments",       adminOnly: false, sectionRequired: "payments_received" },
-    ],
-  },
-  {
-    label: "PURCHASES",
-    items: [
-      { href: "/purchases",          label: "Purchase Overview", iconKey: "purchaseDashboard", adminOnly: false, sectionRequired: "purchase_overview" },
-      { href: "/purchases/vendors",  label: "Vendors",           iconKey: "vendors",            adminOnly: false },
-      { href: "/purchases/bills",    label: "Purchase Bills",    iconKey: "purchases",          adminOnly: false },
-      { href: "/purchases/payments", label: "Payments Made",     iconKey: "paymentsMade",       adminOnly: false, sectionRequired: "payments_made" },
-    ],
-  },
-  {
-    label: "CATALOG",
-    items: [
-      { href: "/products",   label: "Products",   iconKey: "products", adminOnly: false },
-      { href: "/brands",     label: "Brands",      iconKey: "brands",   adminOnly: false },
-      { href: "/categories", label: "Categories",  iconKey: "categories", adminOnly: false },
-    ],
-  },
-  {
-    label: "REPORTS",
-    items: [
-      { href: "/reports/sales",     label: "Sales Reports",    iconKey: "reportsSales",     adminOnly: false, sectionRequired: "reports_sales" },
-      { href: "/reports/purchases", label: "Purchase Reports", iconKey: "reportsPurchases", adminOnly: false, sectionRequired: "reports_purchases" },
-    ],
-  },
-  {
-    label: "SYSTEM",
-    items: [
-      { href: "/admin",    label: "Admin",    iconKey: "admin",    adminOnly: true },
-      { href: "/settings", label: "Settings", iconKey: "settings", adminOnly: true },
-    ],
-  },
-];
-
 const allNavItems = NAV_GROUPS.flatMap((g) => g.items);
-const BIN_NAV = { href: "/bin", label: "Recycle Bin", iconKey: "bin", adminOnly: false };
 // These overview pages must only highlight when exactly on that path, not on sub-pages.
 const EXACT_MATCH_HREFS = new Set(["/dashboard", "/sales", "/purchases"]);
 
@@ -374,9 +332,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {NAV_GROUPS.map((group) => {
             const visibleItems = group.items.filter((item) => {
               if (item.adminOnly && session?.user?.role !== "admin") return false;
-              if (item.sectionRequired) {
+              if (item.sectionRequired || item.sectionsRequired) {
                 if (session?.user?.role === "admin") return true;
-                return session?.user?.sections?.includes(item.sectionRequired) ?? false;
+                const required = item.sectionsRequired ?? [item.sectionRequired as ProtectedSection];
+                return required.every((s) => session?.user?.sections?.includes(s) ?? false);
               }
               return true;
             });

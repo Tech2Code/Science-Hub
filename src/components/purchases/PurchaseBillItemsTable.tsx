@@ -4,7 +4,7 @@ import { useState, useCallback, type Dispatch, type SetStateAction } from "react
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
-import { bustCache } from "@/lib/useCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import {
   PURCHASE_BILL_UNITS, PURCHASE_BILL_GST_RATES, PURCHASE_BILL_MARGIN_PRESETS,
@@ -69,6 +69,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
             unit: match.unit,
             purchasePrice: rate != null ? String(rate) : next[idx].purchasePrice,
             gstRate: String(match.gstRate),
+            hsn: match.hsn ?? "",
           };
           return next;
         });
@@ -133,6 +134,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
           unit: product.unit,
           purchasePrice: rate != null ? String(rate) : "",
           gstRate: String(product.gstRate),
+          hsn: product.hsn ?? "",
         };
       } else {
         next[idx] = { ...next[idx], productId: "", name: "" };
@@ -180,7 +182,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
           if (i !== -1) next[i] = { ...next[i], productId: data.id };
           return next;
         });
-        bustCache("/api/products");
+        bustCachePrefix("/api/products");
         toast({ type: "success", title: "Saved to catalog", message: `${data.name} added as a product.` });
       } else {
         toast({ type: "error", title: "Failed", message: data.error ?? "Could not save to catalog." });
@@ -211,6 +213,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
           <colgroup>
             <col className={styles.colProduct} />
             <col className={styles.colName} />
+            <col className={styles.colHsn} />
             <col className={styles.colUnit} />
             <col className={styles.colQty} />
             <col className={styles.colRate} />
@@ -221,7 +224,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
           </colgroup>
           <thead>
             <tr>
-              {["Product (optional)", "Item Name", "Unit", "Qty", "Rate (₹)", "Discount", "GST %", "Amount", ""].map((h) => (
+              {["Product (optional)", "Item Name", "HSN/SAC", "Unit", "Qty", "Rate (₹)", "Discount", "GST %", "Amount", ""].map((h) => (
                 <th key={h} className={h === "Amount" ? styles.thRight : styles.th}>{h}</th>
               ))}
             </tr>
@@ -238,7 +241,10 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
                     </Select>
                   </td>
                   <td className={styles.tdName}>
-                    <Input sz="sm" value={item.name} onChange={(e) => handleItemChange(idx, "name", e.target.value)} placeholder="Item name" required />
+                    <Input sz="sm" value={item.name} onChange={(e) => handleItemChange(idx, "name", e.target.value)} placeholder="Item name" />
+                  </td>
+                  <td className={styles.tdHsn}>
+                    <Input sz="sm" value={item.hsn} onChange={(e) => handleItemChange(idx, "hsn", e.target.value)} placeholder="HSN/SAC" />
                   </td>
                   <td className={styles.tdUnit}>
                     <Select sz="sm" value={item.unit} onChange={(e) => handleItemChange(idx, "unit", e.target.value)}>

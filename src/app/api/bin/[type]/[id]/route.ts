@@ -6,7 +6,7 @@ import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { deleteAttachmentBlob } from "@/lib/blobStorage";
 import { requireWriteAccess, requireAdmin } from "@/lib/apiAuth";
 
-type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill";
+type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill" | "return";
 
 async function getItemName(type: BinType, id: string): Promise<string> {
   switch (type) {
@@ -37,6 +37,10 @@ async function getItemName(type: BinType, id: string): Promise<string> {
     case "purchase_bill": {
       const b = await prisma.purchaseBill.findUnique({ where: { id }, select: { billNumber: true } });
       return b?.billNumber ?? id;
+    }
+    case "return": {
+      const r = await prisma.return.findUnique({ where: { id }, select: { creditNoteNumber: true } });
+      return r?.creditNoteNumber ?? id;
     }
   }
 }
@@ -72,7 +76,7 @@ export async function POST(
           await batchAdjustStock(
             tx,
             invItems.map((item) => ({ productId: item.productId, quantity: -item.quantity })),
-            { type: "adjustment", reference: name, notes: "Invoice restored from bin", createdByUserId: session.user?.id }
+            { type: "sale_bin_restore", reference: name, notes: "Invoice restored from bin", createdByUserId: session.user?.id }
           );
           return true;
         }, { timeout: 20000, maxWait: 10000 });
@@ -125,13 +129,39 @@ export async function POST(
             await batchAdjustStock(
               tx,
               billItems.filter(i => i.productId).map((item) => ({ productId: item.productId!, quantity: item.quantity })),
-              { type: "purchase", reference: name, purchaseBillId: id, notes: "Purchase bill restored from bin", createdByUserId: session.user?.id }
+              { type: "purchase_bin_restore", reference: name, purchaseBillId: id, notes: "Purchase bill restored from bin", createdByUserId: session.user?.id }
             );
           }
           return true;
         }, { timeout: 20000, maxWait: 10000 });
         if (!restored) return NextResponse.json({ message: "Already restored" });
         revalidateTag("purchase-bills", { expire: 0 });
+        revalidateTag("products", { expire: 0 });
+        revalidateTag("reports", { expire: 0 });
+        break;
+      }
+      case "return": {
+        // Guard against double-restore, symmetric to invoice/purchase-bill —
+        // re-apply the credit note's original stock effect (goods coming
+        // back in) only on the call that actually restores it.
+        const restored = await prisma.$transaction(async (tx) => {
+          const updateResult = await tx.return.updateMany({
+            where: { id, deletedAt: { not: null } },
+            data: { deletedAt: null },
+          });
+          if (updateResult.count === 0) return false;
+          const retItems = await tx.returnItem.findMany({
+            where: { returnId: id },
+            select: { productId: true, quantity: true },
+          });
+          await batchAdjustStock(
+            tx,
+            retItems.filter((i) => i.productId).map((item) => ({ productId: item.productId!, quantity: item.quantity })),
+            { type: "return_bin_restore", reference: name, notes: "Credit note restored from bin", createdByUserId: session.user?.id }
+          );
+          return true;
+        }, { timeout: 20000, maxWait: 10000 });
+        if (!restored) return NextResponse.json({ message: "Already restored" });
         revalidateTag("products", { expire: 0 });
         revalidateTag("reports", { expire: 0 });
         break;
@@ -257,6 +287,11 @@ export async function DELETE(
         revalidateTag("reports", { expire: 0 });
         break;
       }
+      case "return":
+        // Nothing else references a credit note — cascade handles its items.
+        await prisma.return.delete({ where: { id } });
+        revalidateTag("reports", { expire: 0 });
+        break;
       default:
         return NextResponse.json({ error: "Invalid type" }, { status: 400 });
     }

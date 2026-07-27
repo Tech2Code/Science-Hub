@@ -8,7 +8,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { CustomerFormFields } from "@/components/customers/CustomerFormFields";
 import { BLANK_CUSTOMER_FORM, validateCustomerForm, normalizeCustomerField, type CustomerFormData } from "@/lib/customerForm";
-import { bustCache } from "@/lib/useCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -44,7 +44,7 @@ export default function NewCustomerPage() {
     });
     setSaving(false);
     if (res.ok) {
-      bustCache("/api/customers");
+      bustCachePrefix("/api/customers");
       toast({ type: "success", title: "Customer created", message: "New customer added." });
       router.push("/sales/customers");
     } else {
@@ -64,11 +64,11 @@ export default function NewCustomerPage() {
         <p className="page-sub">Add a new customer to your directory</p>
       </div>
 
-      <form onSubmit={handleSubmit} {...animateSection(0, "form-card")}>
+      <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
         <CustomerFormFields form={form} onChange={handleChange} errors={errors} phoneRequired autoFocusName />
 
         <div className="form-actions">
-          <Button type="submit" variant="primary" disabled={saving}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Add Customer</Button>
+          <Button type="submit" variant="primary" disabled={saving || !form.name.trim() || !form.phone.trim()}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Add Customer</Button>
           <Button variant="secondary" href="/sales/customers"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
         </div>
       </form>

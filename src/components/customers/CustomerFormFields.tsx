@@ -1,6 +1,7 @@
 "use client";
 
 import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { INDIA_STATES_FULL } from "@/lib/states";
 import type { CustomerFormData } from "@/lib/customerForm";
 import type { FormErrors } from "@/lib/validation";
@@ -25,7 +26,7 @@ export function CustomerFormFields({ form, onChange, errors, disabled, phoneRequ
 
       <div className="form-grid-2">
         <FormField label="Phone" required={phoneRequired} error={errors.phone}>
-          <Input name="phone" type="tel" value={form.phone} onChange={onChange} placeholder="10-digit mobile" disabled={disabled} />
+          <PhoneInput name="phone" value={form.phone} onChange={onChange} placeholder="10-digit mobile" disabled={disabled} />
         </FormField>
         <FormField label="Email" error={errors.email}>
           <Input name="email" type="email" value={form.email} onChange={onChange} placeholder="billing@customer.com" disabled={disabled} />

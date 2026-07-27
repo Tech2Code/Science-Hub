@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getInvoices } from "@/lib/db";
+import { getInvoices, getBusinessSettings, type InvoiceSort } from "@/lib/db";
+import { deriveIsInterState } from "@/lib/gstLocation";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
+import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,8 +19,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const customerId = searchParams.get("customerId");
-    const invoices = await getInvoices(status, customerId);
-    return NextResponse.json(invoices);
+    const search = searchParams.get("search") ?? undefined;
+    const sort = (searchParams.get("sort") ?? undefined) as InvoiceSort | undefined;
+    const dateRange = monthYearToDateRange(searchParams.get("month") ?? "", searchParams.get("year") ?? "");
+    const { skip, take } = parsePageParams(searchParams);
+
+    const { data, total } = await getInvoices({ status, customerId, search, dateRange }, sort, skip, take);
+    return NextResponse.json({ data, total });
   } catch (error) {
     console.error("GET /api/invoices error:", error);
     return NextResponse.json({ error: "Failed to fetch invoices" }, { status: 500 });
@@ -32,7 +39,7 @@ export async function POST(request: NextRequest) {
     const user = auth.session.user;
 
     const body = await request.json();
-    const { items, notes, dueDate, isInterState, placeOfSupply, reverseCharge, customCustomer } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, customCustomer } = body;
     let { customerId } = body;
 
     if (!items || items.length === 0) {
@@ -41,6 +48,17 @@ export async function POST(request: NextRequest) {
     if (!placeOfSupply || !String(placeOfSupply).trim()) {
       return NextResponse.json({ error: "Place of supply is required" }, { status: 400 });
     }
+
+    // Independently verify inter-state vs. intra-state from the business's
+    // own configured state rather than trusting the client-supplied flag —
+    // the browser derives it the same way, so this only changes behavior
+    // if a request's isInterState doesn't actually match its place of
+    // supply. Falls back to the client's value only if the business state
+    // isn't configured yet (nothing to compare against).
+    const biz = await getBusinessSettings();
+    const derivedIsInterState = deriveIsInterState(String(placeOfSupply), biz.state);
+    const isInterState = derivedIsInterState !== null ? derivedIsInterState : Boolean(clientIsInterState);
+
     if (dueDate) {
       const parsedDueDate = new Date(dueDate);
       if (isNaN(parsedDueDate.getTime())) {
@@ -67,6 +85,15 @@ export async function POST(request: NextRequest) {
       }
       if (!(discountPercent >= 0 && discountPercent <= 100)) {
         return NextResponse.json({ error: "Item discount must be between 0 and 100%" }, { status: 400 });
+      }
+    }
+    {
+      const seenProductIds = new Set<string>();
+      for (const item of items as { productId: string }[]) {
+        if (seenProductIds.has(item.productId)) {
+          return NextResponse.json({ error: "Each product can only appear once per invoice — combine duplicate lines into a single quantity instead." }, { status: 400 });
+        }
+        seenProductIds.add(item.productId);
       }
     }
 

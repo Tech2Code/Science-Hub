@@ -17,6 +17,7 @@ function ResetPasswordForm() {
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ password?: string; confirm?: string }>({});
   const [done, setDone] = useState(false);
 
   useEffect(() => {
@@ -28,7 +29,8 @@ function ResetPasswordForm() {
     setError("");
     const pwErr   = validate(password, rules.required("Password is required."), rules.minLength(8, "Password must be at least 8 characters."));
     const confErr = validate(confirm,  rules.required("Please confirm your password."), rules.passwordMatch(password));
-    if (pwErr || confErr) { setError(pwErr ?? confErr ?? ""); return; }
+    if (pwErr || confErr) { setFieldErrors({ password: pwErr ?? undefined, confirm: confErr ?? undefined }); return; }
+    setFieldErrors({});
     setLoading(true);
     try {
       const res = await fetch("/api/auth/reset-password", {
@@ -70,31 +72,30 @@ function ResetPasswordForm() {
           <h2 className={styles.cardTitle}>Set a new password</h2>
           {error && <div className={styles.errorBox}>{error}</div>}
           {!token ? null : (
-            <form onSubmit={handleSubmit} className={styles.formStack}>
+            <form onSubmit={handleSubmit} className={styles.formStack} noValidate>
               <div>
                 <label htmlFor="password" className={styles.fieldLabel}>New password</label>
                 <PasswordInput
                   id="password"
                   autoComplete="new-password"
-                  required
-                  minLength={8}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => { setPassword(e.target.value); setFieldErrors(prev => ({ ...prev, password: undefined })); }}
                   placeholder="min. 8 characters"
                 />
+                {fieldErrors.password && <p className={styles.fieldError}>{fieldErrors.password}</p>}
               </div>
               <div>
                 <label htmlFor="confirm" className={styles.fieldLabel}>Confirm new password</label>
                 <PasswordInput
                   id="confirm"
                   autoComplete="new-password"
-                  required
                   value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
+                  onChange={(e) => { setConfirm(e.target.value); setFieldErrors(prev => ({ ...prev, confirm: undefined })); }}
                   placeholder="repeat your new password"
                 />
+                {fieldErrors.confirm && <p className={styles.fieldError}>{fieldErrors.confirm}</p>}
               </div>
-              <button type="submit" className={styles.submitBtn} disabled={loading || !token}>
+              <button type="submit" className={styles.submitBtn} disabled={loading || !token || !password.trim() || !confirm.trim()}>
                 {loading ? "Updating…" : "Update password"}
               </button>
             </form>

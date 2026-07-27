@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Sk } from "@/components/ui/Skeleton";
-import { fetchCached, bustCache } from "@/lib/useCache";
+import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { invalidateCachedPdf } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
@@ -58,11 +58,11 @@ export default function EditInvoicePage() {
   useEffect(() => {
     Promise.all([
       fetchCached(`/api/invoices/${id}`),
-      fetchCached("/api/products").catch(() => []),
+      fetchCached("/api/products?pageSize=5000").catch(() => ({ data: [] })),
       fetchCached("/api/settings").catch(() => null),
     ]).then(([inv, prods, settings]) => {
       const invoice = inv as InvoiceData;
-      const products = prods as Product[];
+      const products = (prods as { data: Product[] }).data ?? [];
       setInvoice(invoice);
       setProducts(products);
       setBusinessState((settings as { state?: string } | null)?.state ?? "");
@@ -93,6 +93,7 @@ export default function EditInvoicePage() {
       markClean({ isInterState: inter, placeOfSupply: pos, reverseCharge: rc, items: lineItems, notes: notesVal, dueDate: dueDateVal });
       setLoading(false);
     }).catch(() => { setError("Failed to load invoice."); setLoading(false); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- markClean is a fresh function each render (not memoized); only `id` should retrigger this fetch
   }, [id]);
 
   const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal } = computeInvoiceTotals(items);
@@ -148,7 +149,7 @@ export default function EditInvoicePage() {
     if (res.ok) {
       const d = await res.json();
       bustCache(`/api/invoices/${id}`);
-      bustCache("/api/products");
+      bustCachePrefix("/api/products");
       invalidateCachedPdf("invoice", id);
       toast({ type: "success", title: "Invoice updated", message: "Changes saved." });
       if (d.stockWarnings?.length > 0) {
@@ -246,7 +247,7 @@ export default function EditInvoicePage() {
         <h1 className="page-title">Edit Invoice — {invoice.invoiceNumber}</h1>
         <p className="page-sub">Editing is allowed only while the invoice is unpaid or partially paid.</p>
       </div>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <div className={styles.layout}>
           {/* Left column */}
           <div className={styles.leftCol}>

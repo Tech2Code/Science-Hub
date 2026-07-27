@@ -14,7 +14,7 @@ export async function DELETE() {
     const auth = await requireAdmin();
     if (!auth.ok) return auth.response;
 
-    const [invoices, customers, products, brands, categories, vendors, purchaseBills] = await Promise.all([
+    const [invoices, customers, products, brands, categories, vendors, purchaseBills, returns] = await Promise.all([
       prisma.invoice.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
       prisma.customer.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
       prisma.product.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
@@ -22,6 +22,7 @@ export async function DELETE() {
       prisma.category.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
       prisma.vendor.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
       prisma.purchaseBill.findMany({ where: { deletedAt: { not: null } }, select: { id: true, attachmentUrl: true } }),
+      prisma.return.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
     ]);
 
     let deleted = 0;
@@ -84,6 +85,12 @@ export async function DELETE() {
       if (billCount > 0) { skipped++; continue; }
       await prisma.vendor.delete({ where: { id: v.id } });
       deleted++;
+    }
+
+    // Credit notes — nothing else references them, always safe to purge
+    if (returns.length > 0) {
+      const r = await prisma.return.deleteMany({ where: { id: { in: returns.map((x) => x.id) } } });
+      deleted += r.count;
     }
 
     await logActivity(

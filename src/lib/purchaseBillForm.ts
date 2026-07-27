@@ -4,6 +4,7 @@ export interface PurchaseBillLineItem {
   key: string;
   productId: string;
   name: string;
+  hsn: string;
   unit: string;
   quantity: string;
   purchasePrice: string;
@@ -12,10 +13,10 @@ export interface PurchaseBillLineItem {
 }
 
 export interface PurchaseBillProduct {
-  id: string; name: string; sku: string | null; unit: string; price: number; purchasePrice: number | null; gstRate: number;
+  id: string; name: string; sku: string | null; unit: string; price: number; purchasePrice: number | null; gstRate: number; hsn?: string | null;
 }
 
-export interface PurchaseBillVendor { id: string; name: string; company: string | null; gstin?: string | null; }
+export interface PurchaseBillVendor { id: string; name: string; company: string | null; gstin?: string | null; state?: string | null; }
 
 export const PURCHASE_BILL_UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pack", "Set", "Mtr", "Dozen", "Pair"];
 export const PURCHASE_BILL_GST_RATES = ["0", "5", "12", "18", "28"];
@@ -30,7 +31,7 @@ const DISCOUNT_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 40, 50];
 let itemKeySeq = 0;
 export function makeBlankPurchaseBillItem(): PurchaseBillLineItem {
   itemKeySeq += 1;
-  return { key: `item-${itemKeySeq}`, productId: "", name: "", unit: "Pcs", quantity: "1", purchasePrice: "", gstRate: "18", discountPercent: "0" };
+  return { key: `item-${itemKeySeq}`, productId: "", name: "", hsn: "", unit: "Pcs", quantity: "1", purchasePrice: "", gstRate: "18", discountPercent: "0" };
 }
 
 // A custom typed amount rarely lands on a preset % exactly — inject it into

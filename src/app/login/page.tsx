@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { Input } from "@/components/ui/Input";
+import { Input, FormField } from "@/components/ui/Input";
 import { useBranding } from "@/lib/businessBranding";
 import styles from "./login.module.css";
 import { rules, validate } from "@/lib/validation";
@@ -17,24 +17,39 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [stage, setStage] = useState<"idle" | "verifying" | "verified">("idle");
+
+  function handleEmailBlur() {
+    setEmailError(validate(email, rules.required("Email is required."), rules.email()) ?? "");
+  }
+
+  function handlePasswordBlur() {
+    setPasswordError(validate(password, rules.required("Password is required.")) ?? "");
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const emailErr = validate(email, rules.required("Email is required."), rules.email());
     const passwordErr = validate(password, rules.required("Password is required."));
-    const err = emailErr || passwordErr;
-    if (err) { setError(err); return; }
+    setEmailError(emailErr ?? "");
+    setPasswordError(passwordErr ?? "");
+    if (emailErr || passwordErr) return;
     setError("");
-    setLoading(true);
+    setStage("verifying");
     const result = await signIn("credentials", { email, password, redirect: false });
-    setLoading(false);
     if (result?.error) {
+      setStage("idle");
       setError("Incorrect email or password. Try again.");
     } else {
+      // Credentials matched — only now is a real login happening.
+      setStage("verified");
       router.push("/dashboard");
     }
   }
+
+  const loading = stage !== "idle";
 
   return (
     <div className={styles.page}>
@@ -50,33 +65,38 @@ export default function LoginPage() {
         <div className={styles.card}>
           <h2 className={styles.cardTitle}>Sign in to your account</h2>
           {error && <div className={styles.errorBox}>{error}</div>}
-          <form onSubmit={handleSubmit} className={styles.formStack}>
-            <div>
-              <label htmlFor="email" className={styles.fieldLabel}>Email address</label>
+          <form onSubmit={handleSubmit} className={styles.formStack} noValidate>
+            <FormField label="Email address" error={emailError}>
               <Input
                 id="email"
-                type="email"
+                type="text"
                 autoComplete="email"
-                required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError(""); }}
+                onBlur={handleEmailBlur}
                 placeholder="you@sciencehub.in"
-                className={styles.input}
               />
-            </div>
-            <div>
-              <label htmlFor="password" className={styles.fieldLabel}>Password</label>
+            </FormField>
+            <FormField label="Password" error={passwordError}>
               <PasswordInput
                 id="password"
                 autoComplete="current-password"
-                required
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); if (passwordError) setPasswordError(""); }}
+                onBlur={handlePasswordBlur}
                 placeholder="••••••••"
               />
-            </div>
-            <Button type="submit" variant="primary" size="full" loading={loading} loadingText="Logging in…" fullScreen disabled={loading}>
-              {loading ? "Signing in…" : "Sign in"}
+            </FormField>
+            <Button
+              type="submit"
+              variant="primary"
+              size="full"
+              loading={loading}
+              loadingText={stage === "verified" ? "Logging in…" : "Verifying…"}
+              fullScreen
+              disabled={loading}
+            >
+              Sign in
             </Button>
           </form>
         </div>

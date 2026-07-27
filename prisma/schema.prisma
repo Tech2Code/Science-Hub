@@ -102,6 +102,12 @@ model Product {
   gstRate           Float              @default(18)
   stock             Int                @default(0)
   minStock          Int                @default(5)
+  // DB-generated (GENERATED ALWAYS AS (stock > 0 AND stock <= "minStock")
+  // STORED) — "low stock" compares two columns of the same row, which a
+  // plain Prisma `where` can't express directly; this lets the products
+  // list filter/count it server-side via a normal boolean equality check.
+  // Mirrors src/lib/stockStatus.ts's isLowStock() definition exactly.
+  isLowStock        Boolean            @default(dbgenerated("(stock > 0 AND stock <= \"minStock\")"))
   maxStock          Int?
   reorderLevel      Int?
   categoryId        String?
@@ -137,6 +143,11 @@ model Invoice {
   total         Float
   roundOff      Float         @default(0)
   paidAmount    Float         @default(0)
+  // DB-generated (GENERATED ALWAYS AS (total - "paidAmount") STORED) — lets
+  // "Balance Due (High-Low)" sort server-side via a normal orderBy instead of
+  // needing raw SQL just for that one sort option. Never written to by the
+  // app; Prisma omits dbgenerated() defaults from INSERT/UPDATE payloads.
+  balanceDue    Float         @default(dbgenerated("(total - \"paidAmount\")"))
   notes         String?
   isInterState  Boolean       @default(false)
   placeOfSupply String?
@@ -191,15 +202,24 @@ model Payment {
 }
 
 model Return {
-  id        String       @id @default(cuid())
-  invoiceId String
-  invoice   Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  date      DateTime     @default(now())
-  notes     String?
-  createdAt DateTime     @default(now())
-  items     ReturnItem[]
+  id               String       @id @default(cuid())
+  invoiceId        String
+  invoice          Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  creditNoteNumber String?      @unique // "CN-YYYY-0001" — nullable so pre-existing returns aren't retroactively renumbered
+  date             DateTime     @default(now())
+  notes            String?
+  subtotal         Float        @default(0)
+  cgst             Float        @default(0)
+  sgst             Float        @default(0)
+  igst             Float        @default(0)
+  roundOff         Float        @default(0)
+  total            Float        @default(0)
+  createdAt        DateTime     @default(now())
+  deletedAt        DateTime?
+  items            ReturnItem[]
 
   @@index([invoiceId])
+  @@index([deletedAt])
 }
 
 model ReturnItem {
@@ -211,6 +231,8 @@ model ReturnItem {
   name      String
   quantity  Float
   price     Float
+  gstRate   Float    @default(0)
+  gstAmount Float    @default(0)
   total     Float
 }
 
@@ -249,6 +271,7 @@ model Vendor {
   phone         String?
   email         String?
   address       String?
+  state         String?
   notes         String?
   isActive      Boolean         @default(true)
   createdAt     DateTime        @default(now())
@@ -268,10 +291,18 @@ model PurchaseBill {
   dueDate         DateTime?
   subtotal        Float             @default(0)
   taxAmount       Float             @default(0)
+  isInterState    Boolean           @default(false)
+  placeOfSupply   String?
+  cgst            Float             @default(0)
+  sgst            Float             @default(0)
+  igst            Float             @default(0)
   discount        Float             @default(0)
   total           Float
   roundOff        Float             @default(0)
   paidAmount      Float             @default(0)
+  // DB-generated (GENERATED ALWAYS AS (total - "paidAmount") STORED) — see
+  // the matching Invoice.balanceDue field for why this exists.
+  balanceDue      Float             @default(dbgenerated("(total - \"paidAmount\")"))
   status          String            @default("unpaid")   // unpaid | partial | paid | cancelled
   notes           String?
   attachmentUrl   String?
@@ -298,6 +329,7 @@ model PurchaseBillItem {
   productId      String?
   product        Product?     @relation(fields: [productId], references: [id])
   name             String
+  hsn              String       @default("")
   quantity         Float
   unit             String       @default("Nos")
   purchasePrice    Float
@@ -331,7 +363,14 @@ model StockMovement {
   productId      String?
   product        Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
   productName    String        @default("")
-  type           String        // purchase | sale | adjustment | return | manual
+  // Specific action that produced this row — see StockMovementType in
+  // src/lib/stockMovement.ts for the full set (e.g. sale, sale_edit_reverse,
+  // purchase_cancel, return_bin_restore, manual). Never updated after
+  // creation — every stock-affecting action writes a new row instead.
+  type           String
+  // Source document kind, derived 1:1 from `type` (see
+  // DOCUMENT_TYPE_BY_MOVEMENT_TYPE) — invoice | purchase_bill | credit_note | manual
+  documentType   String        @default("")
   quantity       Float         // positive = stock in, negative = stock out
   balanceAfter   Float
   reference      String?
@@ -344,6 +383,7 @@ model StockMovement {
 
   @@index([productId, createdAt])
   @@index([createdAt])
+  @@index([documentType])
 }
 
 // ── Section Permissions (Access Control) ──────────────────────────────────────

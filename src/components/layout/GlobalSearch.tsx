@@ -92,6 +92,7 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
   // Collapsing back to icon-only on a desktop resize would otherwise leave
   // the expanded overlay's fixed positioning stuck on screen.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets stale expanded state from a prior mobile session so it doesn't reappear next time `mobile` flips back to true
     if (!mobile) setMobileExpanded(false);
   }, [mobile]);
 
@@ -104,6 +105,14 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
     setMobileExpanded(false);
     setQuery("");
     setGroups([]);
+    const [path, hash] = href.split("#");
+    // Same-page anchor jumps (e.g. already on /settings, searching "bank
+    // details") don't remount the target page, so its own hash-scroll
+    // effect never re-fires — scroll manually instead of relying on it.
+    if (hash && path === window.location.pathname) {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     router.push(href);
   }
 
@@ -153,7 +162,7 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
             ref={inputRef}
             type="search"
             aria-label="Search everything"
-            placeholder="Search invoices, customers, products…"
+            placeholder="Search invoices, customers, products, settings…"
             value={query}
             onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
             onFocus={() => setOpen(true)}

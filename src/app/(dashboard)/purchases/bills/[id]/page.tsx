@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -10,7 +11,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Sk } from "@/components/ui/Skeleton";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
-import { bustCache } from "@/lib/useCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
@@ -22,8 +23,8 @@ import { useCanWrite } from "@/lib/useCanWrite";
 import styles from "./billDetail.module.css";
 
 interface PurchaseBillItem {
-  id: string; name: string; unit: string; quantity: number;
-  purchasePrice: number; discountPercent: number; gstRate: number; gstAmount: number; total: number;
+  id: string; name: string; hsn: string; unit: string; quantity: number;
+  purchasePrice: number; discountPercent: number; discountAmount: number; gstRate: number; gstAmount: number; total: number;
   product: { id: string; name: string } | null;
 }
 interface PurchasePayment {
@@ -32,8 +33,10 @@ interface PurchasePayment {
 interface PurchaseBill {
   id: string; billNumber: string; billDate: string; dueDate: string | null;
   status: string; category: string | null; notes: string | null;
-  subtotal: number; taxAmount: number; discount: number; total: number; roundOff: number; paidAmount: number;
-  vendor: { id: string; name: string; company: string | null; gstin: string | null; phone: string | null; email: string | null; address: string | null; };
+  subtotal: number; taxAmount: number; isInterState: boolean; placeOfSupply: string | null;
+  cgst: number; sgst: number; igst: number;
+  discount: number; total: number; roundOff: number; paidAmount: number;
+  vendor: { id: string; name: string; company: string | null; gstin: string | null; phone: string | null; email: string | null; address: string | null; state: string | null; };
   createdBy: { id: string; name: string };
   items: PurchaseBillItem[];
   payments: PurchasePayment[];
@@ -85,6 +88,7 @@ export default function PurchaseBillDetailPage() {
   // Payment form
   const [showPayForm, setShowPayForm]   = useState(false);
   const [payAmount,   setPayAmount]     = useState("");
+  const [payAmountError, setPayAmountError] = useState<string | undefined>(undefined);
   const [payMethod,   setPayMethod]     = useState("Cash");
   const [payRef,      setPayRef]        = useState("");
   const [payDate,     setPayDate]       = useState(() => new Date().toISOString().slice(0, 10));
@@ -104,7 +108,7 @@ export default function PurchaseBillDetailPage() {
       .catch(() => { setError("Failed to load purchase bill."); setLoading(false); });
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- fetch-on-id-change; load() sets loading/bill state
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch-on-id-change; load() sets loading/bill state
   useEffect(() => { load(); }, [id]);
 
   useEffect(() => {
@@ -138,8 +142,9 @@ export default function PurchaseBillDetailPage() {
     if (!bill) return;
     const amount  = parseFloat(payAmount);
     const balance = bill.total - bill.paidAmount;
-    if (!payAmount || isNaN(amount) || amount <= 0) { toast({ type: "error", title: "Check form", message: "Enter a valid amount." }); return; }
-    if (amount > balance + 0.01) { toast({ type: "error", title: "Check form", message: `Amount exceeds outstanding balance of ₹${fmt(balance)}.` }); return; }
+    if (!payAmount || isNaN(amount) || amount <= 0) { setPayAmountError("Enter a valid amount."); return; }
+    if (amount > balance + 0.01) { setPayAmountError(`Amount exceeds outstanding balance of ₹${fmt(balance)}.`); return; }
+    setPayAmountError(undefined);
     if (payDate < bill.billDate.slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be before the bill date." }); return; }
     if (payDate > new Date().toISOString().slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be in the future." }); return; }
     setSubmitting(true);
@@ -151,7 +156,7 @@ export default function PurchaseBillDetailPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        bustCache("/api/purchase-bills");
+        bustCachePrefix("/api/purchase-bills");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Payment recorded", message: `₹${fmt(amount)} via ${payMethod}.` });
         setShowPayForm(false);
@@ -175,8 +180,8 @@ export default function PurchaseBillDetailPage() {
         body: JSON.stringify({ status: "cancelled" }),
       });
       if (res.ok) {
-        bustCache("/api/purchase-bills");
-        bustCache("/api/products");
+        bustCachePrefix("/api/purchase-bills");
+        bustCachePrefix("/api/products");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Bill cancelled", message: "Status updated to cancelled." });
         load();
@@ -196,8 +201,8 @@ export default function PurchaseBillDetailPage() {
     try {
       const res = await fetch(`/api/purchase-bills/${id}`, { method: "DELETE" });
       if (res.ok) {
-        bustCache("/api/purchase-bills");
-        bustCache("/api/products");
+        bustCachePrefix("/api/purchase-bills");
+        bustCachePrefix("/api/products");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Deleted", message: "Purchase bill moved to bin." });
         router.push("/purchases/bills");
@@ -279,8 +284,9 @@ export default function PurchaseBillDetailPage() {
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className={styles.skTableRow}>
             <Sk w={20} h={12} r={3} />
-            <Sk w="24%" h={12} r={3} />
-            <Sk w="8%" h={12} r={3} />
+            <Sk w="20%" h={12} r={3} />
+            <Sk w="9%" h={12} r={3} />
+            <Sk w="7%" h={12} r={3} />
             <Sk w="10%" h={12} r={3} />
             <Sk w="10%" h={12} r={3} />
             <Sk w="8%" h={12} r={3} />
@@ -320,7 +326,8 @@ export default function PurchaseBillDetailPage() {
 
     <style>{`
       #bill-print-area {
-        --bp-bg:#fff; --bp-bd:#475569; --bp-tx:#0f172a; --bp-tx2:#334155; --bp-tx3:#64748b;
+        --bp-bg:#fff; --bp-bg2:#f8fafc; --bp-bg3:#f1f5f9; --bp-bg4:#e2e8f0;
+        --bp-bd:#475569; --bp-tx:#0f172a; --bp-tx2:#334155; --bp-tx3:#64748b;
       }
     `}</style>
 
@@ -330,7 +337,7 @@ export default function PurchaseBillDetailPage() {
         capture as content bleeding outside the page during PDF generation.
         The vendor-name div overrides this locally with nowrap + ellipsis,
         which still wins for that single line. */}
-    <div id="bill-print-area" style={{ position: "fixed", left: -9999, top: 0, width: 794, background: "var(--bp-bg)", color: "var(--bp-tx)", padding: 28, fontFamily: "Arial, sans-serif", overflowWrap: "break-word", wordBreak: "break-word" }} aria-hidden="true">
+    <div id="bill-print-area" style={{ position: "fixed", left: -9999, top: 0, width: 794, background: "var(--bp-bg)", color: "var(--bp-tx)", padding: "20px 14px", fontFamily: "Arial, sans-serif", overflowWrap: "break-word", wordBreak: "break-word" }} aria-hidden="true">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, borderBottom: `2px solid var(--bp-bd)`, paddingBottom: 12 }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: "var(--bp-tx)" }}>{settings?.name || "Science Hub"}</div>
@@ -364,65 +371,117 @@ export default function PurchaseBillDetailPage() {
 
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
         <thead>
-          <tr style={{ background: "#f1f5f9" }}>
-            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "left", width: 28 }}>#</th>
-            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "left" }}>Item</th>
-            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>Qty</th>
-            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>Rate</th>
-            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>Discount</th>
-            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>GST %</th>
-            <th style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>Total</th>
-          </tr>
+          {(() => {
+            const th = (label: string, align: "left" | "right" = "left", width?: number) => {
+              const lastSpace = label.lastIndexOf(" ");
+              const content = lastSpace === -1
+                ? label
+                : <>{label.slice(0, lastSpace)}<br />{label.slice(lastSpace + 1)}</>;
+              return (
+                <th key={label} style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", textAlign: align, width, lineHeight: 1.25 }}>{content}</th>
+              );
+            };
+            return (
+              <tr style={{ background: "var(--bp-bg3)" }}>
+                {th("S.N.", "left", 28)}
+                {th("Description of Goods")}
+                {th("HSN/SAC Code")}
+                {th("Qty.", "right")}
+                {th("Unit")}
+                {th("List Price", "right")}
+                {th("Discount", "right")}
+                {th("Taxable Amount", "right")}
+                {bill.isInterState ? (
+                  th("IGST", "right")
+                ) : (
+                  <>{th("CGST", "right")}{th("SGST", "right")}</>
+                )}
+                {th("Amount(Rs.)", "right")}
+              </tr>
+            );
+          })()}
         </thead>
         <tbody>
-          {bill.items.map((item, idx) => (
-            <tr key={item.id}>
-              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, color: "var(--bp-tx3)" }}>{idx + 1}</td>
-              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6 }}>{item.name} <span style={{ color: "var(--bp-tx3)" }}>({item.unit})</span></td>
-              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{item.quantity}</td>
-              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{fmt(item.purchasePrice)}</td>
-              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{item.discountPercent > 0 ? `${item.discountPercent}%` : "—"}</td>
-              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{item.gstRate}%</td>
-              <td style={{ border: `1px solid var(--bp-bd)`, padding: 6, textAlign: "right" }}>{fmt(item.total)}</td>
-            </tr>
-          ))}
+          {bill.items.map((item, idx) => {
+            const rowBg = idx % 2 === 1 ? "var(--bp-bg2)" : "var(--bp-bg)";
+            const halfRate = item.gstRate / 2;
+            const halfGst = item.gstAmount / 2;
+            const td = (content: React.ReactNode, align: "left" | "right" = "left") => (
+              <td style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", textAlign: align, background: rowBg }}>{content}</td>
+            );
+            return (
+              <tr key={item.id}>
+                {td(idx + 1, "left")}
+                {td(item.name)}
+                {td(item.hsn || "—")}
+                {td(item.quantity, "right")}
+                {td(item.unit)}
+                {td(fmt(item.purchasePrice), "right")}
+                {td(item.discountPercent > 0 ? `${item.discountPercent}% (−₹${fmt(item.discountAmount)})` : "—", "right")}
+                {td(fmt(item.quantity * item.purchasePrice - item.discountAmount), "right")}
+                {bill.isInterState ? (
+                  td(`${item.gstRate}% (₹${fmt(item.gstAmount)})`, "right")
+                ) : (
+                  <>{td(`${halfRate}% (₹${fmt(halfGst)})`, "right")}{td(`${halfRate}% (₹${fmt(halfGst)})`, "right")}</>
+                )}
+                {td(fmt(item.total), "right")}
+              </tr>
+            );
+          })}
+          {(() => {
+            const bpLabelCell: CSSProperties = { border: `1px solid var(--bp-bd)`, padding: "5px 8px", color: "var(--bp-tx2)", background: "var(--bp-bg2)" };
+            const bpValueCell: CSSProperties = { ...bpLabelCell, textAlign: "right" };
+            const bpTotalsRows = 5 + (bill.discount > 0 ? 2 : 0) + (bill.roundOff !== 0 ? 1 : 0);
+            const notesColSpan = (bill.isInterState ? 10 : 11) - 2;
+            return (
+              <>
+                <tr>
+                  <td colSpan={notesColSpan} rowSpan={bpTotalsRows} style={{ border: `1px solid var(--bp-bd)`, padding: "10px 12px", verticalAlign: "top", fontSize: 10.5, color: "var(--bp-tx3)" }}>
+                    <div style={{ fontStyle: "italic" }}><strong>Amount in Words:</strong> {amountInWordsINR(bill.total)}</div>
+                    {bill.notes && <div style={{ marginTop: 6 }}><strong>Note:</strong> {bill.notes}</div>}
+                  </td>
+                  <td style={bpLabelCell}>Subtotal</td>
+                  <td style={bpValueCell}>₹{fmt(bill.subtotal)}</td>
+                </tr>
+                <tr>
+                  <td style={bpLabelCell}>GST</td>
+                  <td style={bpValueCell}>₹{fmt(bill.taxAmount)}</td>
+                </tr>
+                {bill.discount > 0 && (
+                  <>
+                    <tr>
+                      <td style={bpLabelCell}>Discount</td>
+                      <td style={bpValueCell}>−₹{fmt(bill.discount)}</td>
+                    </tr>
+                    <tr>
+                      <td style={bpLabelCell}>Taxable Value</td>
+                      <td style={bpValueCell}>₹{fmt(bill.subtotal - bill.discount)}</td>
+                    </tr>
+                  </>
+                )}
+                {bill.roundOff !== 0 && (
+                  <tr>
+                    <td style={bpLabelCell}>Round Off</td>
+                    <td style={bpValueCell}>{bill.roundOff > 0 ? "+" : "−"}₹{fmt(Math.abs(bill.roundOff))}</td>
+                  </tr>
+                )}
+                <tr>
+                  <td style={{ ...bpLabelCell, fontWeight: 700, color: "var(--bp-tx)", background: "var(--bp-bg4)", fontSize: 12 }}>Total</td>
+                  <td style={{ ...bpValueCell, fontWeight: 700, color: "var(--bp-tx)", background: "var(--bp-bg4)", fontSize: 12 }}>₹{fmt(bill.total)}</td>
+                </tr>
+                <tr>
+                  <td style={bpLabelCell}>Paid</td>
+                  <td style={bpValueCell}>₹{fmt(bill.paidAmount)}</td>
+                </tr>
+                <tr>
+                  <td style={{ ...bpLabelCell, fontWeight: 700, color: "var(--bp-tx)" }}>Balance Due</td>
+                  <td style={{ ...bpValueCell, fontWeight: 700, color: "var(--bp-tx)" }}>₹{fmt(balance)}</td>
+                </tr>
+              </>
+            );
+          })()}
         </tbody>
       </table>
-
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-        {(() => {
-          const bd = `1px solid var(--bp-bd)`;
-          const row = (label: string, value: string, opts?: { bold?: boolean; muted?: boolean }) => (
-            <tr key={label}>
-              <td style={{ border: bd, padding: "4px 8px", fontWeight: opts?.bold ? 700 : undefined, color: opts?.muted ? "var(--bp-tx3)" : undefined }}>{label}</td>
-              <td style={{ border: bd, padding: "4px 8px", textAlign: "right", fontWeight: opts?.bold ? 700 : undefined }}>{value}</td>
-            </tr>
-          );
-          return (
-            <table style={{ fontSize: 11, minWidth: 220, borderCollapse: "collapse" }}>
-              <tbody>
-                {row("Subtotal", `₹${fmt(bill.subtotal)}`, { muted: true })}
-                {row("GST", `₹${fmt(bill.taxAmount)}`, { muted: true })}
-                {bill.discount > 0 && row("Discount", `−₹${fmt(bill.discount)}`, { muted: true })}
-                {bill.roundOff !== 0 && row("Round Off", `${bill.roundOff > 0 ? "+" : "−"}₹${fmt(Math.abs(bill.roundOff))}`, { muted: true })}
-                {row("Total", `₹${fmt(bill.total)}`, { bold: true })}
-                {row("Paid", `₹${fmt(bill.paidAmount)}`, { muted: true })}
-                {row("Balance Due", `₹${fmt(balance)}`, { bold: true })}
-              </tbody>
-            </table>
-          );
-        })()}
-      </div>
-
-      <div style={{ marginTop: 8, fontSize: 10.5, fontStyle: "italic", color: "var(--bp-tx3)", textAlign: "right" }}>
-        {amountInWordsINR(bill.total)}
-      </div>
-
-      {bill.notes && (
-        <div style={{ marginTop: 14, fontSize: 11, color: "var(--bp-tx2)" }}>
-          <strong>Note:</strong> {bill.notes}
-        </div>
-      )}
     </div>
 
     <ConfirmDialog
@@ -589,12 +648,12 @@ export default function PurchaseBillDetailPage() {
               </span>
             </h3>
           </div>
-          <form onSubmit={handlePayment}>
+          <form onSubmit={handlePayment} noValidate>
             <div className={`form-grid-2 ${styles.marginBottom075}`}>
-              <FormField label="Amount (₹)" required>
+              <FormField label="Amount (₹)" required error={payAmountError}>
                 <div className={styles.amountRow}>
                   <Input type="number" min="0.01" step="0.01" max={balance}
-                    value={payAmount} onChange={e => setPayAmount(e.target.value)}
+                    value={payAmount} onChange={e => { setPayAmount(e.target.value); setPayAmountError(undefined); }}
                     placeholder={`Max ₹${fmt(balance)}`} autoFocus className={styles.amountInput} />
                   <button
                     type="button"
@@ -624,7 +683,7 @@ export default function PurchaseBillDetailPage() {
               </FormField>
             </div>
             <div className="form-actions">
-              <Button type="submit" variant="primary" disabled={submitting}>Save Payment</Button>
+              <Button type="submit" variant="primary" disabled={submitting || !payAmount.trim()}>Save Payment</Button>
               <Button type="button" variant="secondary" onClick={() => { setShowPayForm(false); }}>Cancel</Button>
             </div>
           </form>
@@ -643,6 +702,7 @@ export default function PurchaseBillDetailPage() {
             <colgroup>
               <col className={styles.colNum} />
               <col className={styles.colItem} />
+              <col className={styles.colHsn} />
               <col className={styles.colQty} />
               <col className={styles.colRate} />
               <col className={styles.colDiscount} />
@@ -654,6 +714,7 @@ export default function PurchaseBillDetailPage() {
               <tr>
                 <th>#</th>
                 <th>Item</th>
+                <th>HSN/SAC</th>
                 <th className={styles.textRight}>Qty</th>
                 <th className={styles.textRight}>Rate</th>
                 <th className={styles.textRight}>Discount</th>
@@ -670,9 +731,10 @@ export default function PurchaseBillDetailPage() {
                     <div className={styles.itemName}>{item.name}</div>
                     <div className={styles.itemUnit}>{item.unit}</div>
                   </td>
+                  <td data-label="HSN/SAC" className={styles.textMuted}>{item.hsn || "—"}</td>
                   <td data-label="Qty" className={styles.qtyCell}>{item.quantity}</td>
                   <td data-label="Rate" className={styles.textRight}>₹{fmt(item.purchasePrice)}</td>
-                  <td data-label="Discount" className={`${styles.textRight} ${styles.textMuted}`}>{item.discountPercent > 0 ? `${item.discountPercent}%` : "—"}</td>
+                  <td data-label="Discount" className={`${styles.textRight} ${styles.textMuted}`}>{item.discountPercent > 0 ? `${item.discountPercent}% (−₹${fmt(item.discountAmount)})` : "—"}</td>
                   <td data-label="GST %" className={`${styles.textRight} ${styles.textMuted}`}>{item.gstRate}%</td>
                   <td data-label="GST Amt" className={styles.gstAmtCell}>₹{fmt(item.gstAmount)}</td>
                   <td data-label="Total" className={styles.totalCell}>₹{fmt(item.total)}</td>

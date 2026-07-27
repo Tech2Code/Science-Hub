@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/Input";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
-import { fetchCached, bustCache } from "@/lib/useCache";
+import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
+import { isLowStock } from "@/lib/stockStatus";
 import styles from "./view.module.css";
 
 interface BrandProduct {
@@ -59,7 +60,7 @@ export default function BrandViewPage() {
       setSavingRename(false);
       if (res.ok) {
         setBrand((prev) => (prev ? { ...prev, name } : prev));
-        bustCache("/api/brands");
+        bustCachePrefix("/api/brands");
         setRenaming(false);
         toast({ type: "success", title: "Brand renamed", message: `Renamed to "${name}".` });
       } else if (res.status === 409) {
@@ -83,7 +84,7 @@ export default function BrandViewPage() {
       setDeleting(false);
       setConfirmOpen(false);
       if (res.ok) {
-        bustCache("/api/brands");
+        bustCachePrefix("/api/brands");
         toast({ type: "success", title: "Brand deleted", message: `"${brand.name}" moved to bin.` });
         router.push("/brands");
       } else {
@@ -102,7 +103,7 @@ export default function BrandViewPage() {
   // Rendered unconditionally (loading or loaded) so adding/removing a header
   // button, stat, or column only ever needs one edit — see SkeletonSwap.
   const products = brand?.products ?? [];
-  const lowStockCount = products.filter((p) => p.stock <= p.minStock).length;
+  const lowStockCount = products.filter((p) => isLowStock(p.stock, p.minStock)).length;
   const catalogValue = products.reduce((s, p) => s + p.price * p.stock, 0);
 
   return (
@@ -135,7 +136,7 @@ export default function BrandViewPage() {
                   onChange={(e) => setRenameValue(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") saveRename(); if (e.key === "Escape") setRenaming(false); }}
                 />
-                <Button size="sm" variant="primary" onClick={saveRename} disabled={!renameValue.trim() || savingRename}>Save</Button>
+                <Button size="sm" variant="primary" onClick={saveRename} disabled={!renameValue.trim() || renameValue.trim() === brand?.name || savingRename}>Save</Button>
                 <Button size="sm" variant="secondary" onClick={() => setRenaming(false)} disabled={savingRename}>Cancel</Button>
               </div>
             ) : (
@@ -212,7 +213,7 @@ export default function BrandViewPage() {
                   </td>
                   <td data-label="SKU" className={styles.mutedCell}>{p.sku || "—"}</td>
                   <td data-label="Price" className="table-td-right">₹{p.price.toLocaleString("en-IN")}</td>
-                  <td data-label="Stock" className={`table-td-right ${p.stock <= p.minStock ? styles.stockLow : ""}`}>{p.stock}</td>
+                  <td data-label="Stock" className={`table-td-right ${isLowStock(p.stock, p.minStock) ? styles.stockLow : ""}`}>{p.stock}</td>
                 </tr>
               ))}
             </tbody>
