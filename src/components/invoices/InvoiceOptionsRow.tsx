@@ -1,6 +1,7 @@
 "use client";
 
 import { Input, Select } from "@/components/ui/Input";
+import { Switch } from "@/components/ui/Switch";
 import { INDIA_STATES } from "@/lib/states";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./InvoiceOptionsRow.module.css";
@@ -41,28 +42,6 @@ export function InvoiceOptionsRow({
             {INDIA_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
           </Select>
         </div>
-        <label className={styles.switchLabel}>
-          <div
-            role="switch"
-            aria-checked={isInterState}
-            onClick={onToggleInterState}
-            className={`${styles.switchTrack} ${isInterState ? styles.switchTrackOn : ""}`}
-          >
-            <span className={`${styles.switchThumb} ${isInterState ? styles.switchThumbOn : ""}`} />
-          </div>
-          <span className={styles.switchText}>Inter-state supply (IGST)</span>
-        </label>
-        <label className={styles.switchLabel}>
-          <div
-            role="switch"
-            aria-checked={reverseCharge}
-            onClick={onToggleReverseCharge}
-            className={`${styles.switchTrack} ${reverseCharge ? styles.switchTrackOn : ""}`}
-          >
-            <span className={`${styles.switchThumb} ${reverseCharge ? styles.switchThumbOn : ""}`} />
-          </div>
-          <span className={styles.switchText}>Reverse charge applicable</span>
-        </label>
         <div className={styles.dueDateRow}>
           <label className={styles.dueDateLabel}>Due date</label>
           <Input
@@ -74,6 +53,14 @@ export function InvoiceOptionsRow({
             className={styles.dueDateInput}
           />
         </div>
+        <label className={styles.switchLabel}>
+          <Switch checked={isInterState} onChange={onToggleInterState} aria-label="Inter-state supply (IGST)" />
+          <span className={styles.switchText}>Inter-state supply (IGST)</span>
+        </label>
+        <label className={styles.switchLabel}>
+          <Switch checked={reverseCharge} onChange={onToggleReverseCharge} aria-label="Reverse charge applicable" />
+          <span className={styles.switchText}>Reverse charge applicable</span>
+        </label>
       </div>
     </div>
   );

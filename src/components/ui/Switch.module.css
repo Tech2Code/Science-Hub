@@ -1,0 +1,62 @@
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 2.75rem;
+  height: 1.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--c-border);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.18s ease;
+}
+
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.switchLoading:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.switchOn {
+  background: var(--c-blue);
+}
+
+.switchThumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
+  transition: transform 0.18s ease;
+}
+
+.switchOn .switchThumb {
+  transform: translateX(1.25rem);
+}
+
+@keyframes switchSpin {
+  to { transform: rotate(360deg); }
+}
+
+.switchSpinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-top: -0.4375rem;
+  margin-left: -0.4375rem;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: switchSpin 0.6s linear infinite;
+}

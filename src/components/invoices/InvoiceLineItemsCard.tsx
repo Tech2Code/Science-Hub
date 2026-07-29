@@ -2,7 +2,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
-import { Input, Select } from "@/components/ui/Input";
+import { Input, Select, FormField } from "@/components/ui/Input";
 import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
@@ -38,7 +38,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
   const [productSearch, setProductSearch] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
-  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "Nos", price: "", gstRate: "18" });
+  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "Nos", price: "", gstRate: "18", skipCatalog: false });
   const [quickAddErrors, setQuickAddErrors] = useState<Partial<Record<"name" | "price" | "gstRate", string>>>({});
   const [quickAddSaving, setQuickAddSaving] = useState(false);
 
@@ -55,10 +55,11 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
     setProductSearch(""); setShowProductDropdown(false);
   }
 
-  function openQuickAddProduct() {
-    setQuickAddProduct({ name: productSearch, unit: "Nos", price: "", gstRate: "18" });
+  function openQuickAddProduct(name = productSearch) {
+    setQuickAddProduct({ name, unit: "Nos", price: "", gstRate: "18", skipCatalog: false });
     setQuickAddErrors({});
     setShowQuickAddProduct(true);
+    setShowProductDropdown(false);
   }
 
   async function handleQuickAddProduct() {
@@ -69,6 +70,19 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
     };
     if (Object.values(errs).some(Boolean)) { setQuickAddErrors(errs); return; }
     setQuickAddErrors({});
+
+    if (quickAddProduct.skipCatalog) {
+      setItems((prev) => [...prev, {
+        key: makeInvoiceLineItemKey(), productId: "", productName: quickAddProduct.name.trim(),
+        unit: quickAddProduct.unit.trim() || "Nos", qty: 1, price: parseFloat(quickAddProduct.price) || 0,
+        gstRate: parseFloat(quickAddProduct.gstRate) || 0, hsn: "", discountPercent: 0,
+      }]);
+      setShowQuickAddProduct(false);
+      setShowProductDropdown(false);
+      toast({ type: "success", title: "Item added", message: `"${quickAddProduct.name.trim()}" added to this invoice only.` });
+      return;
+    }
+
     setQuickAddSaving(true);
     try {
       const res = await fetch("/api/products", {
@@ -123,17 +137,18 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
       style={{ ...section.style, position: "relative", zIndex: showProductDropdown ? 5 : "auto" }}
     >
       <h2 className={styles.lineItemsHeading}>Line Items</h2>
-      <div className={styles.productSearchWrap}>
-        <Input
-          type="text"
-          placeholder="Search and add product…"
-          value={productSearch}
-          onChange={(e) => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
-          onFocus={() => setShowProductDropdown(true)}
-          onBlur={() => setTimeout(() => setShowProductDropdown(false), 150)}
-          className={styles.input}
-        />
-        {showProductDropdown && (
+      <div className={styles.searchRow}>
+        <div className={styles.productSearchWrap}>
+          <Input
+            type="text"
+            placeholder="Search and add product…"
+            value={productSearch}
+            onChange={(e) => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
+            onFocus={() => setShowProductDropdown(true)}
+            onBlur={() => setTimeout(() => setShowProductDropdown(false), 150)}
+            className={styles.input}
+          />
+          {showProductDropdown && (
           <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
             {filteredProducts.length > 0 ? filteredProducts.map((p) => (
               <button key={p.id} type="button" onClick={() => addProduct(p)} className={styles.dropdownBtn}>
@@ -145,64 +160,78 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
             )) : (
               <div className={styles.dropdownEmpty}>
                 No product found.{" "}
-                <button type="button" className={styles.dropdownEmptyLink} onMouseDown={(e) => e.preventDefault()} onClick={openQuickAddProduct}>
+                <button type="button" className={styles.dropdownEmptyLink} onMouseDown={(e) => e.preventDefault()} onClick={() => openQuickAddProduct()}>
                   Add new product →
                 </button>
               </div>
             )}
           </div>
-        )}
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => { setProductSearch(""); openQuickAddProduct(""); }}
+          className={styles.customItemBtn}
+        >
+          + Add custom item
+        </button>
       </div>
 
       {showQuickAddProduct && (
         <div className={styles.customForm}>
-          <div>
+          <FormField label="Product Name" required error={quickAddErrors.name}>
             <Input
-              type="text" placeholder="Product name *"
+              type="text" placeholder="e.g. Delivery charges"
               value={quickAddProduct.name}
               onChange={(e) => { setQuickAddProduct((p) => ({ ...p, name: e.target.value })); setQuickAddErrors((p) => ({ ...p, name: undefined })); }}
-              className={quickAddErrors.name ? styles.inputError : styles.input}
             />
-            {quickAddErrors.name && <p className={styles.errMsg}>{quickAddErrors.name}</p>}
-          </div>
+          </FormField>
           <div className={styles.grid3}>
-            <Select
-              value={quickAddProduct.unit}
-              onChange={(e) => setQuickAddProduct((p) => ({ ...p, unit: e.target.value }))}
-              className={styles.input}
-            >
-              {QUICK_ADD_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-            </Select>
-            <div>
+            <FormField label="Unit">
+              <Select
+                value={quickAddProduct.unit}
+                onChange={(e) => setQuickAddProduct((p) => ({ ...p, unit: e.target.value }))}
+              >
+                {QUICK_ADD_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              </Select>
+            </FormField>
+            <FormField label="Price (₹)" required error={quickAddErrors.price}>
               <Input
-                type="text" inputMode="decimal" placeholder="Price (₹) *"
+                type="text" inputMode="decimal" placeholder="0.00"
                 value={quickAddProduct.price}
                 onChange={(e) => { setQuickAddProduct((p) => ({ ...p, price: e.target.value })); setQuickAddErrors((p) => ({ ...p, price: undefined })); }}
-                className={quickAddErrors.price ? styles.inputError : styles.input}
               />
-              {quickAddErrors.price && <p className={styles.errMsg}>{quickAddErrors.price}</p>}
-            </div>
-            <div>
+            </FormField>
+            <FormField label="GST %" error={quickAddErrors.gstRate}>
               <Input
-                type="text" inputMode="decimal" placeholder="GST %"
+                type="text" inputMode="decimal" placeholder="18"
                 value={quickAddProduct.gstRate}
                 onChange={(e) => { setQuickAddProduct((p) => ({ ...p, gstRate: e.target.value })); setQuickAddErrors((p) => ({ ...p, gstRate: undefined })); }}
-                className={quickAddErrors.gstRate ? styles.inputError : styles.input}
               />
-              {quickAddErrors.gstRate && <p className={styles.errMsg}>{quickAddErrors.gstRate}</p>}
-            </div>
+            </FormField>
           </div>
-          <div className={styles.grid2}>
-            <Button type="button" variant="primary" size="sm" onClick={handleQuickAddProduct} disabled={quickAddSaving}>
-              {quickAddSaving ? "Adding…" : "Add & use product"}
-            </Button>
-            <Button type="button" variant="secondary" size="sm" onClick={() => setShowQuickAddProduct(false)} disabled={quickAddSaving}>
+          <label className={styles.skipCatalogLabel}>
+            <input
+              type="checkbox"
+              checked={quickAddProduct.skipCatalog}
+              onChange={(e) => setQuickAddProduct((p) => ({ ...p, skipCatalog: e.target.checked }))}
+              className={styles.skipCatalogCheckbox}
+            />
+            Just for this invoice — don&apos;t save to catalog
+          </label>
+          <div className={styles.formActions}>
+            <Button type="button" variant="secondary" size="md" onClick={() => setShowQuickAddProduct(false)} disabled={quickAddSaving}>
               Cancel
             </Button>
+            <Button type="button" variant="primary" size="md" onClick={handleQuickAddProduct} disabled={quickAddSaving || !quickAddProduct.name.trim() || !quickAddProduct.price.trim()}>
+              {quickAddSaving ? "Adding…" : quickAddProduct.skipCatalog ? "Add to invoice" : "Add & use product"}
+            </Button>
           </div>
-          <p className={styles.customFormHint}>
-            This product will be saved to your catalog and added to this invoice.
-          </p>
+          {!quickAddProduct.skipCatalog && (
+            <p className={styles.customFormHint}>
+              This product will be saved to your catalog and added to this invoice.
+            </p>
+          )}
         </div>
       )}
 

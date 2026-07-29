@@ -107,16 +107,22 @@ export async function PUT(
     }
     {
       const seenProductIds = new Set<string>();
-      for (const item of items as { productId: string }[]) {
+      for (const item of items as { productId?: string }[]) {
+        if (!item.productId) continue; // unlinked custom items (e.g. "Delivery Charges") can repeat freely
         if (seenProductIds.has(item.productId)) {
           return NextResponse.json({ error: "Each product can only appear once per invoice — combine duplicate lines into a single quantity instead." }, { status: 400 });
         }
         seenProductIds.add(item.productId);
       }
     }
+    for (const item of items as { productId?: string; name?: string }[]) {
+      if (!item.productId && !String(item.name ?? "").trim()) {
+        return NextResponse.json({ error: "Custom items must have a name" }, { status: 400 });
+      }
+    }
 
-    // Fetch product info for names/units
-    const productIds = items.map((i: { productId: string }) => i.productId);
+    // Fetch product info for names/units (custom/unlinked items have no productId)
+    const productIds = items.map((i: { productId?: string }) => i.productId).filter(Boolean);
     const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
     const productMap = new Map(products.map((p) => [p.id, p]));
 
@@ -124,10 +130,10 @@ export async function PUT(
     let totalGst = 0;
 
     const invoiceItems = items.map((item: {
-      productId: string; qty?: number; quantity?: number;
+      productId?: string; name?: string; qty?: number; quantity?: number;
       price: number; gstRate: number; unit?: string; hsn?: string; discountPercent?: number;
     }) => {
-      const product = productMap.get(item.productId);
+      const product = item.productId ? productMap.get(item.productId) : undefined;
       const quantity = parseFloat(String(item.qty ?? item.quantity ?? 1));
       const price = parseFloat(String(item.price));
       const gstRate = parseFloat(String(item.gstRate ?? product?.gstRate ?? 18));
@@ -137,8 +143,8 @@ export async function PUT(
       subtotal += itemSubtotal;
       totalGst += gstAmount;
       return {
-        productId: item.productId,
-        name: product?.name ?? "Unknown Product",
+        productId: item.productId || null,
+        name: product?.name || (item.name ?? "").trim() || "Unknown Product",
         hsn: (item.hsn ?? product?.hsn ?? "").trim(),
         quantity,
         unit: item.unit ?? product?.unit ?? "Nos",
@@ -201,7 +207,7 @@ export async function PUT(
       });
       await batchAdjustStock(
         tx,
-        oldItems.map((old) => ({ productId: old.productId, quantity: old.quantity })),
+        oldItems.filter((old) => old.productId).map((old) => ({ productId: old.productId!, quantity: old.quantity })),
         {
           type: "sale_edit_reverse",
           reference: existing.invoiceNumber,
@@ -237,10 +243,9 @@ export async function PUT(
       // is also how we detect negative stock without a second query per item.
       const updatedProducts = await batchAdjustStock(
         tx,
-        (invoiceItems as { productId: string; quantity: number }[]).map((item) => ({
-          productId: item.productId,
-          quantity: -item.quantity,
-        })),
+        (invoiceItems as { productId: string | null; quantity: number }[])
+          .filter((item) => item.productId)
+          .map((item) => ({ productId: item.productId!, quantity: -item.quantity })),
         {
           type: "sale_edit_apply",
           reference: existing.invoiceNumber,
@@ -319,7 +324,7 @@ export async function DELETE(
       }
       await batchAdjustStock(
         tx,
-        items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+        items.filter((item) => item.productId).map((item) => ({ productId: item.productId!, quantity: item.quantity })),
         {
           type: "sale_delete_restore",
           reference: inv.invoiceNumber,

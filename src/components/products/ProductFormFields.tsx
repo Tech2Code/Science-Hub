@@ -21,12 +21,15 @@ interface ProductFormFieldsProps {
 export function ProductFormFields({ form, onChange, fieldErrors, brands, categories, disabled, stockLabel = "Opening Stock" }: ProductFormFieldsProps) {
   return (
     <>
-      <div className="form-grid-2">
+      <div className="form-grid-3">
         <FormField label="Product Name" required error={fieldErrors.name}>
           <Input name="name" value={form.name} onChange={onChange} placeholder="e.g. Beaker 250ml Borosilicate" disabled={disabled} />
         </FormField>
         <FormField label="SKU / Item Code">
           <Input name="sku" value={form.sku} onChange={onChange} placeholder="e.g. BKR-250-BOR" mono disabled={disabled} />
+        </FormField>
+        <FormField label="HSN/SAC" hint="Used on invoices & purchase bills.">
+          <Input name="hsn" value={form.hsn} onChange={onChange} placeholder="e.g. 7017" mono disabled={disabled} />
         </FormField>
       </div>
 

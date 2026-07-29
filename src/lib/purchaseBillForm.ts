@@ -24,14 +24,11 @@ export const PURCHASE_BILL_CATEGORIES = ["Raw Materials", "Lab Chemicals", "Lab 
 export const PURCHASE_BILL_MARGIN_PRESETS = ["10", "15", "20", "25", "30", "40", "50"];
 const DISCOUNT_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 40, 50];
 
-// A stable per-row id, separate from array index — catalogSalePrice/
-// catalogMarginPct/catalogSaving state in PurchaseBillItemsTable is keyed by
-// this so removing a row can't silently misapply another row's saved margin
-// after the array shifts.
+// A stable per-row id, separate from array index.
 let itemKeySeq = 0;
-export function makeBlankPurchaseBillItem(): PurchaseBillLineItem {
+export function makePurchaseBillLineItemKey() {
   itemKeySeq += 1;
-  return { key: `item-${itemKeySeq}`, productId: "", name: "", hsn: "", unit: "Pcs", quantity: "1", purchasePrice: "", gstRate: "18", discountPercent: "0" };
+  return `item-${itemKeySeq}`;
 }
 
 // A custom typed amount rarely lands on a preset % exactly — inject it into

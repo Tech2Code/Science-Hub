@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Modal } from "@/components/dialogs/Modal";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
@@ -57,9 +58,11 @@ export default function CategoriesPage() {
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [editingOriginalName, setEditingOriginalName] = useState("");
   const [editingUpdatedAt, setEditingUpdatedAt] = useState<string | undefined>(undefined);
   const [renaming, setRenaming] = useState(false);
   const [openingView, setOpeningView] = useState(false);
@@ -94,6 +97,7 @@ export default function CategoriesPage() {
     });
     if (r.ok) {
       setNewName("");
+      setAddOpen(false);
       await mutate();
       toast({ type: "success", title: "Category added", message: `"${name}" added to catalog.` });
     } else {
@@ -106,11 +110,15 @@ export default function CategoriesPage() {
   function startRename(cat: Category) {
     setEditingId(cat.id);
     setEditingName(cat.name);
+    setEditingOriginalName(cat.name);
     setEditingUpdatedAt(cat.updatedAt);
   }
 
-  async function handleRename(id: string) {
+  async function handleRename(e: React.FormEvent) {
+    e.preventDefault();
+    const id = editingId;
     const name = editingName.trim();
+    if (!id) return;
     if (validate(name, rules.required("Category name is required."))) return;
     setRenaming(true);
     const r = await fetch(`/api/categories/${id}`, {
@@ -176,30 +184,50 @@ export default function CategoriesPage() {
           <h1 className="page-title">Categories</h1>
           <p className="page-sub">{loading ? "Loading…" : `${total} categories in catalog`}</p>
         </div>
-      </div>
-
-      {/* Add category form */}
-      {canWrite && (<div {...animateSection(0, `card ${styles.addCard}`)}>
-        <h2 className={styles.addCardTitle}>
-          Add New Category
-        </h2>
-        <form onSubmit={handleAdd} className={styles.addForm} noValidate>
-          <Input
-            ref={inputRef}
-            type="text"
-            placeholder="Category name (e.g. Lab Glassware, Instruments…)"
-            value={newName}
-            onChange={(e) => { setNewName(e.target.value); }}
-            className={`${styles.addInput}`}
-          />
-          <Button type="submit" variant="primary" disabled={!newName.trim() || saving}>
+        {canWrite && (
+          <Button variant="primary" onClick={() => { setNewName(""); setAddOpen(true); }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Category
           </Button>
-        </form>
-      </div>)}
+        )}
+      </div>
+
+      {canWrite && (
+        <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add New Category">
+          <form onSubmit={handleAdd} className={styles.addForm} noValidate>
+            <Input
+              ref={inputRef}
+              type="text"
+              autoFocus
+              placeholder="Category name (e.g. Lab Glassware, Instruments…)"
+              value={newName}
+              onChange={(e) => { setNewName(e.target.value); }}
+              className={`${styles.addInput}`}
+            />
+            <Button type="submit" variant="primary" disabled={!newName.trim() || saving}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Category
+            </Button>
+          </form>
+        </Modal>
+      )}
+
+      {canWrite && (
+        <Modal open={!!editingId} onClose={() => setEditingId(null)} title="Rename Category">
+          <form onSubmit={handleRename} className={styles.addForm} noValidate>
+            <Input
+              type="text"
+              autoFocus
+              placeholder="Category name"
+              value={editingName}
+              onChange={(e) => setEditingName(e.target.value)}
+              className={`${styles.addInput}`}
+            />
+            <Button type="submit" variant="primary" disabled={!editingName.trim() || editingName.trim() === editingOriginalName || renaming}>Save</Button>
+          </form>
+        </Modal>
+      )}
 
       {/* Categories list */}
-      <div {...animateSection(1, "card")}>
+      <div {...animateSection(0, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
             <Input
@@ -234,21 +262,7 @@ export default function CategoriesPage() {
                 <tr key={c.id}>
                   <Cell col={COLUMNS[0]} className={styles.indexCell}>{i + 1}</Cell>
                   <Cell col={COLUMNS[1]}>
-                    {editingId === c.id ? (
-                      <div className={styles.editingRow}>
-                        <Input
-                          sz="sm"
-                          autoFocus
-                          value={editingName}
-                          onChange={(e) => setEditingName(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter") handleRename(c.id); if (e.key === "Escape") setEditingId(null); }}
-                        />
-                        <Button size="sm" variant="primary" onClick={() => handleRename(c.id)} disabled={!editingName.trim() || editingName.trim() === c.name || renaming}>Save</Button>
-                        <Button size="sm" variant="secondary" onClick={() => setEditingId(null)} disabled={renaming}>Cancel</Button>
-                      </div>
-                    ) : (
-                      <Link href={`/categories/${c.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`} title={c.name}>{c.name}</Link>
-                    )}
+                    <Link href={`/categories/${c.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`} title={c.name}>{c.name}</Link>
                   </Cell>
                   <Cell col={COLUMNS[2]}>
                     <span className={`${styles.productsBadge} ${c._count.products > 0 ? styles.productsBadgeActive : ""}`}>
@@ -256,23 +270,21 @@ export default function CategoriesPage() {
                     </span>
                   </Cell>
                   <Cell col={COLUMNS[3]}>
-                    {editingId !== c.id && (
-                      <div className="table-actions">
-                        <Button variant="viewOutline" size="sm" onClick={() => { setOpeningView(true); router.push(`/categories/${c.id}`); }}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View
-                        </Button>
-                        {canWrite && (<Button variant="editOutline" size="sm" onClick={() => startRename(c)}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Rename
-                        </Button>)}
-                        {canWrite && (<Button
-                          variant="dangerOutline"
-                          size="sm"
-                          onClick={() => handleDelete(c.id, c.name)}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete
-                        </Button>)}
-                      </div>
-                    )}
+                    <div className="table-actions">
+                      <Button variant="viewOutline" size="sm" onClick={() => { setOpeningView(true); router.push(`/categories/${c.id}`); }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View
+                      </Button>
+                      {canWrite && (<Button variant="editOutline" size="sm" onClick={() => startRename(c)}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Rename
+                      </Button>)}
+                      {canWrite && (<Button
+                        variant="dangerOutline"
+                        size="sm"
+                        onClick={() => handleDelete(c.id, c.name)}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete
+                      </Button>)}
+                    </div>
                   </Cell>
                 </tr>
               ))}

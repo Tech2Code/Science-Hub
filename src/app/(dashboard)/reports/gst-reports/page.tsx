@@ -197,7 +197,9 @@ export default function GstFilingPage() {
         {error && <p className={styles.errorText}>{error}</p>}
       </div>
 
-      {report && (
+      {report && (() => {
+        const isReportEmpty = report.salesRegister.length === 0 && report.purchaseRegister.length === 0 && report.creditNotes.length === 0;
+        return (
         <>
           {/* Validation status */}
           <div {...animateSection(1, "card")}>
@@ -257,13 +259,15 @@ export default function GstFilingPage() {
               ))}
             </div>
             <div className={styles.downloadRow}>
-              <Button variant="primary" onClick={handleDownload} disabled={downloading}>
+              <Button variant="primary" onClick={handleDownload} disabled={downloading || isReportEmpty}>
                 {downloading ? "Preparing…" : "Download ZIP"}
               </Button>
+              {isReportEmpty && <p className={styles.errorText}>No sales, purchases, or credit notes in this period — nothing to download.</p>}
             </div>
           </div>
         </>
-      )}
+        );
+      })()}
       {(generating || downloading) && (
         <OverlayLoader text={generating ? "Generating GST package…" : "Preparing download…"} />
       )}

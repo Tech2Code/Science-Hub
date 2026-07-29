@@ -1,4 +1,11 @@
-.pageStack { max-width: 52rem; }
+/* ── Validation warnings (right column) ───────── */
+.warningList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+}
+.warningItem { color: var(--c-amber-text); }
 
 /* ── Loading skeleton ──────────────────────────── */
 .skFieldStack { display: flex; flex-direction: column; gap: 0.375rem; }

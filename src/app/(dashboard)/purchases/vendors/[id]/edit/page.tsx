@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { VendorFormFields } from "@/components/vendors/VendorFormFields";
+import { Sk } from "@/components/ui/Skeleton";
 import { BLANK_VENDOR_FORM, validateVendorForm, normalizeVendorField, type VendorFormData } from "@/lib/vendorForm";
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
@@ -84,31 +85,48 @@ export default function EditVendorPage() {
 
   return (
     <>
-    {loading && <OverlayLoader text="Loading vendor…" />}
     {!loading && saving && <OverlayLoader text="Saving…" />}
     <div className={`page-stack ${styles.pageStack}`}>
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "Edit Vendor" }]} />
       <h1 className="page-title">Edit Vendor</h1>
 
-      <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
-        <VendorFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} />
-
-        <div className="form-actions-wrap">
-          <div className="form-actions">
-            <Button type="submit" variant="primary" disabled={disabled || !hasChanges || !form.name.trim()}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-              Update Vendor
-            </Button>
-            <Button variant="secondary" href={`/purchases/vendors/${id}`}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              Cancel
-            </Button>
+      {loading ? (
+        <div className="form-card">
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={90} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={130} h={11} /><Sk h={38} r={8} /></div>
           </div>
-          {!loading && !hasChanges && !saving && (
-            <span className={styles.noChanges}>No changes detected.</span>
-          )}
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+          </div>
+          <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+          <div className={styles.skFieldStack}><Sk w={70} h={11} /><Sk h={60} r={8} /></div>
+          <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+          <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={60} r={8} /></div>
+          <Sk w={140} h={14} r={4} />
         </div>
-      </form>
+      ) : (
+        <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
+          <VendorFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} />
+
+          <div className="form-actions-wrap">
+            <div className="form-actions">
+              <Button type="submit" variant="primary" disabled={disabled || !hasChanges || !form.name.trim()}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                Update Vendor
+              </Button>
+              <Button variant="secondary" href={`/purchases/vendors/${id}`}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                Cancel
+              </Button>
+            </div>
+            {!hasChanges && !saving && (
+              <span className={styles.noChanges}>No changes detected.</span>
+            )}
+          </div>
+        </form>
+      )}
     </div>
     </>
   );

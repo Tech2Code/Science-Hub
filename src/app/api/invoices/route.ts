@@ -90,10 +90,16 @@ export async function POST(request: NextRequest) {
     {
       const seenProductIds = new Set<string>();
       for (const item of items as { productId: string }[]) {
+        if (!item.productId) continue; // unlinked custom items (e.g. "Delivery Charges") can repeat freely
         if (seenProductIds.has(item.productId)) {
           return NextResponse.json({ error: "Each product can only appear once per invoice — combine duplicate lines into a single quantity instead." }, { status: 400 });
         }
         seenProductIds.add(item.productId);
+      }
+    }
+    for (const item of items as { productId?: string; name?: string }[]) {
+      if (!item.productId && !String(item.name ?? "").trim()) {
+        return NextResponse.json({ error: "Custom items must have a name" }, { status: 400 });
       }
     }
 
@@ -124,8 +130,8 @@ export async function POST(request: NextRequest) {
 
     const currentYear = new Date().getFullYear();
 
-    // Fetch product details for each item
-    const productIds = items.map((item: { productId: string }) => item.productId);
+    // Fetch product details for each item (custom/unlinked items have no productId)
+    const productIds = items.map((item: { productId?: string }) => item.productId).filter(Boolean);
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
     });
@@ -137,15 +143,17 @@ export async function POST(request: NextRequest) {
     let totalGst = 0;
 
     const invoiceItems = items.map((item: {
-      productId: string;
+      productId?: string;
+      name?: string;
       quantity?: number;
       qty?: number;
       price: number;
       gstRate: number;
       hsn?: string;
+      unit?: string;
       discountPercent?: number;
     }) => {
-      const product = productMap.get(item.productId);
+      const product = item.productId ? productMap.get(item.productId) : undefined;
       const quantity = parseFloat(String(item.quantity ?? item.qty ?? 1));
       const price = parseFloat(String(item.price));
       const gstRate = parseFloat(String(item.gstRate ?? product?.gstRate ?? 18));
@@ -157,11 +165,11 @@ export async function POST(request: NextRequest) {
       totalGst += gstAmount;
 
       return {
-        productId: item.productId,
-        name: product?.name ?? "Unknown Product",
+        productId: item.productId || null,
+        name: product?.name || (item.name ?? "").trim() || "Unknown Product",
         hsn: (item.hsn ?? product?.hsn ?? "").trim(),
         quantity,
-        unit: product?.unit ?? "Nos",
+        unit: product?.unit || item.unit || "Nos",
         price,
         discountPercent,
         discountAmount,
@@ -225,10 +233,11 @@ export async function POST(request: NextRequest) {
           include: { customer: true, items: true },
         });
 
+        const stockedItems = (invoiceItems as { productId: string | null; quantity: number }[]).filter((item) => item.productId);
         const updatedProducts = await batchAdjustStock(
           tx,
-          (invoiceItems as { productId: string; quantity: number }[]).map((item) => ({
-            productId: item.productId,
+          stockedItems.map((item) => ({
+            productId: item.productId!,
             quantity: -item.quantity,
           })),
           { type: "sale", reference: inv.invoiceNumber, createdByUserId: user.id }

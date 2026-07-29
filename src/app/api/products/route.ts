@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
-    const { name, description, sku, unit, price, purchasePrice, gstRate, stock, minStock, categoryId, brandId } = body;
+    const { name, description, sku, hsn, unit, price, purchasePrice, gstRate, stock, minStock, categoryId, brandId } = body;
     const coreErr = validateProductInput({ name, price }, true);
     if (coreErr) return NextResponse.json({ error: coreErr }, { status: 400 });
     const trimmedName = (name as string).trim();
@@ -60,10 +60,11 @@ export async function POST(request: NextRequest) {
     if (numericErr) return NextResponse.json({ error: numericErr }, { status: 400 });
 
     const trimmedSku = typeof sku === "string" ? sku.trim() || null : null;
+    const trimmedHsn = typeof hsn === "string" ? hsn.trim() || null : null;
 
     const product = await prisma.product.create({
       data: {
-        name: trimmedName, description, sku: trimmedSku, unit,
+        name: trimmedName, description, sku: trimmedSku, hsn: trimmedHsn, unit,
         price: parsedPrice,
         purchasePrice: parsedPurchasePrice,
         gstRate: parsedGstRate,

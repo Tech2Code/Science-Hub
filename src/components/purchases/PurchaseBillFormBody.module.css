@@ -1,0 +1,20 @@
+/* ── Two-column layout, shared by the New/Edit Purchase Bill pages ─ */
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.leftCol { display: flex; flex-direction: column; gap: 1.25rem; flex: 1; min-width: 0; }
+
+.rightCol { display: flex; flex-direction: column; gap: 1.25rem; width: 100%; }
+
+@media (min-width: 1280px) {
+  .layout { flex-direction: row; align-items: flex-start; }
+  .rightCol { width: 18rem; flex-shrink: 0; position: sticky; top: 1rem; }
+}
+
+/* Tighter, even rhythm between the totals/payment/warnings/actions blocks
+   stacked inside the summary card — the default form-card gap (1.375rem)
+   is sized for full form fields, not this compact sidebar. */
+.rightCol :global(.form-card) { gap: 1rem; }

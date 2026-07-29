@@ -151,10 +151,6 @@
   background: var(--c-bg-sub);
 }
 
-.gstFootCell {
-  padding: 0.625rem 1rem;
-}
-
 .gstFootCellRight {
   padding: 0.625rem 1rem;
   text-align: right;

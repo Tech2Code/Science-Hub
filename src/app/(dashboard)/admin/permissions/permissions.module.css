@@ -26,12 +26,13 @@
 .toolbar {
   display: flex;
   gap: 0.75rem;
-  flex-wrap: wrap;
+}
+
+.toolbar .roleWrap{
+  max-width: 200px;
 }
 
 .searchInput {
-  flex: 1;
-  min-width: 200px;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--c-border);
   border-radius: var(--c-radius-sm);
@@ -46,7 +47,7 @@
   border-color: var(--c-blue, #3b82f6);
 }
 
-.roleSelect {
+.roleTrigger {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--c-border);
   border-radius: var(--c-radius-sm);
@@ -58,7 +59,7 @@
   min-width: 120px;
 }
 
-.roleSelect:focus {
+.roleTrigger:focus-visible {
   border-color: var(--c-blue, #3b82f6);
 }
 
@@ -145,51 +146,6 @@
   vertical-align: middle;
 }
 
-/* ── Toggle switch ─────────────────────────────────────── */
-.toggle {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  width: 36px;
-  height: 20px;
-  border-radius: 10px;
-  border: none;
-  cursor: pointer;
-  padding: 2px;
-  transition: background-color 0.2s ease, opacity 0.2s ease;
-}
-
-.toggle:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.toggleOn {
-  background-color: var(--c-blue, #3b82f6);
-}
-
-.toggleOff {
-  background-color: var(--c-border-md, #d1d5db);
-}
-
-.toggleThumb {
-  display: block;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-  transition: transform 0.2s ease;
-}
-
-.toggleOn .toggleThumb {
-  transform: translateX(16px);
-}
-
-.toggleOff .toggleThumb {
-  transform: translateX(0);
-}
-
 /* ── Skeleton loading ──────────────────────────────────── */
 .skeletonRow td {
   padding: 0.75rem 1rem;
@@ -269,13 +225,6 @@
 }
 
 /* ── States ────────────────────────────────────────────── */
-.loading {
-  padding: 2rem 1rem;
-  text-align: center;
-  color: var(--c-text-4);
-  font-size: 0.875rem;
-}
-
 .error {
   padding: 1rem;
   border-radius: var(--c-radius-sm);

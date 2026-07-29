@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Modal } from "@/components/dialogs/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { useScrollToHash } from "@/lib/useScrollToHash";
@@ -630,93 +631,94 @@ export default function AdminPage() {
             <h2 className={styles.sectionTitle}>User Management</h2>
             <p className={styles.sectionSub}>{users.length} user{users.length !== 1 ? "s" : ""} in the system</p>
           </div>
-          {!addOpen && (
-            <Button variant="primary" size="sm" onClick={() => { setAddOpen(true); setEditUser(null); setAddMsg(null); setAddFieldErrors({}); }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add User
-            </Button>
-          )}
+          <Button variant="primary" size="sm" onClick={() => { setAddOpen(true); setEditUser(null); setAddMsg(null); setAddFieldErrors({}); }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add User
+          </Button>
         </div>
 
-        {addOpen && (
-          <div className={styles.inlineForm}>
-            <div className={styles.inlineFormTitle}>New User</div>
-            <form onSubmit={addUser} className={styles.formColTight} noValidate>
-              <div className={styles.fg4}>
-                <FormField label="Full Name" required error={addFieldErrors.name}>
-                  <Input className={`${styles.inp} ${addFieldErrors.name ? styles.inpError : ""}`} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} placeholder="Jane Smith" />
-                </FormField>
-                <FormField label="Email" required error={addFieldErrors.email}>
-                  <div className={styles.emailWrap}>
-                    <Input className={`${styles.inp} ${addFieldErrors.email ? styles.inpError : ""}`} type="email" value={addForm.email} onChange={e => handleAddFormChange("email", e.target.value)} placeholder="jane@example.com" />
-                    {emailCheckLoading && <span className={styles.emailChecking}>checking…</span>}
-                  </div>
-                </FormField>
-                <FormField label="Password" required error={addFieldErrors.password}>
-                  <PasswordInput className={styles.inp} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} placeholder="min. 8 characters" autoComplete="new-password" />
-                </FormField>
-                <FormField
-                  label="Re-enter Password"
-                  required
-                  error={addFieldErrors.confirmPassword}
-                  hint={!addFieldErrors.confirmPassword && addForm.confirmPassword && addForm.password === addForm.confirmPassword ? "✓ Passwords match" : undefined}
-                  hintSuccess
-                >
-                  <PasswordInput className={styles.inp} value={addForm.confirmPassword} onChange={e => handleAddFormChange("confirmPassword", e.target.value)} placeholder="repeat password" autoComplete="new-password" />
-                </FormField>
-                <FormField label="Role">
-                  <Select className={`${styles.inp} ${styles.inpCursor}`} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>
-                    <option value="staff">Staff</option>
-                    <option value="manager">Manager</option>
-                    <option value="admin">Admin</option>
-                  </Select>
-                </FormField>
-              </div>
-              {addMsg && <Msg m={addMsg} />}
-              <div className={styles.formActions}>
-                <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}>Cancel</Button>
-                <Button type="submit" variant="primary" size="sm" disabled={addSaving || !addForm.name.trim() || !addForm.email.trim() || !addForm.password.trim() || !addForm.confirmPassword.trim() || !!addFieldErrors.name || !!addFieldErrors.email || !!addFieldErrors.password || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
-              </div>
-            </form>
-          </div>
-        )}
-
-
-        {editUser && (
-          <div className={styles.inlineForm}>
-            <div className={styles.inlineFormTitle}>Edit: {editUser.name}</div>
-            <form onSubmit={saveEdit} className={styles.formCol} noValidate>
-              <div className={styles.fg3}>
-                <FormField label="Full Name" required error={editFieldErrors.name}>
-                  <Input className={`${styles.inp} ${editFieldErrors.name ? styles.inpError : ""}`} value={editForm.name} onChange={e => { setEditForm(p => ({ ...p, name: e.target.value })); setEditFieldErrors(prev => ({ ...prev, name: undefined })); }} />
-                </FormField>
-                <FormField label="Email" required error={editFieldErrors.email}>
-                  <Input className={`${styles.inp} ${editFieldErrors.email ? styles.inpError : ""}`} type="email" value={editForm.email} onChange={e => { setEditForm(p => ({ ...p, email: e.target.value })); setEditFieldErrors(prev => ({ ...prev, email: undefined })); }} />
-                </FormField>
-                <FormField label="Role">
-                  <Select className={`${styles.inp} ${styles.inpCursor}`} value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value as Role }))}>
-                    <option value="staff">Staff</option>
-                    <option value="manager">Manager</option>
-                    <option value="admin">Admin</option>
-                  </Select>
-                </FormField>
-              </div>
-              <div className={styles.pwSection}>
-                <div className={styles.pwSectionHint}>New password — leave blank to keep current</div>
-                <div className={styles.maxW20}>
-                  <FormField label="New Password" error={editFieldErrors.newPassword}>
-                    <Input className={`${styles.inp} ${editFieldErrors.newPassword ? styles.inpError : ""}`} type="password" value={editForm.newPassword} onChange={e => { setEditForm(p => ({ ...p, newPassword: e.target.value })); setEditFieldErrors(prev => ({ ...prev, newPassword: undefined })); }} placeholder="min. 8 characters" autoComplete="new-password" />
-                  </FormField>
+        <Modal
+          open={addOpen}
+          title="New User"
+          maxWidth="40rem"
+          onClose={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}
+        >
+          <form onSubmit={addUser} className={styles.formColTight} noValidate>
+            <div className={styles.fg2}>
+              <FormField label="Full Name" required error={addFieldErrors.name}>
+                <Input className={`${styles.inp} ${addFieldErrors.name ? styles.inpError : ""}`} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} placeholder="Jane Smith" />
+              </FormField>
+              <FormField label="Email" required error={addFieldErrors.email}>
+                <div className={styles.emailWrap}>
+                  <Input className={`${styles.inp} ${addFieldErrors.email ? styles.inpError : ""}`} type="email" value={addForm.email} onChange={e => handleAddFormChange("email", e.target.value)} placeholder="jane@example.com" />
+                  {emailCheckLoading && <span className={styles.emailChecking}>checking…</span>}
                 </div>
+              </FormField>
+              <FormField label="Password" required error={addFieldErrors.password}>
+                <PasswordInput className={styles.inp} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} placeholder="min. 8 characters" autoComplete="new-password" />
+              </FormField>
+              <FormField
+                label="Re-enter Password"
+                required
+                error={addFieldErrors.confirmPassword}
+                hint={!addFieldErrors.confirmPassword && addForm.confirmPassword && addForm.password === addForm.confirmPassword ? "✓ Passwords match" : undefined}
+                hintSuccess
+              >
+                <PasswordInput className={styles.inp} value={addForm.confirmPassword} onChange={e => handleAddFormChange("confirmPassword", e.target.value)} placeholder="repeat password" autoComplete="new-password" />
+              </FormField>
+              <FormField label="Role">
+                <Select className={`${styles.inp} ${styles.inpCursor}`} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>
+                  <option value="staff">Staff</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </Select>
+              </FormField>
+            </div>
+            {addMsg && <Msg m={addMsg} />}
+            <div className={styles.formActions}>
+              <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}>Cancel</Button>
+              <Button type="submit" variant="primary" size="sm" disabled={addSaving || !addForm.name.trim() || !addForm.email.trim() || !addForm.password.trim() || !addForm.confirmPassword.trim() || !!addFieldErrors.name || !!addFieldErrors.email || !!addFieldErrors.password || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
+            </div>
+          </form>
+        </Modal>
+
+        <Modal
+          open={!!editUser}
+          title={`Edit: ${editUser?.name ?? ""}`}
+          maxWidth="40rem"
+          onClose={() => { setEditUser(null); setEditMsg(null); setEditFieldErrors({}); }}
+        >
+          <form onSubmit={saveEdit} className={styles.formCol} noValidate>
+            <div className={styles.fg3}>
+              <FormField label="Full Name" required error={editFieldErrors.name}>
+                <Input className={`${styles.inp} ${editFieldErrors.name ? styles.inpError : ""}`} value={editForm.name} onChange={e => { setEditForm(p => ({ ...p, name: e.target.value })); setEditFieldErrors(prev => ({ ...prev, name: undefined })); }} />
+              </FormField>
+              <FormField label="Email" required error={editFieldErrors.email}>
+                <Input className={`${styles.inp} ${editFieldErrors.email ? styles.inpError : ""}`} type="email" value={editForm.email} onChange={e => { setEditForm(p => ({ ...p, email: e.target.value })); setEditFieldErrors(prev => ({ ...prev, email: undefined })); }} />
+              </FormField>
+              <FormField label="Role">
+                <Select className={`${styles.inp} ${styles.inpCursor}`} value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value as Role }))}>
+                  <option value="staff">Staff</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </Select>
+              </FormField>
+            </div>
+            <div className={styles.pwSection}>
+              <div className={styles.pwSectionHint}>New password — leave blank to keep current</div>
+              <div className={styles.maxW20}>
+                <FormField label="New Password" error={editFieldErrors.newPassword}>
+                  <Input className={`${styles.inp} ${editFieldErrors.newPassword ? styles.inpError : ""}`} type="password" value={editForm.newPassword} onChange={e => { setEditForm(p => ({ ...p, newPassword: e.target.value })); setEditFieldErrors(prev => ({ ...prev, newPassword: undefined })); }} placeholder="min. 8 characters" autoComplete="new-password" />
+                </FormField>
               </div>
-              {editMsg && <Msg m={editMsg} />}
-              <div className={styles.formActions}>
-                <Button type="button" variant="secondary" size="sm" onClick={() => { setEditUser(null); setEditMsg(null); setEditFieldErrors({}); }}>Cancel</Button>
-                <Button type="submit" variant="primary" size="sm" disabled={editSaving || !editFormDirty.isDirty || !editForm.name.trim() || !editForm.email.trim()}>Save Changes</Button>
-              </div>
-            </form>
-          </div>
-        )}
+            </div>
+            {editMsg && <Msg m={editMsg} />}
+            <div className={styles.formActions}>
+              <Button type="button" variant="secondary" size="sm" onClick={() => { setEditUser(null); setEditMsg(null); setEditFieldErrors({}); }}>Cancel</Button>
+              <Button type="submit" variant="primary" size="sm" disabled={editSaving || !editFormDirty.isDirty || !editForm.name.trim() || !editForm.email.trim()}>Save Changes</Button>
+            </div>
+          </form>
+        </Modal>
 
 
         <div className="table-wrap">
@@ -831,9 +833,9 @@ export default function AdminPage() {
             </Select>
           </div>
           {(logsSearch || logsFilter) && (
-            <button className={styles.clearFiltersBtn} onClick={() => { setLogsSearch(""); setLogsFilter(""); setLogsPage(1); }}>
+            <Button variant="ghost" size="sm" onClick={() => { setLogsSearch(""); setLogsFilter(""); setLogsPage(1); }}>
               Clear filters
-            </button>
+            </Button>
           )}
         </div>
 

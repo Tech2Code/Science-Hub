@@ -26,7 +26,7 @@ export default function NewProductPage() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [form, setForm] = useState<ProductFormData>({
-    name: "", sku: "", description: "", unit: "Nos",
+    name: "", sku: "", hsn: "", description: "", unit: "Nos",
     price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: "5",
     brandId: "", categoryId: "",
   });

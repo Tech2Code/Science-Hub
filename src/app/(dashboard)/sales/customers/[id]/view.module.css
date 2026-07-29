@@ -33,37 +33,6 @@
 
 .errorCenter { color: var(--c-red); }
 
-.cardPad { padding: 1.25rem; }
-
-.skRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.skLeftRow { display: flex; align-items: center; gap: 1rem; }
-
-.skCol { display: flex; flex-direction: column; gap: 0.5rem; }
-
-.skActions { display: flex; gap: 0.5rem; }
-
-.skStatCard { padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
-
-.skTableHead { padding: 1rem 1.25rem; border-bottom: 1px solid var(--c-border); }
-
-.skeletonBlock {
-  border-radius: 6px;
-  background: var(--c-border);
-  animation: skPulse 1.4s ease-in-out infinite;
-}
-
-@keyframes skPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
 .headerLeft { display: flex; gap: 1rem; min-width: 0; }
 
 .contactRow {

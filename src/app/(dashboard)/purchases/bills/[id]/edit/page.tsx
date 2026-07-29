@@ -14,9 +14,7 @@ import { useDirty } from "@/lib/useDirty";
 import { rules, validate } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { truncateFilename } from "@/lib/truncateFilename";
-import { BillDetailsCard } from "@/components/purchases/BillDetailsCard";
-import { PurchaseBillItemsTable } from "@/components/purchases/PurchaseBillItemsTable";
-import { PurchaseBillTotals } from "@/components/purchases/PurchaseBillTotals";
+import { PurchaseBillFormBody } from "@/components/purchases/PurchaseBillFormBody";
 import {
   toNum, fmtCurrency, computePurchaseBillTotals, calcPurchaseBillItem,
   type PurchaseBillLineItem, type PurchaseBillProduct, type PurchaseBillVendor,
@@ -193,6 +191,8 @@ export default function EditPurchaseBillPage() {
   const rawTotal = subtotal + taxTotal - toNum(discount);
   const { roundOff, roundedTotal: computedTotal } = computeRoundOff(rawTotal);
   const outstanding   = bill ? computedTotal - bill.paidAmount : 0;
+  const missingVendor = !vendorId;
+  const noItems = items.length === 0;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -266,7 +266,7 @@ export default function EditPurchaseBillPage() {
   if (loading) return (
     <>
       <OverlayLoader text="Loading bill…" />
-      <div className={`page-stack ${styles.pageStack}`}>
+      <div className="page-stack">
         <Sk w={160} h={13} />
         <Sk w={200} h={20} />
         <div className="form-card">
@@ -301,7 +301,7 @@ export default function EditPurchaseBillPage() {
   // so guard here too rather than showing a form that has nowhere useful to go.
   if (bill && (bill.status === "paid" || bill.status === "cancelled")) {
     return (
-      <div className={`page-stack ${styles.pageStack}`}>
+      <div className="page-stack">
         <Breadcrumb items={[
           { label: "Purchase Bills", href: "/purchases/bills" },
           { label: bill.billNumber, href: `/purchases/bills/${id}` },
@@ -344,10 +344,9 @@ export default function EditPurchaseBillPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="form-stack" noValidate>
-
-        <BillDetailsCard
-          sectionIndex={1}
+      <form onSubmit={handleSubmit} noValidate>
+        <PurchaseBillFormBody
+          startIndex={1}
           vendors={vendors}
           vendorId={vendorId}
           onVendorIdChange={(id) => { setVendorId(id); setVendorError(undefined); }}
@@ -366,18 +365,10 @@ export default function EditPurchaseBillPage() {
           attachmentUrl={attachmentUrl}
           onAttachmentFileChange={handleAttachmentChange}
           onAttachmentRemove={removeAttachment}
-        />
-
-        <PurchaseBillItemsTable
-          sectionIndex={2}
           products={products}
           setProducts={setProducts}
           items={items}
           setItems={setItems}
-        />
-
-        <PurchaseBillTotals
-          sectionIndex={3}
           grossTotal={grossTotal}
           itemDiscountTotal={itemDiscountTotal}
           taxTotal={taxTotal}
@@ -385,15 +376,27 @@ export default function EditPurchaseBillPage() {
           grandTotal={computedTotal}
           discount={discount}
           onDiscountChange={setDiscount}
+          footer={
+            <>
+              {(missingVendor || noItems) && (
+                <div className={styles.warningList}>
+                  {missingVendor && <p className={styles.warningItem}>• Select a vendor</p>}
+                  {noItems && <p className={styles.warningItem}>• Add at least one item</p>}
+                </div>
+              )}
+              <div className="summary-actions">
+                <Button type="submit" variant="primary" size="full" disabled={saving || !isDirty || missingVendor || noItems} title={!isDirty ? "No changes to save" : undefined}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                  Save Changes
+                </Button>
+                <Button variant="secondary" size="full" href={`/purchases/bills/${id}`}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  Cancel
+                </Button>
+              </div>
+            </>
+          }
         />
-
-        <div className="form-actions">
-          <Button type="submit" variant="primary" disabled={saving || !isDirty} title={!isDirty ? "No changes to save" : undefined}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-            Save Changes
-          </Button>
-          <Button variant="secondary" href={`/purchases/bills/${id}`}>Cancel</Button>
-        </div>
       </form>
     </div>
     </>

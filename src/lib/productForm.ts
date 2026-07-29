@@ -4,7 +4,7 @@ export const PRODUCT_UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "
 export const PRODUCT_GST_RATES = [0, 5, 12, 18, 28];
 
 export interface ProductFormData {
-  name: string; sku: string; description: string; unit: string;
+  name: string; sku: string; hsn: string; description: string; unit: string;
   price: string; purchasePrice: string; gstRate: string; stock: string; minStock: string;
   brandId: string; categoryId: string;
 }

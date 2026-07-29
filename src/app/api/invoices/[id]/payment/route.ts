@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireWriteAccess } from "@/lib/apiAuth";
+import { isFutureIstDate } from "@/lib/validation";
 
 class PaymentExceedsBalanceError extends Error {}
 
@@ -17,7 +18,7 @@ export async function POST(
 
     const { id } = await params;
     const body = await request.json();
-    const { amount, method, reference, notes } = body;
+    const { amount, method, reference, notes, date } = body;
 
     const amountStr = (typeof amount === "string" || typeof amount === "number") ? String(amount).trim() : "";
     if (!/^\d+(\.\d+)?$/.test(amountStr) || parseFloat(amountStr) <= 0) {
@@ -26,11 +27,25 @@ export async function POST(
 
     const invoiceCheck = await prisma.invoice.findUnique({
       where: { id },
-      select: { invoiceNumber: true, deletedAt: true, customer: { select: { name: true } } },
+      select: { invoiceNumber: true, deletedAt: true, date: true, customer: { select: { name: true } } },
     });
     if (!invoiceCheck) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     if (invoiceCheck.deletedAt) {
       return NextResponse.json({ error: "This invoice is in the bin — restore it before recording a payment" }, { status: 400 });
+    }
+
+    let paymentDate: Date | undefined;
+    if (date) {
+      paymentDate = new Date(date);
+      if (isNaN(paymentDate.getTime())) {
+        return NextResponse.json({ error: "Invalid payment date" }, { status: 400 });
+      }
+      if (paymentDate < invoiceCheck.date) {
+        return NextResponse.json({ error: "Payment date cannot be before the invoice date" }, { status: 400 });
+      }
+      if (isFutureIstDate(date)) {
+        return NextResponse.json({ error: "Payment date cannot be in the future" }, { status: 400 });
+      }
     }
 
     // Re-read the invoice and re-validate the remaining balance inside a
@@ -57,6 +72,7 @@ export async function POST(
             method: method || "cash",
             reference: reference || null,
             notes: notes || null,
+            ...(paymentDate ? { date: paymentDate } : {}),
           },
         });
 

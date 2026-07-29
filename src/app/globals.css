@@ -425,6 +425,8 @@ select::-moz-focus-inner {
   gap: 1.375rem;
 }
 
+.form-section-title { font-size: 0.8125rem; font-weight: 600; color: var(--c-text-2); }
+
 .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.375rem 1rem; }
 .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.375rem 1rem; }
 @media (max-width: 640px) {

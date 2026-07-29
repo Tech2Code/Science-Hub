@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, FormField } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
+import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
 import { useBranding } from "@/lib/businessBranding";
@@ -647,17 +648,13 @@ export default function SettingsPage() {
                     {saved.showLogoOnInvoices ? "Invoice PDFs and print views include the business logo." : "Invoice PDFs and print views hide the business logo."}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={saved.showLogoOnInvoices}
+                <Switch
+                  checked={saved.showLogoOnInvoices}
+                  onChange={handleToggleInvoiceLogo}
                   disabled={savingBranding}
-                  onClick={handleToggleInvoiceLogo}
-                  className={[styles.invoiceLogoSwitch, saved.showLogoOnInvoices ? styles.invoiceLogoSwitchOn : ""].filter(Boolean).join(" ")}
-                >
-                  <span className={styles.invoiceLogoSwitchThumb} />
-                  {savingBranding && <span className={styles.invoiceLogoSwitchSpinner} />}
-                </button>
+                  loading={savingBranding}
+                  aria-label="Show logo on invoices"
+                />
               </div>
             </div>
           </div>

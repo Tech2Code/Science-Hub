@@ -4,23 +4,18 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, FormField } from "@/components/ui/Input";
 import { rules, validate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
-import { animateSection } from "@/lib/animateSection";
-import { BillDetailsCard } from "@/components/purchases/BillDetailsCard";
-import { PurchaseBillItemsTable } from "@/components/purchases/PurchaseBillItemsTable";
-import { PurchaseBillTotals } from "@/components/purchases/PurchaseBillTotals";
+import { PurchaseBillFormBody } from "@/components/purchases/PurchaseBillFormBody";
+import { RecordPaymentDialog, type PaymentDraft } from "@/components/purchases/RecordPaymentDialog";
 import {
-  makeBlankPurchaseBillItem, toNum, fmtCurrency, computePurchaseBillTotals, calcPurchaseBillItem,
+  toNum, fmtCurrency, computePurchaseBillTotals, calcPurchaseBillItem,
   type PurchaseBillLineItem, type PurchaseBillProduct, type PurchaseBillVendor,
 } from "@/lib/purchaseBillForm";
 import styles from "./billNew.module.css";
-
-const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
 
 export default function NewPurchaseBillPage() {
   const router = useRouter();
@@ -41,17 +36,33 @@ export default function NewPurchaseBillPage() {
   const [category,  setCategory]  = useState("");
   const [discount,  setDiscount]  = useState("0");
   const [notes,     setNotes]     = useState("");
-  const [items,     setItems]     = useState<PurchaseBillLineItem[]>(() => [makeBlankPurchaseBillItem()]);
+  const [items,     setItems]     = useState<PurchaseBillLineItem[]>([]);
   const [attachmentUrl,  setAttachmentUrl]  = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
 
-  // Optional: record payment immediately
+  // Optional: record payment immediately, via a popup dialog
   const [addPayment,   setAddPayment]   = useState(false);
   const [payAmount,    setPayAmount]    = useState("");
   const [payMethod,    setPayMethod]    = useState("Cash");
   const [payReference, setPayReference] = useState("");
   const [payDate,      setPayDate]      = useState(() => new Date().toISOString().slice(0, 10));
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+
+  function handleSavePayment(payment: PaymentDraft) {
+    setPayAmount(payment.amount);
+    setPayMethod(payment.method);
+    setPayReference(payment.reference);
+    setPayDate(payment.date);
+    setAddPayment(true);
+    setShowPaymentDialog(false);
+  }
+
+  function removePayment() {
+    setAddPayment(false);
+    setPayAmount("");
+    setPayReference("");
+  }
 
   useEffect(() => {
     fetch("/api/vendors?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then((res: { data: PurchaseBillVendor[] }) => setVendors(res.data ?? [])).catch(() => {});
@@ -179,17 +190,27 @@ export default function NewPurchaseBillPage() {
     setSaving(false);
   }
 
+  const missingVendor = !vendorId;
+  const noItems = items.length === 0;
+  const canSubmit = !saving && !attachmentUploading && !missingVendor && !noItems;
+
   return (
     <>
     {saving && <OverlayLoader text="Creating bill…" />}
-    <div className={`page-stack ${styles.pageWrap}`}>
+    <RecordPaymentDialog
+      open={showPaymentDialog}
+      billDate={billDate}
+      grandTotal={grandTotal}
+      initial={{ amount: payAmount, method: payMethod, reference: payReference, date: payDate }}
+      onCancel={() => setShowPaymentDialog(false)}
+      onSave={handleSavePayment}
+    />
+    <div className="page-stack">
       <Breadcrumb items={[{ label: "Purchases", href: "/purchases/bills" }, { label: "New Purchase Bill" }]} />
       <h1 className="page-title">New Purchase Bill</h1>
 
-      <form onSubmit={handleSubmit} className="form-stack" noValidate>
-
-        <BillDetailsCard
-          sectionIndex={0}
+      <form onSubmit={handleSubmit} noValidate>
+        <PurchaseBillFormBody
           vendors={vendors}
           vendorId={vendorId}
           onVendorIdChange={(id) => { setVendorId(id); setVendorError(undefined); }}
@@ -207,18 +228,10 @@ export default function NewPurchaseBillPage() {
           attachmentName={attachmentName}
           onAttachmentFileChange={handleAttachmentChange}
           onAttachmentRemove={removeAttachment}
-        />
-
-        <PurchaseBillItemsTable
-          sectionIndex={1}
           products={products}
           setProducts={setProducts}
           items={items}
           setItems={setItems}
-        />
-
-        <PurchaseBillTotals
-          sectionIndex={2}
           grossTotal={grossTotal}
           itemDiscountTotal={itemDiscountTotal}
           taxTotal={taxTotal}
@@ -226,59 +239,48 @@ export default function NewPurchaseBillPage() {
           grandTotal={grandTotal}
           discount={discount}
           onDiscountChange={setDiscount}
-        />
-
-        {/* Optional Payment */}
-        <div {...animateSection(3, "form-card")}>
-          <label className={styles.paymentCheckboxLabel}>
-            <input type="checkbox" checked={addPayment} onChange={e => setAddPayment(e.target.checked)} className={styles.paymentCheckbox} />
-            Record payment now
-          </label>
-
-          {addPayment && (
-            <div className={styles.paymentDetailBox}>
-              <div className={`form-grid-2 ${styles.marginBottom1}`}>
-                <FormField label="Amount (₹)">
-                  <div className={styles.amountRow}>
-                    <Input type="number" min="0" step="0.01" max={grandTotal} value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder={`Max ₹${fmtCurrency(grandTotal)}`} className={styles.amountInput} />
-                    <button
-                      type="button"
-                      onClick={() => setPayAmount(grandTotal.toFixed(2))}
-                      title="Fill full bill amount"
-                      className={styles.payFullBtn}
-                    >
-                      Pay Full
-                    </button>
+          footer={
+            <>
+              {/* Optional Payment */}
+              <div className={styles.paymentSection}>
+                {addPayment ? (
+                  <div className={styles.paymentSummary}>
+                    <div className={styles.paymentSummaryInfo}>
+                      <span className={styles.paymentSummaryAmount}>₹{fmtCurrency(toNum(payAmount))}</span>
+                      <span className={styles.paymentSummarySub}>{payMethod} · {payDate}{payReference ? ` · ${payReference}` : ""}</span>
+                    </div>
+                    <div className={styles.paymentSummaryActions}>
+                      <button type="button" className={styles.paymentSummaryBtn} onClick={() => setShowPaymentDialog(true)}>Edit</button>
+                      <button type="button" className={styles.paymentSummaryBtn} onClick={removePayment}>Remove</button>
+                    </div>
                   </div>
-                </FormField>
-                <FormField label="Payment Date">
-                  <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} min={billDate} max={new Date().toISOString().slice(0, 10)} />
-                </FormField>
+                ) : (
+                  <button type="button" className={styles.recordPaymentLink} onClick={() => setShowPaymentDialog(true)}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Record payment now
+                  </button>
+                )}
               </div>
-              <div className="form-grid-2">
-                <FormField label="Method">
-                  <Select value={payMethod} onChange={e => setPayMethod(e.target.value)}>
-                    {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
-                  </Select>
-                </FormField>
-                <FormField label="Reference / UTR">
-                  <Input value={payReference} onChange={e => setPayReference(e.target.value)} placeholder="e.g. cheque no., UTR…" />
-                </FormField>
-              </div>
-            </div>
-          )}
-        </div>
 
-        <div className="form-actions">
-          <Button type="submit" variant="primary" disabled={saving}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-            Create Purchase Bill
-          </Button>
-          <Button variant="secondary" href="/purchases/bills">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            Cancel
-          </Button>
-        </div>
+              {(missingVendor || noItems) && (
+                <div className={styles.warningList}>
+                  {missingVendor && <p className={styles.warningItem}>• Select a vendor</p>}
+                  {noItems && <p className={styles.warningItem}>• Add at least one item</p>}
+                </div>
+              )}
+              <div className="summary-actions">
+                <Button type="submit" variant="primary" size="full" disabled={!canSubmit}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                  Create Purchase Bill
+                </Button>
+                <Button variant="secondary" size="full" href="/purchases/bills">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  Cancel
+                </Button>
+              </div>
+            </>
+          }
+        />
       </form>
     </div>
     </>

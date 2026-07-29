@@ -75,7 +75,7 @@ export async function POST(
           });
           await batchAdjustStock(
             tx,
-            invItems.map((item) => ({ productId: item.productId, quantity: -item.quantity })),
+            invItems.filter((item) => item.productId).map((item) => ({ productId: item.productId!, quantity: -item.quantity })),
             { type: "sale_bin_restore", reference: name, notes: "Invoice restored from bin", createdByUserId: session.user?.id }
           );
           return true;

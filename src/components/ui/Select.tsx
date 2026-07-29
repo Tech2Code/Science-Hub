@@ -33,6 +33,8 @@ function parseOptions(children: React.ReactNode): OptionData[] {
 
 export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   sz?: "sm" | "md";
+  /** Applied to the outer wrapper div (className goes to the visible trigger button instead). */
+  wrapClassName?: string;
 }
 
 /**
@@ -45,7 +47,7 @@ export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElemen
  * genuine ChangeEvent<HTMLSelectElement>, unchanged.
  */
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { sz, className, children, value, onChange, name, id, disabled, required, "aria-label": ariaLabel, ...rest },
+  { sz, className, wrapClassName, children, value, onChange, name, id, disabled, required, "aria-label": ariaLabel, ...rest },
   forwardedRef
 ) {
   const hiddenRef = useRef<HTMLSelectElement>(null);
@@ -195,8 +197,10 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
 
   const triggerCls = [styles.trigger, sz === "sm" && styles.sm, disabled && styles.disabled, className].filter(Boolean).join(" ");
 
+  const wrapCls = [styles.wrap, wrapClassName].filter(Boolean).join(" ");
+
   return (
-    <div className={styles.wrap} ref={wrapRef}>
+    <div className={wrapCls} ref={wrapRef}>
       <button
         type="button"
         id={triggerId}

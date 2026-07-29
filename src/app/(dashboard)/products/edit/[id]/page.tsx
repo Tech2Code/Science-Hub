@@ -8,6 +8,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ProductFormFields } from "@/components/products/ProductFormFields";
+import { Sk, SkeletonSwap } from "@/components/ui/Skeleton";
 import { validateProductForm, hasProductFieldErrors, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
@@ -26,7 +27,7 @@ export default function EditProductPage() {
     if (session?.user?.role === "manager") router.replace("/dashboard");
   }, [session, router]);
   const [form, setForm] = useState<ProductFormData>({
-    name: "", sku: "", description: "", unit: "Nos",
+    name: "", sku: "", hsn: "", description: "", unit: "Nos",
     price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: "0",
     brandId: "", categoryId: "",
   });
@@ -47,7 +48,7 @@ export default function EditProductPage() {
     ])
       .then(([product, b, c]) => {
         const loaded: ProductFormData = {
-          name: product.name ?? "", sku: product.sku ?? "",
+          name: product.name ?? "", sku: product.sku ?? "", hsn: product.hsn ?? "",
           description: product.description ?? "", unit: product.unit ?? "Nos",
           price: product.price?.toString() ?? "", purchasePrice: product.purchasePrice != null ? product.purchasePrice.toString() : "",
           gstRate: product.gstRate?.toString() ?? "18",
@@ -74,7 +75,7 @@ export default function EditProductPage() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: form.name, sku: form.sku, description: form.description, unit: form.unit,
+        name: form.name, sku: form.sku, hsn: form.hsn, description: form.description, unit: form.unit,
         price: parseFloat(form.price), purchasePrice: form.purchasePrice.trim() ? parseFloat(form.purchasePrice) : null,
         gstRate: parseInt(form.gstRate),
         stock: parseInt(form.stock), minStock: parseInt(form.minStock),
@@ -110,7 +111,6 @@ export default function EditProductPage() {
 
   return (
     <>
-    {loading && <OverlayLoader text="Loading product…" />}
     {!loading && saving && <OverlayLoader text="Saving…" />}
     <div className={`page-stack ${styles.pageStack}`}>
       <ConfirmDialog
@@ -127,7 +127,7 @@ export default function EditProductPage() {
       <div className={styles.headerRow}>
         <div>
           <h1 className="page-title">Edit Product</h1>
-          <p className="page-sub">{form.name || "—"}</p>
+          <p className="page-sub"><SkeletonSwap loading={loading} w={140} h={14} inline>{form.name || "—"}</SkeletonSwap></p>
         </div>
         <div className={styles.idCol}>
           <span className={styles.idLabel}>Product ID</span>
@@ -137,21 +137,48 @@ export default function EditProductPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
-        <ProductFormFields form={form} onChange={handleChange} fieldErrors={fieldErrors} brands={brands} categories={categories} disabled={disabled} stockLabel="Current Stock" />
-
-        <div className="form-actions-wrap">
-          <div className="form-actions">
-            <Button type="submit" variant="primary" disabled={disabled || noChanges || !form.name.trim() || !form.price.trim()}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Product
-            </Button>
-            <Button variant="secondary" href={`/products/${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
+      {loading ? (
+        <div className="form-card">
+          <div className="form-grid-3">
+            <div className={styles.skFieldStack}><Sk w={90} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={70} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={60} h={11} /><Sk h={38} r={8} /></div>
           </div>
-          {!loading && noChanges && !saving && (
-            <span className={styles.noChanges}>No changes detected.</span>
-          )}
+          <div className={styles.skFieldStack}><Sk w={90} h={11} /><Sk h={60} r={8} /></div>
+          <div className="form-grid-3">
+            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={110} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={70} h={11} /><Sk h={38} r={8} /></div>
+          </div>
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={120} h={11} /><Sk h={38} r={8} /></div>
+          </div>
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={100} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={110} h={11} /><Sk h={38} r={8} /></div>
+          </div>
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={70} h={11} /><Sk h={38} r={8} /></div>
+          </div>
         </div>
-      </form>
+      ) : (
+        <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
+          <ProductFormFields form={form} onChange={handleChange} fieldErrors={fieldErrors} brands={brands} categories={categories} disabled={disabled} stockLabel="Current Stock" />
+
+          <div className="form-actions-wrap">
+            <div className="form-actions">
+              <Button type="submit" variant="primary" disabled={disabled || noChanges || !form.name.trim() || !form.price.trim()}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Product
+              </Button>
+              <Button variant="secondary" href={`/products/${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
+            </div>
+            {noChanges && !saving && (
+              <span className={styles.noChanges}>No changes detected.</span>
+            )}
+          </div>
+        </form>
+      )}
     </div>
     </>
   );

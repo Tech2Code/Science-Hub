@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Input";
+import { FillMaxButton } from "@/components/ui/FillMaxButton";
 import { StatusBadge } from "@/components/ui/Badge";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Sk } from "@/components/ui/Skeleton";
@@ -15,6 +16,7 @@ import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
+import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { amountInWordsINR } from "@/lib/numberToWords";
 import { animateSection } from "@/lib/animateSection";
 import { truncateFilename } from "@/lib/truncateFilename";
@@ -84,6 +86,12 @@ export default function PurchaseBillDetailPage() {
   const [openingEdit, setOpeningEdit] = useState(false);
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
   const [pdfDownloading, setPdfDownloading] = useState(false);
+  const [pdfViewing, setPdfViewing] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
+  }, [pdfPreviewUrl]);
 
   // Payment form
   const [showPayForm, setShowPayForm]   = useState(false);
@@ -93,6 +101,14 @@ export default function PurchaseBillDetailPage() {
   const [payRef,      setPayRef]        = useState("");
   const [payDate,     setPayDate]       = useState(() => new Date().toISOString().slice(0, 10));
   const [submitting,  setSubmitting]    = useState(false);
+
+  function resetPaymentForm() {
+    setPayAmount("");
+    setPayAmountError(undefined);
+    setPayMethod("Cash");
+    setPayRef("");
+    setPayDate(new Date().toISOString().slice(0, 10));
+  }
 
   const [updatingStatus] = useState(false);
   const [confirmCancel,  setConfirmCancel]  = useState(false);
@@ -115,9 +131,8 @@ export default function PurchaseBillDetailPage() {
     fetch("/api/settings").then(r => r.json()).then(setSettings).catch(() => {});
   }, []);
 
-  async function handleDownloadPdf(force = false) {
-    if (!bill) return;
-    setPdfDownloading(true);
+  async function generateBillPdfBlob(force: boolean): Promise<Blob | null> {
+    if (!bill) return null;
     const variantKey = buildPdfVariantKey();
     let blob = force ? null : await getCachedPdf("purchase-bill", bill.id, variantKey);
     if (!blob) {
@@ -127,6 +142,13 @@ export default function PurchaseBillDetailPage() {
       blob = el ? await generateInvoicePdfBlob(el) : null;
       if (blob) setCachedPdf("purchase-bill", bill.id, variantKey, blob);
     }
+    return blob;
+  }
+
+  async function handleDownloadPdf(force = false) {
+    if (!bill) return;
+    setPdfDownloading(true);
+    const blob = await generateBillPdfBlob(force);
     setPdfDownloading(false);
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
     const url = URL.createObjectURL(blob);
@@ -135,6 +157,15 @@ export default function PurchaseBillDetailPage() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
     if (force) toast({ type: "success", title: "Regenerated", message: "Latest PDF generated and cached." });
+  }
+
+  async function handleViewPdf() {
+    if (!bill) return;
+    setPdfViewing(true);
+    const blob = await generateBillPdfBlob(false);
+    setPdfViewing(false);
+    if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
+    setPdfPreviewUrl(URL.createObjectURL(blob));
   }
 
   async function handlePayment(e: React.FormEvent) {
@@ -160,7 +191,7 @@ export default function PurchaseBillDetailPage() {
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Payment recorded", message: `₹${fmt(amount)} via ${payMethod}.` });
         setShowPayForm(false);
-        setPayAmount(""); setPayRef("");
+        resetPaymentForm();
         load();
       } else {
         toast({ type: "error", title: "Failed", message: data.error ?? "Failed to record payment." });
@@ -223,16 +254,15 @@ export default function PurchaseBillDetailPage() {
       <div className={styles.toolbarRow}>
         <div>
           <Sk w={160} h={12} r={3} />
-          <div className={styles.titleRow}>
-            <Sk w={140} h={22} r={4} />
-            <Sk w={70} h={20} r={9999} />
-          </div>
         </div>
         <div className={styles.toolbarActions}>
-          <Sk w={110} h={30} r={6} />
-          <Sk w={70} h={30} r={6} />
+          <Sk w={70} h={20} r={9999} />
+          <Sk w={90} h={30} r={6} />
           <Sk w={140} h={30} r={6} />
+          <Sk w={70} h={30} r={6} />
+          <Sk w={110} h={30} r={6} />
           <Sk w={100} h={30} r={6} />
+          <Sk w={90} h={30} r={6} />
           <Sk w={80} h={30} r={6} />
         </div>
       </div>
@@ -323,6 +353,16 @@ export default function PurchaseBillDetailPage() {
     {deleting && <OverlayLoader text="Deleting…" />}
     {openingEdit && <OverlayLoader text="Opening editor…" />}
     {pdfDownloading && <OverlayLoader text="Generating PDF…" />}
+
+    {pdfPreviewUrl && (
+      <PdfPreviewModal
+        url={pdfPreviewUrl}
+        fileName={bill.billNumber}
+        title={bill.billNumber}
+        subtitle={bill.vendor.name}
+        onClose={() => { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }}
+      />
+    )}
 
     <style>{`
       #bill-print-area {
@@ -512,17 +552,36 @@ export default function PurchaseBillDetailPage() {
       <div className={styles.toolbarRow}>
         <div>
           <Breadcrumb items={[{ label: "Purchase Bills", href: "/purchases/bills" }, { label: bill.billNumber }]} />
-          <div className={styles.titleRow}>
-            <h1 className={`page-title ${styles.titleNoMargin}`}>{bill.billNumber}</h1>
-            <StatusBadge status={bill.status} />
-            {isOverdue && (
-              <span className={styles.overdueBadge}>
-                OVERDUE
-              </span>
-            )}
-          </div>
         </div>
         <div className={styles.toolbarActions}>
+          <StatusBadge status={bill.status} />
+          {isOverdue && (
+            <span className={styles.overdueBadge}>
+              OVERDUE
+            </span>
+          )}
+          {canWrite && (
+          <Button
+            variant="editOutline"
+            size="sm"
+            disabled={bill.status === "paid" || bill.status === "cancelled"}
+            title={bill.status === "paid" || bill.status === "cancelled" ? `Bill is ${bill.status} — nothing left to edit` : undefined}
+            onClick={() => { setOpeningEdit(true); router.push(`/purchases/bills/${bill.id}/edit`); }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit Bill
+          </Button>
+          )}
+          {canWrite && bill.status !== "paid" && bill.status !== "cancelled" && (
+            <Button variant="primary" size="sm" onClick={() => { setShowPayForm(v => !v); resetPaymentForm(); }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              {showPayForm ? "Hide Payment" : "Record Payment"}
+            </Button>
+          )}
+          <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            View
+          </Button>
           <Button variant="secondary" size="sm" onClick={() => handleDownloadPdf(false)} disabled={pdfDownloading}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             {pdfDownloading ? "Generating…" : "Download PDF"}
@@ -531,26 +590,11 @@ export default function PurchaseBillDetailPage() {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
             Regenerate
           </Button>
-          {canWrite && (
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={bill.status === "paid" || bill.status === "cancelled"}
-            title={bill.status === "paid" || bill.status === "cancelled" ? `Bill is ${bill.status} — nothing left to edit` : undefined}
-            onClick={() => { setOpeningEdit(true); router.push(`/purchases/bills/${bill.id}/edit`); }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            Edit
-          </Button>
-          )}
-          {canWrite && bill.status !== "paid" && bill.status !== "cancelled" && (
-            <Button variant="primary" size="sm" onClick={() => setShowPayForm(v => !v)}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              {showPayForm ? "Hide Payment" : "Record Payment"}
-            </Button>
-          )}
           {canWrite && bill.status !== "cancelled" && (
-            <Button variant="dangerOutline" size="sm" onClick={() => setConfirmCancel(true)}>Cancel Bill</Button>
+            <Button variant="dangerOutline" size="sm" onClick={() => setConfirmCancel(true)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+              Cancel Bill
+            </Button>
           )}
           {canWrite && (
           <Button variant="dangerOutline" size="sm" onClick={() => setConfirmDelete(true)}>
@@ -560,6 +604,63 @@ export default function PurchaseBillDetailPage() {
           )}
         </div>
       </div>
+
+      {/* ── Record Payment form (same compact layout & position as sales/invoices detail) ── */}
+      {showPayForm && bill.status !== "paid" && bill.status !== "cancelled" && (
+        <div className={`card ${styles.paymentFormCard}`}>
+          <h3 className={styles.paymentFormTitle}>Record Payment</h3>
+          <form onSubmit={handlePayment} noValidate>
+            <div className={styles.paymentFormRow}>
+              <FormField label="Amount (₹)" error={payAmountError}>
+                <div className={styles.paymentAmountRow}>
+                  <Input
+                    type="number" min="0.01" step="0.01" max={balance}
+                    value={payAmount}
+                    onChange={e => { setPayAmount(e.target.value); setPayAmountError(undefined); }}
+                    placeholder={`e.g. ${balance.toFixed(2)}`}
+                    sz="sm"
+                    className={styles.paymentAmountInput}
+                    autoFocus
+                  />
+                  <FillMaxButton onClick={() => setPayAmount(balance.toFixed(2))} label={`Full ₹${fmt(balance)}`} variant="green" />
+                </div>
+              </FormField>
+              <div className={styles.paymentDateField}>
+                <FormField label="Date">
+                  <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} min={bill.billDate.slice(0, 10)} max={new Date().toISOString().slice(0, 10)} sz="sm" />
+                </FormField>
+              </div>
+              <div className={styles.paymentMethodField}>
+                <FormField label="Method">
+                  <Select value={payMethod} onChange={e => setPayMethod(e.target.value)} sz="sm">
+                    {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </Select>
+                </FormField>
+              </div>
+              <FormField label="Reference / UTR">
+                <Input
+                  type="text"
+                  value={payRef}
+                  onChange={e => setPayRef(e.target.value)}
+                  placeholder="Optional"
+                  sz="sm"
+                  className={styles.paymentReferenceInput}
+                />
+              </FormField>
+              <div className={styles.paymentFormBtnRow}>
+                <Button type="submit" variant="primary" size="sm" disabled={submitting || !payAmount.trim()} loading={submitting}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+                  Save Payment
+                </Button>
+                <Button type="button" variant="secondary" size="sm" onClick={() => { setShowPayForm(false); resetPaymentForm(); }} disabled={submitting}>Cancel</Button>
+              </div>
+            </div>
+            <p className={styles.paymentBalanceHint}>
+              Balance due: ₹{fmt(balance)}
+            </p>
+          </form>
+        </div>
+      )}
 
       {/* ── KPI stat strip ── */}
       <div {...animateSection(0, styles.statStrip)}>
@@ -637,59 +738,6 @@ export default function PurchaseBillDetailPage() {
         </div>
       </div>
 
-      {/* ── Record Payment form ── */}
-      {showPayForm && bill.status !== "paid" && bill.status !== "cancelled" && (
-        <div {...animateSection(2, `card ${styles.payFormCard}`)}>
-          <div className={styles.payFormHeaderRow}>
-            <h3 className={styles.payFormHeading}>
-              Record Payment
-              <span className={styles.payFormBalanceInline}>
-                Balance: ₹{fmt(balance)}
-              </span>
-            </h3>
-          </div>
-          <form onSubmit={handlePayment} noValidate>
-            <div className={`form-grid-2 ${styles.marginBottom075}`}>
-              <FormField label="Amount (₹)" required error={payAmountError}>
-                <div className={styles.amountRow}>
-                  <Input type="number" min="0.01" step="0.01" max={balance}
-                    value={payAmount} onChange={e => { setPayAmount(e.target.value); setPayAmountError(undefined); }}
-                    placeholder={`Max ₹${fmt(balance)}`} autoFocus className={styles.amountInput} />
-                  <button
-                    type="button"
-                    onClick={() => setPayAmount(balance.toFixed(2))}
-                    title="Fill full outstanding balance"
-                    className={styles.payFullBtn}
-                  >
-                    Pay Full
-                  </button>
-                </div>
-                <p className={styles.outstandingHint}>
-                  Outstanding: <strong className={styles.outstandingHintStrong}>₹{fmt(balance)}</strong>
-                </p>
-              </FormField>
-              <FormField label="Date">
-                <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} min={bill.billDate.slice(0, 10)} max={new Date().toISOString().slice(0, 10)} />
-              </FormField>
-            </div>
-            <div className={`form-grid-2 ${styles.marginBottom1}`}>
-              <FormField label="Method">
-                <Select value={payMethod} onChange={e => setPayMethod(e.target.value)}>
-                  {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
-                </Select>
-              </FormField>
-              <FormField label="Reference / UTR">
-                <Input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="Cheque no., UTR, etc." />
-              </FormField>
-            </div>
-            <div className="form-actions">
-              <Button type="submit" variant="primary" disabled={submitting || !payAmount.trim()}>Save Payment</Button>
-              <Button type="button" variant="secondary" onClick={() => { setShowPayForm(false); }}>Cancel</Button>
-            </div>
-          </form>
-        </div>
-      )}
-
       {/* ── Items table ── */}
       <div {...animateSection(3, "card")}>
         <div className={styles.sectionHeaderRow}>
@@ -744,16 +792,16 @@ export default function PurchaseBillDetailPage() {
             <tfoot>
               {bill.roundOff !== 0 && (
                 <tr>
-                  <td colSpan={7} className={styles.textMuted}>Round Off</td>
+                  <td colSpan={8} className={`${styles.textRight} ${styles.textMuted}`}>Round Off</td>
                   <td className={`${styles.textRight} ${styles.textMuted}`}>{bill.roundOff > 0 ? "+" : "−"}₹{fmt(Math.abs(bill.roundOff))}</td>
                 </tr>
               )}
               <tr className={styles.tfootRow}>
-                <td colSpan={7} className={styles.tfootLabelCell}>Grand Total</td>
+                <td colSpan={8} className={styles.tfootLabelCell}>Grand Total</td>
                 <td className={styles.tfootValueCell}>₹{fmt(bill.total)}</td>
               </tr>
               <tr>
-                <td colSpan={7} className={styles.amountInWordsCell}>{amountInWordsINR(bill.total)}</td>
+                <td colSpan={9} className={styles.amountInWordsCell}>{amountInWordsINR(bill.total)}</td>
               </tr>
             </tfoot>
           </table>

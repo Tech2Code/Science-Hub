@@ -26,7 +26,7 @@ interface InvoiceData {
   id: string; invoiceNumber: string; status: string; date: string; updatedAt?: string;
   isInterState: boolean; placeOfSupply?: string; reverseCharge?: boolean; dueDate?: string; notes?: string;
   customer: { id: string; name: string; city: string; state: string; gstin: string; };
-  items: Array<{ productId: string; name: string; unit: string; quantity: number; price: number; gstRate: number; hsn?: string; discountPercent?: number; }>;
+  items: Array<{ productId: string | null; name: string; unit: string; quantity: number; price: number; gstRate: number; hsn?: string; discountPercent?: number; }>;
 }
 
 export default function EditInvoicePage() {
@@ -72,7 +72,7 @@ export default function EditInvoicePage() {
       const dueDateVal = invoice.dueDate ? invoice.dueDate.split("T")[0] : "";
       const lineItems: LineItem[] = invoice.items.map((item: InvoiceData["items"][0]) => ({
         key: makeInvoiceLineItemKey(),
-        productId: item.productId,
+        productId: item.productId ?? "",
         productName: item.name,
         unit: item.unit,
         qty: item.quantity,
@@ -139,7 +139,7 @@ export default function EditInvoicePage() {
         isInterState,
         placeOfSupply,
         reverseCharge,
-        items: items.map((i) => ({ productId: i.productId, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent })),
+        items: items.map((i) => ({ productId: i.productId || null, name: i.productName, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent })),
         notes,
         dueDate: dueDate || undefined,
         expectedUpdatedAt: loadedUpdatedAt,

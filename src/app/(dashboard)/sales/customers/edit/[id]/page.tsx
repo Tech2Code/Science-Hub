@@ -8,6 +8,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { CustomerFormFields } from "@/components/customers/CustomerFormFields";
+import { Sk, SkeletonSwap } from "@/components/ui/Skeleton";
 import { BLANK_CUSTOMER_FORM, validateCustomerForm, normalizeCustomerField, type CustomerFormData } from "@/lib/customerForm";
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
@@ -87,7 +88,6 @@ export default function EditCustomerPage() {
 
   return (
     <>
-    {loading && <OverlayLoader text="Loading customer…" />}
     {!loading && saving && <OverlayLoader text="Saving…" />}
     <div className={`page-stack ${styles.pageStack}`}>
       <ConfirmDialog
@@ -104,7 +104,7 @@ export default function EditCustomerPage() {
       <div className={styles.headerRow}>
         <div>
           <h1 className="page-title">Edit Customer</h1>
-          <p className="page-sub">{form.name || "—"}</p>
+          <p className="page-sub"><SkeletonSwap loading={loading} w={140} h={14} inline>{form.name || "—"}</SkeletonSwap></p>
         </div>
         <div className={styles.idCol}>
           <span className={styles.idLabel}>Customer ID</span>
@@ -114,21 +114,38 @@ export default function EditCustomerPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
-        <CustomerFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} />
-
-        <div className="form-actions-wrap">
-          <div className="form-actions">
-            <Button type="submit" variant="primary" disabled={disabled || noChanges || !form.name.trim()}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Customer
-            </Button>
-            <Button variant="secondary" href={`/sales/customers/${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
+      {loading ? (
+        <div className="form-card">
+          <div className={styles.skFieldStack}><Sk w={110} h={11} /><Sk h={38} r={8} /></div>
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
           </div>
-          {!loading && noChanges && !saving && (
-            <span className={styles.noChanges}>No changes detected.</span>
-          )}
+          <div className={styles.skFieldStack}><Sk w={70} h={11} /><Sk h={60} r={8} /></div>
+          <div className="form-grid-3">
+            <div className={styles.skFieldStack}><Sk w={40} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={60} h={11} /><Sk h={38} r={8} /></div>
+          </div>
+          <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
         </div>
-      </form>
+      ) : (
+        <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
+          <CustomerFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} />
+
+          <div className="form-actions-wrap">
+            <div className="form-actions">
+              <Button type="submit" variant="primary" disabled={disabled || noChanges || !form.name.trim()}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Customer
+              </Button>
+              <Button variant="secondary" href={`/sales/customers/${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>
+            </div>
+            {noChanges && !saving && (
+              <span className={styles.noChanges}>No changes detected.</span>
+            )}
+          </div>
+        </form>
+      )}
     </div>
     </>
   );

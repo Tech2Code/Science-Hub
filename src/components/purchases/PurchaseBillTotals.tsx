@@ -14,12 +14,15 @@ interface PurchaseBillTotalsProps {
   grandTotal: number;
   discount: string;
   onDiscountChange: (value: string) => void;
+  footer?: React.ReactNode;
 }
 
 // Subtotal / item discount / GST / additional discount input / grand total —
 // shared by the New Purchase Bill and Edit Purchase Bill pages so the two
-// forms can't drift apart.
-export function PurchaseBillTotals({ sectionIndex, grossTotal, itemDiscountTotal, taxTotal, roundOff, grandTotal, discount, onDiscountChange }: PurchaseBillTotalsProps) {
+// forms can't drift apart. `footer` lets a page (e.g. New Purchase Bill)
+// render its validation warnings + submit/cancel actions inside this same
+// card instead of a separate one.
+export function PurchaseBillTotals({ sectionIndex, grossTotal, itemDiscountTotal, taxTotal, roundOff, grandTotal, discount, onDiscountChange, footer }: PurchaseBillTotalsProps) {
   return (
     <div {...animateSection(sectionIndex, "form-card")}>
         <div className={styles.totalsAlignRight}>
@@ -51,8 +54,7 @@ export function PurchaseBillTotals({ sectionIndex, grossTotal, itemDiscountTotal
             </div>
           </div>
         </div>
-      {/* <div className={styles.totalsWrap}>
-      </div> */}
+      {footer}
     </div>
   );
 }

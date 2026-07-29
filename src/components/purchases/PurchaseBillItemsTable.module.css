@@ -1,181 +1,202 @@
-/* ── Section header row ───────────────────────── */
-.sectionHeaderRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+/* ── Search / add-product row ─────────────────── */
+.searchRow { display: flex; align-items: flex-start; gap: 0.625rem; margin-bottom: 1rem; }
+.productSearchWrap { position: relative; flex: 1 1 auto; min-width: 0; }
+
+.customItemBtn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.5rem;
+  border: 1px dashed var(--c-border);
+  background: none;
+  color: var(--c-blue);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.customItemBtn:hover { background: var(--c-bg-sub); border-color: var(--c-blue-border); }
+
+@media (max-width: 480px) {
+  .searchRow { flex-direction: column; }
+  .customItemBtn { width: 100%; }
 }
 
-.sectionTitleNoMargin { margin: 0; }
+/* ── Product dropdown ──────────────────────────── */
+.dropdown {
+  position: absolute;
+  z-index: 20;
+  margin-top: 0.25rem;
+  width: 100%;
+  background: var(--c-bg-card);
+  border: 1px solid var(--c-border);
+  border-radius: 0.5rem;
+  box-shadow: var(--c-shadow-lg);
+  max-height: 13rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.dropdownBtn {
+  width: 100%;
+  text-align: left;
+  padding: 0.625rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--c-border);
+  cursor: pointer;
+}
+
+.dropdownBtn:hover { background: var(--c-bg-sub); }
+
+.dropdownItemName {
+  font-weight: 500;
+  color: var(--c-text);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dropdownItemMeta { font-size: 0.75rem; color: var(--c-text-4); }
+
+.dropdownEmpty {
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--c-text-3);
+}
+
+.dropdownEmptyLink {
+  color: var(--c-blue);
+  font-weight: 500;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* ── Quick-add item form ───────────────────────── */
+.customForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-bottom: 1rem;
+  padding: 0.875rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.625rem;
+  background: var(--c-bg-sub);
+}
+
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.625rem; }
+@media (max-width: 640px) {
+  .grid4 { grid-template-columns: 1fr 1fr; }
+}
+
+.skipCatalogLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--c-text-3);
+  cursor: pointer;
+}
+.skipCatalogCheckbox { width: 0.9rem; height: 0.9rem; accent-color: var(--c-blue); cursor: pointer; }
+
+.formActions { display: flex; justify-content: flex-end; gap: 0.625rem; }
+@media (max-width: 480px) {
+  .formActions { flex-direction: column-reverse; }
+}
+
+.customFormHint { font-size: 0.7rem; color: var(--c-text-4); }
 
 /* ── Items table ───────────────────────────────── */
-.itemsTableWrap { overflow-x: auto; }
+.itemsTableWrap {
+  overflow-x: auto;
+  border-radius: 0.625rem;
+  border: 1px solid var(--c-border);
+}
 
-.colProduct  { width: 14%; }
-.colName     { width: 14%; }
-.colHsn      { width: 8%; }
-.colUnit     { width: 10%; }
-.colQty      { width: 9%; }
-.colRate     { width: 8%; }
-.colDiscount { width: 10%; }
-.colGst      { width: 8%; }
-.colAmount   { width: 10%; }
+.colIndex    { width: 2.25rem; }
+.colName     { width: 18%; }
+.colHsn      { width: 12%; }
+.colUnit     { width: 12%; }
+.colQty      { width: 10%; }
+.colRate     { width: 10%; }
+.colDiscount { width: 8%; }
+.colGst      { width: 10%; }
+.colAmount   { width: 14%; }
 .colAction   { width: 1.25rem; }
 
 .itemsTable {
   width: 100%;
   border-collapse: collapse;
+  font-size: 0.875rem;
   /* Keeps every column at its desktop width on narrow screens instead of
      the % widths squeezing headers/fields into an unreadable, overlapping
      mess — .itemsTableWrap's overflow-x:auto lets the row scroll sideways
      on mobile instead. */
-  min-width: 840px;
+  min-width: 780px;
 }
 
-.itemsTable thead tr { border-bottom: 1px solid var(--c-border); }
+.itemsTable thead tr { background: var(--c-bg-sub); }
 
 .th {
-  padding: 0.4rem 0.5rem;
-  font-size: 0.72rem;
-  font-weight: 600;
+  padding: 0.625rem 0.875rem;
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 700;
   color: var(--c-text-4);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  text-align: left;
-  /* Fixed-width columns + long labels like "Product (optional)" need to
-     wrap onto a second line rather than overflow into the next header. */
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--c-border);
   white-space: nowrap;
   line-height: 1.25;
   overflow-wrap: break-word;
 }
 .thRight { composes: th; text-align: right; }
 
-.itemRow ~ .itemRow { border-top: 1px solid var(--c-border-light, var(--c-border)); }
+.itemRow { border-bottom: 1px solid var(--c-border); }
 
-.tdProduct { padding: 0.4rem 0.5rem; width: 14%; max-width: 10rem; overflow: hidden; }
-.tdName { padding: 0.4rem 0.5rem; width: 14%; }
-.tdHsn { padding: 0.4rem 0.5rem; width: 8%; }
-.tdUnit { padding: 0.4rem 0.5rem; width: 10%; }
-.tdQty { padding: 0.4rem 0.5rem; width: 9%; }
-.tdRate { padding: 0.4rem 0.5rem; width: 8%; }
-.tdDiscount { padding: 0.4rem 0.5rem; width: 10%; }
-.tdGst { padding: 0.4rem 0.5rem; width: 8%; }
-.tdAmount { padding: 0.4rem 0.5rem; text-align: right; font-weight: 500; white-space: nowrap; width: 10%; }
+.tdIndex { padding: 0.4rem 0.5rem; width: 2.25rem; color: var(--c-text-4); font-size: 0.75rem; font-weight: 500; text-align: center; }
+.tdName { padding: 0.4rem 0.5rem; width: 18%; max-width: 11rem; }
+.tdNameInner { font-weight: 600; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tdHsn { padding: 0.4rem 0.5rem; width: 12%; }
+.tdUnit { padding: 0.4rem 0.5rem; width: 12%; }
+.tdQty { padding: 0.4rem 0.5rem; width: 10%; }
+.tdRate { padding: 0.4rem 0.5rem; width: 10%; }
+.tdDiscount { padding: 0.4rem 0.5rem; width: 8%; }
+.tdGst { padding: 0.4rem 0.5rem; width: 10%; }
+.tdAmount { padding: 0.4rem 0.5rem; text-align: right; font-weight: 500; white-space: nowrap; width: 14%; }
 .tdAction { padding: 0.4rem 0.25rem; width: 1.25rem; }
 
 .numInputRight { text-align: right; }
 .discountStack { display: flex; flex-direction: column; gap: 0.25rem; }
 
 .removeItemBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
   background: none;
-  border: none;
+  border: 1px solid var(--c-border);
   cursor: pointer;
-  color: var(--c-red);
-  padding: 0.25rem;
-  border-radius: 0.25rem;
-}
-.removeItemBtnDisabled {
-  composes: removeItemBtn;
-  cursor: not-allowed;
-  opacity: 0.3;
-}
-
-/* ── Unmatched items — save to catalog ────────── */
-.unmatchedWrap {
-  margin-top: 1rem;
-  padding: 0.875rem 1rem;
-  border-radius: 0.625rem;
-  border: 1px solid var(--c-border);
-  background: var(--c-bg-sub);
-}
-
-.unmatchedHeading {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--c-text-3);
-  margin-bottom: 0.625rem;
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-.unmatchedList { display: flex; flex-direction: column; gap: 0.5rem; }
-
-.unmatchedRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.5rem;
-  background: var(--c-bg-card);
-  border: 1px solid var(--c-border);
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.unmatchedInfo { min-width: 0; flex: 1 1 auto; max-width: 40%; }
-
-.unmatchedName { font-size: 0.8125rem; font-weight: 600; color: var(--c-text-2);overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.unmatchedMeta { font-size: 0.72rem; color: var(--c-text-4); }
-
-@media (max-width: 640px) {
-  .unmatchedRow { min-width: 0; }
-  .unmatchedName {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .unmatchedMeta {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
-.unmatchedSaleField {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  width: 110px;
-}
-.unmatchedSaleLabel {
-  font-size: 0.65rem;
   color: var(--c-text-4);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  font-size: 0.875rem;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.removeItemBtn:hover {
+  background: var(--c-red-bg);
+  border-color: var(--c-red-border);
+  color: var(--c-red-text);
 }
 
-.saveToCatalogBtn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.75rem;
-  border-radius: 0.5rem;
-  border: 1px solid var(--c-blue);
-  background: var(--c-blue-bg);
-  color: var(--c-blue);
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-.saveToCatalogBtnSaving {
-  composes: saveToCatalogBtn;
-  cursor: wait;
-  opacity: 0.6;
-}
-
-.spinIcon {
-  animation: spin 0.8s linear infinite;
-  width: 12px;
-  height: 12px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.emptyItems {
+  text-align: center;
+  padding: 2rem;
+  font-size: 0.875rem;
+  color: var(--c-text-4);
+  border: 2px dashed var(--c-border);
+  border-radius: 0.625rem;
 }

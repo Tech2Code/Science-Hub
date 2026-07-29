@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Modal } from "@/components/dialogs/Modal";
 import { Input } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { InvoiceOptionsRow } from "@/components/invoices/InvoiceOptionsRow";
@@ -38,6 +39,7 @@ export default function NewInvoicePage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [customCustomer, setCustomCustomer] = useState({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
+  const [customModalOpen, setCustomModalOpen] = useState(false);
   const [isInterState, setIsInterState] = useState(false);
   const [placeOfSupply, setPlaceOfSupply] = useState("");
   const [businessState, setBusinessState] = useState("");
@@ -82,6 +84,9 @@ export default function NewInvoicePage() {
     setCustomerId(c.id);
     setCustomerSearch(c.name);
     setShowCustomerDropdown(false);
+    setCustomerMode("existing");
+    setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
+    setCustomModalOpen(false);
     setPlaceOfSupply(c.state ?? "");
     if (c.state && businessState) setIsInterState(c.state !== businessState);
   }, [businessState]);
@@ -132,7 +137,7 @@ export default function NewInvoicePage() {
       isInterState,
       placeOfSupply,
       reverseCharge,
-      items: items.map((i) => ({ productId: i.productId, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent })),
+      items: items.map((i) => ({ productId: i.productId || null, name: i.productName, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent })),
       notes, dueDate: dueDate || undefined,
     };
     if (customerMode === "existing") body.customerId = customerId;
@@ -241,121 +246,163 @@ export default function NewInvoicePage() {
                 >
               <div className={styles.sectionHeaderRow}>
                 <h2 className={styles.sectionTitle}>Bill To</h2>
-                {/* Mode toggle */}
-                <div className={styles.modeToggle}>
-                  {(["existing", "custom"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => { setCustomerMode(mode); setCustomerId(""); setCustomerSearch(""); setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" }); setPlaceOfSupply(""); }}
-                      className={`${styles.modeToggleBtn} ${customerMode === mode ? styles.modeToggleBtnActive : ""}`}
-                    >
-                      {mode === "existing" ? "Search" : "Custom"}
-                    </button>
-                  ))}
-                </div>
               </div>
 
-              {customerMode === "existing" ? (
-                <>
-                  <div className={styles.searchWrap}>
-                    <Input
-                      type="text"
-                      placeholder="Search customer…"
-                      value={customerSearch}
-                      onChange={(e) => { setCustomerSearch(e.target.value); setCustomerId(""); setShowCustomerDropdown(true); }}
-                      onFocus={() => setShowCustomerDropdown(true)}
-                      onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
-                      className={styles.input}
-                    />
-                    {showCustomerDropdown && (
-                      <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
-                        {filteredCustomers.length > 0 ? filteredCustomers.map((c) => (
-                          <button key={c.id} type="button" onClick={() => handleCustomerSelect(c)} className={styles.dropdownBtn}>
-                            <div className={styles.dropdownItemName} title={c.name}>{c.name}</div>
-                            <div className={styles.dropdownItemSub}>{c.city}{c.gstin ? ` · ${c.gstin}` : ""}</div>
-                          </button>
-                        )) : (
-                          <div className={styles.dropdownEmpty}>
-                            No customer found.{" "}
-                            <Link href="/sales/customers/new" className={styles.dropdownEmptyLink}>Add new →</Link>
-                          </div>
-                        )}
+              <div className={styles.searchWrap}>
+                <Input
+                  type="text"
+                  placeholder="Search customer…"
+                  value={customerSearch}
+                  onChange={(e) => { setCustomerSearch(e.target.value); setCustomerId(""); setShowCustomerDropdown(true); }}
+                  onFocus={() => setShowCustomerDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                  className={styles.input}
+                />
+                {showCustomerDropdown && (
+                  <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
+                    {filteredCustomers.length > 0 ? filteredCustomers.map((c) => (
+                      <button key={c.id} type="button" onClick={() => handleCustomerSelect(c)} className={styles.dropdownBtn}>
+                        <div className={styles.dropdownItemName} title={c.name}>{c.name}</div>
+                        <div className={styles.dropdownItemSub}>{c.city}{c.gstin ? ` · ${c.gstin}` : ""}</div>
+                      </button>
+                    )) : (
+                      <div className={styles.dropdownEmpty}>
+                        No customer found.{" "}
+                        <Link href="/sales/customers/new" className={styles.dropdownEmptyLink}>Add new →</Link>
                       </div>
                     )}
-                    {customerSearch && !customerId && (
-                      <p className={styles.selectHint}>
-                        ⚠ Please select a customer from the dropdown
-                      </p>
-                    )}
                   </div>
-                  {selectedCustomer && (
-                    <div className={styles.selectedCustomer}>
-                      <div className={styles.selectedCustomerName}>{selectedCustomer.name}</div>
-                      <div className={styles.selectedCustomerSub}>
-                        {[selectedCustomer.city, selectedCustomer.state].filter(Boolean).join(", ")}
-                        {selectedCustomer.gstin && ` · GSTIN: ${selectedCustomer.gstin}`}
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className={styles.customForm}>
-                  <div>
-                    <Input
-                      type="text" placeholder="Customer name *"
-                      value={customCustomer.name}
-                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, name: e.target.value })); clearErr("name"); }}
-                      className={errInput("name")}
-                    />
-                    {errMsg("name")}
-                  </div>
-                  <div className={styles.grid2}>
-                    <div {...(customErrors.phone ? { "data-error": "" } : {})}>
-                      <PhoneInput value={customCustomer.phone} placeholder="10-digit mobile"
-                        onChange={(e) => { setCustomCustomer((p) => ({ ...p, phone: e.target.value })); clearErr("phone"); }} />
-                      {errMsg("phone")}
-                    </div>
-                    <div>
-                      <Input type="email" placeholder="Email" value={customCustomer.email}
-                        onChange={(e) => { setCustomCustomer((p) => ({ ...p, email: e.target.value })); clearErr("email"); }}
-                        className={errInput("email")} />
-                      {errMsg("email")}
-                    </div>
-                  </div>
-                  <Input type="text" placeholder="Address" value={customCustomer.address}
-                    onChange={(e) => setCustomCustomer((p) => ({ ...p, address: e.target.value }))} className={styles.input} />
-                  <div className={styles.grid3}>
-                    <Input type="text" placeholder="City" value={customCustomer.city}
-                      onChange={(e) => setCustomCustomer((p) => ({ ...p, city: e.target.value }))} className={styles.input} />
-                    <Input type="text" placeholder="State" value={customCustomer.state}
-                      onChange={(e) => {
-                        const state = e.target.value;
-                        setCustomCustomer((p) => ({ ...p, state }));
-                        applyPlaceOfSupply(state);
-                      }}
-                      className={styles.input} />
-                    <div>
-                      <Input type="text" placeholder="Pincode" value={customCustomer.pincode}
-                        onChange={(e) => { setCustomCustomer((p) => ({ ...p, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })); clearErr("pincode"); }}
-                        className={errInput("pincode")} />
-                      {errMsg("pincode")}
-                    </div>
-                  </div>
-                  <div>
-                    <Input type="text" placeholder="GSTIN" value={customCustomer.gstin} maxLength={15}
-                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, gstin: e.target.value })); clearErr("gstin"); }}
-                      className={errInputMono("gstin")} />
-                    {errMsg("gstin")}
-                  </div>
-                  <p className={styles.customFormHint}>
-                    This customer will be saved automatically for future use.
+                )}
+                {customerSearch && !customerId && (
+                  <p className={styles.selectHint}>
+                    ⚠ Please select a customer from the dropdown
                   </p>
+                )}
+                {!customerId && !customCustomer.name && (
+                  <button
+                    type="button"
+                    onClick={() => { setCustomerMode("custom"); setCustomerId(""); setCustomerSearch(""); setShowCustomerDropdown(false); setCustomModalOpen(true); }}
+                    className={styles.addCustomerLink}
+                  >
+                    + Add new customer manually
+                  </button>
+                )}
+              </div>
+
+              {selectedCustomer && (
+                <div className={styles.selectedCustomer}>
+                  <div className={styles.selectedCustomerName}>{selectedCustomer.name}</div>
+                  <div className={styles.selectedCustomerSub}>
+                    {[selectedCustomer.city, selectedCustomer.state].filter(Boolean).join(", ")}
+                    {selectedCustomer.gstin && ` · GSTIN: ${selectedCustomer.gstin}`}
+                  </div>
+                </div>
+              )}
+
+              {customCustomer.name && (
+                <div className={styles.customSummary}>
+                  <div className={styles.selectedCustomer}>
+                    <div className={styles.selectedCustomerName}>{customCustomer.name}</div>
+                    <div className={styles.selectedCustomerSub}>
+                      {[customCustomer.city, customCustomer.state].filter(Boolean).join(", ")}
+                      {customCustomer.phone && ` · ${customCustomer.phone}`}
+                    </div>
+                  </div>
+                  <div className={styles.customSummaryActions}>
+                    <button type="button" onClick={() => setCustomModalOpen(true)} className={styles.dropdownEmptyLink}>Edit</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomerMode("existing");
+                        setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
+                        setPlaceOfSupply("");
+                      }}
+                      className={styles.removeCustomLink}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               )}
                 </div>
               );
             })()}
+
+            <Modal open={customModalOpen} onClose={() => setCustomModalOpen(false)} title="Custom Customer Details" maxWidth="34rem">
+              <div className={styles.customForm}>
+                <div>
+                  <Input
+                    type="text" placeholder="Customer name *"
+                    autoFocus
+                    value={customCustomer.name}
+                    onChange={(e) => { setCustomCustomer((p) => ({ ...p, name: e.target.value })); clearErr("name"); }}
+                    className={errInput("name")}
+                  />
+                  {errMsg("name")}
+                </div>
+                <div className={styles.grid2}>
+                  <div {...(customErrors.phone ? { "data-error": "" } : {})}>
+                    <PhoneInput value={customCustomer.phone} placeholder="10-digit mobile"
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, phone: e.target.value })); clearErr("phone"); }} />
+                    {errMsg("phone")}
+                  </div>
+                  <div>
+                    <Input type="email" placeholder="Email" value={customCustomer.email}
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, email: e.target.value })); clearErr("email"); }}
+                      className={errInput("email")} />
+                    {errMsg("email")}
+                  </div>
+                </div>
+                <Input type="text" placeholder="Address" value={customCustomer.address}
+                  onChange={(e) => setCustomCustomer((p) => ({ ...p, address: e.target.value }))} className={styles.input} />
+                <div className={styles.grid3}>
+                  <Input type="text" placeholder="City" value={customCustomer.city}
+                    onChange={(e) => setCustomCustomer((p) => ({ ...p, city: e.target.value }))} className={styles.input} />
+                  <Input type="text" placeholder="State" value={customCustomer.state}
+                    onChange={(e) => {
+                      const state = e.target.value;
+                      setCustomCustomer((p) => ({ ...p, state }));
+                      applyPlaceOfSupply(state);
+                    }}
+                    className={styles.input} />
+                  <div>
+                    <Input type="text" placeholder="Pincode" value={customCustomer.pincode}
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })); clearErr("pincode"); }}
+                      className={errInput("pincode")} />
+                    {errMsg("pincode")}
+                  </div>
+                </div>
+                <div>
+                  <Input type="text" placeholder="GSTIN" value={customCustomer.gstin} maxLength={15}
+                    onChange={(e) => { setCustomCustomer((p) => ({ ...p, gstin: e.target.value })); clearErr("gstin"); }}
+                    className={errInputMono("gstin")} />
+                  {errMsg("gstin")}
+                </div>
+                <p className={styles.customFormHint}>
+                  This customer will be saved automatically for future use.
+                </p>
+                <div className={styles.customModalActions}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setCustomerMode("existing");
+                      setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
+                      setPlaceOfSupply("");
+                      setCustomModalOpen(false);
+                    }}
+                  >
+                    Dismiss
+                  </Button>
+                  <Button type="button" variant="primary" onClick={() => setCustomModalOpen(false)}>
+                    <span className={styles.customModalSubmitLabel}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      Save &amp; Use This Customer
+                    </span>
+                  </Button>
+                </div>
+              </div>
+            </Modal>
 
             {/* Place of supply + inter-state toggle + due date */}
             <InvoiceOptionsRow

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Modal } from "@/components/dialogs/Modal";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
@@ -61,9 +62,11 @@ export default function BrandsPage() {
   const [showAll, setShowAll] = useState(false);
   const [saving, setSaving] = useState(false);
   const [openingView, setOpeningView] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [editingOriginalName, setEditingOriginalName] = useState("");
   const [editingUpdatedAt, setEditingUpdatedAt] = useState<string | undefined>(undefined);
   const [renaming, setRenaming] = useState(false);
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
@@ -97,6 +100,7 @@ export default function BrandsPage() {
     });
     if (r.ok) {
       setNewName("");
+      setAddOpen(false);
       await mutate();
       toast({ type: "success", title: "Brand added", message: `"${name}" added to catalog.` });
     } else {
@@ -109,12 +113,15 @@ export default function BrandsPage() {
   function startRename(brand: Brand) {
     setEditingId(brand.id);
     setEditingName(brand.name);
+    setEditingOriginalName(brand.name);
     setEditingUpdatedAt(brand.updatedAt);
   }
 
-  async function handleRename(id: string) {
+  async function handleRename(e: React.FormEvent) {
+    e.preventDefault();
+    const id = editingId;
     const name = editingName.trim();
-    if (!name) return;
+    if (!id || !name) return;
     setRenaming(true);
     const r = await fetch(`/api/brands/${id}`, {
       method: "PUT",
@@ -178,30 +185,50 @@ export default function BrandsPage() {
           <h1 className="page-title">Brands</h1>
           <p className="page-sub">{loading ? "Loading…" : `${total} brands in catalog`}</p>
         </div>
-      </div>
-
-      {/* Add brand form */}
-      {canWrite && (<div {...animateSection(0, `card ${styles.addCard}`)}>
-        <h2 className={styles.addCardTitle}>
-          Add New Brand
-        </h2>
-        <form onSubmit={handleAdd} className={styles.addForm} noValidate>
-          <Input
-            ref={inputRef}
-            type="text"
-            placeholder="Brand name (e.g. Merck, Borosil…)"
-            value={newName}
-            onChange={(e) => { setNewName(e.target.value); }}
-            className={`${styles.addInput}`}
-          />
-          <Button type="submit" variant="primary" disabled={!newName.trim() || saving}>
+        {canWrite && (
+          <Button variant="primary" onClick={() => { setNewName(""); setAddOpen(true); }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Brand
           </Button>
-        </form>
-      </div>)}
+        )}
+      </div>
+
+      {canWrite && (
+        <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add New Brand">
+          <form onSubmit={handleAdd} className={styles.addForm} noValidate>
+            <Input
+              ref={inputRef}
+              type="text"
+              autoFocus
+              placeholder="Brand name (e.g. Merck, Borosil…)"
+              value={newName}
+              onChange={(e) => { setNewName(e.target.value); }}
+              className={`${styles.addInput}`}
+            />
+            <Button type="submit" variant="primary" disabled={!newName.trim() || saving}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Brand
+            </Button>
+          </form>
+        </Modal>
+      )}
+
+      {canWrite && (
+        <Modal open={!!editingId} onClose={() => setEditingId(null)} title="Rename Brand">
+          <form onSubmit={handleRename} className={styles.addForm} noValidate>
+            <Input
+              type="text"
+              autoFocus
+              placeholder="Brand name"
+              value={editingName}
+              onChange={(e) => setEditingName(e.target.value)}
+              className={`${styles.addInput}`}
+            />
+            <Button type="submit" variant="primary" disabled={!editingName.trim() || editingName.trim() === editingOriginalName || renaming}>Save</Button>
+          </form>
+        </Modal>
+      )}
 
       {/* Brands list */}
-      <div {...animateSection(1, "card")}>
+      <div {...animateSection(0, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
             <Input
@@ -236,21 +263,7 @@ export default function BrandsPage() {
                 <tr key={b.id}>
                   <Cell col={COLUMNS[0]} className={styles.indexCell}>{i + 1}</Cell>
                   <Cell col={COLUMNS[1]}>
-                    {editingId === b.id ? (
-                      <div className={styles.editingRow}>
-                        <Input
-                          sz="sm"
-                          autoFocus
-                          value={editingName}
-                          onChange={(e) => setEditingName(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter") handleRename(b.id); if (e.key === "Escape") setEditingId(null); }}
-                        />
-                        <Button size="sm" variant="primary" onClick={() => handleRename(b.id)} disabled={!editingName.trim() || editingName.trim() === b.name || renaming}>Save</Button>
-                        <Button size="sm" variant="secondary" onClick={() => setEditingId(null)} disabled={renaming}>Cancel</Button>
-                      </div>
-                    ) : (
-                      <Link href={`/brands/${b.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`} title={b.name}>{b.name}</Link>
-                    )}
+                    <Link href={`/brands/${b.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`} title={b.name}>{b.name}</Link>
                   </Cell>
                   <Cell col={COLUMNS[2]} className={styles.mutedCell}>{b.createdBy ?? "—"}</Cell>
                   <Cell col={COLUMNS[3]} className={styles.mutedCell}>
@@ -262,23 +275,21 @@ export default function BrandsPage() {
                     </span>
                   </Cell>
                   <Cell col={COLUMNS[5]}>
-                    {editingId !== b.id && (
-                      <div className="table-actions">
-                        <Button variant="viewOutline" size="sm" onClick={() => { setOpeningView(true); router.push(`/brands/${b.id}`); }}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View
-                        </Button>
-                        {canWrite && (<Button variant="editOutline" size="sm" onClick={() => startRename(b)}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Rename
-                        </Button>)}
-                        {canWrite && (<Button
-                          variant="dangerOutline"
-                          size="sm"
-                          onClick={() => handleDelete(b.id, b.name)}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete
-                        </Button>)}
-                      </div>
-                    )}
+                    <div className="table-actions">
+                      <Button variant="viewOutline" size="sm" onClick={() => { setOpeningView(true); router.push(`/brands/${b.id}`); }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View
+                      </Button>
+                      {canWrite && (<Button variant="editOutline" size="sm" onClick={() => startRename(b)}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Rename
+                      </Button>)}
+                      {canWrite && (<Button
+                        variant="dangerOutline"
+                        size="sm"
+                        onClick={() => handleDelete(b.id, b.name)}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete
+                      </Button>)}
+                    </div>
                   </Cell>
                 </tr>
               ))}

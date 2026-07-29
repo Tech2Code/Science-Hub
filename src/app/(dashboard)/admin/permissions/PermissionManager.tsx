@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { PROTECTED_SECTIONS, SECTION_LABELS, ProtectedSection } from "@/lib/sections";
 import { useToast } from "@/components/ui/Toast";
+import { Select } from "@/components/ui/Input";
+import { Switch } from "@/components/ui/Switch";
 import styles from "./permissions.module.css";
 
 interface UserPermission {
@@ -151,17 +153,18 @@ export function PermissionManager() {
               className={styles.searchInput}
               aria-label="Search users"
             />
-            <select
+            <Select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className={styles.roleSelect}
+              className={styles.roleTrigger}
+              wrapClassName={styles.roleWrap}
               aria-label="Filter by role"
             >
               <option value="all">All Roles</option>
               {roles.map((r) => (
                 <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
               ))}
-            </select>
+            </Select>
           </div>
 
           {filteredUsers.length === 0 ? (
@@ -192,15 +195,13 @@ export function PermissionManager() {
                           const toggleKey = `${user.id}:${section}`;
                           return (
                             <td key={section} className={styles.tdToggle}>
-                              <button
-                                onClick={() => handleToggle(user.id, section, enabled)}
+                              <Switch
+                                checked={enabled}
+                                onChange={() => handleToggle(user.id, section, enabled)}
                                 disabled={togglingIds.has(toggleKey)}
-                                className={`${styles.toggle} ${enabled ? styles.toggleOn : styles.toggleOff}`}
                                 aria-label={`${enabled ? "Disable" : "Enable"} ${SECTION_LABELS[section]} for ${user.name}`}
                                 title={`${enabled ? "Disable" : "Enable"} ${SECTION_LABELS[section]}`}
-                              >
-                                <span className={styles.toggleThumb} />
-                              </button>
+                              />
                             </td>
                           );
                         })}
@@ -226,14 +227,12 @@ export function PermissionManager() {
                         return (
                           <div key={section} className={styles.mobileRow}>
                             <span className={styles.mobileLabel}>{SECTION_LABELS[section]}</span>
-                            <button
-                              onClick={() => handleToggle(user.id, section, enabled)}
+                            <Switch
+                              checked={enabled}
+                              onChange={() => handleToggle(user.id, section, enabled)}
                               disabled={togglingIds.has(toggleKey)}
-                              className={`${styles.toggle} ${enabled ? styles.toggleOn : styles.toggleOff}`}
                               aria-label={`${enabled ? "Disable" : "Enable"} ${SECTION_LABELS[section]} for ${user.name}`}
-                            >
-                              <span className={styles.toggleThumb} />
-                            </button>
+                            />
                           </div>
                         );
                       })}

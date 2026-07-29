@@ -8,11 +8,13 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { fetchCached, bustCache, bustCachePrefix, useFetch } from "@/lib/useCache";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Select, FormField } from "@/components/ui/Input";
+import { FillMaxButton } from "@/components/ui/FillMaxButton";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
+import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { amountInWordsINR } from "@/lib/numberToWords";
@@ -194,7 +196,7 @@ export default function InvoiceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [paymentForm, setPaymentForm] = useState({ amount: "", method: "Cash", reference: "" });
+  const [paymentForm, setPaymentForm] = useState({ amount: "", method: "Cash", reference: "", date: new Date().toISOString().slice(0, 10) });
   const [paymentAmountError, setPaymentAmountError] = useState<string | undefined>(undefined);
   const [addingPayment, setAddingPayment] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -209,6 +211,8 @@ export default function InvoiceDetailPage() {
   const [pdfCopyDialogOpen, setPdfCopyDialogOpen] = useState(false);
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [pdfPrinting, setPdfPrinting] = useState(false);
+  const [pdfViewing, setPdfViewing] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
   const [showReturnForm, setShowReturnForm] = useState(false);
   const [returnItems, setReturnItems] = useState<ReturnFormItem[]>([]);
@@ -237,6 +241,10 @@ export default function InvoiceDetailPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load() is redefined every render but reads only `id`, already in the dep array
   }, [id]);
+
+  useEffect(() => {
+    return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
+  }, [pdfPreviewUrl]);
 
   useEffect(() => {
     fetch(`/api/invoices/${id}/returns`, { headers: { "x-no-loader": "1" } })
@@ -275,17 +283,19 @@ export default function InvoiceDetailPage() {
     if (amtErr) { setPaymentAmountError(amtErr); return; }
     const amt = parseFloat(paymentForm.amount);
     if (amt > balance) { setPaymentAmountError(`Amount cannot exceed balance due (₹${fmt(balance)}).`); return; }
+    if (invoice && paymentForm.date < invoice.date.slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be before the invoice date." }); return; }
+    if (paymentForm.date > new Date().toISOString().slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be in the future." }); return; }
     setPaymentAmountError(undefined);
     setAddingPayment(true);
     const res = await fetch(`/api/invoices/${id}/payment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: amt, method: paymentForm.method, reference: paymentForm.reference }),
+      body: JSON.stringify({ amount: amt, method: paymentForm.method, reference: paymentForm.reference, date: paymentForm.date }),
     });
     setAddingPayment(false);
     if (res.ok) {
       setShowPaymentForm(false);
-      setPaymentForm({ amount: "", method: "Cash", reference: "" });
+      setPaymentForm({ amount: "", method: "Cash", reference: "", date: new Date().toISOString().slice(0, 10) });
       bustCache(`/api/invoices/${id}`);
       load(true);
       toast({ type: "success", title: "Payment recorded", message: `₹${parseFloat(paymentForm.amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via ${paymentForm.method}` });
@@ -441,6 +451,17 @@ export default function InvoiceDetailPage() {
   function handleDownloadClick() {
     if (!invoice) return;
     setPdfCopyDialogOpen(true);
+  }
+
+  async function handleViewPdf() {
+    if (!invoice) return;
+    setPdfViewing(true);
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await document.fonts.ready;
+    const blob = await generatePdfBlob();
+    setPdfViewing(false);
+    if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
+    setPdfPreviewUrl(URL.createObjectURL(blob));
   }
 
   async function handleDownloadConfirm(copyLabels: string[]) {
@@ -693,6 +714,15 @@ export default function InvoiceDetailPage() {
         onConfirm={handleDownloadConfirm}
         onCancel={() => { if (!pdfDownloading) setPdfCopyDialogOpen(false); }}
       />
+      {pdfPreviewUrl && invoice && (
+        <PdfPreviewModal
+          url={pdfPreviewUrl}
+          fileName={invoice.invoiceNumber}
+          title={invoice.invoiceNumber}
+          subtitle={invoice.customer?.name}
+          onClose={() => { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }}
+        />
+      )}
       {shareLoading && <OverlayLoader text={shareLoadingText} />}
       {pdfPrinting && <OverlayLoader text="Preparing PDF…" />}
       {addingPayment && <OverlayLoader text="Saving payment…" />}
@@ -728,13 +758,18 @@ export default function InvoiceDetailPage() {
                 variant="greenPrimary"
                 size="sm"
                 onClick={() => {
-                  setPaymentForm({ amount: "", method: "Cash", reference: "" });
-                  setPaymentAmountError(undefined);
-                  setShowPaymentForm(true);
+                  setShowPaymentForm((v) => {
+                    const next = !v;
+                    if (next) {
+                      setPaymentForm({ amount: "", method: "Cash", reference: "", date: new Date().toISOString().slice(0, 10) });
+                      setPaymentAmountError(undefined);
+                    }
+                    return next;
+                  });
                 }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>
-                Record Payment
+                {showPaymentForm ? "Hide Payment" : "Record Payment"}
               </Button>
             )}
             {canWrite && (
@@ -754,6 +789,10 @@ export default function InvoiceDetailPage() {
               </Button>
             </span>
             )}
+            <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+              View
+            </Button>
             <Button variant="secondary" size="sm" onClick={handleDownloadClick}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
               Download PDF
@@ -762,12 +801,6 @@ export default function InvoiceDetailPage() {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
               Print
             </Button>
-            {canWrite && (
-            <Button variant="dangerOutline" size="sm" disabled={deleting} onClick={() => setDeleteConfirm(true)}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
-              Delete
-            </Button>
-            )}
             {/* Share PDF button */}
             <div className={styles.shareWrap} ref={shareContainerRef}>
               <Button variant="secondary" size="sm" disabled={shareLoading} onClick={() => {
@@ -824,6 +857,12 @@ export default function InvoiceDetailPage() {
                 </>
               )}
             </div>
+            {canWrite && (
+            <Button variant="dangerOutline" size="sm" disabled={deleting} onClick={() => setDeleteConfirm(true)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
+              Delete
+            </Button>
+            )}
           </div>
         </div>
 
@@ -845,15 +884,25 @@ export default function InvoiceDetailPage() {
                       className={styles.paymentAmountInput}
                       autoFocus
                     />
-                    <button
-                      type="button"
+                    <FillMaxButton
                       onClick={() => setPaymentForm((p) => ({ ...p, amount: balance.toFixed(2) }))}
-                      className={styles.paymentFullBtn}
-                    >
-                      Full ₹{fmt(balance)}
-                    </button>
+                      label={`Full ₹${fmt(balance)}`}
+                      variant="green"
+                    />
                   </div>
                 </FormField>
+                <div className={styles.paymentDateField}>
+                  <FormField label="Date">
+                    <Input
+                      type="date"
+                      value={paymentForm.date}
+                      onChange={(e) => setPaymentForm((p) => ({ ...p, date: e.target.value }))}
+                      min={invoice.date.slice(0, 10)}
+                      max={new Date().toISOString().slice(0, 10)}
+                      sz="sm"
+                    />
+                  </FormField>
+                </div>
                 <div className={styles.paymentMethodField}>
                   <FormField label="Method">
                     <Select

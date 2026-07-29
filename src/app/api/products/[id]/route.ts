@@ -45,7 +45,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { name, description, sku, unit, price, purchasePrice, gstRate, stock, minStock, categoryId, brandId, expectedUpdatedAt } = body;
+    const { name, description, sku, hsn, unit, price, purchasePrice, gstRate, stock, minStock, categoryId, brandId, expectedUpdatedAt } = body;
 
     const existing = await prisma.product.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existing) return NextResponse.json({ error: "Product not found" }, { status: 404 });
@@ -64,6 +64,7 @@ export async function PUT(
     }
     if (description !== undefined) data.description = description;
     if (sku !== undefined) data.sku = typeof sku === "string" ? sku.trim() || null : null;
+    if (hsn !== undefined) data.hsn = typeof hsn === "string" ? hsn.trim() || null : null;
     if (unit !== undefined) data.unit = unit;
     if (purchasePrice !== undefined) {
       if (purchasePrice === null || purchasePrice === "") {

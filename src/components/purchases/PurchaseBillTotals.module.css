@@ -1,12 +1,6 @@
-.totalsWrap {
-  border-top: 1px solid var(--c-border);
-  margin-top: 1rem;
-  padding-top: 1rem;
-}
-
 .totalsAlignRight { display: flex; justify-content: flex-end; }
 
-.totalsBox { width: min(320px, 100%); }
+.totalsBox { width: 100%; }
 
 .totalsLine {
   display: flex;
@@ -25,7 +19,7 @@
 
 .itemDiscountValue { color: var(--c-amber); }
 
-.discountInput { width: 90px; text-align: right; }
+.discountInput { width: 70px; text-align: right; }
 
 .totalsGrandLine {
   display: flex;
