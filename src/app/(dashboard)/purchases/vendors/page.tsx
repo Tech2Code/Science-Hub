@@ -154,7 +154,7 @@ export default function VendorsPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={COLUMNS.length} />
+                <TableSkeleton columns={COLUMNS} />
               ) : vendors.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search.trim() ? `No vendors match "${search}".` : "No vendors yet. Add your first vendor."}

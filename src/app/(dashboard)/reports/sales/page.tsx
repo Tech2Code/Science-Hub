@@ -215,7 +215,7 @@ export default function SalesReportsPage() {
               <table className="table-base">
                 <thead><tr>{OUT_COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr></thead>
                 <tbody>
-                  {loadingOut ? <TableSkeleton cols={OUT_COLUMNS.length} /> : outstanding.length === 0 ? (
+                  {loadingOut ? <TableSkeleton columns={OUT_COLUMNS} /> : outstanding.length === 0 ? (
                     <tr><td colSpan={OUT_COLUMNS.length} className="table-empty-cell">No outstanding invoices. All settled.</td></tr>
                   ) : visibleOut.map((inv) => {
                     const isOverdue = inv.dueDate && new Date(inv.dueDate) < new Date() && inv.status !== "paid";
@@ -298,7 +298,7 @@ export default function SalesReportsPage() {
               <table className="table-base">
                 <thead><tr>{GST_COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr></thead>
                 <tbody>
-                  {loadingGst ? <TableSkeleton cols={GST_COLUMNS.length} /> : gstRows.length === 0 ? (
+                  {loadingGst ? <TableSkeleton columns={GST_COLUMNS} /> : gstRows.length === 0 ? (
                     <tr><td colSpan={GST_COLUMNS.length} className="table-empty-cell">No invoice data available.</td></tr>
                   ) : gstRows.map((row) => {
                     const totalGstRow = row.cgst + row.sgst + row.igst;

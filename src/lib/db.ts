@@ -123,6 +123,7 @@ export async function getInvoice(id: string) {
     where: { id },
     include: {
       customer: true,
+      createdBy: { select: { id: true, name: true } },
       items: { include: { product: true } },
       payments: { orderBy: { date: "desc" } },
     },

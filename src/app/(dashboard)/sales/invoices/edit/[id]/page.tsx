@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
+import { Textarea, FormField } from "@/components/ui/Input";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Sk } from "@/components/ui/Skeleton";
@@ -291,14 +292,14 @@ export default function EditInvoicePage() {
 
             {/* Notes */}
             <div {...animateSection(3, `card ${styles.sectionCard}`)}>
-              <label className={styles.notesLabel}>Notes / Terms</label>
-              <textarea
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Payment terms, delivery instructions…"
-                className={styles.notesInput}
-              />
+              <FormField label="Notes / Terms">
+                <Textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Payment terms, delivery instructions…"
+                />
+              </FormField>
             </div>
           </div>
 

@@ -65,11 +65,12 @@ export default function NewProductPage() {
     });
     setSaving(false);
     if (res.ok) {
+      const created = await res.json();
       bustCachePrefix("/api/products");
       bustCache("/api/reports?type=summary");
       bustCache("/api/reports?type=stock");
       toast({ type: "success", title: "Product created", message: "New product added to catalog." });
-      router.push("/products");
+      router.push(`/products/${created.id}`);
     }
     else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to save product." }); }
   }

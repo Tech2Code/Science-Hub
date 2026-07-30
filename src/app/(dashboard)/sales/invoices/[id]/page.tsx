@@ -42,6 +42,7 @@ interface ReturnFormItem {
 interface Invoice {
   id: string; invoiceNumber: string; date: string; dueDate?: string; createdAt: string;
   status: string; isInterState: boolean; placeOfSupply?: string; reverseCharge?: boolean;
+  createdBy?: { name: string } | null;
   customer: { name: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; gstin: string; };
   items: InvoiceItem[];
   payments: Payment[];
@@ -749,7 +750,15 @@ export default function InvoiceDetailPage() {
       <div className="page-stack">
         {/* Toolbar */}
         <div className="page-header">
-          <Breadcrumb items={[{ label: "Invoices", href: "/sales/invoices" }, { label: invoice.invoiceNumber }]} />
+          <div>
+            <Breadcrumb items={[{ label: "Invoices", href: "/sales/invoices" }, { label: invoice.invoiceNumber }]} />
+            {(invoice.createdBy?.name || invoice.createdAt) && (
+              <div className={styles.metaText}>
+                {invoice.createdBy?.name && <>Created by {invoice.createdBy.name}</>}
+                {invoice.createdAt && <> · {new Date(invoice.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</>}
+              </div>
+            )}
+          </div>
           <div className={styles.toolbarActions}>
             <StatusBadge status={invoice.status} />
             {canWrite && <Button variant="editOutline" size="sm" onClick={() => { setOpeningEdit(true); router.push(`/sales/invoices/edit/${id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>Edit Invoice</Button>}
@@ -963,12 +972,14 @@ export default function InvoiceDetailPage() {
                 {/* Meta row (pinned, outside the scrollable body) */}
                 <div className={styles.returnModalMetaRow}>
                   <div>
-                    <label className={styles.returnModalFieldLabel}>Return Date</label>
-                    <Input type="date" sz="sm" value={returnDate} onChange={e => setReturnDate(e.target.value)} min={invoice?.date.slice(0, 10)} max={new Date().toISOString().slice(0, 10)} className={styles.returnDateInput} />
+                    <FormField label="Return Date">
+                      <Input type="date" sz="sm" value={returnDate} onChange={e => setReturnDate(e.target.value)} min={invoice?.date.slice(0, 10)} max={new Date().toISOString().slice(0, 10)} className={styles.returnDateInput} />
+                    </FormField>
                   </div>
                   <div className={styles.returnNotesField}>
-                    <label className={styles.returnModalFieldLabel}>Notes</label>
-                    <Input type="text" sz="sm" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Optional reason" className={styles.returnNotesInput} />
+                    <FormField label="Notes">
+                      <Input type="text" sz="sm" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Optional reason" className={styles.returnNotesInput} />
+                    </FormField>
                   </div>
                 </div>
                 {/* Modal body (scrollable) */}

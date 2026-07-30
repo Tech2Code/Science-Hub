@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const { skip, take } = parsePageParams(searchParams, 5000);
 
     const where = buildReturnWhere({ search, dateRange });
-    const [data, total] = await Promise.all([
+    const [returns, total] = await Promise.all([
       prisma.return.findMany({
         where,
         orderBy: buildReturnOrderBy(sort),
@@ -29,6 +29,26 @@ export async function GET(request: NextRequest) {
       }),
       prisma.return.count({ where }),
     ]);
+
+    // Returns have no direct creator FK — the creating user is only ever
+    // recorded on the invoice's "create_return" activity log entry, keyed
+    // by invoiceId (not the return's own id, since a return didn't exist
+    // yet when that log's shape was designed). Disambiguate multiple
+    // returns on the same invoice by matching the credit note number
+    // embedded in the log's details text (unique per return).
+    const invoiceIds = [...new Set(returns.map((r) => r.invoiceId))];
+    const logs = invoiceIds.length
+      ? await prisma.activityLog.findMany({
+          where: { action: "create_return", entityId: { in: invoiceIds } },
+          select: { entityId: true, details: true, user: { select: { name: true } } },
+        })
+      : [];
+    const data = returns.map((r) => {
+      const match = r.creditNoteNumber
+        ? logs.find((l) => l.entityId === r.invoiceId && l.details.includes(`Credit note ${r.creditNoteNumber} `))
+        : undefined;
+      return { ...r, createdBy: match?.user.name ?? null };
+    });
     return NextResponse.json({ data, total });
   } catch (error) {
     console.error(error);

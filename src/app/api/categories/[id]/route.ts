@@ -22,7 +22,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       },
     });
     if (!category) return NextResponse.json({ error: "Category not found" }, { status: 404 });
-    return NextResponse.json(category);
+
+    const log = await prisma.activityLog.findFirst({
+      where: { entityId: id, action: "add_category" },
+      select: { createdAt: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return NextResponse.json({
+      ...category,
+      createdBy: log?.user.name ?? null,
+      createdAt: category.createdAt ?? log?.createdAt ?? null,
+    });
   } catch (error) {
     console.error("GET /api/categories/[id] error:", error);
     return NextResponse.json({ error: "Failed to fetch category" }, { status: 500 });

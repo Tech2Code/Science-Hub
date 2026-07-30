@@ -21,7 +21,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       },
     });
     if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
-    return NextResponse.json(vendor);
+
+    const log = await prisma.activityLog.findFirst({
+      where: { entityId: id, action: "add_vendor" },
+      select: { createdAt: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return NextResponse.json({
+      ...vendor,
+      createdBy: log?.user.name ?? null,
+      createdAt: vendor.createdAt ?? log?.createdAt ?? null,
+    });
   } catch {
     return NextResponse.json({ error: "Failed to fetch vendor" }, { status: 500 });
   }

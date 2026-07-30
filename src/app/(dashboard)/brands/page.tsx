@@ -47,8 +47,6 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 const COLUMNS: Column[] = [
   { label: "#",          mobile: "hide" },
   { label: "Brand Name", mobile: "full+label" },
-  { label: "Created By", mobile: "label" },
-  { label: "Created At", mobile: "label" },
   { label: "Products",   cls: "table-th-right", mobile: "full+label" },
   { label: "Actions",    mobile: "full+label" },
 ];
@@ -254,7 +252,7 @@ export default function BrandsPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={COLUMNS.length} />
+                <TableSkeleton columns={COLUMNS} />
               ) : brands.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search ? "No brands match your search." : "No brands yet. Add one above."}
@@ -265,16 +263,12 @@ export default function BrandsPage() {
                   <Cell col={COLUMNS[1]}>
                     <Link href={`/brands/${b.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`} title={b.name}>{b.name}</Link>
                   </Cell>
-                  <Cell col={COLUMNS[2]} className={styles.mutedCell}>{b.createdBy ?? "—"}</Cell>
-                  <Cell col={COLUMNS[3]} className={styles.mutedCell}>
-                    {b.createdAt ? new Date(b.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—"}
-                  </Cell>
-                  <Cell col={COLUMNS[4]}>
+                  <Cell col={COLUMNS[2]}>
                     <span className={`${styles.productsBadge} ${b._count.products > 0 ? styles.productsBadgeActive : ""}`}>
                       {b._count.products} {b._count.products === 1 ? "product" : "products"}
                     </span>
                   </Cell>
-                  <Cell col={COLUMNS[5]}>
+                  <Cell col={COLUMNS[3]}>
                     <div className="table-actions">
                       <Button variant="viewOutline" size="sm" onClick={() => { setOpeningView(true); router.push(`/brands/${b.id}`); }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View

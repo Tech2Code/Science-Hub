@@ -12,7 +12,15 @@ import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { isLowStock } from "@/lib/stockStatus";
+import type { Column } from "@/components/ui/Table";
 import styles from "./view.module.css";
+
+const PRODUCT_COLUMNS: Column[] = [
+  { label: "Name",  mobile: "full+label" },
+  { label: "SKU",   mobile: "label" },
+  { label: "Price", cls: "table-th-right", mobile: "label" },
+  { label: "Stock", cls: "table-th-right", mobile: "label" },
+];
 
 interface BrandProduct {
   id: string; name: string; sku: string | null; price: number; stock: number; minStock: number;
@@ -203,7 +211,7 @@ export default function BrandViewPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={4} rows={4} />
+                <TableSkeleton columns={PRODUCT_COLUMNS} rows={4} />
               ) : products.length === 0 ? (
                 <tr><td colSpan={4} className={styles.emptyCell}>No products under this brand.</td></tr>
               ) : products.map((p) => (

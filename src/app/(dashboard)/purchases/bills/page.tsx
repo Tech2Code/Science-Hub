@@ -297,7 +297,7 @@ export default function PurchasesPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={COLUMNS.length} />
+                <TableSkeleton columns={COLUMNS} />
               ) : bills.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search.trim() ? `No bills match "${search}".` : (month || year) ? "No purchase bills found for this period." : "No purchase bills yet."}

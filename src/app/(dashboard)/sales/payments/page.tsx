@@ -138,7 +138,7 @@ export default function PaymentsPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={COLUMNS.length} />
+                <TableSkeleton columns={COLUMNS} />
               ) : payments.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search ? "No payments match your search." : "No payments recorded yet."}

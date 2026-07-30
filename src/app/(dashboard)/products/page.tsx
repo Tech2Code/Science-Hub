@@ -56,8 +56,6 @@ const COLUMNS: Column[] = [
   { label: "Price",      cls: "table-th-right", mobile: "label" },
   { label: "GST %",      cls: "table-th-right", mobile: "full+label" },
   { label: "Stock",      cls: "table-th-right", mobile: "full+label" },
-  { label: "Created By", mobile: "label" },
-  { label: "Created At", mobile: "label" },
   { label: "Invoices",   cls: "table-th-right", mobile: "full+label" },
   { label: "Actions",    mobile: "full+label" },
 ];
@@ -217,7 +215,7 @@ export default function ProductsPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={COLUMNS.length} />
+                <TableSkeleton columns={COLUMNS} />
               ) : products.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
                   {stockFilter === "out" ? "No out-of-stock products." : stockFilter === "low" ? "No low-stock products." : search ? "No products match your search." : "No products yet. Add one to get started."}
@@ -241,11 +239,7 @@ export default function ProductsPage() {
                         {p.stock} {p.unit}{(out || low) && " ⚠"}
                       </span>
                     </Cell>
-                    <Cell col={COLUMNS[7]} className={styles.metaCell}>{p.createdBy ?? "—"}</Cell>
-                    <Cell col={COLUMNS[8]} className={styles.metaCell}>
-                      {p.createdAt ? new Date(p.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—"}
-                    </Cell>
-                    <Cell col={COLUMNS[9]}>
+                    <Cell col={COLUMNS[7]}>
                       {(() => {
                         const count = p._count?.invoiceItems ?? 0;
                         return count > 0 ? (
@@ -255,7 +249,7 @@ export default function ProductsPage() {
                         );
                       })()}
                     </Cell>
-                    <Cell col={COLUMNS[10]}>
+                    <Cell col={COLUMNS[8]}>
                       <div className="table-actions">
                         <Button variant="viewOutline" size="sm" onClick={() => { setOpeningView(true); router.push(`/products/${p.id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View</Button>
                         {canWrite && (<Button variant="editOutline" size="sm" onClick={() => { setOpeningEdit(true); router.push(`/products/edit/${p.id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</Button>)}

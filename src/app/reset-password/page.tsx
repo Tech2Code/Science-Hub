@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { FormField } from "@/components/ui/Input";
 import { useBranding } from "@/lib/businessBranding";
 import styles from "../login/login.module.css";
 import { rules, validate } from "@/lib/validation";
@@ -73,8 +74,7 @@ function ResetPasswordForm() {
           {error && <div className={styles.errorBox}>{error}</div>}
           {!token ? null : (
             <form onSubmit={handleSubmit} className={styles.formStack} noValidate>
-              <div>
-                <label htmlFor="password" className={styles.fieldLabel}>New password</label>
+              <FormField label="New password" error={fieldErrors.password}>
                 <PasswordInput
                   id="password"
                   autoComplete="new-password"
@@ -82,10 +82,8 @@ function ResetPasswordForm() {
                   onChange={(e) => { setPassword(e.target.value); setFieldErrors(prev => ({ ...prev, password: undefined })); }}
                   placeholder="min. 8 characters"
                 />
-                {fieldErrors.password && <p className={styles.fieldError}>{fieldErrors.password}</p>}
-              </div>
-              <div>
-                <label htmlFor="confirm" className={styles.fieldLabel}>Confirm new password</label>
+              </FormField>
+              <FormField label="Confirm new password" error={fieldErrors.confirm}>
                 <PasswordInput
                   id="confirm"
                   autoComplete="new-password"
@@ -93,8 +91,7 @@ function ResetPasswordForm() {
                   onChange={(e) => { setConfirm(e.target.value); setFieldErrors(prev => ({ ...prev, confirm: undefined })); }}
                   placeholder="repeat your new password"
                 />
-                {fieldErrors.confirm && <p className={styles.fieldError}>{fieldErrors.confirm}</p>}
-              </div>
+              </FormField>
               <button type="submit" className={styles.submitBtn} disabled={loading || !token || !password.trim() || !confirm.trim()}>
                 {loading ? "Updating…" : "Update password"}
               </button>

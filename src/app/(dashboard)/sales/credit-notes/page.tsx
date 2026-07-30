@@ -31,6 +31,7 @@ interface CreditNote {
   _count: { items: number };
   invoiceId: string;
   invoice: { invoiceNumber: string; customer: { name: string } };
+  createdBy: string | null;
 }
 
 interface CreditNoteListResponse {
@@ -68,6 +69,7 @@ const COLUMNS: Column[] = [
   { label: "Invoice",         mobile: "label" },
   { label: "Items",           mobile: "full+label" },
   { label: "Amount",          cls: "table-th-right", mobile: "full+label" },
+  { label: "Created By",      mobile: "label" },
   { label: "Actions",         mobile: "full+label" },
 ];
 
@@ -326,7 +328,7 @@ export default function CreditNotesPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <TableSkeleton cols={COLUMNS.length} />
+                  <TableSkeleton columns={COLUMNS} />
                 ) : creditNotes.length === 0 ? (
                   <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                     {search ? "No credit notes match your search." : (month || year) ? "No credit notes found for this period." : "No credit notes recorded yet."}
@@ -348,7 +350,8 @@ export default function CreditNotesPage() {
                     </Cell>
                     <Cell col={COLUMNS[4]}>{c._count.items} item{c._count.items !== 1 ? "s" : ""}</Cell>
                     <Cell col={COLUMNS[5]} className={styles.amountCell}>₹{fmt(c.total)}</Cell>
-                    <Cell col={COLUMNS[6]}>
+                    <Cell col={COLUMNS[6]} className={styles.customerCell}>{c.createdBy ?? "—"}</Cell>
+                    <Cell col={COLUMNS[7]}>
                       <div className="table-actions">
                         <Button variant="viewOutline" size="sm" loading={viewingId === c.id} disabled={downloadingId === c.id} onClick={() => handleViewPdf(c)}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>

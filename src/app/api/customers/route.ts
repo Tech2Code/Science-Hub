@@ -17,15 +17,7 @@ export async function GET(request: NextRequest) {
     const sort = (searchParams.get("sort") ?? undefined) as CustomerSort | undefined;
     const { skip, take } = parsePageParams(searchParams, 5000);
 
-    const { data: customers, total } = await getCustomers(search, sort, skip, take);
-    const ids = customers.map((c) => c.id);
-    const logs = await prisma.activityLog.findMany({
-      where: { entityId: { in: ids }, action: "add_customer" },
-      select: { entityId: true, user: { select: { name: true } } },
-      orderBy: { createdAt: "asc" },
-    });
-    const createdByMap = new Map(logs.map((l) => [l.entityId, l.user.name]));
-    const data = customers.map((c) => ({ ...c, createdBy: createdByMap.get(c.id) ?? null }));
+    const { data, total } = await getCustomers(search, sort, skip, take);
     return NextResponse.json({ data, total });
   } catch (error) {
     console.error("GET /api/customers error:", error);

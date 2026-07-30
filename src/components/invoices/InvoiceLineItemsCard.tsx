@@ -146,7 +146,6 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
             onChange={(e) => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
             onFocus={() => setShowProductDropdown(true)}
             onBlur={() => setTimeout(() => setShowProductDropdown(false), 150)}
-            className={styles.input}
           />
           {showProductDropdown && (
           <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>

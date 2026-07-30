@@ -1,6 +1,7 @@
 "use client";
 
 import styles from "./Skeleton.module.css";
+import type { Column } from "./Table";
 
 export function Sk({ w = "100%", h = 14, r = 5 }: { w?: string | number; h?: number; r?: number }) {
   return (
@@ -43,16 +44,33 @@ export function SkeletonSwap({
   return <>{children}</>;
 }
 
-export function TableSkeleton({ cols, rows = 6 }: { cols: number; rows?: number }) {
+/**
+ * Pass `columns` (the same Column[] driving the real <th>/<Cell> markup)
+ * whenever it's available, so the skeleton rows carry the identical
+ * data-mobile-hide/data-mobile-full/data-label attributes as the loaded
+ * rows — without them, the ≤640px card layout hides/spans/captions cells
+ * differently while loading than once data arrives, so the skeleton looks
+ * structurally wrong on mobile even though desktop looks fine. `cols` alone
+ * still works for tables with no Column[] (falls back to plain cells).
+ */
+export function TableSkeleton({ cols, columns, rows = 6 }: { cols?: number; columns?: Column[]; rows?: number }) {
+  const count = columns ? columns.length : (cols ?? 0);
   return (
     <>
       {Array.from({ length: rows }).map((_, r) => (
         <tr key={r}>
-          {Array.from({ length: cols }).map((_, c) => (
-            <td key={c} className={styles.cell}>
-              <Sk w={c === 0 ? "60%" : c === cols - 1 ? 80 : "80%"} />
-            </td>
-          ))}
+          {Array.from({ length: count }).map((_, c) => {
+            const col = columns?.[c];
+            const dataAttrs: Record<string, string> = {};
+            if (col?.mobile === "hide")                                  dataAttrs["data-mobile-hide"] = "";
+            if (col?.mobile === "full" || col?.mobile === "full+label")  dataAttrs["data-mobile-full"] = "";
+            if (col?.mobile === "label" || col?.mobile === "full+label") dataAttrs["data-label"] = col.label;
+            return (
+              <td key={c} className={styles.cell} {...dataAttrs}>
+                <Sk w={c === 0 ? "60%" : c === count - 1 ? 80 : "80%"} />
+              </td>
+            );
+          })}
         </tr>
       ))}
     </>

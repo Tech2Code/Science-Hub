@@ -33,7 +33,7 @@ interface PurchasePayment {
   id: string; amount: number; method: string; reference: string | null; date: string; notes: string | null;
 }
 interface PurchaseBill {
-  id: string; billNumber: string; billDate: string; dueDate: string | null;
+  id: string; billNumber: string; billDate: string; dueDate: string | null; createdAt: string;
   status: string; category: string | null; notes: string | null;
   subtotal: number; taxAmount: number; isInterState: boolean; placeOfSupply: string | null;
   cgst: number; sgst: number; igst: number;
@@ -295,7 +295,7 @@ export default function PurchaseBillDetailPage() {
         {/* Bill Information — label:value rows */}
         <div className={`card ${styles.infoCard}`}>
           <div className={styles.skLabelGap}><Sk w={60} h={10} r={3} /></div>
-          {Array.from({ length: 4 }).map((_, j) => (
+          {Array.from({ length: 5 }).map((_, j) => (
             <div key={j} className={styles.infoRow}>
               <Sk w={70} h={11} r={3} />
               <Sk w={100} h={11} r={3} />
@@ -721,6 +721,7 @@ export default function PurchaseBillDetailPage() {
           <InfoRow label="Due Date"    value={bill.dueDate ? fmtDate(bill.dueDate) : "Not set"} />
           <InfoRow label="Category"    value={bill.category || "—"} />
           <InfoRow label="Created By"  value={bill.createdBy.name} />
+          <InfoRow label="Created At"  value={new Date(bill.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })} />
           {bill.attachmentUrl && (
             <div className={styles.infoRow}>
               <span className={styles.infoRowLabel}>Attachment</span>

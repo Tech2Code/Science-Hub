@@ -45,9 +45,10 @@ export default function NewVendorPage() {
     });
     setSaving(false);
     if (res.ok) {
+      const created = await res.json();
       bustCachePrefix("/api/vendors");
       toast({ type: "success", title: "Vendor created", message: `"${form.name}" added.` });
-      router.push("/purchases/vendors");
+      router.push(`/purchases/vendors/${created.id}`);
     } else {
       const d = await res.json().catch(() => ({}));
       toast({ type: "error", title: "Failed", message: d.error ?? "Failed to create vendor." });

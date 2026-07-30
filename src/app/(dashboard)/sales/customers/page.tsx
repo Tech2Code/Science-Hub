@@ -25,9 +25,7 @@ interface Customer {
   email: string;
   gstin: string;
   city: string;
-  createdAt?: string;
   _count?: { invoices: number };
-  createdBy?: string | null;
 }
 
 interface CustomerListResponse {
@@ -50,8 +48,6 @@ const COLUMNS: Column[] = [
   { label: "Phone / Email", mobile: "label" },
   { label: "GSTIN",         mobile: "label" },
   { label: "City",          mobile: "label" },
-  { label: "Created By",    mobile: "label" },
-  { label: "Created At",    mobile: "label" },
   { label: "Invoices",      cls: "table-th-right", mobile: "label" },
   { label: "Actions",       mobile: "full+label" },
 ];
@@ -156,7 +152,7 @@ export default function CustomersPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={COLUMNS.length} />
+                <TableSkeleton columns={COLUMNS} />
               ) : customers.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
                   {search ? "No customers match your search." : "No customers yet. Add one to get started."}
@@ -172,12 +168,8 @@ export default function CustomersPage() {
                   </Cell>
                   <Cell col={COLUMNS[2]} className={styles.gstinCell}>{c.gstin || "—"}</Cell>
                   <Cell col={COLUMNS[3]} className={styles.mutedCell}>{c.city || "—"}</Cell>
-                  <Cell col={COLUMNS[4]} className={styles.smallMutedCell}>{c.createdBy ?? "—"}</Cell>
-                  <Cell col={COLUMNS[5]} className={styles.smallMutedCell}>
-                    {c.createdAt ? new Date(c.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—"}
-                  </Cell>
-                  <Cell col={COLUMNS[6]} className={styles.countCell}>{c._count?.invoices ?? 0}</Cell>
-                  <Cell col={COLUMNS[7]}>
+                  <Cell col={COLUMNS[4]} className={styles.countCell}>{c._count?.invoices ?? 0}</Cell>
+                  <Cell col={COLUMNS[5]}>
                     <div className={`table-actions ${styles.actionsWrap}`}>
                       <Button variant="viewOutline" size="sm" href={`/sales/customers/${c.id}`}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View</Button>
                       {canWrite && (<Button variant="editOutline" size="sm" onClick={() => { setOpeningEditId(c.id); router.push(`/sales/customers/edit/${c.id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</Button>)}

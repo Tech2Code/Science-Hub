@@ -44,9 +44,10 @@ export default function NewCustomerPage() {
     });
     setSaving(false);
     if (res.ok) {
+      const created = await res.json();
       bustCachePrefix("/api/customers");
       toast({ type: "success", title: "Customer created", message: "New customer added." });
-      router.push("/sales/customers");
+      router.push(`/sales/customers/${created.id}`);
     } else {
       const d = await res.json().catch(() => ({}));
       toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to create customer." });

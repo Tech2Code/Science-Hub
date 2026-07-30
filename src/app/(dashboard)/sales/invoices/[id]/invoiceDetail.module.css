@@ -68,6 +68,12 @@
 
 /* ---------- Toolbar ---------- */
 .toolbarActions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+.metaText {
+  font-size: 0.75rem;
+  color: var(--c-text-3);
+  margin-top: 0.25rem;
+}
 .inlineFlex { display: inline-flex; }
 .shareWrap { position: relative; }
 .shareOverlay { position: fixed; inset: 0; z-index: 99; }
@@ -192,13 +198,6 @@
   flex-wrap: wrap;
   gap: 0.75rem;
   border-bottom: 1px solid var(--c-border);
-}
-.returnModalFieldLabel {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--c-text-3);
-  margin-bottom: 0.25rem;
 }
 .returnDateInput { width: 10rem; }
 .returnNotesField { flex: 1; min-width: 12rem; }

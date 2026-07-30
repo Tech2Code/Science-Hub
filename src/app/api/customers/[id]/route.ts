@@ -17,7 +17,18 @@ export async function GET(
     const { id } = await params;
     const customer = await getCustomer(id);
     if (!customer) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
-    return NextResponse.json(customer);
+
+    const log = await prisma.activityLog.findFirst({
+      where: { entityId: id, action: "add_customer" },
+      select: { createdAt: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return NextResponse.json({
+      ...customer,
+      createdBy: log?.user.name ?? null,
+      createdAt: customer.createdAt ?? log?.createdAt ?? null,
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Failed to fetch customer" }, { status: 500 });

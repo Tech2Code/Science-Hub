@@ -9,8 +9,9 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
-import { Input } from "@/components/ui/Input";
+import { Input, Select, Textarea, FormField } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
+import { INDIA_STATES_FULL } from "@/lib/states";
 import { InvoiceOptionsRow } from "@/components/invoices/InvoiceOptionsRow";
 import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
 import { computeInvoiceTotals, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
@@ -93,20 +94,25 @@ export default function NewInvoicePage() {
 
   const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal } = computeInvoiceTotals(items);
 
+  function validateCustomCustomer(): boolean {
+    const errs = validateForm(customCustomer, {
+      name:    [rules.required("Customer name is required.")],
+      phone:   [rules.required("Phone number is required."), rules.phone10()],
+      email:   [rules.email()],
+      address: [rules.required("Address is required.")],
+      city:    [rules.required("City is required.")],
+      state:   [rules.required("State is required.")],
+      pincode: [rules.required("Pincode is required."), rules.pincode()],
+      gstin:   [rules.gstin()],
+    });
+    setCustomErrors(errs);
+    return !hasErrors(errs);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (customerMode === "existing" && !customerId) { toast({ type: "error", title: "Check form", message: "Select a customer." }); return; }
-    if (customerMode === "custom") {
-      const errs = validateForm(customCustomer, {
-        name:    [rules.required("Customer name is required.")],
-        phone:   [rules.required("Phone number is required."), rules.phone10()],
-        email:   [rules.email()],
-        pincode: [rules.pincode()],
-        gstin:   [rules.gstin()],
-      });
-      if (hasErrors(errs)) { setCustomErrors(errs); return; }
-      setCustomErrors({});
-    }
+    if (customerMode === "custom" && !validateCustomCustomer()) return;
     if (items.length === 0) { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
     if (!placeOfSupply) { toast({ type: "error", title: "Check form", message: "Select place of supply." }); return; }
     if (dueDate && dueDate < todayStr) { toast({ type: "error", title: "Check form", message: "Due date cannot be in the past." }); return; }
@@ -163,16 +169,6 @@ export default function NewInvoicePage() {
     else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to create invoice." }); }
   }
 
-  const errInput = (field: keyof typeof customCustomer) =>
-    customErrors[field] ? styles.inputError : styles.input;
-  const errInputMono = (field: keyof typeof customCustomer) =>
-    customErrors[field] ? styles.inputMonoError : styles.inputMono;
-  const errMsg = (field: keyof typeof customCustomer) => customErrors[field] ? (
-    <p className={styles.errMsg}>
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4.75v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.75" r=".875" fill="currentColor"/></svg>
-      {customErrors[field]}
-    </p>
-  ) : null;
   const clearErr = (field: keyof typeof customCustomer) => {
     if (customErrors[field]) setCustomErrors((p) => ({ ...p, [field]: undefined }));
   };
@@ -256,7 +252,6 @@ export default function NewInvoicePage() {
                   onChange={(e) => { setCustomerSearch(e.target.value); setCustomerId(""); setShowCustomerDropdown(true); }}
                   onFocus={() => setShowCustomerDropdown(true)}
                   onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
-                  className={styles.input}
                 />
                 {showCustomerDropdown && (
                   <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
@@ -330,54 +325,55 @@ export default function NewInvoicePage() {
 
             <Modal open={customModalOpen} onClose={() => setCustomModalOpen(false)} title="Custom Customer Details" maxWidth="34rem">
               <div className={styles.customForm}>
-                <div>
+                <FormField label="Customer Name" required error={customErrors.name}>
                   <Input
-                    type="text" placeholder="Customer name *"
+                    type="text" placeholder="e.g. Acme Traders"
                     autoFocus
                     value={customCustomer.name}
                     onChange={(e) => { setCustomCustomer((p) => ({ ...p, name: e.target.value })); clearErr("name"); }}
-                    className={errInput("name")}
                   />
-                  {errMsg("name")}
-                </div>
+                </FormField>
                 <div className={styles.grid2}>
-                  <div {...(customErrors.phone ? { "data-error": "" } : {})}>
+                  <FormField label="Phone" required error={customErrors.phone}>
                     <PhoneInput value={customCustomer.phone} placeholder="10-digit mobile"
                       onChange={(e) => { setCustomCustomer((p) => ({ ...p, phone: e.target.value })); clearErr("phone"); }} />
-                    {errMsg("phone")}
-                  </div>
-                  <div>
-                    <Input type="email" placeholder="Email" value={customCustomer.email}
-                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, email: e.target.value })); clearErr("email"); }}
-                      className={errInput("email")} />
-                    {errMsg("email")}
-                  </div>
+                  </FormField>
+                  <FormField label="Email" error={customErrors.email}>
+                    <Input type="email" placeholder="customer@example.com" value={customCustomer.email}
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, email: e.target.value })); clearErr("email"); }} />
+                  </FormField>
                 </div>
-                <Input type="text" placeholder="Address" value={customCustomer.address}
-                  onChange={(e) => setCustomCustomer((p) => ({ ...p, address: e.target.value }))} className={styles.input} />
+                <FormField label="Address" required error={customErrors.address}>
+                  <Input type="text" placeholder="Street / locality" value={customCustomer.address}
+                    onChange={(e) => { setCustomCustomer((p) => ({ ...p, address: e.target.value })); clearErr("address"); }} />
+                </FormField>
                 <div className={styles.grid3}>
-                  <Input type="text" placeholder="City" value={customCustomer.city}
-                    onChange={(e) => setCustomCustomer((p) => ({ ...p, city: e.target.value }))} className={styles.input} />
-                  <Input type="text" placeholder="State" value={customCustomer.state}
-                    onChange={(e) => {
-                      const state = e.target.value;
-                      setCustomCustomer((p) => ({ ...p, state }));
-                      applyPlaceOfSupply(state);
-                    }}
-                    className={styles.input} />
-                  <div>
-                    <Input type="text" placeholder="Pincode" value={customCustomer.pincode}
-                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })); clearErr("pincode"); }}
-                      className={errInput("pincode")} />
-                    {errMsg("pincode")}
-                  </div>
+                  <FormField label="City" required error={customErrors.city}>
+                    <Input type="text" placeholder="City" value={customCustomer.city}
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, city: e.target.value })); clearErr("city"); }} />
+                  </FormField>
+                  <FormField label="State" required error={customErrors.state}>
+                    <Select value={customCustomer.state}
+                      onChange={(e) => {
+                        const state = e.target.value;
+                        setCustomCustomer((p) => ({ ...p, state }));
+                        applyPlaceOfSupply(state);
+                        clearErr("state");
+                      }}
+                    >
+                      <option value="">Select state</option>
+                      {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </Select>
+                  </FormField>
+                  <FormField label="Pincode" required error={customErrors.pincode}>
+                    <Input type="text" placeholder="6-digit" value={customCustomer.pincode}
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })); clearErr("pincode"); }} />
+                  </FormField>
                 </div>
-                <div>
-                  <Input type="text" placeholder="GSTIN" value={customCustomer.gstin} maxLength={15}
-                    onChange={(e) => { setCustomCustomer((p) => ({ ...p, gstin: e.target.value })); clearErr("gstin"); }}
-                    className={errInputMono("gstin")} />
-                  {errMsg("gstin")}
-                </div>
+                <FormField label="GSTIN" error={customErrors.gstin}>
+                  <Input type="text" placeholder="22AAAAA0000A1Z5" value={customCustomer.gstin} maxLength={15} mono
+                    onChange={(e) => { setCustomCustomer((p) => ({ ...p, gstin: e.target.value })); clearErr("gstin"); }} />
+                </FormField>
                 <p className={styles.customFormHint}>
                   This customer will be saved automatically for future use.
                 </p>
@@ -394,7 +390,7 @@ export default function NewInvoicePage() {
                   >
                     Dismiss
                   </Button>
-                  <Button type="button" variant="primary" onClick={() => setCustomModalOpen(false)}>
+                  <Button type="button" variant="primary" onClick={() => { if (validateCustomCustomer()) setCustomModalOpen(false); }}>
                     <span className={styles.customModalSubmitLabel}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                       Save &amp; Use This Customer
@@ -429,14 +425,14 @@ export default function NewInvoicePage() {
 
             {/* Notes */}
             <div {...animateSection(3, `card ${styles.cardPad}`)}>
-              <label className={styles.notesLabel}>Notes / Terms</label>
-              <textarea
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Payment terms, delivery instructions, or any other notes…"
-                className={styles.notesTextarea}
-              />
+              <FormField label="Notes / Terms">
+                <Textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Payment terms, delivery instructions, or any other notes…"
+                />
+              </FormField>
             </div>
           </div>
 

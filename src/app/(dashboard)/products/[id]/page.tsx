@@ -13,7 +13,17 @@ import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { needsRestock } from "@/lib/stockStatus";
 import { useCanWrite } from "@/lib/useCanWrite";
+import type { Column } from "@/components/ui/Table";
 import styles from "./view.module.css";
+
+const MOVEMENT_COLUMNS: Column[] = [
+  { label: "Type",          mobile: "full+label" },
+  { label: "Document",      mobile: "label" },
+  { label: "Quantity",      cls: "table-th-right", mobile: "label" },
+  { label: "Balance After", cls: "table-th-right", mobile: "label" },
+  { label: "Reference",     mobile: "label" },
+  { label: "Date",          mobile: "label" },
+];
 
 interface StockMovement {
   id: string;
@@ -48,6 +58,7 @@ interface Product {
   stock: number;
   minStock: number;
   createdAt: string;
+  createdBy: string | null;
   category: { id: string; name: string } | null;
   brand: { id: string; name: string } | null;
   stockMovements: StockMovement[];
@@ -234,6 +245,12 @@ export default function ProductViewPage() {
                 {!loading && product && <span className={styles.badge}>{product.unit}</span>}
               </div>
               {!loading && product?.sku && <code className={styles.skuCode}>SKU: {product.sku}</code>}
+              {!loading && (product?.createdBy || product?.createdAt) && (
+                <div className={styles.metaText}>
+                  {product?.createdBy && <>Added by {product.createdBy}</>}
+                  {product?.createdAt && <> · {new Date(product.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</>}
+                </div>
+              )}
             </div>
           </div>
           <div className={styles.headerActions}>
@@ -309,7 +326,7 @@ export default function ProductViewPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={6} rows={4} />
+                <TableSkeleton columns={MOVEMENT_COLUMNS} rows={4} />
               ) : movements.length === 0 ? (
                 <tr><td colSpan={6} className={styles.emptyCell}>No stock movements recorded yet.</td></tr>
               ) : movements.map((m) => (

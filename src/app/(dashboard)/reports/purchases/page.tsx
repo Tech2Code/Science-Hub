@@ -311,7 +311,7 @@ export default function PurchaseReportsPage() {
               <table className="table-base">
                 <thead><tr>{OUT_COLS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr></thead>
                 <tbody>
-                  {loadingOut ? <TableSkeleton cols={OUT_COLS.length} /> : outstanding.length === 0 ? (
+                  {loadingOut ? <TableSkeleton columns={OUT_COLS} /> : outstanding.length === 0 ? (
                     <tr><td colSpan={OUT_COLS.length} className="table-empty-cell">No outstanding bills. All settled.</td></tr>
                   ) : visibleOut.map((b) => {
                     const isOverdue = b.aging !== "Current";
@@ -372,7 +372,7 @@ export default function PurchaseReportsPage() {
               <table className="table-base">
                 <thead><tr>{SUMMARY_COLS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr></thead>
                 <tbody>
-                  {loadingSummary ? <TableSkeleton cols={SUMMARY_COLS.length} /> : summaryRows.length === 0 ? (
+                  {loadingSummary ? <TableSkeleton columns={SUMMARY_COLS} /> : summaryRows.length === 0 ? (
                     <tr><td colSpan={SUMMARY_COLS.length} className="table-empty-cell">No purchase data available.</td></tr>
                   ) : summaryRows.map((row) => (
                     <tr key={row.month}>
@@ -422,7 +422,7 @@ export default function PurchaseReportsPage() {
               <table className="table-base">
                 <thead><tr>{CAT_COLS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr></thead>
                 <tbody>
-                  {loadingCat ? <TableSkeleton cols={CAT_COLS.length} /> : categoryRows.length === 0 ? (
+                  {loadingCat ? <TableSkeleton columns={CAT_COLS} /> : categoryRows.length === 0 ? (
                     <tr><td colSpan={CAT_COLS.length} className="table-empty-cell">No purchase data available.</td></tr>
                   ) : categoryRows.map((row) => (
                     <tr key={row.category}>
@@ -479,7 +479,7 @@ export default function PurchaseReportsPage() {
               <table className="table-base">
                 <thead><tr>{LEDGER_COLS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr></thead>
                 <tbody>
-                  {loadingLedger ? <TableSkeleton cols={LEDGER_COLS.length} /> : filteredLedger.length === 0 ? (
+                  {loadingLedger ? <TableSkeleton columns={LEDGER_COLS} /> : filteredLedger.length === 0 ? (
                     <tr><td colSpan={LEDGER_COLS.length} className="table-empty-cell">{ledgerSearch ? "No stock movements match your search." : "No stock movements recorded."}</td></tr>
                   ) : filteredLedger.map((m) => (
                     <tr key={m.id}>

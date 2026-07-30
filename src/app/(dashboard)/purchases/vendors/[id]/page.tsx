@@ -12,7 +12,17 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { fetchCached, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
+import type { Column } from "@/components/ui/Table";
 import styles from "./vendorDetail.module.css";
+
+const BILL_COLUMNS: Column[] = [
+  { label: "Bill No.", mobile: "full" },
+  { label: "Date",     mobile: "label" },
+  { label: "Total",    cls: "table-th-right", mobile: "label" },
+  { label: "Paid",     cls: "table-th-right", mobile: "label" },
+  { label: "Balance",  cls: "table-th-right", mobile: "label" },
+  { label: "Status",   mobile: "label" },
+];
 
 interface Bill {
   id: string; billNumber: string; billDate: string;
@@ -22,6 +32,7 @@ interface Vendor {
   id: string; name: string; company: string | null; gstin: string | null;
   phone: string | null; email: string | null; address: string | null; state: string | null;
   notes: string | null; isActive: boolean; purchaseBills: Bill[];
+  createdAt: string | null; createdBy: string | null;
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -116,6 +127,12 @@ export default function VendorDetailPage() {
               {!loading && vendor?.company && (
                 <div className={styles.company}>{vendor.company}</div>
               )}
+              {!loading && (vendor?.createdBy || vendor?.createdAt) && (
+                <div className={styles.metaText}>
+                  {vendor?.createdBy && <>Added by {vendor.createdBy}</>}
+                  {vendor?.createdAt && <> · {new Date(vendor.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</>}
+                </div>
+              )}
               <div className={styles.contactRow}>
                 {!loading && vendor?.phone && <span className={styles.contactItem}>{vendor.phone}</span>}
                 {!loading && vendor?.email && <span className={styles.contactItem}>{vendor.email}</span>}
@@ -203,7 +220,7 @@ export default function VendorDetailPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={6} rows={4} />
+                <TableSkeleton columns={BILL_COLUMNS} rows={4} />
               ) : bills.length === 0 ? (
                 <tr><td colSpan={6} className={styles.emptyCell}>No bills yet.</td></tr>
               ) : bills.map((b) => (

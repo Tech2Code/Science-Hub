@@ -12,13 +12,21 @@ import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { isLowStock } from "@/lib/stockStatus";
+import type { Column } from "@/components/ui/Table";
 import styles from "./view.module.css";
+
+const PRODUCT_COLUMNS: Column[] = [
+  { label: "Name",  mobile: "full+label" },
+  { label: "SKU",   mobile: "label" },
+  { label: "Price", cls: "table-th-right", mobile: "label" },
+  { label: "Stock", cls: "table-th-right", mobile: "label" },
+];
 
 interface CategoryProduct {
   id: string; name: string; sku: string | null; price: number; stock: number; minStock: number;
 }
 interface Category {
-  id: string; name: string; updatedAt?: string; products: CategoryProduct[];
+  id: string; name: string; createdAt: string | null; createdBy: string | null; updatedAt?: string; products: CategoryProduct[];
 }
 
 export default function CategoryViewPage() {
@@ -140,9 +148,17 @@ export default function CategoryViewPage() {
                 <Button size="sm" variant="secondary" onClick={() => setRenaming(false)} disabled={savingRename}>Cancel</Button>
               </div>
             ) : (
-              <h1 className="page-title" title={category?.name}>
-                <SkeletonSwap loading={loading} w={160} h={20}>{category?.name}</SkeletonSwap>
-              </h1>
+              <div style={{ minWidth: 0 }}>
+                <h1 className="page-title" title={category?.name}>
+                  <SkeletonSwap loading={loading} w={160} h={20}>{category?.name}</SkeletonSwap>
+                </h1>
+                {!loading && (category?.createdBy || category?.createdAt) && (
+                  <div className={styles.metaText}>
+                    {category?.createdBy && <>Added by {category.createdBy}</>}
+                    {category?.createdAt && <> · {new Date(category.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</>}
+                  </div>
+                )}
+              </div>
             )}
           </div>
           <div className={styles.headerActions}>
@@ -195,7 +211,7 @@ export default function CategoryViewPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={4} rows={4} />
+                <TableSkeleton columns={PRODUCT_COLUMNS} rows={4} />
               ) : products.length === 0 ? (
                 <tr><td colSpan={4} className={styles.emptyCell}>No products under this category.</td></tr>
               ) : products.map((p) => (

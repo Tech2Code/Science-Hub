@@ -345,7 +345,7 @@ export default function InvoicesPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={COLUMNS.length} />
+                <TableSkeleton columns={COLUMNS} />
               ) : invoices.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
                   {search.trim() ? `No invoices match "${search}".` : (month || year) ? "No invoices found for this period." : "No invoices found."}

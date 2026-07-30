@@ -13,6 +13,16 @@ import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { fetchCached, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
+import type { Column } from "@/components/ui/Table";
+
+const INVOICE_COLUMNS: Column[] = [
+  { label: "Invoice No.", mobile: "full" },
+  { label: "Date",        mobile: "label" },
+  { label: "Total",       cls: "table-th-right", mobile: "label" },
+  { label: "Paid",        cls: "table-th-right", mobile: "label" },
+  { label: "Balance",     cls: "table-th-right", mobile: "label" },
+  { label: "Status",      mobile: "label" },
+];
 
 interface Invoice {
   id: string; invoiceNumber: string; date: string; createdAt: string;
@@ -22,6 +32,7 @@ interface Customer {
   id: string; name: string; phone: string; email: string;
   address: string; city: string; state: string; pincode: string;
   gstin: string; invoices: Invoice[];
+  createdAt: string | null; createdBy: string | null;
 }
 
 export default function CustomerViewPage() {
@@ -97,6 +108,12 @@ export default function CustomerViewPage() {
             </div>
             <div style={{ minWidth: 0 }}>
               <h1 className="page-title" title={customer?.name}><SkeletonSwap loading={loading} w={160} h={20}>{customer?.name}</SkeletonSwap></h1>
+              {!loading && (customer?.createdBy || customer?.createdAt) && (
+                <div className={styles.metaText}>
+                  {customer?.createdBy && <>Added by {customer.createdBy}</>}
+                  {customer?.createdAt && <> · {new Date(customer.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</>}
+                </div>
+              )}
               <div className={styles.contactRow}>
                 {!loading && customer?.phone && <span className={styles.contactItem}>{customer.phone}</span>}
                 {!loading && customer?.email && <span className={styles.contactItem}>{customer.email}</span>}
@@ -164,7 +181,7 @@ export default function CustomerViewPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton cols={6} rows={4} />
+                <TableSkeleton columns={INVOICE_COLUMNS} rows={4} />
               ) : invoices.length === 0 ? (
                 <tr><td colSpan={6} className={styles.emptyCell}>No invoices yet.</td></tr>
               ) : invoices.map((inv) => (

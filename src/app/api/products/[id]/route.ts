@@ -28,7 +28,18 @@ export async function GET(
       },
     });
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
-    return NextResponse.json(product);
+
+    const log = await prisma.activityLog.findFirst({
+      where: { entityId: id, action: "add_product" },
+      select: { createdAt: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return NextResponse.json({
+      ...product,
+      createdBy: log?.user.name ?? null,
+      createdAt: product.createdAt ?? log?.createdAt ?? null,
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Failed to fetch product" }, { status: 500 });
