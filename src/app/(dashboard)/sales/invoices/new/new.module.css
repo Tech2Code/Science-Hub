@@ -138,10 +138,10 @@
 }
 
 /* ── Custom customer form (inside modal) ──────── */
-.customForm { display: flex; flex-direction: column; gap: 1.125rem; }
-
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.375rem 1rem; }
-.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.375rem 1rem; }
+/* Matches the app-wide .form-grid-2/.form-grid-3 row-gap convention
+   (globals.css) so a FormField's absolutely-positioned error text has room
+   below the field without overlapping the next row. */
+.customForm { display: flex; flex-direction: column; gap: 1.325rem; }
 
 .customFormHint { font-size: 0.7rem; color: var(--c-text-4); }
 
@@ -151,6 +151,11 @@
   justify-content: flex-end;
   gap: 0.625rem;
   margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+@media (max-width: 480px) {
+  .customModalActions { flex-direction: column-reverse; align-items: stretch; }
+  .customModalActions > * { width: 100%; justify-content: center; }
 }
 
 .customModalSubmitLabel {

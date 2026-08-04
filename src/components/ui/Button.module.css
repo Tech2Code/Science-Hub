@@ -15,7 +15,7 @@
   outline: none;
 }
 .btn:focus-visible {
-  box-shadow: 0 0 0 3px rgba(59,130,246,0.45);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-blue) 45%, transparent);
 }
 .btn:disabled {
   cursor: not-allowed;
@@ -56,15 +56,15 @@
 }
 
 .danger {
-  background: #dc2626;
+  background: var(--c-red);
   color: #fff;
   border: 1px solid transparent;
 }
-.danger:hover:not(:disabled) { background: #b91c1c; }
+.danger:hover:not(:disabled) { background: var(--c-red-h); }
 
 .dangerOutline {
   background: transparent;
-  color: #ef4444;
+  color: var(--c-red);
   border: 1px solid var(--c-red-border);
 }
 .dangerOutline:hover:not(:disabled) {
@@ -125,10 +125,10 @@
   align-items: center;
   gap: 1.25rem;
   padding: 2.25rem 3rem;
-  border-radius: 1.25rem;
+  border-radius: var(--c-radius);
   background: var(--c-bg-card);
   border: 1px solid var(--c-border);
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--c-shadow-lg);
 }
 
 .overlayDots {

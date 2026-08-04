@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/dialogs/Modal";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { bustCachePrefix } from "@/lib/useCache";
 import { rules, validate } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
+import { useDropUp } from "@/lib/useDropUp";
 import {
   PURCHASE_BILL_UNITS, PURCHASE_BILL_GST_RATES,
   makePurchaseBillLineItemKey, discountOptionsFor, toNum, fmtCurrency, calcPurchaseBillItem,
@@ -22,7 +24,7 @@ interface PurchaseBillItemsTableProps {
   setItems: Dispatch<SetStateAction<PurchaseBillLineItem[]>>;
 }
 
-type QuickAddErrors = Partial<Record<"name" | "purchasePrice" | "gstRate", string>>;
+type QuickAddErrors = Partial<Record<"name" | "purchasePrice" | "unit" | "gstRate", string>>;
 
 // Search-and-add product flow (same interaction as the sales invoice's line
 // items card) — shared by the New Purchase Bill and Edit Purchase Bill pages
@@ -32,8 +34,10 @@ type QuickAddErrors = Partial<Record<"name" | "purchasePrice" | "gstRate", strin
 // for purchase lines like freight or services that aren't inventory.
 export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, items, setItems }: PurchaseBillItemsTableProps) {
   const toast = useToast();
+  const productSearchWrapRef = useRef<HTMLDivElement>(null);
   const [productSearch, setProductSearch] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const { dropUp, measure } = useDropUp(showProductDropdown);
   const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
   const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "Pcs", purchasePrice: "", salePrice: "", gstRate: "18", skipCatalog: false });
   const [quickAddErrors, setQuickAddErrors] = useState<QuickAddErrors>({});
@@ -67,7 +71,8 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
     const errs: QuickAddErrors = {
       name: validate(quickAddProduct.name, rules.required("Item name is required.")) ?? undefined,
       purchasePrice: validate(quickAddProduct.purchasePrice, rules.required("Price is required."), rules.nonNegativeNumber()) ?? undefined,
-      gstRate: validate(quickAddProduct.gstRate, rules.nonNegativeNumber()) ?? undefined,
+      unit: validate(quickAddProduct.unit, rules.required("Unit is required.")) ?? undefined,
+      gstRate: validate(quickAddProduct.gstRate, rules.required("GST rate is required."), rules.nonNegativeNumber()) ?? undefined,
     };
     if (Object.values(errs).some(Boolean)) { setQuickAddErrors(errs); return; }
     setQuickAddErrors({});
@@ -135,17 +140,18 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
       <h2 className="form-section-title">Items</h2>
 
       <div className={styles.searchRow}>
-        <div className={styles.productSearchWrap}>
+        <div className={styles.productSearchWrap} ref={productSearchWrapRef}>
           <Input
             type="text"
             placeholder="Search and add product…"
             value={productSearch}
-            onChange={(e) => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
-            onFocus={() => setShowProductDropdown(true)}
+            onChange={(e) => { setProductSearch(e.target.value); measure(productSearchWrapRef.current); setShowProductDropdown(true); }}
+            onFocus={() => { measure(productSearchWrapRef.current); setShowProductDropdown(true); }}
+            onClick={() => { measure(productSearchWrapRef.current); setShowProductDropdown(true); }}
             onBlur={() => setTimeout(() => setShowProductDropdown(false), 150)}
           />
           {showProductDropdown && (
-            <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
+            <div className={`${styles.dropdown} ${dropUp ? styles.dropdownUp : ""}`} onMouseDown={(e) => e.preventDefault()}>
               {filteredProducts.length > 0 ? filteredProducts.map((p) => (
                 <button key={p.id} type="button" onClick={() => addProduct(p)} className={styles.dropdownBtn}>
                   <div className={styles.dropdownItemName} title={p.name}>{p.name}</div>
@@ -173,20 +179,21 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
         </button>
       </div>
 
-      {showQuickAddProduct && (
+      <Modal open={showQuickAddProduct} onClose={() => { if (!quickAddSaving) setShowQuickAddProduct(false); }} title="Add Custom Item" maxWidth="34rem">
         <div className={styles.customForm}>
           <FormField label="Item Name" required error={quickAddErrors.name}>
             <Input
-              type="text" placeholder="e.g. Freight charges"
+              type="text" placeholder="e.g. Beaker 250ml Borosilicate"
+              autoFocus
               value={quickAddProduct.name}
               onChange={(e) => { setQuickAddProduct((p) => ({ ...p, name: e.target.value })); setQuickAddErrors((p) => ({ ...p, name: undefined })); }}
             />
           </FormField>
           <div className={styles.grid4}>
-            <FormField label="Unit">
+            <FormField label="Unit" required error={quickAddErrors.unit}>
               <Select
                 value={quickAddProduct.unit}
-                onChange={(e) => setQuickAddProduct((p) => ({ ...p, unit: e.target.value }))}
+                onChange={(e) => { setQuickAddProduct((p) => ({ ...p, unit: e.target.value })); setQuickAddErrors((p) => ({ ...p, unit: undefined })); }}
               >
                 {PURCHASE_BILL_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
               </Select>
@@ -207,7 +214,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
                 />
               </FormField>
             )}
-            <FormField label="GST %" error={quickAddErrors.gstRate}>
+            <FormField label="GST %" required error={quickAddErrors.gstRate}>
               <Input
                 type="text" inputMode="decimal" placeholder="18"
                 value={quickAddProduct.gstRate}
@@ -224,6 +231,11 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
             />
             Just for this bill — don&apos;t save to catalog
           </label>
+          {!quickAddProduct.skipCatalog && (
+            <p className={styles.customFormHint}>
+              This product will be saved to your catalog and added to this bill.
+            </p>
+          )}
           <div className={styles.formActions}>
             <Button type="button" variant="secondary" size="md" onClick={() => setShowQuickAddProduct(false)} disabled={quickAddSaving}>
               Cancel
@@ -232,13 +244,8 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
               {quickAddSaving ? "Adding…" : quickAddProduct.skipCatalog ? "Add to bill" : "Add & use product"}
             </Button>
           </div>
-          {!quickAddProduct.skipCatalog && (
-            <p className={styles.customFormHint}>
-              This product will be saved to your catalog and added to this bill.
-            </p>
-          )}
         </div>
-      )}
+      </Modal>
 
       {items.length > 0 ? (
         <div className={styles.itemsTableWrap}>

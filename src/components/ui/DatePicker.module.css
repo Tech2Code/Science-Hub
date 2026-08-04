@@ -9,7 +9,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.75rem 1rem;
+  padding: 0.625rem 0.875rem;
   border-radius: var(--c-radius-sm);
   border: 1px solid var(--c-border);
   background: var(--c-bg-input);
@@ -25,14 +25,14 @@
    original, more compact size on phone-sized screens. */
 @media (max-width: 767px) {
   .trigger {
-    padding: 0.625rem 0.875rem;
+    padding: 0.5rem 0.75rem;
     font-size: 0.875rem;
   }
 }
 .trigger:focus-visible,
 .trigger[aria-expanded="true"] {
   border-color: var(--c-blue);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-blue) 15%, transparent);
 }
 .trigger.disabled {
   cursor: not-allowed;
@@ -175,9 +175,9 @@
 /* Error state — matches [data-error] convention in Input.module.css */
 [data-error] .trigger {
   border-color: var(--c-red-border, #fca5a5);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.09);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-red, #dc2626) 9%, transparent);
 }
 [data-error] .trigger:focus-visible {
   border-color: var(--c-red, #dc2626);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-red, #dc2626) 18%, transparent);
 }

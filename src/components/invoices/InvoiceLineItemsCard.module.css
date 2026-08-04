@@ -27,6 +27,7 @@
 /* ── Search / dropdown ────────────────────────── */
 .dropdown {
   position: absolute;
+  top: 100%;
   z-index: 20;
   margin-top: 0.25rem;
   width: 100%;
@@ -37,6 +38,15 @@
   max-height: 13rem;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+/* Opens above the input instead — used when the page is scrolled far enough
+   that there isn't room below but there is above (see useDropUp). */
+.dropdownUp {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 0.25rem;
 }
 
 .dropdownBtn {
@@ -77,19 +87,23 @@
   cursor: pointer;
 }
 
-/* ── Quick-add product form ───────────────────── */
+/* ── Quick-add product form (rendered inside a Modal) ───────────────────── */
+/* Row gap matches the app-wide .form-grid-2/.form-grid-3 convention
+   (globals.css) — FormField's error text is absolutely positioned below the
+   field (Input.module.css .errorMsg) so it doesn't push the layout down,
+   which means the gap to the next row has to be wide enough to fit it
+   without overlapping; a smaller ad-hoc gap here caused exactly that. */
 .customForm {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
-  margin-bottom: 1rem;
-  padding: 0.875rem;
-  border: 1px solid var(--c-border);
-  border-radius: 0.625rem;
-  background: var(--c-bg-sub);
+  gap: 1.325rem;
 }
 
-.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.625rem; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.325rem 1rem; }
+
+@media (max-width: 480px) {
+  .grid3 { grid-template-columns: 1fr; }
+}
 
 .skipCatalogLabel {
   display: flex;

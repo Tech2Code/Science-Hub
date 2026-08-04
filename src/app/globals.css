@@ -57,6 +57,24 @@
   --c-orange-border: #fed7aa;
   --c-orange-text:   #7c2d12;
 
+  /* Purple */
+  --c-purple:        #7c3aed;
+  --c-purple-bg:     #f5f3ff;
+  --c-purple-border: #ddd6fe;
+  --c-purple-text:   #6d28d9;
+
+  /* Teal */
+  --c-teal:        #0f766e;
+  --c-teal-bg:     #f0fdfa;
+  --c-teal-border: #99f6e4;
+  --c-teal-text:   #0f766e;
+
+  /* Fuchsia */
+  --c-fuchsia:        #a21caf;
+  --c-fuchsia-bg:     #fdf4ff;
+  --c-fuchsia-border: #f5d0fe;
+  --c-fuchsia-text:   #a21caf;
+
   /* Sidebar / chrome */
   --c-sidebar:     #ffffff;
   --c-topbar:      #ffffff;
@@ -122,6 +140,21 @@
   --c-orange-bg:     rgba(251,146,60,0.12);
   --c-orange-border: rgba(251,146,60,0.35);
   --c-orange-text:   #fed7aa;
+
+  --c-purple:        #a78bfa;
+  --c-purple-bg:     rgba(167,139,250,0.1);
+  --c-purple-border: rgba(167,139,250,0.3);
+  --c-purple-text:   #c4b5fd;
+
+  --c-teal:        #2dd4bf;
+  --c-teal-bg:     rgba(45,212,191,0.1);
+  --c-teal-border: rgba(45,212,191,0.3);
+  --c-teal-text:   #5eead4;
+
+  --c-fuchsia:        #e879f9;
+  --c-fuchsia-bg:     rgba(232,121,249,0.1);
+  --c-fuchsia-border: rgba(232,121,249,0.3);
+  --c-fuchsia-text:   #f0abfc;
 
   --c-sidebar:     #0f172a;
   --c-topbar:      #0f172a;
@@ -422,13 +455,13 @@ select::-moz-focus-inner {
   flex-direction: column;
   /* Extra row space leaves room for the absolutely-positioned field error
      message so it doesn't overlap the next field when it appears. */
-  gap: 1.375rem;
+  gap: 1.325rem;
 }
 
 .form-section-title { font-size: 0.8125rem; font-weight: 600; color: var(--c-text-2); }
 
-.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.375rem 1rem; }
-.form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.375rem 1rem; }
+.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.325rem 1rem; }
+.form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.325rem 1rem; }
 @media (max-width: 640px) {
   .form-grid-2,
   .form-grid-3 { grid-template-columns: 1fr; }
@@ -578,7 +611,7 @@ select::-moz-focus-inner {
 .stat-banner-red   .stat-banner-label { color: var(--c-red); }
 .stat-banner-blue  .stat-banner-label { color: var(--c-blue); }
 .stat-banner-green .stat-banner-label { color: var(--c-green-text); }
-.stat-banner-purple .stat-banner-label { color: #8b5cf6; }
+.stat-banner-purple .stat-banner-label { color: var(--c-purple); }
 .stat-banner-value {
   font-size: 1.875rem;
   font-weight: 700;

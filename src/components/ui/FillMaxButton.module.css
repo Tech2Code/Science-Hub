@@ -8,15 +8,15 @@
 .amber {
   padding: 0 0.75rem;
   height: 2.25rem;
-  border-radius: 0.5rem;
+  border-radius: var(--c-radius-sm);
   border: 1px solid var(--c-amber);
-  background: rgba(245, 158, 11, 0.1);
+  background: var(--c-amber-bg);
   color: var(--c-amber);
   font-size: 0.75rem;
   font-weight: 700;
 }
 .amber:hover {
-  background: rgba(245, 158, 11, 0.2);
+  background: color-mix(in srgb, var(--c-amber) 20%, transparent);
 }
 
 .green {

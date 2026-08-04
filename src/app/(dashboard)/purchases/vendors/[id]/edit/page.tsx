@@ -37,7 +37,8 @@ export default function EditVendorPage() {
         const loaded: VendorFormData = {
           name: d.name ?? "", company: d.company ?? "", gstin: d.gstin ?? "",
           phone: d.phone ?? "", email: d.email ?? "", address: d.address ?? "",
-          state: d.state ?? "", notes: d.notes ?? "", isActive: d.isActive !== false,
+          city: d.city ?? "", state: d.state ?? "", pincode: d.pincode ?? "",
+          notes: d.notes ?? "", isActive: d.isActive !== false,
         };
         setForm(loaded);
         setInitialForm(loaded);
@@ -56,7 +57,7 @@ export default function EditVendorPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const newErrors = validateVendorForm(form, { requirePhone: false, requireAddress: false });
+    const newErrors = validateVendorForm(form, { requirePhone: true, requireAddress: true, requireCity: true, requireState: true, requirePincode: true });
     if (hasErrors(newErrors)) { setErrors(newErrors); return; }
     setErrors({});
     setSaving(true);
@@ -100,15 +101,21 @@ export default function EditVendorPage() {
             <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
             <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
           </div>
-          <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
-          <div className={styles.skFieldStack}><Sk w={70} h={11} /><Sk h={60} r={8} /></div>
-          <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+          <div className={styles.skFieldStack}><Sk w={70} h={11} /><Sk h={38} r={8} /></div>
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+          </div>
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+          </div>
           <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={60} r={8} /></div>
           <Sk w={140} h={14} r={4} />
         </div>
       ) : (
         <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
-          <VendorFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} />
+          <VendorFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} phoneRequired addressRequired cityRequired stateRequired pincodeRequired />
 
           <div className="form-actions-wrap">
             <div className="form-actions">

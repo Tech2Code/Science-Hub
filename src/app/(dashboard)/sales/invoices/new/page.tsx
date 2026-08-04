@@ -12,6 +12,7 @@ import { Modal } from "@/components/dialogs/Modal";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { INDIA_STATES_FULL } from "@/lib/states";
+import { usePincodeAutofill } from "@/lib/usePincodeLookup";
 import { InvoiceOptionsRow } from "@/components/invoices/InvoiceOptionsRow";
 import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
 import { computeInvoiceTotals, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
@@ -81,6 +82,20 @@ export default function NewInvoicePage() {
     if (state && businessState) setIsInterState(state !== businessState);
   }
 
+  const customPincodeLookup = usePincodeAutofill((city, state) => {
+    setCustomCustomer((p) => ({ ...p, city: city || p.city, state: state || p.state }));
+    if (city) clearErr("city");
+    if (state) { clearErr("state"); applyPlaceOfSupply(state); }
+  });
+
+  function handleCustomPincodeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digits = e.target.value.replace(/\D/g, "").slice(0, 6);
+    setCustomCustomer((p) => ({ ...p, pincode: digits }));
+    clearErr("pincode");
+    if (digits.length === 6) customPincodeLookup.run(digits);
+    else customPincodeLookup.reset();
+  }
+
   const handleCustomerSelect = useCallback((c: Customer) => {
     setCustomerId(c.id);
     setCustomerSearch(c.name);
@@ -88,8 +103,10 @@ export default function NewInvoicePage() {
     setCustomerMode("existing");
     setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
     setCustomModalOpen(false);
+    customPincodeLookup.reset();
     setPlaceOfSupply(c.state ?? "");
     if (c.state && businessState) setIsInterState(c.state !== businessState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset() only bumps a ref/idle-state, stable in effect though the hook returns a new object each render
   }, [businessState]);
 
   const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal } = computeInvoiceTotals(items);
@@ -310,6 +327,7 @@ export default function NewInvoicePage() {
                       onClick={() => {
                         setCustomerMode("existing");
                         setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
+                        customPincodeLookup.reset();
                         setPlaceOfSupply("");
                       }}
                       className={styles.removeCustomLink}
@@ -323,7 +341,7 @@ export default function NewInvoicePage() {
               );
             })()}
 
-            <Modal open={customModalOpen} onClose={() => setCustomModalOpen(false)} title="Custom Customer Details" maxWidth="34rem">
+            <Modal open={customModalOpen} onClose={() => { setCustomModalOpen(false); customPincodeLookup.reset(); }} title="Custom Customer Details" maxWidth="36rem">
               <div className={styles.customForm}>
                 <FormField label="Customer Name" required error={customErrors.name}>
                   <Input
@@ -333,7 +351,7 @@ export default function NewInvoicePage() {
                     onChange={(e) => { setCustomCustomer((p) => ({ ...p, name: e.target.value })); clearErr("name"); }}
                   />
                 </FormField>
-                <div className={styles.grid2}>
+                <div className="form-grid-2">
                   <FormField label="Phone" required error={customErrors.phone}>
                     <PhoneInput value={customCustomer.phone} placeholder="10-digit mobile"
                       onChange={(e) => { setCustomCustomer((p) => ({ ...p, phone: e.target.value })); clearErr("phone"); }} />
@@ -347,7 +365,22 @@ export default function NewInvoicePage() {
                   <Input type="text" placeholder="Street / locality" value={customCustomer.address}
                     onChange={(e) => { setCustomCustomer((p) => ({ ...p, address: e.target.value })); clearErr("address"); }} />
                 </FormField>
-                <div className={styles.grid3}>
+                <div className="form-grid-2">
+                  <FormField
+                    label="Pincode"
+                    required
+                    error={customErrors.pincode}
+                    hint={customPincodeLookup.status.status === "loading" ? "Looking up city/state…" : customPincodeLookup.status.label}
+                    hintSuccess={customPincodeLookup.status.status === "found"}
+                  >
+                    <Input type="text" placeholder="6-digit" value={customCustomer.pincode} onChange={handleCustomPincodeChange} />
+                  </FormField>
+                  <FormField label="GSTIN" error={customErrors.gstin}>
+                    <Input type="text" placeholder="22AAAAA0000A1Z5" value={customCustomer.gstin} maxLength={15} mono
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, gstin: e.target.value })); clearErr("gstin"); }} />
+                  </FormField>
+                </div>
+                <div className="form-grid-2">
                   <FormField label="City" required error={customErrors.city}>
                     <Input type="text" placeholder="City" value={customCustomer.city}
                       onChange={(e) => { setCustomCustomer((p) => ({ ...p, city: e.target.value })); clearErr("city"); }} />
@@ -365,15 +398,7 @@ export default function NewInvoicePage() {
                       {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
                     </Select>
                   </FormField>
-                  <FormField label="Pincode" required error={customErrors.pincode}>
-                    <Input type="text" placeholder="6-digit" value={customCustomer.pincode}
-                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })); clearErr("pincode"); }} />
-                  </FormField>
                 </div>
-                <FormField label="GSTIN" error={customErrors.gstin}>
-                  <Input type="text" placeholder="22AAAAA0000A1Z5" value={customCustomer.gstin} maxLength={15} mono
-                    onChange={(e) => { setCustomCustomer((p) => ({ ...p, gstin: e.target.value })); clearErr("gstin"); }} />
-                </FormField>
                 <p className={styles.customFormHint}>
                   This customer will be saved automatically for future use.
                 </p>
@@ -390,7 +415,15 @@ export default function NewInvoicePage() {
                   >
                     Dismiss
                   </Button>
-                  <Button type="button" variant="primary" onClick={() => { if (validateCustomCustomer()) setCustomModalOpen(false); }}>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={() => {
+                      if (!validateCustomCustomer()) return;
+                      setCustomModalOpen(false);
+                      toast({ type: "success", title: "Customer details saved", message: `"${customCustomer.name.trim()}" will be added to your directory when you save this invoice.` });
+                    }}
+                  >
                     <span className={styles.customModalSubmitLabel}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                       Save &amp; Use This Customer

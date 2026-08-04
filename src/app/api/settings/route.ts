@@ -56,6 +56,7 @@ export async function GET() {
 // NEXTAUTH_SECRET doesn't match) from blocking saves anywhere else.
 const SIMPLE_STRING_KEYS = ["name", "tagline", "email", "phone", "address", "city", "state", "pincode", "gstin", "termsAndConditions"] as const;
 const BANK_KEYS = ["bankName", "bankAccountName", "bankAccountNumber", "bankIfsc", "bankBranch"] as const;
+const ADDRESS_KEYS = ["address", "city", "state", "pincode"] as const;
 
 export async function PUT(request: NextRequest) {
   try {
@@ -72,10 +73,12 @@ export async function PUT(request: NextRequest) {
       bankName, bankAccountName, bankAccountNumber, bankIfsc, bankBranch,
     };
     const isBankSectionUpdate = BANK_KEYS.some((k) => k in body);
+    const isAddressSectionUpdate = ADDRESS_KEYS.some((k) => k in body);
 
     const validationError = validateSettingsInput(
-      { pan, termsAndConditions, phone, pincode, gstin, bankName, bankAccountNumber, bankIfsc, bankBranch },
+      { pan, termsAndConditions, phone, address, city, state, pincode, gstin, bankName, bankAccountNumber, bankIfsc, bankBranch },
       isBankSectionUpdate,
+      isAddressSectionUpdate,
     );
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 

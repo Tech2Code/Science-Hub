@@ -38,7 +38,7 @@ export function ProductFormFields({ form, onChange, fieldErrors, brands, categor
       </FormField>
 
       <div className="form-grid-3">
-        <FormField label="Unit">
+        <FormField label="Unit" required error={fieldErrors.unit}>
           <Select name="unit" value={form.unit} onChange={onChange} disabled={disabled}>
             {PRODUCT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
           </Select>
@@ -46,7 +46,7 @@ export function ProductFormFields({ form, onChange, fieldErrors, brands, categor
         <FormField label="Selling Price (₹)" required error={fieldErrors.price}>
           <Input name="price" type="number" min="0" step="0.01" value={form.price} onChange={onChange} placeholder="0.00" disabled={disabled} />
         </FormField>
-        <FormField label="GST Rate">
+        <FormField label="GST Rate" required error={fieldErrors.gstRate}>
           <Select name="gstRate" value={form.gstRate} onChange={onChange} disabled={disabled}>
             {PRODUCT_GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
           </Select>
@@ -60,7 +60,7 @@ export function ProductFormFields({ form, onChange, fieldErrors, brands, categor
       </div>
 
       <div className="form-grid-2">
-        <FormField label={stockLabel} error={fieldErrors.stock}>
+        <FormField label={stockLabel} required error={fieldErrors.stock}>
           <Input name="stock" type="number" min="0" value={form.stock} onChange={onChange} disabled={disabled} />
         </FormField>
         <FormField label="Minimum Stock" hint="Alert triggers when stock drops to or below this." error={fieldErrors.minStock}>

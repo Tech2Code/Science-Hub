@@ -30,7 +30,8 @@ interface Bill {
 }
 interface Vendor {
   id: string; name: string; company: string | null; gstin: string | null;
-  phone: string | null; email: string | null; address: string | null; state: string | null;
+  phone: string | null; email: string | null; address: string | null;
+  city: string | null; state: string | null; pincode: string | null;
   notes: string | null; isActive: boolean; purchaseBills: Bill[];
   createdAt: string | null; createdBy: string | null;
 }
@@ -160,18 +161,17 @@ export default function VendorDetailPage() {
           </div>
         </div>
 
-        {!loading && (vendor?.address || vendor?.state || vendor?.notes) && (
+        {!loading && (vendor?.address || vendor?.city || vendor?.state || vendor?.pincode || vendor?.notes) && (
           <div className={styles.detailsBlock}>
-            {vendor?.address && (
+            {(vendor?.address || vendor?.city || vendor?.state || vendor?.pincode) && (
               <div>
                 <div className={styles.detailLabel}>Address</div>
-                <p className={styles.detailText}>{vendor.address}</p>
-              </div>
-            )}
-            {vendor?.state && (
-              <div>
-                <div className={styles.detailLabel}>State</div>
-                <p className={styles.detailText}>{vendor.state}</p>
+                <p className={styles.detailText}>
+                  {vendor?.address}
+                  {[vendor?.city, vendor?.state, vendor?.pincode].filter(Boolean).length > 0 && (
+                    <>{vendor?.address ? ", " : ""}{[vendor?.city, vendor?.state, vendor?.pincode].filter(Boolean).join(", ")}</>
+                  )}
+                </p>
               </div>
             )}
             {vendor?.notes && (

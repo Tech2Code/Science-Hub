@@ -48,7 +48,7 @@
   width: 20rem;
   height: 20rem;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6, #2dd4bf);
+  background: linear-gradient(135deg, var(--c-blue), #2dd4bf);
   opacity: 0.14;
   filter: blur(10px);
   pointer-events: none;
@@ -121,7 +121,7 @@
 }
 
 .actionTile[data-tone="blue"] .actionTileIcon {
-  background: linear-gradient(135deg, #3b82f6, #2dd4bf);
+  background: linear-gradient(135deg, var(--c-blue), #2dd4bf);
   color: #fff;
 }
 .actionTile[data-tone="amber"] .actionTileIcon {

@@ -241,26 +241,29 @@ export default function NewPurchaseBillPage() {
           onDiscountChange={setDiscount}
           footer={
             <>
-              {/* Optional Payment */}
-              <div className={styles.paymentSection}>
-                {addPayment ? (
-                  <div className={styles.paymentSummary}>
-                    <div className={styles.paymentSummaryInfo}>
-                      <span className={styles.paymentSummaryAmount}>₹{fmtCurrency(toNum(payAmount))}</span>
-                      <span className={styles.paymentSummarySub}>{payMethod} · {payDate}{payReference ? ` · ${payReference}` : ""}</span>
+              {/* Optional Payment — only meaningful once the bill actually has a
+                  total; recording a payment against a ₹0 bill has nothing to pay. */}
+              {grandTotal > 0 && (
+                <div className={styles.paymentSection}>
+                  {addPayment ? (
+                    <div className={styles.paymentSummary}>
+                      <div className={styles.paymentSummaryInfo}>
+                        <span className={styles.paymentSummaryAmount}>₹{fmtCurrency(toNum(payAmount))}</span>
+                        <span className={styles.paymentSummarySub}>{payMethod} · {payDate}{payReference ? ` · ${payReference}` : ""}</span>
+                      </div>
+                      <div className={styles.paymentSummaryActions}>
+                        <button type="button" className={styles.paymentSummaryBtn} onClick={() => setShowPaymentDialog(true)}>Edit</button>
+                        <button type="button" className={styles.paymentSummaryBtn} onClick={removePayment}>Remove</button>
+                      </div>
                     </div>
-                    <div className={styles.paymentSummaryActions}>
-                      <button type="button" className={styles.paymentSummaryBtn} onClick={() => setShowPaymentDialog(true)}>Edit</button>
-                      <button type="button" className={styles.paymentSummaryBtn} onClick={removePayment}>Remove</button>
-                    </div>
-                  </div>
-                ) : (
-                  <button type="button" className={styles.recordPaymentLink} onClick={() => setShowPaymentDialog(true)}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    Record payment now
-                  </button>
-                )}
-              </div>
+                  ) : (
+                    <button type="button" className={styles.recordPaymentLink} onClick={() => setShowPaymentDialog(true)}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      Record payment now
+                    </button>
+                  )}
+                </div>
+              )}
 
               {(missingVendor || noItems) && (
                 <div className={styles.warningList}>

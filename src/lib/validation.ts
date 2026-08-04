@@ -90,12 +90,23 @@ export function hasErrors<T>(errors: FormErrors<T>): boolean {
 
 // Server-side counterpart to the customer form's client-side validation —
 // API route handlers must not rely solely on the browser to enforce this.
+// `requireContactDetails` is set on create, edit, and the invoice page's
+// inline "custom customer" flow alike. State is required alongside pincode
+// since it's what pincode auto-fill resolves, mirroring the same
+// requirement on vendors.
 export function validateCustomerInput(input: {
-  name?: string; phone?: string; email?: string; pincode?: string; gstin?: string;
-}): string | null {
+  name?: string; phone?: string; email?: string; address?: string; city?: string; state?: string; pincode?: string; gstin?: string;
+}, requireContactDetails = false): string | null {
   const name = (input.name ?? "").trim();
   if (!name) return "Name is required.";
   if (name.length > 200) return "Name is too long (max 200 characters).";
+  if (requireContactDetails) {
+    if (!(input.phone ?? "").trim()) return "Phone number is required.";
+    if (!(input.address ?? "").trim()) return "Address is required.";
+    if (!(input.city ?? "").trim()) return "City is required.";
+    if (!(input.state ?? "").trim()) return "State is required.";
+    if (!(input.pincode ?? "").trim()) return "Pincode is required.";
+  }
   return (
     validate(input.phone ?? "", rules.phone10()) ||
     validate(input.email ?? "", rules.email()) ||
@@ -174,13 +185,17 @@ export function validateUserInput(
 // fail if the account number couldn't be decrypted for an unrelated reason
 // (e.g. a NEXTAUTH_SECRET mismatch) rather than because it's actually blank.
 export function validateSettingsInput(input: {
-  pan?: string; termsAndConditions?: string; phone?: string; pincode?: string; gstin?: string;
+  pan?: string; termsAndConditions?: string; phone?: string; address?: string; city?: string; state?: string; pincode?: string; gstin?: string;
   bankName?: string; bankAccountNumber?: string; bankIfsc?: string; bankBranch?: string;
-}, isBankSectionUpdate: boolean): string | null {
+}, isBankSectionUpdate: boolean, isAddressSectionUpdate = false): string | null {
   return (
     validate(input.pan ?? "", rules.maxLength(10), rules.pan()) ||
     validate(input.termsAndConditions ?? "", rules.maxLength(2000)) ||
     validate(input.phone ?? "", rules.phone10()) ||
+    (isAddressSectionUpdate ? validate(input.address ?? "", rules.required("Street address is required.")) : null) ||
+    (isAddressSectionUpdate ? validate(input.city ?? "", rules.required("City is required.")) : null) ||
+    (isAddressSectionUpdate ? validate(input.state ?? "", rules.required("State is required.")) : null) ||
+    (isAddressSectionUpdate ? validate(input.pincode ?? "", rules.required("Pincode is required.")) : null) ||
     validate(input.pincode ?? "", rules.pincode()) ||
     validate(input.gstin ?? "", rules.maxLength(15), rules.gstin()) ||
     (isBankSectionUpdate
@@ -195,10 +210,13 @@ export function validateSettingsInput(input: {
 
 // Server-side counterpart to the vendor form's client-side validation —
 // API route handlers must not rely solely on the browser to enforce this.
-// `requireContactDetails` is set on creation only — existing vendors may
-// predate the phone/address requirement, so edits don't retroactively block on it.
+// `requireContactDetails` is set on both creation and edit — a vendor with
+// no state can't have its place-of-supply derived correctly on purchase
+// bills (see deriveIsInterState), so editing an existing vendor is also a
+// chance to backfill the missing contact/address details rather than
+// letting them persist indefinitely.
 export function validateVendorInput(input: {
-  name?: string; phone?: string; email?: string; gstin?: string; address?: string; state?: string;
+  name?: string; phone?: string; email?: string; gstin?: string; address?: string; city?: string; state?: string; pincode?: string;
 }, requireContactDetails = false): string | null {
   const name = (input.name ?? "").trim();
   if (!name) return "Vendor name is required.";
@@ -206,11 +224,15 @@ export function validateVendorInput(input: {
   if (requireContactDetails) {
     if (!(input.phone ?? "").trim()) return "Phone number is required.";
     if (!(input.address ?? "").trim()) return "Address is required.";
+    if (!(input.city ?? "").trim()) return "City is required.";
+    if (!(input.state ?? "").trim()) return "State is required.";
+    if (!(input.pincode ?? "").trim()) return "Pincode is required.";
   }
   return (
     validate(input.phone ?? "", rules.phone10()) ||
     validate(input.email ?? "", rules.email()) ||
     validate(input.gstin ?? "", rules.maxLength(15), rules.gstin()) ||
+    validate(input.pincode ?? "", rules.pincode()) ||
     null
   );
 }

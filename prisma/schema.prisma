@@ -271,7 +271,9 @@ model Vendor {
   phone         String?
   email         String?
   address       String?
+  city          String?
   state         String?
+  pincode       String?
   notes         String?
   isActive      Boolean         @default(true)
   createdAt     DateTime        @default(now())

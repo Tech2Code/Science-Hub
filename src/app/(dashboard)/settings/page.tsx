@@ -2,17 +2,19 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/Button";
-import { Input, Textarea, FormField } from "@/components/ui/Input";
+import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
+import { INDIA_STATES_FULL } from "@/lib/states";
 import { useBranding } from "@/lib/businessBranding";
 import { animateSection } from "@/lib/animateSection";
 import { useScrollToHash } from "@/lib/useScrollToHash";
 import { useDirty } from "@/lib/useDirty";
 import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { patchCache } from "@/lib/useCache";
+import { usePincodeAutofill } from "@/lib/usePincodeLookup";
 import styles from "./settings.module.css";
 
 interface BusinessSettings {
@@ -258,12 +260,33 @@ export default function SettingsPage() {
     addressDirty.markClean(initial);
     setAddressErrors({});
     setEditingAddress(true);
+    addressPincodeLookup.reset();
   }
-  function handleCancelAddress() { setEditingAddress(false); setAddressErrors({}); }
+  function handleCancelAddress() { setEditingAddress(false); setAddressErrors({}); addressPincodeLookup.reset(); }
+
+  const addressPincodeLookup = usePincodeAutofill((city, state) => {
+    setAddressForm((f) => ({ ...f, city: city || f.city, state: state || f.state }));
+    if (city) setAddressErrors((e) => ({ ...e, city: undefined }));
+    if (state) setAddressErrors((e) => ({ ...e, state: undefined }));
+  });
+
+  function handleAddressPincodeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digits = e.target.value.replace(/\D/g, "").slice(0, 6);
+    setAddressForm((f) => ({ ...f, pincode: digits }));
+    setAddressErrors({});
+    if (digits.length === 6) addressPincodeLookup.run(digits);
+    else addressPincodeLookup.reset();
+  }
 
   async function handleSaveAddress(e: React.FormEvent) {
     e.preventDefault();
-    const pinErr = validate(addressForm.pincode, rules.pincode());
+    const addressErr = validate(addressForm.address, rules.required("Street address is required."));
+    if (addressErr) { setAddressErrors({ address: addressErr }); return; }
+    const cityErr = validate(addressForm.city, rules.required("City is required."));
+    if (cityErr) { setAddressErrors({ city: cityErr }); return; }
+    const stateErr = validate(addressForm.state, rules.required("State is required."));
+    if (stateErr) { setAddressErrors({ state: stateErr }); return; }
+    const pinErr = validate(addressForm.pincode, rules.required("Pincode is required."), rules.pincode());
     if (pinErr) { setAddressErrors({ pincode: pinErr }); return; }
     setAddressErrors({});
     setSavingAddress(true);
@@ -725,17 +748,26 @@ export default function SettingsPage() {
                   The <strong>State</strong> field determines intra-state (CGST+SGST) vs inter-state (IGST) for new invoices.
                 </p>
                 <div className={styles.formGrid}>
-                  <FormField label="Street Address">
-                    <Input value={addressForm.address} onChange={(e) => setAddressForm((f) => ({ ...f, address: e.target.value }))} placeholder="e.g. Pooth Khurd" />
+                  <FormField label="Street Address" required error={addressErrors.address}>
+                    <Input value={addressForm.address} onChange={(e) => { setAddressForm((f) => ({ ...f, address: e.target.value })); setAddressErrors((er) => ({ ...er, address: undefined })); }} placeholder="e.g. Pooth Khurd" />
                   </FormField>
-                  <FormField label="City">
-                    <Input value={addressForm.city} onChange={(e) => setAddressForm((f) => ({ ...f, city: e.target.value }))} placeholder="e.g. Delhi" />
+                  <FormField
+                    label="Pincode"
+                    required
+                    error={addressErrors.pincode}
+                    hint={addressPincodeLookup.status.status === "loading" ? "Looking up city/state…" : addressPincodeLookup.status.label}
+                    hintSuccess={addressPincodeLookup.status.status === "found"}
+                  >
+                    <Input value={addressForm.pincode} onChange={handleAddressPincodeChange} placeholder="e.g. 110039" maxLength={6} />
                   </FormField>
-                  <FormField label="State">
-                    <Input value={addressForm.state} onChange={(e) => setAddressForm((f) => ({ ...f, state: e.target.value }))} placeholder="e.g. Delhi" />
+                  <FormField label="City" required error={addressErrors.city}>
+                    <Input value={addressForm.city} onChange={(e) => { setAddressForm((f) => ({ ...f, city: e.target.value })); setAddressErrors((er) => ({ ...er, city: undefined })); }} placeholder="e.g. Delhi" />
                   </FormField>
-                  <FormField label="Pincode" error={addressErrors.pincode}>
-                    <Input value={addressForm.pincode} onChange={(e) => { setAddressForm((f) => ({ ...f, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })); setAddressErrors({}); }} placeholder="e.g. 110039" maxLength={6} />
+                  <FormField label="State" required error={addressErrors.state}>
+                    <Select value={addressForm.state} onChange={(e) => { setAddressForm((f) => ({ ...f, state: e.target.value })); setAddressErrors((er) => ({ ...er, state: undefined })); }}>
+                      <option value="">Select state</option>
+                      {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </Select>
                   </FormField>
                 </div>
                 <div className={styles.formActionsRow}>

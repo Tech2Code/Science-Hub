@@ -11,7 +11,7 @@
 
 .typeToConfirm label {
   font-size: 0.8125rem;
-  color: var(--c-text-muted);
+  color: var(--c-text-3);
 }
 
 .protectedBadge {
@@ -71,39 +71,39 @@
 }
 
 .typePillProduct {
-  background: #f3e8ff;
-  color: #7c3aed;
-  border: 1px solid #ddd6fe;
+  background: var(--c-purple-bg);
+  color: var(--c-purple-text);
+  border: 1px solid var(--c-purple-border);
 }
 
 .typePillBrand {
-  background: #fff7ed;
-  color: #c2410c;
-  border: 1px solid #fed7aa;
+  background: var(--c-orange-bg);
+  color: var(--c-orange-text);
+  border: 1px solid var(--c-orange-border);
 }
 
 .typePillCategory {
-  background: #f0fdfa;
-  color: #0f766e;
-  border: 1px solid #99f6e4;
+  background: var(--c-teal-bg);
+  color: var(--c-teal-text);
+  border: 1px solid var(--c-teal-border);
 }
 
 .typePillVendor {
-  background: #fdf4ff;
-  color: #a21caf;
-  border: 1px solid #f5d0fe;
+  background: var(--c-fuchsia-bg);
+  color: var(--c-fuchsia-text);
+  border: 1px solid var(--c-fuchsia-border);
 }
 
 .typePillPurchaseBill {
-  background: #fef2f2;
-  color: #b91c1c;
-  border: 1px solid #fecaca;
+  background: var(--c-red-bg);
+  color: var(--c-red-text);
+  border: 1px solid var(--c-red-border);
 }
 
 .typePillReturn {
-  background: #fff7ed;
-  color: #c2410c;
-  border: 1px solid #fed7aa;
+  background: var(--c-orange-bg);
+  color: var(--c-orange-text);
+  border: 1px solid var(--c-orange-border);
 }
 
 .itemCount {
@@ -190,13 +190,13 @@
 .daysLeftRed {
   background: var(--c-red-bg);
   color: var(--c-red);
-  border: 1px solid #fecaca;
+  border: 1px solid var(--c-red-border);
 }
 
 .daysLeftYellow {
-  background: #fef9c3;
-  color: #b45309;
-  border: 1px solid #fde68a;
+  background: var(--c-amber-bg);
+  color: var(--c-amber-text);
+  border: 1px solid var(--c-amber-border);
 }
 
 .daysLeftGreen {

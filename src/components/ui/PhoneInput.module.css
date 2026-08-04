@@ -10,7 +10,7 @@
 
 .wrap:focus-within {
   border-color: var(--c-blue, #2563eb);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-blue, #2563eb) 15%, transparent);
 }
 
 /* Matches Input.module.css's [data-error] pattern so FormField's error
@@ -18,11 +18,11 @@
    same way a plain <Input> would be styled. */
 [data-error] .wrap {
   border-color: var(--c-red-border, #fca5a5);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.09);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-red, #dc2626) 9%, transparent);
 }
 [data-error] .wrap:focus-within {
   border-color: var(--c-red, #dc2626);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-red, #dc2626) 18%, transparent);
 }
 
 .prefix {
@@ -41,7 +41,7 @@
 .input {
   flex: 1;
   min-width: 0;
-  padding: 0.75rem 1rem;
+  padding: 0.625rem 0.875rem;
   border: none;
   background: transparent;
   color: var(--c-text, #0f172a);
@@ -52,7 +52,7 @@
 
 @media (max-width: 767px) {
   .input {
-    padding: 0.625rem 0.875rem;
+    padding: 0.5rem 0.75rem;
     font-size: 0.875rem;
   }
 }

@@ -81,8 +81,8 @@
   z-index: 100;
   background: var(--c-bg-card);
   border: 1px solid var(--c-border-md);
-  border-radius: 0.5rem;
-  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, .18), 0 2px 8px -2px rgba(0, 0, 0, .12);
+  border-radius: var(--c-radius-sm);
+  box-shadow: var(--c-shadow-lg);
   min-width: 15rem;
   overflow: hidden;
   padding: 0.375rem 0;
@@ -148,15 +148,15 @@
 .returnModalBackdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
 }
 .returnModalBox {
   position: relative;
   z-index: 1;
   background: var(--c-bg-card);
-  border-radius: 0.75rem;
-  box-shadow: 0 20px 60px -8px rgba(0, 0, 0, .35), 0 4px 16px -4px rgba(0, 0, 0, .2);
+  border-radius: var(--c-radius);
+  box-shadow: var(--c-shadow-lg);
   border: 1px solid var(--c-border-md);
   width: 100%;
   max-width: 540px;
@@ -186,7 +186,7 @@
   cursor: pointer;
   color: var(--c-text-4);
   padding: 0.25rem;
-  border-radius: 0.25rem;
+  border-radius: var(--c-radius-xs);
   display: flex;
   align-items: center;
 }
@@ -210,7 +210,7 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.5rem 0.75rem;
-  border-radius: 0.375rem;
+  border-radius: var(--c-radius-xs);
   background: var(--c-bg-sub);
   border: 1px solid var(--c-border);
 }
@@ -359,12 +359,12 @@
 .creditNoteNumberBadge {
   font-size: 0.7rem; font-weight: 700; font-family: var(--font-mono);
   background: var(--c-bg-sub); border: 1px solid var(--c-border);
-  border-radius: 0.25rem; padding: 0.05rem 0.4rem; color: var(--c-text-2);
+  border-radius: var(--c-radius-xs); padding: 0.05rem 0.4rem; color: var(--c-text-2);
 }
 .returnEntryHeadRight { display: flex; align-items: center; gap: 0.625rem; }
 .returnDeleteBtn {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; border-radius: 0.25rem; border: none;
+  width: 22px; height: 22px; border-radius: var(--c-radius-xs); border: none;
   background: transparent; color: var(--c-text-4); cursor: pointer;
 }
 .returnDeleteBtn:hover { background: var(--c-red-bg); color: var(--c-red); }

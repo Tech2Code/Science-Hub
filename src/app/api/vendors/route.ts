@@ -40,8 +40,8 @@ export async function POST(req: NextRequest) {
     if (!auth.ok) return auth.response;
 
     const body = await req.json();
-    const { name, company, gstin, phone, email, address, state, notes, isActive } = body;
-    const validationError = validateVendorInput({ name, phone, email, gstin, address, state }, true);
+    const { name, company, gstin, phone, email, address, city, state, pincode, notes, isActive } = body;
+    const validationError = validateVendorInput({ name, phone, email, gstin, address, city, state, pincode }, true);
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
     const vendor = await prisma.vendor.create({
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
         name: name.trim(), company: company?.trim() || null,
         gstin: gstin?.trim() || null, phone: phone?.trim() || null,
         email: email?.trim() || null, address: address?.trim() || null,
-        state: state?.trim() || null,
+        city: city?.trim() || null, state: state?.trim() || null, pincode: pincode?.trim() || null,
         notes: notes?.trim() || null, isActive: isActive !== false,
       },
     });

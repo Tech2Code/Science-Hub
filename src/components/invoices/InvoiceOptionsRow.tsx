@@ -50,7 +50,7 @@ export function InvoiceOptionsRow({
             min={minDueDate}
             onChange={(e) => onDueDateChange(e.target.value)}
             onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
-            className={styles.dueDateInput}
+            className={`${styles.dueDateInput} ${styles.dueDateDateInput}`}
           />
         </div>
         <label className={styles.switchLabel}>

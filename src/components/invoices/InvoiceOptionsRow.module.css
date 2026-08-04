@@ -3,7 +3,7 @@
 .toggleRow {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem;
+  gap: 1rem;
   align-items: center;
 }
 
@@ -32,6 +32,11 @@
    but with no option selected it shrinks to fit "Select state…" — give it
    its own floor so it doesn't collapse to a sliver. */
 .placeOfSupplySelect { min-width: 150px; }
+
+/* A native date input's intrinsic width can change between its empty state
+   ("dd-mm-yyyy" placeholder) and a filled state in some browsers — pin a
+   fixed width so picking a date doesn't reflow the rest of the row. */
+.dueDateDateInput { width: 140px; }
 
 /* On narrow screens the toggleRow's flex-wrap only gives each row/switch
    as much width as its own content needs, which squashes the place-of-supply

@@ -1,0 +1,245 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
+import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
+import { useToast } from "@/components/ui/Toast";
+import { animateSection } from "@/lib/animateSection";
+import { isLowStock } from "@/lib/stockStatus";
+import type { Column } from "@/components/ui/Table";
+import styles from "./TaxonomyDetailPage.module.css";
+
+const PRODUCT_COLUMNS: Column[] = [
+  { label: "Name",  mobile: "full+label" },
+  { label: "SKU",   mobile: "label" },
+  { label: "Price", cls: "table-th-right", mobile: "label" },
+  { label: "Stock", cls: "table-th-right", mobile: "label" },
+];
+
+interface TaxonomyProduct {
+  id: string; name: string; sku: string | null; price: number; stock: number; minStock: number;
+}
+interface TaxonomyEntity {
+  id: string; name: string; createdAt: string | null; createdBy: string | null; updatedAt?: string; products: TaxonomyProduct[];
+}
+
+interface TaxonomyDetailPageProps {
+  /** Singular display label, e.g. "Brand" or "Category". */
+  entityLabel: string;
+  /** Base API path, e.g. "/api/brands" or "/api/categories". */
+  apiBase: string;
+  /** List page path to return to and to bust the cache for, e.g. "/brands". */
+  listHref: string;
+  /** Breadcrumb label for the list page, e.g. "Brands". */
+  listLabel: string;
+}
+
+export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }: TaxonomyDetailPageProps) {
+  const entityLower = entityLabel.toLowerCase();
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const toast = useToast();
+  const [entity, setEntity] = useState<TaxonomyEntity | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [savingRename, setSavingRename] = useState(false);
+
+  useEffect(() => {
+    fetchCached(`${apiBase}/${id}`)
+      .then((d) => { setEntity(d as TaxonomyEntity); setLoading(false); })
+      .catch(() => { setError(`${entityLabel} not found.`); setLoading(false); });
+  }, [id, apiBase, entityLabel]);
+
+  function startRename() {
+    if (!entity) return;
+    setRenameValue(entity.name);
+    setRenaming(true);
+  }
+
+  async function saveRename() {
+    const name = renameValue.trim();
+    if (!name || !entity) return;
+    setSavingRename(true);
+    try {
+      const res = await fetch(`${apiBase}/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, expectedUpdatedAt: entity.updatedAt }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setSavingRename(false);
+      if (res.ok) {
+        setEntity((prev) => (prev ? { ...prev, name } : prev));
+        bustCachePrefix(apiBase);
+        setRenaming(false);
+        toast({ type: "success", title: `${entityLabel} renamed`, message: `Renamed to "${name}".` });
+      } else if (res.status === 409) {
+        bustCache(`${apiBase}/${id}`);
+        toast({ type: "error", title: "Update conflict", message: data.error ?? `This ${entityLower} was changed by someone else. Please reload and try again.` });
+      } else {
+        toast({ type: "error", title: "Rename failed", message: data.error ?? `Could not rename ${entityLower}.` });
+      }
+    } catch {
+      setSavingRename(false);
+      toast({ type: "error", title: "Rename failed", message: "Network error." });
+    }
+  }
+
+  async function handleDelete() {
+    if (!entity) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`${apiBase}/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      setDeleting(false);
+      setConfirmOpen(false);
+      if (res.ok) {
+        bustCachePrefix(apiBase);
+        toast({ type: "success", title: `${entityLabel} deleted`, message: `"${entity.name}" moved to bin.` });
+        router.push(listHref);
+      } else {
+        toast({ type: "error", title: `Cannot delete ${entityLower}`, message: data.error ?? `Could not delete ${entityLower}.` });
+      }
+    } catch {
+      setDeleting(false);
+      setConfirmOpen(false);
+      toast({ type: "error", title: "Delete failed", message: "Network error." });
+    }
+  }
+
+  if (!loading && (error || !entity))
+    return <div className={`loading-center ${styles.errorCenter}`}>{error || `${entityLabel} not found.`}</div>;
+
+  // Rendered unconditionally (loading or loaded) so adding/removing a header
+  // button, stat, or column only ever needs one edit — see SkeletonSwap.
+  const products = entity?.products ?? [];
+  const lowStockCount = products.filter((p) => isLowStock(p.stock, p.minStock)).length;
+  const catalogValue = products.reduce((s, p) => s + p.price * p.stock, 0);
+
+  return (
+    <div className={`page-stack ${styles.pageStack}`}>
+      <ConfirmDialog
+        open={confirmOpen}
+        title={`Delete ${entityLabel}`}
+        message={`Move "${entity?.name ?? ""}" to bin?`}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => { if (!deleting) setConfirmOpen(false); }}
+      />
+
+      <Breadcrumb items={entity ? [{ label: listLabel, href: listHref }, { label: entity.name }] : [{ label: listLabel, href: listHref }]} />
+
+      <div {...animateSection(0, `card ${styles.headerCard}`)}>
+        <div className={styles.headerTop}>
+          <div className={styles.headerLeft}>
+            <div className={styles.avatar}>
+              <SkeletonSwap loading={loading} w={48} h={48} r={9999}>{entity?.name?.[0]?.toUpperCase()}</SkeletonSwap>
+            </div>
+            {renaming ? (
+              <div className={styles.renameRow}>
+                <Input
+                  sz="sm"
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveRename(); if (e.key === "Escape") setRenaming(false); }}
+                />
+                <Button size="sm" variant="primary" onClick={saveRename} disabled={!renameValue.trim() || renameValue.trim() === entity?.name || savingRename}>Save</Button>
+                <Button size="sm" variant="secondary" onClick={() => setRenaming(false)} disabled={savingRename}>Cancel</Button>
+              </div>
+            ) : (
+              <div style={{ minWidth: 0 }}>
+                <h1 className="page-title" title={entity?.name}>
+                  <SkeletonSwap loading={loading} w={160} h={20}>{entity?.name}</SkeletonSwap>
+                </h1>
+                {!loading && (entity?.createdBy || entity?.createdAt) && (
+                  <div className={styles.metaText}>
+                    {entity?.createdBy && <>Added by {entity.createdBy}</>}
+                    {entity?.createdAt && <> · {new Date(entity.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</>}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className={styles.headerActions}>
+            {!renaming && (
+              <Button variant="editOutline" disabled={loading} onClick={startRename}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Rename
+              </Button>
+            )}
+            <Button variant="danger" disabled={loading} onClick={() => setConfirmOpen(true)}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+              Delete
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div {...animateSection(1, styles.statsGrid)}>
+        <div className={`card ${styles.cardPadSm}`}>
+          <div className={styles.statLabel}>Products</div>
+          <div className={styles.statValue}><SkeletonSwap loading={loading} w={40} h={22}>{products.length}</SkeletonSwap></div>
+        </div>
+        <div className={`card ${styles.cardPadSm}`}>
+          <div className={styles.statLabel}>Low Stock</div>
+          <div className={`${styles.statValue} ${!loading && lowStockCount > 0 ? styles.negative : ""}`}>
+            <SkeletonSwap loading={loading} w={40} h={22}>{lowStockCount}</SkeletonSwap>
+          </div>
+        </div>
+        <div className={`card ${styles.cardPadSm}`}>
+          <div className={styles.statLabel}>Catalog Value</div>
+          <div className={styles.statValue}>
+            <SkeletonSwap loading={loading} w={80} h={22}>₹{catalogValue.toLocaleString("en-IN")}</SkeletonSwap>
+          </div>
+        </div>
+      </div>
+
+      <div {...animateSection(2, "card")}>
+        <div className={styles.sectionHeader}>
+          <h2 className={styles.sectionTitle}>Products</h2>
+        </div>
+        <div className="table-wrap">
+          <table className="table-base">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>SKU</th>
+                <th className="table-th-right">Price</th>
+                <th className="table-th-right">Stock</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <TableSkeleton columns={PRODUCT_COLUMNS} rows={4} />
+              ) : products.length === 0 ? (
+                <tr><td colSpan={4} className={styles.emptyCell}>No products under this {entityLower}.</td></tr>
+              ) : products.map((p) => (
+                <tr key={p.id}>
+                  <td data-mobile-full data-label="Name">
+                    <Link href={`/products/${p.id}`} className={styles.productLink}>{p.name}</Link>
+                  </td>
+                  <td data-label="SKU" className={styles.mutedCell}>{p.sku || "—"}</td>
+                  <td data-label="Price" className="table-td-right">₹{p.price.toLocaleString("en-IN")}</td>
+                  <td data-label="Stock" className={`table-td-right ${isLowStock(p.stock, p.minStock) ? styles.stockLow : ""}`}>{p.stock}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

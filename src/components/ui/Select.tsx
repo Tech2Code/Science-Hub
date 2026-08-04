@@ -55,7 +55,6 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
   const listRef = useRef<HTMLUListElement>(null);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const [mounted, setMounted] = useState(false);
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null);
   const typeaheadRef = useRef("");
   const typeaheadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -63,7 +62,6 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
   const triggerId = id ?? generatedId;
   const listboxId = `${triggerId}-listbox`;
 
-  useEffect(() => setMounted(true), []);
   React.useImperativeHandle(forwardedRef, () => hiddenRef.current as HTMLSelectElement);
 
   const options = useMemo(() => parseOptions(children), [children]);
@@ -205,7 +203,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
         type="button"
         id={triggerId}
         className={triggerCls}
-        onClick={() => !disabled && setOpen((o) => !o)}
+        onMouseDown={() => !disabled && setOpen((o) => !o)}
         onKeyDown={handleKeyDown}
         disabled={disabled}
         aria-haspopup="listbox"
@@ -220,7 +218,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
         </svg>
       </button>
 
-      {mounted && open && pos && createPortal(
+      {open && pos && createPortal(
         <ul
           ref={listRef}
           id={listboxId}

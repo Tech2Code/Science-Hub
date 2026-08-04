@@ -9,18 +9,22 @@ export interface ProductFormData {
   brandId: string; categoryId: string;
 }
 
-export type ProductFieldErrors = { name?: string; price?: string; purchasePrice?: string; stock?: string; minStock?: string };
+export type ProductFieldErrors = { name?: string; price?: string; purchasePrice?: string; unit?: string; gstRate?: string; stock?: string; minStock?: string };
 
 export function validateProductForm(form: ProductFormData): ProductFieldErrors {
   const nameErr          = validate(form.name,  rules.required("Product name is required."));
   const priceErr         = validate(form.price, rules.required("Price is required."), rules.positiveNumber("Price must be greater than 0."));
   const purchasePriceErr = form.purchasePrice.trim() ? validate(form.purchasePrice, rules.nonNegativeNumber("Purchase price cannot be negative.")) : null;
-  const stockErr         = validate(form.stock, rules.required("Stock is required."), rules.nonNegativeNumber("Stock cannot be negative."));
+  const unitErr          = validate(form.unit, rules.required("Unit is required."));
+  const gstRateErr       = validate(form.gstRate, rules.required("GST rate is required."));
+  const stockErr         = validate(form.stock, rules.required("Opening stock is required."), rules.nonNegativeNumber("Stock cannot be negative."));
   const minStockErr      = validate(form.minStock, rules.required("Minimum stock is required."), rules.nonNegativeNumber("Minimum stock cannot be negative."));
   return {
     name: nameErr ?? undefined,
     price: priceErr ?? undefined,
     purchasePrice: purchasePriceErr ?? undefined,
+    unit: unitErr ?? undefined,
+    gstRate: gstRateErr ?? undefined,
     stock: stockErr ?? undefined,
     minStock: minStockErr ?? undefined,
   };

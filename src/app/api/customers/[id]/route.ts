@@ -47,7 +47,7 @@ export async function PUT(
     const body = await request.json();
     const { name, phone, email, address, city, state, pincode, gstin, expectedUpdatedAt } = body;
 
-    const validationError = validateCustomerInput({ name, phone, email, pincode, gstin });
+    const validationError = validateCustomerInput({ name, phone, email, address, city, state, pincode, gstin }, true);
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }

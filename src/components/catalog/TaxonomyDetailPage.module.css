@@ -10,17 +10,11 @@
 
 .headerLeft { display: flex; gap: 1rem; align-items: center; min-width: 0; }
 
-.metaText {
-  font-size: 0.75rem;
-  color: var(--c-text-3);
-  margin-top: 0.25rem;
-}
-
 .avatar {
   width: 3rem;
   height: 3rem;
-  border-radius: 0.75rem;
-  background: linear-gradient(135deg, #3b82f6, #2dd4bf);
+  border-radius: var(--c-radius);
+  background: linear-gradient(135deg, var(--c-blue), #2dd4bf);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -33,6 +27,12 @@
 .headerActions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
 .renameRow { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+.metaText {
+  font-size: 0.75rem;
+  color: var(--c-text-3);
+  margin-top: 0.25rem;
+}
 
 .statsGrid {
   display: grid;

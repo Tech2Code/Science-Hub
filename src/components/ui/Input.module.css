@@ -1,7 +1,7 @@
 .input,
 .textarea {
   width: 100%;
-  padding: 0.75rem 1rem;
+  padding: 0.625rem 0.875rem;
   border-radius: var(--c-radius-sm);
   border: 1px solid var(--c-border);
   background: var(--c-bg-input);
@@ -30,7 +30,7 @@
 @media (max-width: 767px) {
   .input,
   .textarea {
-    padding: 0.625rem 0.875rem;
+    padding: 0.5rem 0.75rem;
     font-size: 0.875rem;
   }
 }
@@ -47,7 +47,7 @@
 .input:focus,
 .textarea:focus {
   border-color: var(--c-blue);
-  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-blue) 15%, transparent);
 }
 .textarea { resize: none; }
 
@@ -62,7 +62,7 @@
   font-size: 0.75rem;
 }
 
-.field { display: flex; flex-direction: column; gap: 0; position: relative; }
+.field { display: flex; flex-direction: column; gap: 0; position: relative; min-width: 0; }
 .label {
   display: block;
   font-size: 0.875rem;
@@ -94,12 +94,12 @@
 [data-error] .input,
 [data-error] .textarea {
   border-color: var(--c-red-border, #fca5a5);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.09);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-red, #dc2626) 9%, transparent);
 }
 [data-error] .input:focus,
 [data-error] .textarea:focus {
   border-color: var(--c-red, #dc2626);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-red, #dc2626) 18%, transparent);
 }
 
 @keyframes errIn {

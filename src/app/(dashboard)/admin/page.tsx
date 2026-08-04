@@ -677,7 +677,7 @@ export default function AdminPage() {
             {addMsg && <Msg m={addMsg} />}
             <div className={styles.formActions}>
               <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}>Cancel</Button>
-              <Button type="submit" variant="primary" size="sm" disabled={addSaving || !addForm.name.trim() || !addForm.email.trim() || !addForm.password.trim() || !addForm.confirmPassword.trim() || !!addFieldErrors.name || !!addFieldErrors.email || !!addFieldErrors.password || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
+              <Button type="submit" variant="primary" size="sm" disabled={addSaving || !!addFieldErrors.name || !!addFieldErrors.email || !!addFieldErrors.password || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
             </div>
           </form>
         </Modal>

@@ -20,6 +20,11 @@
   justify-content: flex-end;
   gap: 0.625rem;
   margin-top: 1.25rem;
+  flex-wrap: wrap;
+}
+@media (max-width: 480px) {
+  .modalActions { flex-direction: column-reverse; align-items: stretch; }
+  .modalActions > * { width: 100%; justify-content: center; }
 }
 
 .inlineVendorError {
@@ -32,10 +37,13 @@
   color: var(--c-red);
 }
 
+/* Matches the app-wide .form-grid-2/.form-grid-3 row-gap convention
+   (globals.css) so a FormField's absolutely-positioned error text has room
+   below the field without overlapping the next row. */
 .inlineVendorGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.375rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.325rem;
 }
 
 .inlineVendorSubmitLabel {
