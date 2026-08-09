@@ -316,11 +316,21 @@ export function BillDetailsCard({
 
         <div className={styles.modalActions}>
           <Button type="button" variant="secondary" onClick={closeVendorCreate}>Dismiss</Button>
-          <Button type="button" variant="primary" disabled={ivSaving || (!!ivEditId && !ivDirty.isDirty)} onClick={handleCreateInlineVendor}>
+          <Button
+            type="button"
+            variant="primary"
+            disabled={
+              ivSaving ||
+              (!!ivEditId && !ivDirty.isDirty) ||
+              !ivForm.name.trim() || !ivForm.address.trim() ||
+              !ivForm.city.trim() || !ivForm.state.trim() || !ivForm.pincode.trim()
+            }
+            onClick={handleCreateInlineVendor}
+          >
             {ivSaving ? "Saving…" : (
               <span className={styles.inlineVendorSubmitLabel}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                {ivEditId ? "Save Changes" : ivDontSave ? "Use For This Bill Only" : "Create & Use This Vendor"}
+                {ivEditId ? "Save Changes" : ivDontSave ? "Use For This Bill Only" : "Save & Use This Vendor"}
               </span>
             )}
           </Button>

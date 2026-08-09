@@ -82,8 +82,8 @@ export default function CustomersPage() {
 
   function handleDelete(id: string, name: string) {
     setConfirmState({
-      title: "Delete Customer",
-      message: `Delete "${name}"? All associated data will be permanently removed.`,
+      title: "Move to Bin",
+      message: `Move "${name}" to bin? You can restore it within 30 days.`,
       onConfirm: async () => {
         setDeleting(true);
         const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
@@ -92,7 +92,7 @@ export default function CustomersPage() {
         setConfirmState(null);
         if (res.ok) {
           await mutate();
-          toast({ type: "success", title: "Customer deleted", message: `"${name}" removed.` });
+          toast({ type: "success", title: "Moved to bin", message: `"${name}" moved to bin. You can restore it within 30 days.` });
         } else {
           toast({ type: "error", title: "Delete failed", message: resBody.error ?? "Could not delete customer." });
         }
@@ -109,7 +109,7 @@ export default function CustomersPage() {
         open={!!confirmState}
         title={confirmState?.title ?? ""}
         message={confirmState?.message ?? ""}
-        confirmLabel="Delete"
+        confirmLabel="Move to Bin"
         variant="danger"
         loading={deleting}
         onConfirm={confirmState?.onConfirm ?? (() => {})}
@@ -120,10 +120,10 @@ export default function CustomersPage() {
         <div>
           <h1 className="page-title">Customers</h1>
           <p className="page-sub">
-            {loading ? "Loading…" : `${total} total customers`}
+            {loading ? "Loading…" : `${total} customer${total === 1 ? "" : "s"}`}
           </p>
         </div>
-        {canWrite && (<Button variant="primary" href="/sales/customers/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Customer</Button>)}
+        {canWrite && (<Button variant="primary" href="/sales/customers/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Customer</Button>)}
       </div>
 
       <div {...animateSection(0, "card")}>

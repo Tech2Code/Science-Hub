@@ -15,7 +15,7 @@ import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
 import { buildBillWhere, buildBillOrderBy, type PurchaseBillSort } from "@/lib/purchaseBillQuery";
 
 const BILL_INCLUDE = {
-  vendor: { select: { id: true, name: true, company: true, state: true } },
+  vendor: { select: { id: true, name: true, company: true, state: true, updatedAt: true } },
   createdBy: { select: { id: true, name: true } },
   items: {
     include: {
@@ -36,7 +36,7 @@ const BILL_INCLUDE = {
 // what's needed to display a row; search now happens in the `where` clause
 // server-side instead of needing those joins back in the response.
 const BILL_LIST_INCLUDE = {
-  vendor: { select: { id: true, name: true, company: true } },
+  vendor: { select: { id: true, name: true, company: true, updatedAt: true } },
   createdBy: { select: { id: true, name: true } },
 };
 

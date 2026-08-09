@@ -32,7 +32,7 @@ interface Invoice {
   date: string;
   dueDate: string | null;
   createdAt: string;
-  customer: { name: string };
+  customer: { name: string; updatedAt?: string };
   total: number;
   paidAmount: number;
   status: string;
@@ -128,20 +128,21 @@ export default function InvoicesPage() {
   // The iframe always renders the detail page in its default state (payment/
   // return history toggles off), so the cached variant key can assume those
   // flags are false without needing to inspect the loaded page.
-  async function generatePdfViaIframe(invoiceId: string, copyLabels?: string[], force = false): Promise<Blob | null> {
+  async function generatePdfViaIframe(inv: Invoice, copyLabels?: string[], force = false): Promise<Blob | null> {
     const showLogoOnInvoices = settings?.showLogoOnInvoices !== false;
     const variantKey = buildPdfVariantKey(copyLabels, {
       p: false,
       r: false,
       logo: showLogoOnInvoices,
       settings: settings?.updatedAt ?? "loading",
+      customer: inv.customer?.updatedAt ?? "loading",
     });
     if (!force) {
-      const cached = await getCachedPdf("invoice", invoiceId, variantKey);
+      const cached = await getCachedPdf("invoice", inv.id, variantKey);
       if (cached) return cached;
     }
-    const blob = await pdfIframeGenerate({ route: `/sales/invoices/${invoiceId}`, printAreaId: "invoice-print-area", copyLabels, includeLogo: true });
-    if (blob) setCachedPdf("invoice", invoiceId, variantKey, blob);
+    const blob = await pdfIframeGenerate({ route: `/sales/invoices/${inv.id}`, printAreaId: "invoice-print-area", copyLabels, includeLogo: true });
+    if (blob) setCachedPdf("invoice", inv.id, variantKey, blob);
     return blob;
   }
 
@@ -153,7 +154,7 @@ export default function InvoicesPage() {
     pdfBusyRef.current = true;
     setPdfLoading(inv.id);
     try {
-      const blob = await generatePdfViaIframe(inv.id, ["ORIGINAL COPY", "DUPLICATE COPY"], true);
+      const blob = await generatePdfViaIframe(inv, ["ORIGINAL COPY", "DUPLICATE COPY"], true);
       if (blob) {
         const url = URL.createObjectURL(blob);
         setPdfPreviewUrl(url);
@@ -174,7 +175,7 @@ export default function InvoicesPage() {
     // Force a real paint before the (mostly synchronous) iframe setup + PDF
     // work runs, so the loading spinner is actually visible on screen.
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const blob = await generatePdfViaIframe(pdfDialogInvoice.id, copyLabels);
+    const blob = await generatePdfViaIframe(pdfDialogInvoice, copyLabels);
     setPdfDialogLoading(false);
     if (!blob) {
       toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
@@ -378,7 +379,7 @@ export default function InvoicesPage() {
                         pdfBusyRef.current = true;
                         setPdfLoading(inv.id);
                         try {
-                          const blob = await generatePdfViaIframe(inv.id, ["ORIGINAL COPY", "DUPLICATE COPY"]);
+                          const blob = await generatePdfViaIframe(inv, ["ORIGINAL COPY", "DUPLICATE COPY"]);
                           if (blob) {
                             const url = URL.createObjectURL(blob);
                             setPdfPreviewUrl(url);

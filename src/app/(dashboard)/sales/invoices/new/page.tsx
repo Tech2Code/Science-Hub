@@ -542,7 +542,12 @@ export default function NewInvoicePage() {
                   <Button
                     type="button"
                     variant="primary"
-                    disabled={customerSaving || (!!customerEditId && !customCustomerDirty.isDirty)}
+                    disabled={
+                      customerSaving ||
+                      (!!customerEditId && !customCustomerDirty.isDirty) ||
+                      !customCustomer.name.trim() || !customCustomer.address.trim() ||
+                      !customCustomer.city.trim() || !customCustomer.state.trim() || !customCustomer.pincode.trim()
+                    }
                     onClick={() => { if (customerEditId) saveCustomerEdit(); else saveNewCustomer(); }}
                   >
                     <span className={styles.customModalSubmitLabel}>

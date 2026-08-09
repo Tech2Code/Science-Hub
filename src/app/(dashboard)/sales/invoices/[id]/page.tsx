@@ -44,7 +44,7 @@ interface Invoice {
   id: string; invoiceNumber: string; date: string; dueDate?: string; createdAt: string;
   status: string; isInterState: boolean; placeOfSupply?: string; reverseCharge?: boolean;
   createdBy?: { name: string } | null;
-  customer: { name: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; gstin: string; };
+  customer: { name: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; gstin: string; updatedAt?: string; };
   items: InvoiceItem[];
   payments: Payment[];
   subtotal: number; cgst: number; sgst: number; igst: number;
@@ -409,13 +409,18 @@ export default function InvoiceDetailPage() {
   }
 
   // Cached by return id + a variant key derived from whatever can actually
-  // change the rendered PDF (logo/business settings) — a credit note itself
-  // is never edited after creation, so once generated it's reused as-is
-  // until settings change or the note is deleted (see invalidateCachedPdf
-  // in handleDeleteReturn), instead of re-rendering on every click.
+  // change the rendered PDF (logo/business settings, the customer record) —
+  // a credit note's own line items are never edited after creation, but the
+  // customer it was issued to can still be, so its updatedAt is part of the
+  // key too. Reused as-is until settings/customer change (different key) or
+  // the note is deleted (see invalidateCachedPdf in handleDeleteReturn).
   async function getOrRenderCreditNotePdf(ret: ReturnRecord): Promise<Blob | null> {
     const showLogo = settings?.showLogoOnInvoices !== false;
-    const variantKey = buildPdfVariantKey(undefined, { logo: showLogo, settings: settings?.updatedAt ?? "loading" });
+    const variantKey = buildPdfVariantKey(undefined, {
+      logo: showLogo,
+      settings: settings?.updatedAt ?? "loading",
+      customer: invoice?.customer?.updatedAt ?? "loading",
+    });
     const cached = await getCachedPdf("return", ret.id, variantKey);
     if (cached) return cached;
 
@@ -451,6 +456,7 @@ export default function InvoiceDetailPage() {
       r: showReturnInPdf,
       logo: showLogo,
       settings: settings?.updatedAt ?? "loading",
+      customer: invoice?.customer?.updatedAt ?? "loading",
     });
     if (!force) {
       const cached = await getCachedPdf("invoice", id, variantKey);

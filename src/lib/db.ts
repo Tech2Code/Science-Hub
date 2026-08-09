@@ -117,7 +117,7 @@ export async function getInvoices(filters: InvoiceListFilters, sort: InvoiceSort
       orderBy: buildInvoiceOrderBy(sort),
       skip,
       take,
-      include: { customer: { select: { id: true, name: true } } },
+      include: { customer: { select: { id: true, name: true, updatedAt: true } } },
     }),
     prisma.invoice.count({ where }),
   ]);

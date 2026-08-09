@@ -90,7 +90,7 @@ export default function VendorsPage() {
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
         await mutate();
-        toast({ type: "success", title: "Vendor deleted", message: `"${target.name}" removed.` });
+        toast({ type: "success", title: "Moved to bin", message: `"${target.name}" moved to bin. You can restore it within 30 days.` });
       } else {
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete vendor." });
       }
@@ -107,9 +107,9 @@ export default function VendorsPage() {
     {openingEditId && <OverlayLoader text="Opening editor…" />}
     <ConfirmDialog
       open={!!deleteTarget}
-      title="Delete Vendor"
-      message={`Delete "${deleteTarget?.name}"? This cannot be undone.`}
-      confirmLabel="Delete"
+      title="Move to Bin"
+      message={`Move "${deleteTarget?.name}" to bin? You can restore it within 30 days.`}
+      confirmLabel="Move to Bin"
       variant="danger"
       loading={deleting}
       onConfirm={handleDelete}
@@ -121,7 +121,7 @@ export default function VendorsPage() {
         <div>
           <h1 className="page-title">Vendors</h1>
           <p className="page-sub">
-            {loading ? "Loading…" : `${total} vendors`}
+            {loading ? "Loading…" : `${total} vendor${total === 1 ? "" : "s"}`}
           </p>
         </div>
         {canWrite && (<Button variant="primary" href="/purchases/vendors/new">

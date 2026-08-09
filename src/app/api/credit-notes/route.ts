@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
         take,
         include: {
           _count: { select: { items: true } },
-          invoice: { select: { invoiceNumber: true, customer: { select: { name: true } } } },
+          invoice: { select: { invoiceNumber: true, customer: { select: { name: true, updatedAt: true } } } },
         },
       }),
       prisma.return.count({ where }),

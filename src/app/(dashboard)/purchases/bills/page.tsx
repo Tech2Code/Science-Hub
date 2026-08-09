@@ -37,13 +37,17 @@ interface PurchaseBill {
   category: string | null;
   attachmentUrl: string | null;
   attachmentName: string | null;
-  vendor: { id: string; name: string; company: string | null };
+  vendor: { id: string; name: string; company: string | null; updatedAt?: string };
   createdBy: { id: string; name: string };
 }
 
 interface PurchaseBillListResponse {
   data: PurchaseBill[];
   total: number;
+}
+
+interface BusinessSettings {
+  updatedAt?: string;
 }
 
 interface PurchaseBillStats {
@@ -117,14 +121,17 @@ export default function PurchasesPage() {
   // Loads the bill detail page into a hidden iframe to render its full
   // #bill-print-area (which this list page doesn't have the data for) and
   // generates a PDF blob from it.
-  async function generatePdfViaIframe(billId: string, force = false): Promise<Blob | null> {
-    const variantKey = buildPdfVariantKey();
+  async function generatePdfViaIframe(b: PurchaseBill, force = false): Promise<Blob | null> {
+    const variantKey = buildPdfVariantKey(undefined, {
+      settings: settings?.updatedAt ?? "loading",
+      vendor: b.vendor?.updatedAt ?? "loading",
+    });
     if (!force) {
-      const cached = await getCachedPdf("purchase-bill", billId, variantKey);
+      const cached = await getCachedPdf("purchase-bill", b.id, variantKey);
       if (cached) return cached;
     }
-    const blob = await pdfIframeGenerate({ route: `/purchases/bills/${billId}`, printAreaId: "bill-print-area" });
-    if (blob) setCachedPdf("purchase-bill", billId, variantKey, blob);
+    const blob = await pdfIframeGenerate({ route: `/purchases/bills/${b.id}`, printAreaId: "bill-print-area" });
+    if (blob) setCachedPdf("purchase-bill", b.id, variantKey, blob);
     return blob;
   }
 
@@ -134,7 +141,7 @@ export default function PurchasesPage() {
     pdfBusyRef.current = true;
     setPdfLoading(b.id);
     try {
-      const blob = await generatePdfViaIframe(b.id, true);
+      const blob = await generatePdfViaIframe(b, true);
       if (blob) {
         const url = URL.createObjectURL(blob);
         setPdfPreviewUrl(url);
@@ -170,6 +177,7 @@ export default function PurchasesPage() {
 
   const { data, loading, mutate } = useFetch<PurchaseBillListResponse>(apiUrl);
   const { data: stats, mutate: mutateStats } = useFetch<PurchaseBillStats>(statsUrl);
+  const { data: settings } = useFetch<BusinessSettings>("/api/settings");
   const bills = data?.data ?? [];
   const total = data?.total ?? 0;
 
@@ -189,7 +197,7 @@ export default function PurchasesPage() {
       if (res.ok) {
         await Promise.all([mutate(), mutateStats()]);
         invalidateCachedPdf("purchase-bill", target.id);
-        toast({ type: "success", title: "Bill deleted", message: `${target.billNumber} removed.` });
+        toast({ type: "success", title: "Moved to bin", message: `${target.billNumber} moved to bin. You can restore it within 30 days.` });
       } else {
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete bill." });
       }
@@ -205,9 +213,9 @@ export default function PurchasesPage() {
     <>
     <ConfirmDialog
       open={!!deleteTarget}
-      title="Delete Purchase Bill"
-      message={`Delete purchase bill ${deleteTarget?.billNumber}? This cannot be undone.`}
-      confirmLabel="Delete"
+      title="Move to Bin"
+      message={`Move bill ${deleteTarget?.billNumber} to bin? You can restore it within 30 days.`}
+      confirmLabel="Move to Bin"
       variant="danger"
       loading={deleting}
       onConfirm={handleDelete}
@@ -347,7 +355,7 @@ export default function PurchasesPage() {
                         pdfBusyRef.current = true;
                         setPdfLoading(b.id);
                         try {
-                          const blob = await generatePdfViaIframe(b.id);
+                          const blob = await generatePdfViaIframe(b);
                           if (blob) {
                             const url = URL.createObjectURL(blob);
                             setPdfPreviewUrl(url);

@@ -31,7 +31,7 @@ interface CreditNote {
   subtotal: number; cgst: number; sgst: number; igst: number; total: number;
   _count: { items: number };
   invoiceId: string;
-  invoice: { invoiceNumber: string; customer: { name: string } };
+  invoice: { invoiceNumber: string; customer: { name: string; updatedAt?: string } };
   createdBy: string | null;
 }
 
@@ -162,15 +162,20 @@ export default function CreditNotesPage() {
     setPdfPreviewNote(null);
   }
 
-  // A credit note is never edited after creation, so once rendered its PDF
-  // is reused as-is (cached by return id + a variant key derived from the
-  // business settings that could actually change its content) instead of
+  // A credit note's own line items are never edited after creation, so once
+  // rendered its PDF is reused as-is (cached by return id + a variant key
+  // derived from everything else that can still change its content —
+  // business settings and the customer record it was issued to) instead of
   // re-rendering through the iframe on every click — only regenerated when
-  // settings change (different variant key) or the note itself is deleted
-  // (cache invalidated from the invoice detail page's delete handler).
+  // settings/customer change (different variant key) or the note itself is
+  // deleted (cache invalidated from the invoice detail page's delete handler).
   async function getOrRenderCreditNotePdf(c: CreditNote): Promise<Blob | null> {
     const showLogo = settings?.showLogoOnInvoices !== false;
-    const variantKey = buildPdfVariantKey(undefined, { logo: showLogo, settings: settings?.updatedAt ?? "loading" });
+    const variantKey = buildPdfVariantKey(undefined, {
+      logo: showLogo,
+      settings: settings?.updatedAt ?? "loading",
+      customer: c.invoice?.customer?.updatedAt ?? "loading",
+    });
     const cached = await getCachedPdf("return", c.id, variantKey);
     if (cached) return cached;
 
@@ -211,7 +216,11 @@ export default function CreditNotesPage() {
     setRegeneratingId(c.id);
     try {
       const showLogo = settings?.showLogoOnInvoices !== false;
-      const variantKey = buildPdfVariantKey(undefined, { logo: showLogo, settings: settings?.updatedAt ?? "loading" });
+      const variantKey = buildPdfVariantKey(undefined, {
+        logo: showLogo,
+        settings: settings?.updatedAt ?? "loading",
+        customer: c.invoice?.customer?.updatedAt ?? "loading",
+      });
       const blob = await generatePdfViaIframe({
         route: `/sales/invoices/${c.invoiceId}?creditNoteId=${c.id}`,
         printAreaId: "credit-note-print-area",

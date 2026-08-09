@@ -220,7 +220,10 @@ export default function NewPurchaseBillPage() {
     />
     <div className="page-stack">
       <Breadcrumb items={[{ label: "Purchases", href: "/purchases/bills" }, { label: "New Purchase Bill" }]} />
-      <h1 className="page-title">New Purchase Bill</h1>
+      <div>
+        <h1 className="page-title">Create Purchase Bill</h1>
+        <p className="page-sub">Record a GST-compliant purchase bill</p>
+      </div>
 
       <form onSubmit={handleSubmit} noValidate>
         <PurchaseBillFormBody

@@ -24,8 +24,11 @@ function fireChange(onChange: CustomerFormFieldsProps["onChange"], name: string,
   onChange({ target: { name, value } } as React.ChangeEvent<HTMLInputElement>);
 }
 
-// Name/phone/email/address/city/state/pincode/GSTIN fields — shared by the
+// Name/address/pincode/state/city/GSTIN/phone/email fields — shared by the
 // New Customer and Edit Customer pages so the two forms can't drift apart.
+// Field order mirrors the "Add New Customer" quick-add popup in invoice
+// creation (src/app/(dashboard)/sales/invoices/new/page.tsx) so both flows
+// feel identical.
 export function CustomerFormFields({ form, onChange, errors, disabled, phoneRequired, addressRequired, cityRequired, stateRequired, pincodeRequired, autoFocusName }: CustomerFormFieldsProps) {
   const pincodeLookup = usePincodeAutofill((city, state) => {
     if (city) fireChange(onChange, "city", city);
@@ -45,15 +48,6 @@ export function CustomerFormFields({ form, onChange, errors, disabled, phoneRequ
         <Input name="name" value={form.name} onChange={onChange} placeholder="e.g. ABC Enterprises" autoFocus={autoFocusName} disabled={disabled} />
       </FormField>
 
-      <div className="form-grid-2">
-        <FormField label="Phone" required={phoneRequired} error={errors.phone}>
-          <PhoneInput name="phone" value={form.phone} onChange={onChange} placeholder="10-digit mobile" disabled={disabled} />
-        </FormField>
-        <FormField label="Email" error={errors.email}>
-          <Input name="email" type="email" value={form.email} onChange={onChange} placeholder="billing@customer.com" disabled={disabled} />
-        </FormField>
-      </div>
-
       <FormField label="Address" required={addressRequired} error={errors.address}>
         <Input name="address" value={form.address} onChange={onChange} placeholder="Street address, building, floor…" disabled={disabled} />
       </FormField>
@@ -68,8 +62,11 @@ export function CustomerFormFields({ form, onChange, errors, disabled, phoneRequ
         >
           <Input name="pincode" value={form.pincode} onChange={handlePincodeChange} placeholder="6-digit PIN" maxLength={6} disabled={disabled} />
         </FormField>
-        <FormField label="GSTIN" hint="Leave blank if customer is unregistered." error={errors.gstin}>
-          <Input name="gstin" value={form.gstin} onChange={onChange} placeholder="15-character GST number" maxLength={15} mono disabled={disabled} />
+        <FormField label="State" required={stateRequired} error={errors.state}>
+          <Select name="state" value={form.state} onChange={onChange} disabled={disabled}>
+            <option value="">Select state</option>
+            {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
+          </Select>
         </FormField>
       </div>
 
@@ -77,11 +74,17 @@ export function CustomerFormFields({ form, onChange, errors, disabled, phoneRequ
         <FormField label="City" required={cityRequired} error={errors.city}>
           <Input name="city" value={form.city} onChange={onChange} placeholder="City" disabled={disabled} />
         </FormField>
-        <FormField label="State" required={stateRequired} error={errors.state}>
-          <Select name="state" value={form.state} onChange={onChange} disabled={disabled}>
-            <option value="">Select state</option>
-            {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
-          </Select>
+        <FormField label="GSTIN" hint="Leave blank if customer is unregistered." error={errors.gstin}>
+          <Input name="gstin" value={form.gstin} onChange={onChange} placeholder="15-character GST number" maxLength={15} mono disabled={disabled} />
+        </FormField>
+      </div>
+
+      <div className="form-grid-2">
+        <FormField label="Phone" required={phoneRequired} error={errors.phone}>
+          <PhoneInput name="phone" value={form.phone} onChange={onChange} placeholder="10-digit mobile" disabled={disabled} />
+        </FormField>
+        <FormField label="Email" error={errors.email}>
+          <Input name="email" type="email" value={form.email} onChange={onChange} placeholder="billing@customer.com" disabled={disabled} />
         </FormField>
       </div>
     </>

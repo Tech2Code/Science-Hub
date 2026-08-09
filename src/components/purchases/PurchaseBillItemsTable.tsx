@@ -42,7 +42,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const { dropUp, measure } = useDropUp(showProductDropdown);
   const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
-  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "", purchasePrice: "", salePrice: "", gstRate: "18", skipCatalog: false });
+  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "", purchasePrice: "", salePrice: "", gstRate: "18", hsn: "", skipCatalog: false });
   const [quickAddErrors, setQuickAddErrors] = useState<QuickAddErrors>({});
   const [quickAddSaving, setQuickAddSaving] = useState(false);
   const [showUnitDropdown, setShowUnitDropdown] = useState(false);
@@ -67,7 +67,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
   }
 
   function openQuickAddProduct(name = productSearch) {
-    setQuickAddProduct({ name, unit: "", purchasePrice: "", salePrice: "", gstRate: "18", skipCatalog: false });
+    setQuickAddProduct({ name, unit: "", purchasePrice: "", salePrice: "", gstRate: "18", hsn: "", skipCatalog: false });
     setQuickAddErrors({});
     setShowUnitDropdown(false);
     setShowQuickAddProduct(true);
@@ -86,7 +86,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
 
     if (quickAddProduct.skipCatalog) {
       setItems((prev) => [...prev, {
-        key: makePurchaseBillLineItemKey(), productId: "", name: quickAddProduct.name.trim(), hsn: "",
+        key: makePurchaseBillLineItemKey(), productId: "", name: quickAddProduct.name.trim(), hsn: quickAddProduct.hsn.trim(),
         unit: quickAddProduct.unit, quantity: "1", purchasePrice: quickAddProduct.purchasePrice, gstRate: quickAddProduct.gstRate, discountPercent: "0",
       }]);
       setShowQuickAddProduct(false);
@@ -106,6 +106,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
           price: quickAddProduct.salePrice.trim() || quickAddProduct.purchasePrice,
           purchasePrice: quickAddProduct.purchasePrice,
           gstRate: quickAddProduct.gstRate,
+          hsn: quickAddProduct.hsn.trim() || undefined,
           stock: 0,
         }),
       });
@@ -162,7 +163,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
     <>
     {quickAddSaving && <OverlayLoader text="Adding…" />}
     <div {...animateSection(sectionIndex, "form-card")}>
-      <h2 className="form-section-title">Items</h2>
+      <h2 className="form-section-title">Line Items</h2>
       {itemsError && <p className={styles.itemsErrorMsg} role="alert">{itemsError}</p>}
 
       <div className={styles.searchRow}>
@@ -266,6 +267,13 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
                 type="text" inputMode="decimal" placeholder="18"
                 value={quickAddProduct.gstRate}
                 onChange={(e) => { setQuickAddProduct((p) => ({ ...p, gstRate: e.target.value })); setQuickAddErrors((p) => ({ ...p, gstRate: undefined })); }}
+              />
+            </FormField>
+            <FormField label="HSN/SAC" hint="Optional">
+              <Input
+                type="text" placeholder="e.g. 3822" maxLength={8}
+                value={quickAddProduct.hsn}
+                onChange={(e) => setQuickAddProduct((p) => ({ ...p, hsn: e.target.value.replace(/\D/g, "").slice(0, 8) }))}
               />
             </FormField>
           </div>

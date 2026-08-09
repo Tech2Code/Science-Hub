@@ -63,7 +63,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
 
   async function handleQuickAddProduct() {
     const errs: Partial<Record<"name" | "price" | "unit" | "gstRate", string>> = {
-      name: validate(quickAddProduct.name, rules.required("Product name is required.")) ?? undefined,
+      name: validate(quickAddProduct.name, rules.required("Item name is required.")) ?? undefined,
       price: validate(quickAddProduct.price, rules.required("Price is required."), rules.nonNegativeNumber()) ?? undefined,
       unit: validate(quickAddProduct.unit, rules.required("Unit is required.")) ?? undefined,
       gstRate: validate(quickAddProduct.gstRate, rules.required("GST rate is required."), rules.nonNegativeNumber()) ?? undefined,
@@ -201,9 +201,9 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
 
       <Modal open={showQuickAddProduct} onClose={() => { if (!quickAddSaving) setShowQuickAddProduct(false); }} title="Add Custom Item" maxWidth="34rem">
         <div className={styles.customForm}>
-          <FormField label="Product Name" required error={quickAddErrors.name}>
+          <FormField label="Item Name" required error={quickAddErrors.name}>
             <Input
-              type="text" placeholder="Enter Product Name"
+              type="text" placeholder="e.g. Beaker 250ml Borosilicate"
               autoFocus
               value={quickAddProduct.name}
               onChange={(e) => { setQuickAddProduct((p) => ({ ...p, name: e.target.value })); setQuickAddErrors((p) => ({ ...p, name: undefined })); }}
@@ -284,7 +284,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
             <thead>
               <tr>
                 <th className={styles.th}>#</th>
-                <th className={styles.th}>Product</th>
+                <th className={styles.th}>Item</th>
                 <th className={styles.thCenter}>HSN/SAC</th>
                 <th className={styles.thCenter}>Unit</th>
                 <th className={styles.thCenter}>Qty</th>

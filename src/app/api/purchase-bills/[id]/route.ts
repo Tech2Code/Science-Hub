@@ -11,7 +11,7 @@ import { getBusinessSettings } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
 
 const BILL_INCLUDE = {
-  vendor: { select: { id: true, name: true, company: true, phone: true, email: true, gstin: true, address: true, state: true } },
+  vendor: { select: { id: true, name: true, company: true, phone: true, email: true, gstin: true, address: true, state: true, updatedAt: true } },
   createdBy: { select: { id: true, name: true } },
   items: { include: { product: { select: { id: true, name: true, unit: true } } } },
   payments: { orderBy: { date: "desc" as const } },

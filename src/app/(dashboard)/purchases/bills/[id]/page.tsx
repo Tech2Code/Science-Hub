@@ -39,7 +39,7 @@ interface PurchaseBill {
   subtotal: number; taxAmount: number; isInterState: boolean; placeOfSupply: string | null;
   cgst: number; sgst: number; igst: number;
   discount: number; total: number; roundOff: number; paidAmount: number;
-  vendor: { id: string; name: string; company: string | null; gstin: string | null; phone: string | null; email: string | null; address: string | null; state: string | null; };
+  vendor: { id: string; name: string; company: string | null; gstin: string | null; phone: string | null; email: string | null; address: string | null; state: string | null; updatedAt?: string; };
   createdBy: { id: string; name: string };
   items: PurchaseBillItem[];
   payments: PurchasePayment[];
@@ -49,6 +49,7 @@ interface PurchaseBill {
 interface BusinessSettings {
   name: string; tagline: string; email: string; phone: string;
   address: string; city: string; state: string; pincode: string; gstin: string;
+  updatedAt?: string;
 }
 
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
@@ -133,7 +134,10 @@ export default function PurchaseBillDetailPage() {
 
   async function generateBillPdfBlob(force: boolean): Promise<Blob | null> {
     if (!bill) return null;
-    const variantKey = buildPdfVariantKey();
+    const variantKey = buildPdfVariantKey(undefined, {
+      settings: settings?.updatedAt ?? "loading",
+      vendor: bill.vendor?.updatedAt ?? "loading",
+    });
     let blob = force ? null : await getCachedPdf("purchase-bill", bill.id, variantKey);
     if (!blob) {
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));

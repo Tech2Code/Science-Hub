@@ -25,8 +25,11 @@ function fireChange(onChange: VendorFormFieldsProps["onChange"], name: string, v
   onChange({ target: { name, value } } as React.ChangeEvent<HTMLInputElement>);
 }
 
-// Name/company/phone/email/GSTIN/address/notes/active fields — shared by the
-// New Vendor and Edit Vendor pages so the two forms can't drift apart.
+// Name/company/address/pincode/state/city/GSTIN/phone/email/notes/active
+// fields — shared by the New Vendor and Edit Vendor pages so the two forms
+// can't drift apart. Field order mirrors the "Add New Vendor" quick-add
+// popup in purchase bill creation (BillDetailsCard.tsx) so both flows feel
+// identical.
 export function VendorFormFields({ form, onChange, errors, disabled, phoneRequired, addressRequired, cityRequired, stateRequired, pincodeRequired, autoFocusName }: VendorFormFieldsProps) {
   const pincodeLookup = usePincodeAutofill((city, state) => {
     if (city) fireChange(onChange, "city", city);
@@ -51,15 +54,6 @@ export function VendorFormFields({ form, onChange, errors, disabled, phoneRequir
         </FormField>
       </div>
 
-      <div className="form-grid-2">
-        <FormField label="Phone" required={phoneRequired} error={errors.phone}>
-          <PhoneInput name="phone" value={form.phone} onChange={onChange} placeholder="10-digit mobile" disabled={disabled} />
-        </FormField>
-        <FormField label="Email" error={errors.email}>
-          <Input name="email" type="email" value={form.email} onChange={onChange} placeholder="vendor@example.com" disabled={disabled} />
-        </FormField>
-      </div>
-
       <FormField label="Address" required={addressRequired} error={errors.address}>
         <Input name="address" value={form.address} onChange={onChange} placeholder="Street, city…" disabled={disabled} />
       </FormField>
@@ -74,8 +68,11 @@ export function VendorFormFields({ form, onChange, errors, disabled, phoneRequir
         >
           <Input name="pincode" value={form.pincode} onChange={handlePincodeChange} placeholder="6-digit PIN" maxLength={6} disabled={disabled} />
         </FormField>
-        <FormField label="GSTIN" hint="Leave blank if unregistered." error={errors.gstin}>
-          <Input name="gstin" value={form.gstin} onChange={onChange} placeholder="15-character GST number" maxLength={15} mono disabled={disabled} />
+        <FormField label="State" required={stateRequired} error={errors.state}>
+          <Select name="state" value={form.state} onChange={onChange} disabled={disabled}>
+            <option value="">Select state</option>
+            {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
+          </Select>
         </FormField>
       </div>
 
@@ -83,11 +80,17 @@ export function VendorFormFields({ form, onChange, errors, disabled, phoneRequir
         <FormField label="City" required={cityRequired} error={errors.city}>
           <Input name="city" value={form.city} onChange={onChange} placeholder="City" disabled={disabled} />
         </FormField>
-        <FormField label="State" required={stateRequired} error={errors.state}>
-          <Select name="state" value={form.state} onChange={onChange} disabled={disabled}>
-            <option value="">Select state</option>
-            {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
-          </Select>
+        <FormField label="GSTIN" hint="Leave blank if vendor is unregistered." error={errors.gstin}>
+          <Input name="gstin" value={form.gstin} onChange={onChange} placeholder="15-character GST number" maxLength={15} mono disabled={disabled} />
+        </FormField>
+      </div>
+
+      <div className="form-grid-2">
+        <FormField label="Phone" required={phoneRequired} error={errors.phone}>
+          <PhoneInput name="phone" value={form.phone} onChange={onChange} placeholder="10-digit mobile" disabled={disabled} />
+        </FormField>
+        <FormField label="Email" error={errors.email}>
+          <Input name="email" type="email" value={form.email} onChange={onChange} placeholder="vendor@example.com" disabled={disabled} />
         </FormField>
       </div>
 

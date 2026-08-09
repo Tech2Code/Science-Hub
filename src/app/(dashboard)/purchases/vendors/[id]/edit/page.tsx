@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
+import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { VendorFormFields } from "@/components/vendors/VendorFormFields";
 import { Sk } from "@/components/ui/Skeleton";
@@ -29,6 +30,7 @@ export default function EditVendorPage() {
   const [errors, setErrors] = useState<ReturnType<typeof validateVendorForm>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     fetch(`/api/vendors/${id}`, { headers: { "x-no-loader": "1" } })
@@ -55,11 +57,8 @@ export default function EditVendorPage() {
     setErrors(prev => ({ ...prev, [name]: undefined }));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const newErrors = validateVendorForm(form, { requirePhone: false, requireAddress: true, requireCity: true, requireState: true, requirePincode: true });
-    if (hasErrors(newErrors)) { setErrors(newErrors); return; }
-    setErrors({});
+  async function doSave() {
+    setConfirmOpen(false);
     setSaving(true);
     const res = await fetch(`/api/vendors/${id}`, {
       method: "PUT",
@@ -81,6 +80,14 @@ export default function EditVendorPage() {
     }
   }
 
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const newErrors = validateVendorForm(form, { requirePhone: false, requireAddress: true, requireCity: true, requireState: true, requirePincode: true });
+    if (hasErrors(newErrors)) { setErrors(newErrors); return; }
+    setErrors({});
+    setConfirmOpen(true);
+  }
+
   const hasChanges = initialForm !== null && JSON.stringify(form) !== JSON.stringify(initialForm);
   const disabled = loading || saving;
 
@@ -88,6 +95,15 @@ export default function EditVendorPage() {
     <>
     {!loading && saving && <OverlayLoader text="Saving…" />}
     <div className={`page-stack ${styles.pageStack}`}>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Save Changes"
+        message="Are you sure you want to update this vendor's details?"
+        confirmLabel="Save Changes"
+        loading={saving}
+        onConfirm={doSave}
+        onCancel={() => setConfirmOpen(false)}
+      />
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "Edit Vendor" }]} />
       <h1 className="page-title">Edit Vendor</h1>
 

@@ -412,7 +412,7 @@ export default function EditPurchaseBillPage() {
               <div className="summary-actions">
                 <Button type="submit" variant="primary" size="full" disabled={saving || !isDirty || missingVendor || noItems} title={!isDirty ? "No changes to save" : undefined}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                  Save Changes
+                  Update Purchase Bill
                 </Button>
                 {!isDirty && !missingVendor && !noItems && !saving && (
                   <p className={styles.noChangesHint}>No changes detected.</p>
