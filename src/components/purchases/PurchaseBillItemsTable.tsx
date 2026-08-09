@@ -330,7 +330,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
                       <div className={styles.tdNameInner} title={item.name}>{item.name}</div>
                     </td>
                     <td className={styles.tdHsn}>
-                      <Input sz="sm" value={item.hsn} onChange={(e) => updateItem(idx, "hsn", e.target.value)} placeholder="HSN/SAC" />
+                      <Input sz="sm" value={item.hsn} maxLength={8} onChange={(e) => updateItem(idx, "hsn", e.target.value.replace(/\D/g, "").slice(0, 8))} placeholder="HSN/SAC" />
                     </td>
                     <td className={styles.tdUnit}>
                       <span className={styles.unitBadge}>{item.unit}</span>

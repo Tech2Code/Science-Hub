@@ -29,7 +29,10 @@ export function ProductFormFields({ form, onChange, fieldErrors, brands, categor
           <Input name="sku" value={form.sku} onChange={onChange} placeholder="e.g. BKR-250-BOR" mono disabled={disabled} />
         </FormField>
         <FormField label="HSN/SAC" hint="Used on invoices & purchase bills.">
-          <Input name="hsn" value={form.hsn} onChange={onChange} placeholder="e.g. 7017" mono disabled={disabled} />
+          <Input
+            name="hsn" value={form.hsn} maxLength={8} mono disabled={disabled} placeholder="e.g. 7017"
+            onChange={(e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 8); onChange(e); }}
+          />
         </FormField>
       </div>
 

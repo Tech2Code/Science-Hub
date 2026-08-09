@@ -202,6 +202,27 @@ export default function EditInvoicePage() {
   if (error && !invoice) return <div className={`loading-center ${styles.errorCenter}`}>{error}</div>;
   if (!invoice) return null;
 
+  // A fully paid invoice has nothing left to edit — reachable directly by URL
+  // even though the detail/list pages' Edit buttons are disabled for these,
+  // so guard here too rather than showing a form that has nowhere useful to go.
+  if (invoice.status === "paid") {
+    return (
+      <div className="page-stack">
+        <Breadcrumb items={[
+          { label: "Invoices", href: "/sales/invoices" },
+          { label: invoice.invoiceNumber, href: `/sales/invoices/${id}` },
+          { label: "Edit" },
+        ]} />
+        <div className={`error-banner ${styles.errorCenter}`}>
+          This invoice is fully paid and cannot be edited.
+        </div>
+        <div className="form-actions">
+          <Button variant="secondary" href={`/sales/invoices/${id}`}>← Back to Invoice</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
     {saving && <OverlayLoader text="Saving invoice…" />}

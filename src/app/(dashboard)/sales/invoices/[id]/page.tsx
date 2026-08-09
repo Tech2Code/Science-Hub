@@ -791,7 +791,14 @@ export default function InvoiceDetailPage() {
           </div>
           <div className={styles.toolbarActions}>
             <StatusBadge status={invoice.status} />
-            {canWrite && <Button variant="editOutline" size="sm" onClick={() => { setOpeningEdit(true); router.push(`/sales/invoices/edit/${id}`); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>Edit Invoice</Button>}
+            {canWrite && (
+              <Button
+                variant="editOutline" size="sm"
+                disabled={invoice.status === "paid"}
+                title={invoice.status === "paid" ? "Invoice is fully paid — nothing left to edit" : undefined}
+                onClick={() => { setOpeningEdit(true); router.push(`/sales/invoices/${id}/edit`); }}
+              ><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>Edit Invoice</Button>
+            )}
             {canWrite && balance > 0 && (
               <Button
                 variant="greenPrimary"
@@ -1335,7 +1342,7 @@ export default function InvoiceDetailPage() {
                   return (
                     <tr id="invoice-col-header" style={{ background: "var(--inv-bg3)", fontWeight: 700, fontSize: 8, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--inv-tx2)" }}>
                       {[
-                        ["#", "center", "3%"], ["Description", "left", "15%"], ["HSN/SAC", "center", "6%"],
+                        ["#", "center", "3%"], ["Description", "left", "15%"], ["HSN/SAC", "center", "8%"],
                         ["Qty", "center", "5%"], ["Unit", "center", "5%"],
                       ].map(([label, align, width]) => (
                         <td key={label} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align as "left" | "right" | "center", width, whiteSpace: "nowrap", verticalAlign: "middle" }}>{label}</td>
@@ -1346,10 +1353,10 @@ export default function InvoiceDetailPage() {
                       <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "8%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                         <div>Total</div><div>Value (₹)</div>
                       </td>
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "3%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "2%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                         <div>Discount</div><div>%</div>
                       </td>
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "7%", whiteSpace: "nowrap", verticalAlign: "middle" }}>Taxable (₹)</td>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "6%", whiteSpace: "nowrap", verticalAlign: "middle" }}>Taxable (₹)</td>
                       {invoice.isInterState
                         ? taxGroup("IGST", "9%")
                         : <>{taxGroup("CGST", "8%")}{taxGroup("SGST", "8%")}</>
@@ -1379,7 +1386,11 @@ export default function InvoiceDetailPage() {
                   return (
                     <tr key={item.id} data-invoice-item-row="true">
                       {c(idx + 1)}
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 6px", background: rowBg, fontWeight: 600, color: "var(--inv-tx)", wordBreak: "break-word" }}>{item.name}</td>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 6px", background: rowBg, fontWeight: 600, color: "var(--inv-tx)" }}>
+                        <div style={{
+                          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word",
+                        }}>{item.name}</div>
+                      </td>
                       {c(item.hsn || "—")}
                       {c(item.quantity)}{c(item.unit)}
                       {c(fmt(item.price), "center", false, undefined, true)}

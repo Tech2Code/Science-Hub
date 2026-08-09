@@ -39,15 +39,15 @@ src/
       bin/page.tsx                      # Recycle bin — 7 entity types, restore/permanent-delete/empty-all
       settings/page.tsx                 # Business settings, bank details (IFSC autofill), Gmail send-from
       products/
-        page.tsx, new/page.tsx, [id]/page.tsx, edit/[id]/page.tsx
+        page.tsx, new/page.tsx, [id]/page.tsx, [id]/edit/page.tsx
       brands/
         page.tsx, [id]/page.tsx
       categories/
         page.tsx, [id]/page.tsx
       sales/
         page.tsx                        # Sales overview/dashboard
-        customers/  page.tsx, new/page.tsx, [id]/page.tsx, edit/[id]/page.tsx
-        invoices/   page.tsx, new/page.tsx, [id]/page.tsx, edit/[id]/page.tsx
+        customers/  page.tsx, new/page.tsx, [id]/page.tsx, [id]/edit/page.tsx
+        invoices/   page.tsx, new/page.tsx, [id]/page.tsx, [id]/edit/page.tsx
         payments/page.tsx                # Payments Received
       purchases/
         page.tsx                        # Purchase overview/dashboard
@@ -398,6 +398,7 @@ See **Testing** below before adding new tests — in particular, `tests/api/**` 
 - Secrets at rest (Gmail app password, bank account number) are AES-256-GCM encrypted via `src/lib/crypto.ts`, keyed off `NEXTAUTH_SECRET`; legacy unprefixed plaintext values still pass through
 - Purchase-bill attachment uploads validate magic bytes, not just declared MIME type; accepted/deletable blob URLs are allowlisted to the app's own storage path (`blobStorage.ts`)
 - UI routing (`sales/*`, `purchases/*`) was reorganized independently of the API surface — API paths stayed at their original top-level routes
+- Edit-page routes follow `[id]/edit` (e.g. `/sales/invoices/{id}/edit`), not `edit/[id]` — standardized 2026-08-09 so every entity's edit URL nests under its detail page; keep new edit routes on this pattern
 - List routes (invoices, products, brands, categories, vendors, purchase-bills, purchase-bill payments, sales payments, credit notes) moved from returning every matching row to server-side pagination (`{data, total}`), each with a companion `/stats` route for summary totals — a single page of paginated rows can no longer produce a correct total client-side
 - `Invoice.balanceDue`, `PurchaseBill.balanceDue`, and `Product.isLowStock` are real Postgres `GENERATED ALWAYS AS (...) STORED` columns (not app-computed), so a cross-column comparison/derivation can be filtered/sorted server-side via a plain equality/orderBy instead of needing raw SQL per query
 - `package.json`'s `build` script runs `prisma migrate deploy`, not `prisma db push` — required once real generated columns exist, since `db push`'s schema-diffing permanently conflicts with them (see Known Issues)

@@ -252,9 +252,9 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
             </FormField>
             <FormField label="HSN/SAC" hint="Optional">
               <Input
-                type="text" placeholder="e.g. 3822"
+                type="text" placeholder="e.g. 3822" maxLength={8}
                 value={quickAddProduct.hsn}
-                onChange={(e) => setQuickAddProduct((p) => ({ ...p, hsn: e.target.value }))}
+                onChange={(e) => setQuickAddProduct((p) => ({ ...p, hsn: e.target.value.replace(/\D/g, "").slice(0, 8) }))}
               />
             </FormField>
           </div>
@@ -307,8 +307,8 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
                     </td>
                     <td className={styles.tdCenter}>
                       <Input
-                        type="text" value={item.hsn}
-                        onChange={(e) => updateItem(idx, "hsn", e.target.value)}
+                        type="text" value={item.hsn} maxLength={8}
+                        onChange={(e) => updateItem(idx, "hsn", e.target.value.replace(/\D/g, "").slice(0, 8))}
                         placeholder="HSN/SAC"
                         className={styles.hsnInput}
                       />
