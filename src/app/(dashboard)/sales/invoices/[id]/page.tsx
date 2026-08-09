@@ -1101,7 +1101,7 @@ export default function InvoiceDetailPage() {
                 bleeding outside the page during PDF generation. The
                 customer-name divs override this locally with nowrap +
                 ellipsis, which still wins for that single line. */}
-            <table style={{ width: "100%", minWidth: 700, borderCollapse: "collapse", fontSize: 10.5, overflowWrap: "break-word", wordBreak: "break-word" }}>
+            <table style={{ width: "100%", minWidth: 700, borderCollapse: "collapse", fontSize: 9, overflowWrap: "break-word", wordBreak: "break-word" }}>
               {/* ── Letterhead header ── */}
               <thead>
                 <tr>
@@ -1326,16 +1326,16 @@ export default function InvoiceDetailPage() {
                   const taxGroup = (label: string, width: string) => (
                     <td key={label} colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", width, whiteSpace: "nowrap" }}>
                       <div style={{ textAlign: "center" }}>{label}</div>
-                      <div style={{ display: "flex", fontSize: 8, gap: 6, margin: "5px -4px 0", borderTop: "1px solid var(--inv-bd)", padding: "5px 5px 0 5px" }}>
+                      <div style={{ display: "flex", fontSize: 7, gap: 6, margin: "5px -4px 0", borderTop: "1px solid var(--inv-bd)", padding: "5px 5px 0 5px" }}>
                         <div style={{ flex: "1.3", textAlign: "left" }}>Rate</div>
                         <div style={{ flex: 1, textAlign: "left" }}>Amount</div>
                       </div>
                     </td>
                   );
                   return (
-                    <tr id="invoice-col-header" style={{ background: "var(--inv-bg3)", fontWeight: 700, fontSize: 9.5, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--inv-tx2)" }}>
+                    <tr id="invoice-col-header" style={{ background: "var(--inv-bg3)", fontWeight: 700, fontSize: 8, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--inv-tx2)" }}>
                       {[
-                        ["#", "center", "3%"], ["Description", "left", "13%"], ["HSN/SAC", "center", "6%"],
+                        ["#", "center", "3%"], ["Description", "left", "15%"], ["HSN/SAC", "center", "6%"],
                         ["Qty", "center", "5%"], ["Unit", "center", "5%"],
                       ].map(([label, align, width]) => (
                         <td key={label} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align as "left" | "right" | "center", width, whiteSpace: "nowrap", verticalAlign: "middle" }}>{label}</td>
@@ -1346,11 +1346,10 @@ export default function InvoiceDetailPage() {
                       <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "8%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                         <div>Total</div><div>Value (₹)</div>
                       </td>
-                      {[
-                        ["Discount %", "center", "5%"], ["Taxable (₹)", "right", "7%"],
-                      ].map(([label, align, width]) => (
-                        <td key={label} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align as "left" | "right" | "center", width, whiteSpace: "nowrap", verticalAlign: "middle" }}>{label}</td>
-                      ))}
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "3%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                        <div>Discount</div><div>%</div>
+                      </td>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "7%", whiteSpace: "nowrap", verticalAlign: "middle" }}>Taxable (₹)</td>
                       {invoice.isInterState
                         ? taxGroup("IGST", "9%")
                         : <>{taxGroup("CGST", "8%")}{taxGroup("SGST", "8%")}</>
