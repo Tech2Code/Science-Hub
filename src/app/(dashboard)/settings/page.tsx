@@ -15,6 +15,7 @@ import { useDirty } from "@/lib/useDirty";
 import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { patchCache } from "@/lib/useCache";
 import { usePincodeAutofill } from "@/lib/usePincodeLookup";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import styles from "./settings.module.css";
 
 interface BusinessSettings {
@@ -155,6 +156,13 @@ export default function SettingsPage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [savingBranding, setSavingBranding] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Branding actions (logo upload/replace/remove, and the "show on invoices"
+  // toggle) all save instantly with no form/edit step to absorb the wait, so
+  // a full-page overlay (not just a spinner on the affected control) makes it
+  // clear the whole page is briefly blocked mid-save. Uses the same shared
+  // OverlayLoader as every other async action in the app (e.g. Admin → create user).
+  const brandingBusy = savingBranding || logoUploading;
 
   function applyLoaded(d: Record<string, string | boolean>) {
     const s: BusinessSettings = {
@@ -675,7 +683,6 @@ export default function SettingsPage() {
                   checked={saved.showLogoOnInvoices}
                   onChange={handleToggleInvoiceLogo}
                   disabled={savingBranding}
-                  loading={savingBranding}
                   aria-label="Show logo on invoices"
                 />
               </div>
@@ -996,6 +1003,7 @@ export default function SettingsPage() {
           </div>
         </>
       )}
+      {brandingBusy && <OverlayLoader text={logoUploading ? "Updating logo…" : "Updating invoice logo setting…"} />}
     </div>
   );
 }

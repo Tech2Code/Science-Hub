@@ -12,6 +12,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { fetchCached, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
+import { formatDate } from "@/lib/formatDate";
 import type { Column } from "@/components/ui/Table";
 import styles from "./vendorDetail.module.css";
 
@@ -131,7 +132,7 @@ export default function VendorDetailPage() {
               {!loading && (vendor?.createdBy || vendor?.createdAt) && (
                 <div className={styles.metaText}>
                   {vendor?.createdBy && <>Added by {vendor.createdBy}</>}
-                  {vendor?.createdAt && <> · {new Date(vendor.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</>}
+                  {vendor?.createdAt && <> · {formatDate(vendor.createdAt)}</>}
                 </div>
               )}
               <div className={styles.contactRow}>
@@ -231,7 +232,7 @@ export default function VendorDetailPage() {
                     </Link>
                   </td>
                   <td data-label="Date" className={styles.dateCell}>
-                    {new Date(b.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                    {formatDate(b.billDate)}
                   </td>
                   <td data-label="Total" className={`table-td-right ${styles.totalCell}`}>{fmt(b.total)}</td>
                   <td data-label="Paid" className={`table-td-right ${styles.paidCell}`}>{fmt(b.paidAmount)}</td>

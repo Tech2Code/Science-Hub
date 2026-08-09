@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/dialogs/Modal";
-import { Input, Select, FormField } from "@/components/ui/Input";
+import { OverlayLoader } from "@/components/ui/Spinner";
+import { Input, FormField } from "@/components/ui/Input";
 import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
@@ -12,17 +13,7 @@ import { useDropUp } from "@/lib/useDropUp";
 import { lineBreakdown, makeInvoiceLineItemKey, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
 import styles from "./InvoiceLineItemsCard.module.css";
 
-const DISCOUNT_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 40, 50];
-const QUICK_ADD_UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pack", "Set", "Mtr", "Dozen"];
-
-// A custom typed amount rarely lands on a preset % exactly — inject it into
-// the option list (rounded to 2dp) so the select actually shows/highlights
-// it instead of falling back to blank.
-function discountOptionsFor(percent: number) {
-  const rounded = Math.round(percent * 100) / 100;
-  if (DISCOUNT_OPTIONS.includes(rounded)) return DISCOUNT_OPTIONS;
-  return [...DISCOUNT_OPTIONS, rounded].sort((a, b) => a - b);
-}
+const QUICK_ADD_UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pkt", "Set", "Mtr", "Dozen"];
 
 interface InvoiceLineItemsCardProps {
   sectionIndex: number;
@@ -42,9 +33,12 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const { dropUp, measure } = useDropUp(showProductDropdown);
   const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
-  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "Nos", price: "", gstRate: "18", skipCatalog: false });
+  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "", price: "", gstRate: "18", hsn: "", skipCatalog: false });
   const [quickAddErrors, setQuickAddErrors] = useState<Partial<Record<"name" | "price" | "unit" | "gstRate", string>>>({});
   const [quickAddSaving, setQuickAddSaving] = useState(false);
+  const [showUnitDropdown, setShowUnitDropdown] = useState(false);
+  const filteredUnits = QUICK_ADD_UNITS.filter((u) => u.toLowerCase().includes(quickAddProduct.unit.toLowerCase()));
+  const unitFieldId = useId();
 
   const filteredProducts = products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase()));
 
@@ -60,8 +54,9 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
   }
 
   function openQuickAddProduct(name = productSearch) {
-    setQuickAddProduct({ name, unit: "Nos", price: "", gstRate: "18", skipCatalog: false });
+    setQuickAddProduct({ name, unit: "", price: "", gstRate: "18", hsn: "", skipCatalog: false });
     setQuickAddErrors({});
+    setShowUnitDropdown(false);
     setShowQuickAddProduct(true);
     setShowProductDropdown(false);
   }
@@ -80,7 +75,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
       setItems((prev) => [...prev, {
         key: makeInvoiceLineItemKey(), productId: "", productName: quickAddProduct.name.trim(),
         unit: quickAddProduct.unit.trim() || "Nos", qty: 1, price: parseFloat(quickAddProduct.price) || 0,
-        gstRate: parseFloat(quickAddProduct.gstRate) || 0, hsn: "", discountPercent: 0,
+        gstRate: parseFloat(quickAddProduct.gstRate) || 0, hsn: quickAddProduct.hsn.trim(), discountPercent: 0,
       }]);
       setShowQuickAddProduct(false);
       setShowProductDropdown(false);
@@ -98,6 +93,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
           unit: quickAddProduct.unit.trim() || "Nos",
           price: quickAddProduct.price,
           gstRate: quickAddProduct.gstRate,
+          hsn: quickAddProduct.hsn.trim() || undefined,
           stock: 0,
         }),
       });
@@ -121,22 +117,40 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
   }
 
-  // Typing a flat ₹ amount is just another way to set discountPercent — it's
-  // converted against that line's gross (qty × rate) so the stored value stays
-  // a percentage, same as picking one from the dropdown.
-  function setDiscountAmount(idx: number, amountStr: string) {
-    const amount = parseFloat(amountStr) || 0;
-    setItems((prev) => prev.map((item, i) => {
-      if (i !== idx) return item;
-      const gross = item.qty * item.price;
-      const discountPercent = gross > 0 ? Math.min(100, Math.max(0, (amount / gross) * 100)) : 0;
-      return { ...item, discountPercent };
-    }));
+  // Holds exactly what's been typed (e.g. "10." or "10%") per line item, so a
+  // trailing decimal point or "%" isn't stripped out from under the user's
+  // cursor by reformatting item.discountPercent back into the input on every
+  // keystroke — cleared on blur so the field then shows the committed number.
+  const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
+
+  // Accepts a plain number or one typed with a trailing "%" (e.g. "10%") —
+  // capped at 2 decimal places (matching how every ₹ amount in this app is
+  // displayed) and at 100 overall, since a discount can never exceed the
+  // line's own value. A keystroke that would push past either limit is
+  // rejected outright rather than silently truncated later.
+  function handleDiscountPercentChange(idx: number, key: string, raw: string) {
+    const cleaned = raw.replace(/%/g, "");
+    if (!/^(100(\.\d{0,2})?|\d{0,2}(\.\d{0,2})?)$/.test(cleaned)) return;
+    setDiscountDrafts((prev) => ({ ...prev, [key]: raw }));
+    const parsed = parseFloat(cleaned);
+    const clamped = isNaN(parsed) ? 0 : Math.min(100, Math.max(0, parsed));
+    updateItem(idx, "discountPercent", clamped);
+  }
+
+  function clearDiscountDraft(key: string) {
+    setDiscountDrafts((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   }
 
   const section = animateSection(sectionIndex, `card ${styles.cardPad}`);
 
   return (
+    <>
+    {quickAddSaving && <OverlayLoader text="Adding…" />}
     <div
       className={section.className}
       style={{ ...section.style, position: "relative", zIndex: showProductDropdown ? 5 : "auto" }}
@@ -152,6 +166,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
             onFocus={() => { measure(productSearchWrapRef.current); setShowProductDropdown(true); }}
             onClick={() => { measure(productSearchWrapRef.current); setShowProductDropdown(true); }}
             onBlur={() => setTimeout(() => setShowProductDropdown(false), 150)}
+            onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur(); }}
           />
           {showProductDropdown && (
           <div className={`${styles.dropdown} ${dropUp ? styles.dropdownUp : ""}`} onMouseDown={(e) => e.preventDefault()}>
@@ -173,16 +188,18 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
           </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => { setProductSearch(""); openQuickAddProduct(""); }}
-          className={styles.customItemBtn}
-        >
-          + Add custom item
-        </button>
+        {!showProductDropdown && (
+          <button
+            type="button"
+            onClick={() => { setProductSearch(""); openQuickAddProduct(""); }}
+            className={styles.customItemBtn}
+          >
+            + Add custom item manually
+          </button>
+        )}
       </div>
 
-      <Modal open={showQuickAddProduct} onClose={() => { if (!quickAddSaving) setShowQuickAddProduct(false); }} title="Add Custom Item" maxWidth="32rem">
+      <Modal open={showQuickAddProduct} onClose={() => { if (!quickAddSaving) setShowQuickAddProduct(false); }} title="Add Custom Item" maxWidth="34rem">
         <div className={styles.customForm}>
           <FormField label="Product Name" required error={quickAddErrors.name}>
             <Input
@@ -192,14 +209,32 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
               onChange={(e) => { setQuickAddProduct((p) => ({ ...p, name: e.target.value })); setQuickAddErrors((p) => ({ ...p, name: undefined })); }}
             />
           </FormField>
-          <div className={styles.grid3}>
-            <FormField label="Unit" required error={quickAddErrors.unit}>
-              <Select
-                value={quickAddProduct.unit}
-                onChange={(e) => { setQuickAddProduct((p) => ({ ...p, unit: e.target.value })); setQuickAddErrors((p) => ({ ...p, unit: undefined })); }}
-              >
-                {QUICK_ADD_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </Select>
+          <div className={styles.grid2}>
+            <FormField label="Unit" required error={quickAddErrors.unit} id={unitFieldId}>
+              <div className={styles.unitCombo}>
+                <Input
+                  id={unitFieldId}
+                  type="text" placeholder="e.g. Nos, Kg, Box"
+                  value={quickAddProduct.unit}
+                  onChange={(e) => { setQuickAddProduct((p) => ({ ...p, unit: e.target.value })); setQuickAddErrors((p) => ({ ...p, unit: undefined })); setShowUnitDropdown(true); }}
+                  onFocus={() => setShowUnitDropdown(true)}
+                  onClick={() => setShowUnitDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowUnitDropdown(false), 150)}
+                  onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur(); }}
+                />
+                {showUnitDropdown && filteredUnits.length > 0 && (
+                  <div className={styles.unitDropdown} onMouseDown={(e) => e.preventDefault()}>
+                    {filteredUnits.map((u) => (
+                      <button
+                        key={u} type="button" className={styles.unitOption}
+                        onClick={() => { setQuickAddProduct((p) => ({ ...p, unit: u })); setQuickAddErrors((p) => ({ ...p, unit: undefined })); setShowUnitDropdown(false); }}
+                      >
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </FormField>
             <FormField label="Price (₹)" required error={quickAddErrors.price}>
               <Input
@@ -215,6 +250,13 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
                 onChange={(e) => { setQuickAddProduct((p) => ({ ...p, gstRate: e.target.value })); setQuickAddErrors((p) => ({ ...p, gstRate: undefined })); }}
               />
             </FormField>
+            <FormField label="HSN/SAC" hint="Optional">
+              <Input
+                type="text" placeholder="e.g. 3822"
+                value={quickAddProduct.hsn}
+                onChange={(e) => setQuickAddProduct((p) => ({ ...p, hsn: e.target.value }))}
+              />
+            </FormField>
           </div>
           <label className={styles.skipCatalogLabel}>
             <input
@@ -225,17 +267,12 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
             />
             Just for this invoice — don&apos;t save to catalog
           </label>
-          {!quickAddProduct.skipCatalog && (
-            <p className={styles.customFormHint}>
-              This product will be saved to your catalog and added to this invoice.
-            </p>
-          )}
           <div className={styles.formActions}>
             <Button type="button" variant="secondary" size="md" onClick={() => setShowQuickAddProduct(false)} disabled={quickAddSaving}>
               Cancel
             </Button>
             <Button type="button" variant="primary" size="md" onClick={handleQuickAddProduct} disabled={quickAddSaving || !quickAddProduct.name.trim() || !quickAddProduct.price.trim()}>
-              {quickAddSaving ? "Adding…" : quickAddProduct.skipCatalog ? "Add to invoice" : "Add & use product"}
+              {quickAddSaving ? "Adding…" : quickAddProduct.skipCatalog ? "Add to invoice" : "Save & use product"}
             </Button>
           </div>
         </div>
@@ -251,8 +288,8 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
                 <th className={styles.thCenter}>HSN/SAC</th>
                 <th className={styles.thCenter}>Unit</th>
                 <th className={styles.thCenter}>Qty</th>
-                <th className={styles.thRight}>List Price (₹)</th>
-                <th className={styles.thCenter}>Discount</th>
+                <th className={styles.thCenter}>List Price (₹)</th>
+                <th className={styles.thCenter}>Discount %</th>
                 <th className={styles.thCenter}>GST %</th>
                 <th className={styles.thRight}>GST Amt</th>
                 <th className={styles.thRight}>Total (₹)</th>
@@ -297,21 +334,22 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
                     </td>
                     <td className={styles.discountCell}>
                       <div className={styles.discountStack}>
-                        <Select
-                          value={Math.round(item.discountPercent * 100) / 100}
-                          onChange={(e) => updateItem(idx, "discountPercent", parseFloat(e.target.value) || 0)}
-                          className={styles.discountSelect}
-                        >
-                          {discountOptionsFor(item.discountPercent).map((d) => <option key={d} value={d}>{d}%</option>)}
-                        </Select>
                         <Input
                           type="text" inputMode="decimal"
-                          value={discountAmount > 0 ? Math.round(discountAmount * 100) / 100 : ""}
-                          onChange={(e) => setDiscountAmount(idx, e.target.value)}
-                          placeholder="₹0"
-                          title="Flat discount amount"
-                          className={styles.discountAmountInput}
+                          value={
+                            discountDrafts[item.key] ??
+                            (item.discountPercent > 0 ? Math.round(item.discountPercent * 100) / 100 : "")
+                          }
+                          onChange={(e) => handleDiscountPercentChange(idx, item.key, e.target.value)}
+                          onBlur={() => clearDiscountDraft(item.key)}
+                          placeholder="0%"
+                          className={styles.discountPercentInput}
                         />
+                        {discountAmount > 0 && (
+                          <span className={styles.discountAmountHint}>
+                            ₹{discountAmount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className={styles.tdCenter}>
@@ -342,5 +380,6 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
         </div>
       )}
     </div>
+    </>
   );
 }

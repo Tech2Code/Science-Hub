@@ -48,9 +48,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "This purchase bill was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
     }
 
-    if (items !== undefined && (existing.status === "paid" || existing.status === "cancelled")) {
+    if (
+      (items !== undefined || discount !== undefined) &&
+      (existing.status === "paid" || existing.status === "cancelled")
+    ) {
       return NextResponse.json(
-        { error: `Items on a ${existing.status} bill cannot be edited.` },
+        { error: `Items and discount on a ${existing.status} bill cannot be edited.` },
         { status: 400 }
       );
     }
@@ -122,7 +125,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const sgst = isInterState ? 0 : effectiveTaxAmount / 2;
     const igst = isInterState ? effectiveTaxAmount : 0;
 
-    const effectiveDiscount = discount !== undefined ? discount : existing.discount;
+    const parsedDiscount = discount !== undefined && discount !== null && discount !== ""
+      ? parseFloat(String(discount))
+      : undefined;
+    if (parsedDiscount !== undefined && (Number.isNaN(parsedDiscount) || parsedDiscount < 0)) {
+      return NextResponse.json({ error: "Discount cannot be negative" }, { status: 400 });
+    }
+    const effectiveDiscount = parsedDiscount !== undefined ? parsedDiscount : existing.discount;
     const rawTotal = subtotal !== undefined && taxAmount !== undefined
       ? subtotal + taxAmount - effectiveDiscount
       : existing.subtotal + existing.taxAmount - effectiveDiscount;
@@ -133,12 +142,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Status isn't a free-form field the user picks — it's derived from
-    // paidAmount vs total, the same way invoices work, so editing items
-    // (which changes total) can never leave a stale status behind. The one
-    // status a user DOES set directly is "cancelled", via the dedicated
-    // Cancel Bill action, which calls this route with only `{ status }` and
-    // no `items` — that explicit value passes through untouched here.
-    const effectiveStatus = items !== undefined
+    // paidAmount vs total, the same way invoices work, so editing anything
+    // that changes total (items or the bill-level discount) can never leave
+    // a stale status behind. The one status a user DOES set directly is
+    // "cancelled", via the dedicated Cancel Bill action, which calls this
+    // route with only `{ status }` and no `items`/`discount` — that explicit
+    // value passes through untouched here.
+    const totalChanged = items !== undefined || parsedDiscount !== undefined;
+    const effectiveStatus = totalChanged
       ? (existing.paidAmount + 0.01 >= total ? "paid" : existing.paidAmount > 0 ? "partial" : "unpaid")
       : status;
 
@@ -193,7 +204,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           cgst,
           sgst,
           igst,
-          ...(discount !== undefined && { discount }),
+          ...(parsedDiscount !== undefined && { discount: parsedDiscount }),
           total,
           roundOff,
           ...(notes !== undefined && { notes: notes || null }),

@@ -10,7 +10,6 @@ import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
-import { validateCustomerInput } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,8 +39,8 @@ export async function POST(request: NextRequest) {
     const user = auth.session.user;
 
     const body = await request.json();
-    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, customCustomer } = body;
-    let { customerId } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge } = body;
+    const { customerId } = body;
 
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "At least one item is required" }, { status: 400 });
@@ -104,45 +103,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // If no existing customer selected, create one from the custom details —
-    // mirrors what the "custom customer" form on the client already requires
-    // (name/phone/address/city/state/pincode), since the client can't be
-    // trusted to enforce this on its own.
+    // The client always resolves a real Customer row before submitting
+    // (creating one inline via /api/customers if needed) — mirrors how
+    // /api/purchase-bills requires an existing vendorId rather than
+    // accepting inline vendor details. Deliberately not filtered by
+    // deletedAt: a "just for this invoice" customer is soft-deleted the
+    // moment it's created (so it never surfaces in the directory) but must
+    // still be usable for the invoice being created right now.
     if (!customerId) {
-      if (!customCustomer?.name?.trim()) {
-        return NextResponse.json({ error: "Customer name is required" }, { status: 400 });
-      }
-      if (!customCustomer?.phone?.trim()) {
-        return NextResponse.json({ error: "Customer phone number is required" }, { status: 400 });
-      }
-      if (!customCustomer?.address?.trim()) {
-        return NextResponse.json({ error: "Customer address is required" }, { status: 400 });
-      }
-      if (!customCustomer?.city?.trim()) {
-        return NextResponse.json({ error: "Customer city is required" }, { status: 400 });
-      }
-      if (!customCustomer?.state?.trim()) {
-        return NextResponse.json({ error: "Customer state is required" }, { status: 400 });
-      }
-      const customerValidationError = validateCustomerInput(customCustomer, true);
-      if (customerValidationError) {
-        return NextResponse.json({ error: customerValidationError }, { status: 400 });
-      }
-      const newCustomer = await prisma.customer.create({
-        data: {
-          name: customCustomer.name.trim(),
-          phone:   customCustomer.phone?.trim()   || null,
-          email:   customCustomer.email?.trim()   || null,
-          address: customCustomer.address?.trim() || null,
-          city:    customCustomer.city?.trim()    || null,
-          state:   customCustomer.state?.trim()   || null,
-          pincode: customCustomer.pincode?.trim() || null,
-          gstin:   customCustomer.gstin?.trim()   || null,
-        },
-      });
-      customerId = newCustomer.id;
-      await logActivity(user.id, "add_customer", `Added customer "${newCustomer.name}" (via invoice) | Phone: ${newCustomer.phone || "—"} | City: ${newCustomer.city || "—"}`, newCustomer.id, "customer");
-      revalidateTag("customers", { expire: 0 });
+      return NextResponse.json({ error: "Customer is required." }, { status: 400 });
+    }
+    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) {
+      return NextResponse.json({ error: "Selected customer was not found." }, { status: 400 });
     }
 
     const currentYear = new Date().getFullYear();

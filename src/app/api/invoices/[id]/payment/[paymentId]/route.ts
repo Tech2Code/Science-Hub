@@ -90,7 +90,7 @@ export async function PUT(
           _sum: { amount: true },
         });
         const paidAmount = agg._sum.amount ?? 0;
-        const status = paidAmount >= invoice.total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+        const status = paidAmount + 0.01 >= invoice.total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
 
         return tx.invoice.update({
           where: { id },

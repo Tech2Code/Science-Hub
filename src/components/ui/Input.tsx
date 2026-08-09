@@ -49,13 +49,19 @@ interface FieldProps {
   hintSuccess?: boolean;
   error?: string;
   children: React.ReactNode;
+  // When children isn't a single cloneable element (e.g. an input wrapped in
+  // a dropdown/combobox container, or multiple sibling nodes), auto-id
+  // injection below can't find a real control to attach to and the label's
+  // htmlFor would point at nothing. Pass the same id here and directly on
+  // the actual form control to keep the label properly associated.
+  id?: string;
 }
-export function FormField({ label, required, hint, hintSuccess, error, children }: FieldProps) {
+export function FormField({ label, required, hint, hintSuccess, error, children, id }: FieldProps) {
   const generatedId = useId();
-  const child = React.isValidElement(children)
+  const child = !id && React.isValidElement(children)
     ? (children as React.ReactElement<{ id?: string }>)
     : null;
-  const fieldId = child?.props.id || generatedId;
+  const fieldId = id || child?.props.id || generatedId;
   const content = child ? React.cloneElement(child, { id: fieldId }) : children;
 
   return (

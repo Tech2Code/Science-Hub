@@ -24,8 +24,8 @@
   position: relative;
   z-index: 10;
   width: 100%;
-  max-width: 36rem;
-  max-height: 85vh;
+  max-width: 34rem;
+  max-height: 90vh;
   background: var(--c-bg-card);
   border: 1px solid var(--c-border);
   border-radius: var(--c-radius);

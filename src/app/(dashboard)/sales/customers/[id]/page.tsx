@@ -13,6 +13,7 @@ import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { fetchCached, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
+import { formatDate } from "@/lib/formatDate";
 import type { Column } from "@/components/ui/Table";
 
 const INVOICE_COLUMNS: Column[] = [
@@ -111,7 +112,7 @@ export default function CustomerViewPage() {
               {!loading && (customer?.createdBy || customer?.createdAt) && (
                 <div className={styles.metaText}>
                   {customer?.createdBy && <>Added by {customer.createdBy}</>}
-                  {customer?.createdAt && <> · {new Date(customer.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</>}
+                  {customer?.createdAt && <> · {formatDate(customer.createdAt)}</>}
                 </div>
               )}
               <div className={styles.contactRow}>
@@ -192,7 +193,7 @@ export default function CustomerViewPage() {
                     </Link>
                   </td>
                   <td data-label="Date" className={styles.dateCellText}>
-                    <div>{new Date(inv.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
+                    <div>{formatDate(inv.date)}</div>
                     <div className={`date-sub ${styles.dateSubRow}`}>
                       {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                     </div>

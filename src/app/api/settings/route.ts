@@ -5,40 +5,18 @@ import { requireSession, requireAdmin } from "@/lib/apiAuth";
 import { encrypt, safeDecrypt } from "@/lib/crypto";
 import { validateSettingsInput } from "@/lib/validation";
 
-let invoiceLogoColumnReady = false;
-
-async function ensureInvoiceLogoColumn() {
-  if (invoiceLogoColumnReady) return;
-  await prisma.$executeRaw`
-    ALTER TABLE "BusinessSettings"
-    ADD COLUMN IF NOT EXISTS "showLogoOnInvoices" BOOLEAN NOT NULL DEFAULT true
-  `;
-  invoiceLogoColumnReady = true;
-}
-
-async function readShowLogoOnInvoices(): Promise<boolean> {
-  await ensureInvoiceLogoColumn();
-  const rows = await prisma.$queryRaw<{ showLogoOnInvoices: boolean }[]>`
-    SELECT "showLogoOnInvoices" FROM "BusinessSettings" WHERE id = 'singleton' LIMIT 1
-  `;
-  return rows[0]?.showLogoOnInvoices ?? true;
-}
-
 export async function GET() {
   try {
     const auth = await requireSession();
     if (!auth.ok) return auth.response;
 
-    await ensureInvoiceLogoColumn();
     const { gmailAppPassword, gmailAppPasswordDecryptFailed, gmailUser, ...settings } = await getBusinessSettings();
-    const showLogoOnInvoices = await readShowLogoOnInvoices();
     // Non-admins (e.g. staff viewing/printing an invoice, which needs the
     // letterhead fields below) must not see the Gmail send-from address —
     // only admins, who manage it on the Settings page, get it back.
     const isAdmin = auth.session.user.role === "admin";
     return NextResponse.json({
       ...settings,
-      showLogoOnInvoices,
       ...(isAdmin ? { gmailUser, gmailAppPasswordSet: Boolean(gmailAppPassword), gmailAppPasswordDecryptFailed } : {}),
     });
   } catch (error) {
@@ -62,7 +40,6 @@ export async function PUT(request: NextRequest) {
   try {
     const auth = await requireAdmin();
     if (!auth.ok) return auth.response;
-    await ensureInvoiceLogoColumn();
     const body = await request.json();
     const {
       name, tagline, email, phone, address, city, state, pincode, gstin, pan, gmailUser, gmailAppPassword,
@@ -87,12 +64,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Business settings were updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
     }
 
-    const updateData: Record<string, string> = {};
+    const updateData: Record<string, string | boolean> = {};
     for (const key of SIMPLE_STRING_KEYS) {
       if (key in body) updateData[key] = fieldValues[key] ?? "";
     }
     if ("pan" in body) updateData.pan = (pan ?? "").toUpperCase();
     if (logoUrl !== undefined) updateData.logoUrl = logoUrl ?? "";
+    if (showLogoOnInvoices !== undefined) updateData.showLogoOnInvoices = Boolean(showLogoOnInvoices);
     if ("gmailUser" in body) {
       updateData.gmailUser = gmailUser ?? "";
       // Save password when explicitly provided; if gmailUser is being cleared, clear password too
@@ -112,19 +90,9 @@ export async function PUT(request: NextRequest) {
       create: { id: "singleton", ...updateData },
       update: updateData,
     });
-    if (showLogoOnInvoices !== undefined) {
-      await ensureInvoiceLogoColumn();
-      await prisma.$executeRaw`
-        UPDATE "BusinessSettings"
-        SET "showLogoOnInvoices" = ${Boolean(showLogoOnInvoices)}
-        WHERE id = 'singleton'
-      `;
-    }
-    const savedShowLogoOnInvoices = await readShowLogoOnInvoices();
     const decryptedAccountNumber = storedAccountNumber ? safeDecrypt(storedAccountNumber) : { value: "", failed: false };
     return NextResponse.json({
       ...settings,
-      showLogoOnInvoices: savedShowLogoOnInvoices,
       gmailAppPasswordSet: Boolean(storedPassword),
       bankAccountNumber: decryptedAccountNumber.value,
       bankAccountNumberDecryptFailed: decryptedAccountNumber.failed,

@@ -12,6 +12,7 @@ import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { Cell, type Column } from "@/components/ui/Table";
 import { animateSection } from "@/lib/animateSection";
+import { formatDate } from "@/lib/formatDate";
 import styles from "./purchasePayments.module.css";
 
 interface PurchasePayment {
@@ -146,7 +147,7 @@ export default function PurchasePaymentsPage() {
                 return (
                   <tr key={p.id}>
                     <Cell col={COLUMNS[0]} className={styles.dateCell}>
-                      <div>{new Date(p.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
+                      <div>{formatDate(p.date)}</div>
                     </Cell>
                     <Cell col={COLUMNS[1]} className={styles.vendorCell}>{p.purchaseBill.vendor.name}</Cell>
                     <Cell col={COLUMNS[2]}>

@@ -11,6 +11,7 @@ import { useFetch } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
+import { formatDate } from "@/lib/formatDate";
 import styles from "./bin.module.css";
 
 type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill" | "return";
@@ -277,7 +278,7 @@ export default function BinPage() {
         item.meta.toLowerCase().includes(q) ||
         item.type.toLowerCase().includes(q) ||
         (item.deletedBy ?? "").toLowerCase().includes(q) ||
-        new Date(item.deletedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toLowerCase().includes(q)
+        formatDate(item.deletedAt).toLowerCase().includes(q)
       );
     });
   }, [items, search]);

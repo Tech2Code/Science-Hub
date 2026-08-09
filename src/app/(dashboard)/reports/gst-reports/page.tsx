@@ -78,7 +78,7 @@ export default function GstFilingPage() {
 
   const fyOptions = Array.from({ length: 6 }, (_, i) => currentFyStartYear() - i);
 
-  const [mode, setMode] = useState<"month" | "fy">("month");
+  const [mode, setMode] = useState<"month" | "fy">("fy");
   // Defaults to "1st of this month → today" for the common case (current
   // month, up to date) — both ends stay freely editable to any date, so a
   // custom multi-month range (a quarter, say) is just picking a wider "To".
@@ -155,8 +155,8 @@ export default function GstFilingPage() {
           </div>
         </div>
         <div className={styles.tabsRow}>
-          <button className={`${styles.tabBtn} ${mode === "month" ? styles.active : ""}`} onClick={() => switchMode("month")}>Month</button>
           <button className={`${styles.tabBtn} ${mode === "fy" ? styles.active : ""}`} onClick={() => switchMode("fy")}>Financial Year</button>
+          <button className={`${styles.tabBtn} ${mode === "month" ? styles.active : ""}`} onClick={() => switchMode("month")}>Month</button>
         </div>
         <div className={styles.dateFilterRow}>
           {mode === "month" ? (
@@ -242,19 +242,30 @@ export default function GstFilingPage() {
               </div>
             </div>
             <div className={styles.summaryGrid}>
-              {[
+              {([
                 { label: "Sales Invoices", value: String(report.salesRegister.length) },
                 { label: "B2B / B2C", value: `${report.b2bSales.length} / ${report.b2cSales.length}` },
                 { label: "Credit Notes", value: String(new Set(report.creditNotes.map(c => c.returnId)).size) },
                 { label: "Purchase Bills", value: String(report.purchaseRegister.length) },
                 { label: "HSN Codes", value: String(report.hsnSummary.length) },
                 { label: "Output Tax", value: fmt(report.summary.outputTax) },
+                { label: "Credit Note Tax", value: fmt(report.summary.creditNoteTax) },
+                { label: "Net Output Tax", value: fmt(report.summary.netOutputTax) },
                 { label: "Input Tax Credit", value: fmt(report.summary.inputTax) },
-                { label: "Net GST Payable", value: fmt(report.summary.netGstPayable) },
-              ].map(({ label, value }) => (
+                {
+                  label: "Net GST Payable",
+                  value: fmt(report.summary.netGstPayable),
+                  valueClassName:
+                    report.summary.netGstPayable < 0
+                      ? styles.summaryCardValueRefund
+                      : report.summary.netGstPayable > 0
+                        ? styles.summaryCardValueDue
+                        : undefined,
+                },
+              ] as { label: string; value: string; valueClassName?: string }[]).map(({ label, value, valueClassName }) => (
                 <div key={label} className={styles.summaryCard}>
                   <div className={styles.summaryCardLabel}>{label}</div>
-                  <div className={styles.summaryCardValue}>{value}</div>
+                  <div className={`${styles.summaryCardValue} ${valueClassName ?? ""}`}>{value}</div>
                 </div>
               ))}
             </div>

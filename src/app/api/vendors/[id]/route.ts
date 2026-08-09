@@ -10,8 +10,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const auth = await requireSession();
     if (!auth.ok) return auth.response;
     const { id } = await params;
+    // A "one-off" vendor (created via the purchase bill's "just for this
+    // bill — don't save" option) is soft-deleted from the moment it's
+    // created, but can still be reached from an active bill's detail page —
+    // let it load as long as it's still actually in use, same as it would
+    // if it weren't soft-deleted at all.
     const vendor = await prisma.vendor.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, OR: [{ deletedAt: null }, { purchaseBills: { some: { deletedAt: null } } }] },
       include: {
         purchaseBills: {
           where: { deletedAt: null },
@@ -51,7 +56,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const existing = await prisma.vendor.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existing) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
     if (existing.deletedAt) {
-      return NextResponse.json({ error: "This vendor is in the bin — restore it before editing" }, { status: 400 });
+      // A "one-off" vendor (created via a purchase bill's "just for this
+      // bill — don't save" option) is soft-deleted from the moment it's
+      // created and never gets an explicit delete_vendor log entry — that
+      // distinguishes it from one actually sent to the bin, which must stay
+      // blocked from editing until restored.
+      const wasExplicitlyDeleted = await prisma.activityLog.findFirst({ where: { entityId: id, entityType: "vendor", action: "delete_vendor" } });
+      if (wasExplicitlyDeleted) {
+        return NextResponse.json({ error: "This vendor is in the bin — restore it before editing" }, { status: 400 });
+      }
     }
     if (expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== existing.updatedAt.getTime()) {
       return NextResponse.json({ error: "This vendor was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });

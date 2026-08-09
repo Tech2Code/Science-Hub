@@ -141,9 +141,21 @@
 /* Matches the app-wide .form-grid-2/.form-grid-3 row-gap convention
    (globals.css) so a FormField's absolutely-positioned error text has room
    below the field without overlapping the next row. */
+.customModalSub { font-size: 0.8125rem; color: var(--c-text-3); margin-bottom: 1.125rem; margin-top: -0.5rem; }
+
 .customForm { display: flex; flex-direction: column; gap: 1.325rem; }
 
 .customFormHint { font-size: 0.7rem; color: var(--c-text-4); }
+
+.customFormCheckbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--c-text-2);
+  cursor: pointer;
+}
+.customFormCheckbox input[type="checkbox"] { width: 1rem; height: 1rem; cursor: pointer; accent-color: var(--c-accent); }
 
 .customModalActions {
   display: flex;

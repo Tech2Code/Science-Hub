@@ -2,6 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { formatDate } from "@/lib/formatDate";
 import styles from "./DatePicker.module.css";
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -181,7 +182,7 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(func
     return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
   }, [viewYear, viewMonth]);
 
-  const label = selected ? selected.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
+  const label = selected ? formatDate(selected) : "";
   const triggerCls = [styles.trigger, sz === "sm" && styles.sm, disabled && styles.disabled, className].filter(Boolean).join(" ");
 
   return (

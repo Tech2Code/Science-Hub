@@ -14,7 +14,7 @@
   flex-wrap: wrap;
 }
 
-.headerLeft { display: flex; align-items: center; gap: 1rem; }
+.headerLeft { display: flex; gap: 1rem; }
 
 .avatarActive {
   width: 3rem;

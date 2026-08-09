@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/dialogs/Modal";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { bustCachePrefix } from "@/lib/useCache";
@@ -11,7 +12,7 @@ import { animateSection } from "@/lib/animateSection";
 import { useDropUp } from "@/lib/useDropUp";
 import {
   PURCHASE_BILL_UNITS, PURCHASE_BILL_GST_RATES,
-  makePurchaseBillLineItemKey, discountOptionsFor, toNum, fmtCurrency, calcPurchaseBillItem,
+  makePurchaseBillLineItemKey, toNum, fmtCurrency, calcPurchaseBillItem,
   type PurchaseBillLineItem, type PurchaseBillProduct,
 } from "@/lib/purchaseBillForm";
 import styles from "./PurchaseBillItemsTable.module.css";
@@ -22,6 +23,8 @@ interface PurchaseBillItemsTableProps {
   setProducts: Dispatch<SetStateAction<PurchaseBillProduct[]>>;
   items: PurchaseBillLineItem[];
   setItems: Dispatch<SetStateAction<PurchaseBillLineItem[]>>;
+  /** Aggregate item-level validation message (e.g. missing quantity/price), shown inline instead of via toast. */
+  itemsError?: string;
 }
 
 type QuickAddErrors = Partial<Record<"name" | "purchasePrice" | "unit" | "gstRate", string>>;
@@ -32,16 +35,19 @@ type QuickAddErrors = Partial<Record<"name" | "purchasePrice" | "unit" | "gstRat
 // new item to the product catalog (default) or, via the "just for this bill"
 // toggle, add it as a one-off line that never becomes a stocked product —
 // for purchase lines like freight or services that aren't inventory.
-export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, items, setItems }: PurchaseBillItemsTableProps) {
+export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, items, setItems, itemsError }: PurchaseBillItemsTableProps) {
   const toast = useToast();
   const productSearchWrapRef = useRef<HTMLDivElement>(null);
   const [productSearch, setProductSearch] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const { dropUp, measure } = useDropUp(showProductDropdown);
   const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
-  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "Pcs", purchasePrice: "", salePrice: "", gstRate: "18", skipCatalog: false });
+  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "", purchasePrice: "", salePrice: "", gstRate: "18", skipCatalog: false });
   const [quickAddErrors, setQuickAddErrors] = useState<QuickAddErrors>({});
   const [quickAddSaving, setQuickAddSaving] = useState(false);
+  const [showUnitDropdown, setShowUnitDropdown] = useState(false);
+  const filteredUnits = PURCHASE_BILL_UNITS.filter((u) => u.toLowerCase().includes(quickAddProduct.unit.toLowerCase()));
+  const unitFieldId = useId();
 
   const filteredProducts = products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase()));
 
@@ -61,8 +67,9 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
   }
 
   function openQuickAddProduct(name = productSearch) {
-    setQuickAddProduct({ name, unit: "Pcs", purchasePrice: "", salePrice: "", gstRate: "18", skipCatalog: false });
+    setQuickAddProduct({ name, unit: "", purchasePrice: "", salePrice: "", gstRate: "18", skipCatalog: false });
     setQuickAddErrors({});
+    setShowUnitDropdown(false);
     setShowQuickAddProduct(true);
     setShowProductDropdown(false);
   }
@@ -122,22 +129,41 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
   }
 
-  // Typing a flat ₹ amount is just another way to set discountPercent — it's
-  // converted against that line's gross (qty × rate) so the stored value
-  // stays a percentage, same as the sales invoice form.
-  function setItemDiscountAmount(idx: number, amountStr: string) {
-    const amount = toNum(amountStr);
-    setItems((prev) => prev.map((item, i) => {
-      if (i !== idx) return item;
-      const gross = toNum(item.quantity) * toNum(item.purchasePrice);
-      const discountPercent = gross > 0 ? Math.min(100, Math.max(0, (amount / gross) * 100)) : 0;
-      return { ...item, discountPercent: String(discountPercent) };
-    }));
+  // Holds exactly what's been typed (e.g. "10." or "10%") per line item, so a
+  // trailing decimal point or "%" isn't stripped out from under the user's
+  // cursor by reformatting item.discountPercent back into the input on every
+  // keystroke — cleared on blur so the field then shows the committed number.
+  const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
+
+  // Accepts a plain number or one typed with a trailing "%" (e.g. "10%") —
+  // capped at 2 decimal places (matching how every ₹ amount in this app is
+  // displayed) and at 100 overall, since a discount can never exceed the
+  // line's own value. A keystroke that would push past either limit is
+  // rejected outright rather than silently truncated later.
+  function handleDiscountPercentChange(idx: number, key: string, raw: string) {
+    const cleaned = raw.replace(/%/g, "");
+    if (!/^(100(\.\d{0,2})?|\d{0,2}(\.\d{0,2})?)$/.test(cleaned)) return;
+    setDiscountDrafts((prev) => ({ ...prev, [key]: raw }));
+    const parsed = parseFloat(cleaned);
+    const clamped = isNaN(parsed) ? 0 : Math.min(100, Math.max(0, parsed));
+    updateItem(idx, "discountPercent", String(clamped));
+  }
+
+  function clearDiscountDraft(key: string) {
+    setDiscountDrafts((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   }
 
   return (
+    <>
+    {quickAddSaving && <OverlayLoader text="Adding…" />}
     <div {...animateSection(sectionIndex, "form-card")}>
       <h2 className="form-section-title">Items</h2>
+      {itemsError && <p className={styles.itemsErrorMsg} role="alert">{itemsError}</p>}
 
       <div className={styles.searchRow}>
         <div className={styles.productSearchWrap} ref={productSearchWrapRef}>
@@ -149,6 +175,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
             onFocus={() => { measure(productSearchWrapRef.current); setShowProductDropdown(true); }}
             onClick={() => { measure(productSearchWrapRef.current); setShowProductDropdown(true); }}
             onBlur={() => setTimeout(() => setShowProductDropdown(false), 150)}
+            onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur(); }}
           />
           {showProductDropdown && (
             <div className={`${styles.dropdown} ${dropUp ? styles.dropdownUp : ""}`} onMouseDown={(e) => e.preventDefault()}>
@@ -170,13 +197,15 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => { setProductSearch(""); openQuickAddProduct(""); }}
-          className={styles.customItemBtn}
-        >
-          + Add custom item
-        </button>
+        {!showProductDropdown && (
+          <button
+            type="button"
+            onClick={() => { setProductSearch(""); openQuickAddProduct(""); }}
+            className={styles.customItemBtn}
+          >
+            + Add custom item manually
+          </button>
+        )}
       </div>
 
       <Modal open={showQuickAddProduct} onClose={() => { if (!quickAddSaving) setShowQuickAddProduct(false); }} title="Add Custom Item" maxWidth="34rem">
@@ -190,13 +219,31 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
             />
           </FormField>
           <div className={styles.grid4}>
-            <FormField label="Unit" required error={quickAddErrors.unit}>
-              <Select
-                value={quickAddProduct.unit}
-                onChange={(e) => { setQuickAddProduct((p) => ({ ...p, unit: e.target.value })); setQuickAddErrors((p) => ({ ...p, unit: undefined })); }}
-              >
-                {PURCHASE_BILL_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </Select>
+            <FormField label="Unit" required error={quickAddErrors.unit} id={unitFieldId}>
+              <div className={styles.unitCombo}>
+                <Input
+                  id={unitFieldId}
+                  type="text" placeholder="e.g. Nos, Kg, Box"
+                  value={quickAddProduct.unit}
+                  onChange={(e) => { setQuickAddProduct((p) => ({ ...p, unit: e.target.value })); setQuickAddErrors((p) => ({ ...p, unit: undefined })); setShowUnitDropdown(true); }}
+                  onFocus={() => setShowUnitDropdown(true)}
+                  onClick={() => setShowUnitDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowUnitDropdown(false), 150)}
+                  onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur(); }}
+                />
+                {showUnitDropdown && filteredUnits.length > 0 && (
+                  <div className={styles.unitDropdown} onMouseDown={(e) => e.preventDefault()}>
+                    {filteredUnits.map((u) => (
+                      <button
+                        key={u} type="button" className={styles.unitOption}
+                        onClick={() => { setQuickAddProduct((p) => ({ ...p, unit: u })); setQuickAddErrors((p) => ({ ...p, unit: undefined })); setShowUnitDropdown(false); }}
+                      >
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </FormField>
             <FormField label="Purchase Price (₹)" required error={quickAddErrors.purchasePrice}>
               <Input
@@ -231,17 +278,12 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
             />
             Just for this bill — don&apos;t save to catalog
           </label>
-          {!quickAddProduct.skipCatalog && (
-            <p className={styles.customFormHint}>
-              This product will be saved to your catalog and added to this bill.
-            </p>
-          )}
           <div className={styles.formActions}>
             <Button type="button" variant="secondary" size="md" onClick={() => setShowQuickAddProduct(false)} disabled={quickAddSaving}>
               Cancel
             </Button>
             <Button type="button" variant="primary" size="md" onClick={handleQuickAddProduct} disabled={quickAddSaving || !quickAddProduct.name.trim() || !quickAddProduct.purchasePrice.trim()}>
-              {quickAddSaving ? "Adding…" : quickAddProduct.skipCatalog ? "Add to bill" : "Add & use product"}
+              {quickAddSaving ? "Adding…" : quickAddProduct.skipCatalog ? "Add to bill" : "Save & use product"}
             </Button>
           </div>
         </div>
@@ -264,8 +306,17 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
             </colgroup>
             <thead>
               <tr>
-                {["#", "Item", "HSN/SAC", "Unit", "Qty", "Rate (₹)", "Discount", "GST %", "Amount", ""].map((h) => (
-                  <th key={h} className={h === "Amount" ? styles.thRight : styles.th}>{h}</th>
+                {["#", "Item", "HSN/SAC", "Unit", "Qty", "Rate (₹)", "Discount %", "GST %", "Amount", ""].map((h) => (
+                  <th
+                    key={h}
+                    className={
+                      h === "Rate (₹)" || h === "Amount" ? styles.thRight
+                        : ["HSN/SAC", "Unit", "Qty", "Discount %", "GST %"].includes(h) ? styles.thCenter
+                        : styles.th
+                    }
+                  >
+                    {h}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -282,29 +333,33 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
                       <Input sz="sm" value={item.hsn} onChange={(e) => updateItem(idx, "hsn", e.target.value)} placeholder="HSN/SAC" />
                     </td>
                     <td className={styles.tdUnit}>
-                      <Select sz="sm" value={item.unit} onChange={(e) => updateItem(idx, "unit", e.target.value)}>
-                        {PURCHASE_BILL_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-                      </Select>
+                      <span className={styles.unitBadge}>{item.unit}</span>
                     </td>
                     <td className={styles.tdQty}>
-                      <Input sz="sm" type="number" min="1" step="1" value={item.quantity} onChange={(e) => updateItem(idx, "quantity", e.target.value)} className={styles.numInputRight} />
+                      <Input sz="sm" type="number" min="1" step="1" value={item.quantity} onChange={(e) => updateItem(idx, "quantity", e.target.value)} className={styles.numInputCenter} />
                     </td>
                     <td className={styles.tdRate}>
                       <Input sz="sm" type="text" inputMode="decimal" value={item.purchasePrice} onChange={(e) => updateItem(idx, "purchasePrice", e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" className={styles.numInputRight} />
                     </td>
                     <td className={styles.tdDiscount}>
                       <div className={styles.discountStack}>
-                        <Select sz="sm" value={Math.round(toNum(item.discountPercent) * 100) / 100} onChange={(e) => updateItem(idx, "discountPercent", e.target.value)}>
-                          {discountOptionsFor(toNum(item.discountPercent)).map((d) => <option key={d} value={d}>{d}%</option>)}
-                        </Select>
                         <Input
                           sz="sm" type="text" inputMode="decimal"
-                          value={(() => { const { discountAmount } = calcPurchaseBillItem(item); return discountAmount > 0 ? Math.round(discountAmount * 100) / 100 : ""; })()}
-                          onChange={(e) => setItemDiscountAmount(idx, e.target.value)}
-                          placeholder="₹0"
-                          title="Flat discount amount"
-                          className={styles.numInputRight}
+                          value={
+                            discountDrafts[item.key] ??
+                            (toNum(item.discountPercent) > 0 ? Math.round(toNum(item.discountPercent) * 100) / 100 : "")
+                          }
+                          onChange={(e) => handleDiscountPercentChange(idx, item.key, e.target.value)}
+                          onBlur={() => clearDiscountDraft(item.key)}
+                          placeholder="0%"
+                          className={styles.numInputCenter}
                         />
+                        {(() => {
+                          const { discountAmount } = calcPurchaseBillItem(item);
+                          return discountAmount > 0 ? (
+                            <span className={styles.discountAmountHint}>₹{discountAmount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
+                          ) : null;
+                        })()}
                       </div>
                     </td>
                     <td className={styles.tdGst}>
@@ -330,5 +385,6 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
         </div>
       )}
     </div>
+    </>
   );
 }

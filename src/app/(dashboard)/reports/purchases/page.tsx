@@ -15,6 +15,7 @@ import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
 import { downloadXlsx } from "@/lib/downloadXlsx";
+import { formatDate } from "@/lib/formatDate";
 import styles from "./purchaseReports.module.css";
 
 interface SummaryRow { month: string; count: number; totalSpend: number; paid: number; payable: number; }
@@ -150,8 +151,8 @@ export default function PurchaseReportsPage() {
         ["Bill No.", "Vendor", "Bill Date", "Due Date", "Aging", "Total", "Paid", "Balance", "Status"],
         outstanding.map(b => [
           b.billNumber, b.vendor.name,
-          new Date(b.billDate).toLocaleDateString("en-IN"),
-          b.dueDate ? new Date(b.dueDate).toLocaleDateString("en-IN") : "",
+          formatDate(b.billDate),
+          b.dueDate ? formatDate(b.dueDate) : "",
           b.aging, b.total, b.paidAmount, b.balance, b.status,
         ])
       );
@@ -190,7 +191,7 @@ export default function PurchaseReportsPage() {
         "Stock Ledger",
         ["Date", "Time", "Product", "Type", "Document", "Quantity", "Balance After", "Reference", "Bill No.", "Notes"],
         exportData.data.map(m => [
-          new Date(m.createdAt).toLocaleDateString("en-IN"),
+          formatDate(m.createdAt),
           new Date(m.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
           m.productId ? m.productName : `${m.productName} (deleted)`,
           LEDGER_TYPE_LABEL[m.type] ?? m.type,
@@ -324,7 +325,7 @@ export default function PurchaseReportsPage() {
                           <Link href={`/purchases/vendors/${b.vendor.id}`} className={styles.linkPlain}>{b.vendor.name}</Link>
                         </Cell>
                         <Cell col={OUT_COLS[2]} className={styles.textMuted3}>
-                          {new Date(b.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                          {formatDate(b.billDate)}
                         </Cell>
                         <Cell col={OUT_COLS[3]}>
                           {b.dueDate
@@ -332,7 +333,7 @@ export default function PurchaseReportsPage() {
                                 className={styles.dueDate}
                                 style={{ "--due-color": isOverdue ? "var(--c-red)" : "var(--c-text-3)", "--due-weight": isOverdue ? 500 : undefined } as React.CSSProperties}
                               >
-                                {new Date(b.dueDate).toLocaleDateString("en-IN")}
+                                {formatDate(b.dueDate)}
                                 {isOverdue && " ⚠"}
                               </span>
                             : <span className={styles.textMuted4}>—</span>
@@ -484,7 +485,7 @@ export default function PurchaseReportsPage() {
                   ) : filteredLedger.map((m) => (
                     <tr key={m.id}>
                       <Cell col={LEDGER_COLS[0]} className={styles.textMuted3}>
-                        {new Date(m.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(m.createdAt)}
                       </Cell>
                       <Cell col={LEDGER_COLS[1]} className={styles.rowFontMedium}>
                         {m.productId ? (

@@ -40,10 +40,15 @@ export async function POST(req: NextRequest) {
     if (!auth.ok) return auth.response;
 
     const body = await req.json();
-    const { name, company, gstin, phone, email, address, city, state, pincode, notes, isActive } = body;
+    const { name, company, gstin, phone, email, address, city, state, pincode, notes, isActive, oneOff } = body;
     const validationError = validateVendorInput({ name, phone, email, gstin, address, city, state, pincode }, true);
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
+    // "Just for this bill" vendors still need a real Vendor row
+    // (PurchaseBill.vendorId is a required FK), but are soft-deleted at
+    // creation so they never surface in the vendor directory/search — the
+    // bill itself keeps working normally via the FK either way.
+    const isOneOff = oneOff === true;
     const vendor = await prisma.vendor.create({
       data: {
         name: name.trim(), company: company?.trim() || null,
@@ -51,10 +56,15 @@ export async function POST(req: NextRequest) {
         email: email?.trim() || null, address: address?.trim() || null,
         city: city?.trim() || null, state: state?.trim() || null, pincode: pincode?.trim() || null,
         notes: notes?.trim() || null, isActive: isActive !== false,
+        ...(isOneOff ? { deletedAt: new Date() } : {}),
       },
     });
-    await logActivity(auth.session.user.id, "add_vendor", `Created vendor "${vendor.name}"`, vendor.id, "vendor");
-    revalidateTag("vendors", { expire: 0 });
+    if (isOneOff) {
+      await logActivity(auth.session.user.id, "add_vendor", `Created one-off vendor "${vendor.name}" (via purchase bill, not saved to directory)`, vendor.id, "vendor");
+    } else {
+      await logActivity(auth.session.user.id, "add_vendor", `Created vendor "${vendor.name}"`, vendor.id, "vendor");
+      revalidateTag("vendors", { expire: 0 });
+    }
     return NextResponse.json(vendor, { status: 201 });
   } catch {
     return NextResponse.json({ error: "Failed to create vendor" }, { status: 500 });

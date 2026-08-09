@@ -6,6 +6,7 @@
 // mistakes (bad GSTIN, missing HSN, tax mismatches...) surface before the
 // business owner sends the package to their CA.
 import { prisma } from "@/lib/prisma";
+import { formatDate } from "@/lib/formatDate";
 import {
   isValidGstin, hasValidGstinStateCode, isStandardGstRate, amountsMatch, issue, type ValidationIssue,
 } from "@/lib/gstValidation";
@@ -224,7 +225,7 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
   const netOutputTax = outputTax - creditNoteTax;
 
   return {
-    period: { startDate, endDate, label: `${new Date(startDate).toLocaleDateString("en-IN")} – ${new Date(endDate).toLocaleDateString("en-IN")}` },
+    period: { startDate, endDate, label: `${formatDate(startDate)} – ${formatDate(endDate)}` },
     company,
     salesRegister, b2bSales, b2cSales, creditNotes, purchaseRegister, hsnSummary,
     summary: {

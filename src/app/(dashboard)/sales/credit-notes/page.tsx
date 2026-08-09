@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
+import { formatDate } from "@/lib/formatDate";
 import { useFetch } from "@/lib/useCache";
 import { generatePdfViaIframe } from "@/lib/pdfIframeGenerator";
 import { getCachedPdf, setCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
@@ -143,7 +144,7 @@ export default function CreditNotesPage() {
         "Credit Notes",
         ["Date", "Time", "Credit Note No.", "Customer", "Invoice", "Taxable Value", "CGST", "SGST", "IGST", "Total"],
         exportData.data.map(c => [
-          new Date(c.date).toLocaleDateString("en-IN"),
+          formatDate(c.date),
           new Date(c.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
           c.creditNoteNumber ?? "—", c.invoice.customer.name, c.invoice.invoiceNumber,
           c.subtotal, c.cgst, c.sgst, c.igst, c.total,
@@ -336,7 +337,7 @@ export default function CreditNotesPage() {
                 ) : creditNotes.map((c) => (
                   <tr key={c.id}>
                     <Cell col={COLUMNS[0]} className={styles.dateCell}>
-                      {new Date(c.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                      {formatDate(c.date)}
                       <div className={styles.timeText}>
                         {new Date(c.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
                       </div>

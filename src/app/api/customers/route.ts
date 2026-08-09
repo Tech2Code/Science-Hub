@@ -31,19 +31,29 @@ export async function POST(request: NextRequest) {
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
-    const { name, phone, email, address, city, state, pincode, gstin } = body;
+    const { name, phone, email, address, city, state, pincode, gstin, oneOff } = body;
 
     const validationError = validateCustomerInput({ name, phone, email, address, city, state, pincode, gstin }, true);
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
+    // "Just for this invoice" customers still need a real Customer row
+    // (Invoice.customerId is a required FK), but are soft-deleted at
+    // creation so they never surface in the customer directory/search — the
+    // invoice itself keeps working normally via the FK either way. Mirrors
+    // the same one-off pattern used for vendors.
+    const isOneOff = oneOff === true;
     const customer = await prisma.customer.create({
-      data: { name: name.trim(), phone, email, address, city, state, pincode, gstin },
+      data: { name: name.trim(), phone, email, address, city, state, pincode, gstin, ...(isOneOff ? { deletedAt: new Date() } : {}) },
     });
 
-    await logActivity(auth.session.user.id, "add_customer", `Added customer "${customer.name}" | Phone: ${phone || "—"} | City: ${city || "—"} | GSTIN: ${gstin || "—"}`, customer.id, "customer");
-    revalidateTag("customers", { expire: 0 });
+    if (isOneOff) {
+      await logActivity(auth.session.user.id, "add_customer", `Created one-off customer "${customer.name}" (via invoice, not saved to directory)`, customer.id, "customer");
+    } else {
+      await logActivity(auth.session.user.id, "add_customer", `Added customer "${customer.name}" | Phone: ${phone || "—"} | City: ${city || "—"} | GSTIN: ${gstin || "—"}`, customer.id, "customer");
+      revalidateTag("customers", { expire: 0 });
+    }
     return NextResponse.json(customer, { status: 201 });
   } catch (error) {
     console.error("POST /api/customers error:", error);

@@ -41,8 +41,9 @@ export function numberToIndianWords(num: number): string {
 
 // e.g. amountInWordsINR(3262) -> "Rupees Three Thousand Two Hundred Sixty Two Only"
 export function amountInWordsINR(amount: number): string {
-  const rupees = Math.floor(Math.abs(amount));
-  const paise = Math.round((Math.abs(amount) - rupees) * 100);
+  let rupees = Math.floor(Math.abs(amount));
+  let paise = Math.round((Math.abs(amount) - rupees) * 100);
+  if (paise >= 100) { rupees += 1; paise = 0; }
   let words = `Rupees ${numberToIndianWords(rupees)}`;
   if (paise > 0) words += ` And ${numberToIndianWords(paise)} Paise`;
   return `${words} Only`;

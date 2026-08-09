@@ -12,6 +12,7 @@ import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { Cell, type Column } from "@/components/ui/Table";
 import { animateSection } from "@/lib/animateSection";
+import { formatDate } from "@/lib/formatDate";
 import styles from "./salesPayments.module.css";
 
 interface Payment {
@@ -148,7 +149,7 @@ export default function PaymentsPage() {
                 return (
                   <tr key={p.id}>
                     <Cell col={COLUMNS[0]} className={styles.dateCell}>
-                      <div>{new Date(p.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
+                      <div>{formatDate(p.date)}</div>
                       <div className={styles.dateSub}>
                         {new Date(p.date).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                       </div>

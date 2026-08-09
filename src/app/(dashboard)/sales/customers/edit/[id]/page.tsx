@@ -78,7 +78,7 @@ export default function EditCustomerPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const newErrors = validateCustomerForm(form, { requirePhone: true, requireAddress: true, requireCity: true, requireState: true, requirePincode: true });
+    const newErrors = validateCustomerForm(form, { requirePhone: false, requireAddress: true, requireCity: true, requireState: true, requirePincode: true });
     if (hasErrors(newErrors)) { setErrors(newErrors); return; }
     setErrors({}); setConfirmOpen(true);
   }
@@ -131,7 +131,7 @@ export default function EditCustomerPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
-          <CustomerFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} phoneRequired addressRequired cityRequired stateRequired pincodeRequired />
+          <CustomerFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} addressRequired cityRequired stateRequired pincodeRequired />
 
           <div className="form-actions-wrap">
             <div className="form-actions">

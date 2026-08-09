@@ -21,8 +21,12 @@ import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate, validateForm, hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
+import { useDirty } from "@/lib/useDirty";
 
-interface Customer { id: string; name: string; city: string; state: string; gstin: string; }
+interface Customer {
+  id: string; name: string; city: string; state: string; gstin: string;
+  phone?: string | null; email?: string | null; address?: string | null; pincode?: string | null;
+}
 type Product = InvoiceProduct;
 type LineItem = InvoiceLineItem;
 
@@ -36,12 +40,14 @@ export default function NewInvoicePage() {
   }, [session, router]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [customerMode, setCustomerMode] = useState<"existing" | "custom">("existing");
   const [customerId, setCustomerId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [customCustomer, setCustomCustomer] = useState({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
   const [customModalOpen, setCustomModalOpen] = useState(false);
+  const [dontSaveCustomer, setDontSaveCustomer] = useState(false);
+  const [customerEditId, setCustomerEditId] = useState<string | null>(null);
+  const [customerSaving, setCustomerSaving] = useState(false);
   const [isInterState, setIsInterState] = useState(false);
   const [placeOfSupply, setPlaceOfSupply] = useState("");
   const [businessState, setBusinessState] = useState("");
@@ -76,6 +82,7 @@ export default function NewInvoicePage() {
 
   const filteredCustomers = customers.filter((c) => c.name.toLowerCase().includes(customerSearch.toLowerCase()));
   const selectedCustomer = customers.find((c) => c.id === customerId);
+  const customCustomerDirty = useDirty(customCustomer);
 
   function applyPlaceOfSupply(state: string) {
     setPlaceOfSupply(state);
@@ -100,8 +107,8 @@ export default function NewInvoicePage() {
     setCustomerId(c.id);
     setCustomerSearch(c.name);
     setShowCustomerDropdown(false);
-    setCustomerMode("existing");
     setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
+    setDontSaveCustomer(false);
     setCustomModalOpen(false);
     customPincodeLookup.reset();
     setPlaceOfSupply(c.state ?? "");
@@ -109,12 +116,115 @@ export default function NewInvoicePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset() only bumps a ref/idle-state, stable in effect though the hook returns a new object each render
   }, [businessState]);
 
+  function openCustomerCreate() {
+    setCustomerId("");
+    setCustomerSearch("");
+    setShowCustomerDropdown(false);
+    setCustomerEditId(null);
+    setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
+    setDontSaveCustomer(false);
+    setCustomErrors({});
+    customPincodeLookup.reset();
+    setCustomModalOpen(true);
+  }
+
+  function openCustomerEdit(c: Customer) {
+    const snapshot = {
+      name: c.name, phone: c.phone ?? "", email: c.email ?? "", address: c.address ?? "",
+      city: c.city ?? "", state: c.state ?? "", pincode: c.pincode ?? "", gstin: c.gstin ?? "",
+    };
+    setCustomerEditId(c.id);
+    setCustomCustomer(snapshot);
+    customCustomerDirty.markClean(snapshot);
+    setCustomErrors({});
+    setCustomModalOpen(true);
+    customPincodeLookup.reset();
+  }
+
+  async function saveCustomerEdit() {
+    if (!customerEditId || !validateCustomCustomer()) return;
+    setCustomerSaving(true);
+    try {
+      const res = await fetch(`/api/customers/${customerEditId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: customCustomer.name.trim(),
+          phone: customCustomer.phone.trim() || null,
+          email: customCustomer.email.trim() || null,
+          address: customCustomer.address.trim() || null,
+          city: customCustomer.city.trim() || null,
+          state: customCustomer.state.trim() || null,
+          pincode: customCustomer.pincode.trim() || null,
+          gstin: customCustomer.gstin.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCustomers((prev) => prev.map((c) => (c.id === data.id ? data : c)));
+        setCustomerSearch(data.name);
+        applyPlaceOfSupply(data.state ?? "");
+        bustCachePrefix("/api/customers");
+        setCustomerEditId(null);
+        setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
+        setCustomModalOpen(false);
+        toast({ type: "success", title: "Customer updated", message: `${data.name} saved.` });
+      } else {
+        toast({ type: "error", title: "Failed to save", message: data.error ?? "Failed to update customer." });
+      }
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Please try again." });
+    }
+    setCustomerSaving(false);
+  }
+
+  async function saveNewCustomer() {
+    if (!validateCustomCustomer()) return;
+    setCustomerSaving(true);
+    try {
+      const res = await fetch("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: customCustomer.name.trim(),
+          phone: customCustomer.phone.trim() || null,
+          email: customCustomer.email.trim() || null,
+          address: customCustomer.address.trim() || null,
+          city: customCustomer.city.trim() || null,
+          state: customCustomer.state.trim() || null,
+          pincode: customCustomer.pincode.trim() || null,
+          gstin: customCustomer.gstin.trim() || null,
+          oneOff: dontSaveCustomer,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCustomers((prev) => [...prev, data]);
+        setCustomerId(data.id);
+        setCustomerSearch(data.name);
+        applyPlaceOfSupply(data.state ?? "");
+        setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
+        setCustomModalOpen(false);
+        if (!dontSaveCustomer) bustCachePrefix("/api/customers");
+        toast({
+          type: "success", title: "Customer created",
+          message: dontSaveCustomer ? `${data.name} added and selected for this invoice only.` : `${data.name} added and selected.`,
+        });
+      } else {
+        toast({ type: "error", title: "Failed to save", message: data.error ?? "Failed to create customer." });
+      }
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Please try again." });
+    }
+    setCustomerSaving(false);
+  }
+
   const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal } = computeInvoiceTotals(items);
 
   function validateCustomCustomer(): boolean {
     const errs = validateForm(customCustomer, {
       name:    [rules.required("Customer name is required.")],
-      phone:   [rules.required("Phone number is required."), rules.phone10()],
+      phone:   [rules.phone10()],
       email:   [rules.email()],
       address: [rules.required("Address is required.")],
       city:    [rules.required("City is required.")],
@@ -128,8 +238,7 @@ export default function NewInvoicePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (customerMode === "existing" && !customerId) { toast({ type: "error", title: "Check form", message: "Select a customer." }); return; }
-    if (customerMode === "custom" && !validateCustomCustomer()) return;
+    if (!customerId) { toast({ type: "error", title: "Check form", message: "Select a customer." }); return; }
     if (items.length === 0) { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
     if (!placeOfSupply) { toast({ type: "error", title: "Check form", message: "Select place of supply." }); return; }
     if (dueDate && dueDate < todayStr) { toast({ type: "error", title: "Check form", message: "Due date cannot be in the past." }); return; }
@@ -162,9 +271,8 @@ export default function NewInvoicePage() {
       reverseCharge,
       items: items.map((i) => ({ productId: i.productId || null, name: i.productName, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent })),
       notes, dueDate: dueDate || undefined,
+      customerId,
     };
-    if (customerMode === "existing") body.customerId = customerId;
-    else body.customCustomer = customCustomer;
     const res = await fetch("/api/invoices", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -193,6 +301,7 @@ export default function NewInvoicePage() {
   return (
     <>
     {saving && <OverlayLoader text="Creating invoice…" />}
+    {customerSaving && <OverlayLoader text="Saving customer…" />}
     <div className="page-stack">
       <Breadcrumb items={[{ label: "Invoices", href: "/sales/invoices" }, { label: "New Invoice" }]} />
       <div>
@@ -269,6 +378,7 @@ export default function NewInvoicePage() {
                   onChange={(e) => { setCustomerSearch(e.target.value); setCustomerId(""); setShowCustomerDropdown(true); }}
                   onFocus={() => setShowCustomerDropdown(true)}
                   onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                  onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur(); }}
                 />
                 {showCustomerDropdown && (
                   <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
@@ -290,10 +400,10 @@ export default function NewInvoicePage() {
                     ⚠ Please select a customer from the dropdown
                   </p>
                 )}
-                {!customerId && !customCustomer.name && (
+                {!customerId && !showCustomerDropdown && (
                   <button
                     type="button"
-                    onClick={() => { setCustomerMode("custom"); setCustomerId(""); setCustomerSearch(""); setShowCustomerDropdown(false); setCustomModalOpen(true); }}
+                    onClick={openCustomerCreate}
                     className={styles.addCustomerLink}
                   >
                     + Add new customer manually
@@ -302,34 +412,19 @@ export default function NewInvoicePage() {
               </div>
 
               {selectedCustomer && (
-                <div className={styles.selectedCustomer}>
-                  <div className={styles.selectedCustomerName}>{selectedCustomer.name}</div>
-                  <div className={styles.selectedCustomerSub}>
-                    {[selectedCustomer.city, selectedCustomer.state].filter(Boolean).join(", ")}
-                    {selectedCustomer.gstin && ` · GSTIN: ${selectedCustomer.gstin}`}
-                  </div>
-                </div>
-              )}
-
-              {customCustomer.name && (
                 <div className={styles.customSummary}>
                   <div className={styles.selectedCustomer}>
-                    <div className={styles.selectedCustomerName}>{customCustomer.name}</div>
+                    <div className={styles.selectedCustomerName}>{selectedCustomer.name}</div>
                     <div className={styles.selectedCustomerSub}>
-                      {[customCustomer.city, customCustomer.state].filter(Boolean).join(", ")}
-                      {customCustomer.phone && ` · ${customCustomer.phone}`}
+                      {[selectedCustomer.city, selectedCustomer.state].filter(Boolean).join(", ")}
+                      {selectedCustomer.gstin && ` · GSTIN: ${selectedCustomer.gstin}`}
                     </div>
                   </div>
                   <div className={styles.customSummaryActions}>
-                    <button type="button" onClick={() => setCustomModalOpen(true)} className={styles.dropdownEmptyLink}>Edit</button>
+                    <button type="button" onClick={() => openCustomerEdit(selectedCustomer)} className={styles.dropdownEmptyLink}>Edit</button>
                     <button
                       type="button"
-                      onClick={() => {
-                        setCustomerMode("existing");
-                        setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
-                        customPincodeLookup.reset();
-                        setPlaceOfSupply("");
-                      }}
+                      onClick={() => { setCustomerId(""); setCustomerSearch(""); }}
                       className={styles.removeCustomLink}
                     >
                       Remove
@@ -337,11 +432,25 @@ export default function NewInvoicePage() {
                   </div>
                 </div>
               )}
+
                 </div>
               );
             })()}
 
-            <Modal open={customModalOpen} onClose={() => { setCustomModalOpen(false); customPincodeLookup.reset(); }} title="Custom Customer Details" maxWidth="36rem">
+            <Modal
+              open={customModalOpen}
+              onClose={() => {
+                if (customerSaving) return;
+                setCustomModalOpen(false);
+                applyPlaceOfSupply(customerEditId ? (selectedCustomer?.state ?? "") : "");
+                setCustomerEditId(null);
+                setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
+                customPincodeLookup.reset();
+              }}
+              title={customerEditId ? "Edit Customer" : "Add New Customer"}
+              maxWidth="34rem"
+            >
+              <p className={styles.customModalSub}>{customerEditId ? "Update this customer's details" : "Not in your list — fill details and create"}</p>
               <div className={styles.customForm}>
                 <FormField label="Customer Name" required error={customErrors.name}>
                   <Input
@@ -351,16 +460,6 @@ export default function NewInvoicePage() {
                     onChange={(e) => { setCustomCustomer((p) => ({ ...p, name: e.target.value })); clearErr("name"); }}
                   />
                 </FormField>
-                <div className="form-grid-2">
-                  <FormField label="Phone" required error={customErrors.phone}>
-                    <PhoneInput value={customCustomer.phone} placeholder="10-digit mobile"
-                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, phone: e.target.value })); clearErr("phone"); }} />
-                  </FormField>
-                  <FormField label="Email" error={customErrors.email}>
-                    <Input type="email" placeholder="customer@example.com" value={customCustomer.email}
-                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, email: e.target.value })); clearErr("email"); }} />
-                  </FormField>
-                </div>
                 <FormField label="Address" required error={customErrors.address}>
                   <Input type="text" placeholder="Street / locality" value={customCustomer.address}
                     onChange={(e) => { setCustomCustomer((p) => ({ ...p, address: e.target.value })); clearErr("address"); }} />
@@ -374,16 +473,6 @@ export default function NewInvoicePage() {
                     hintSuccess={customPincodeLookup.status.status === "found"}
                   >
                     <Input type="text" placeholder="6-digit" value={customCustomer.pincode} onChange={handleCustomPincodeChange} />
-                  </FormField>
-                  <FormField label="GSTIN" error={customErrors.gstin}>
-                    <Input type="text" placeholder="22AAAAA0000A1Z5" value={customCustomer.gstin} maxLength={15} mono
-                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, gstin: e.target.value })); clearErr("gstin"); }} />
-                  </FormField>
-                </div>
-                <div className="form-grid-2">
-                  <FormField label="City" required error={customErrors.city}>
-                    <Input type="text" placeholder="City" value={customCustomer.city}
-                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, city: e.target.value })); clearErr("city"); }} />
                   </FormField>
                   <FormField label="State" required error={customErrors.state}>
                     <Select value={customCustomer.state}
@@ -399,18 +488,53 @@ export default function NewInvoicePage() {
                     </Select>
                   </FormField>
                 </div>
-                <p className={styles.customFormHint}>
-                  This customer will be saved automatically for future use.
-                </p>
+                <div className="form-grid-2">
+                  <FormField label="City" required error={customErrors.city}>
+                    <Input type="text" placeholder="City" value={customCustomer.city}
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, city: e.target.value })); clearErr("city"); }} />
+                  </FormField>
+                  <FormField label="GSTIN" error={customErrors.gstin}>
+                    <Input type="text" placeholder="22AAAAA0000A1Z5" value={customCustomer.gstin} maxLength={15} mono
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, gstin: e.target.value })); clearErr("gstin"); }} />
+                  </FormField>
+                </div>
+                <div className="form-grid-2">
+                  <FormField label="Phone" error={customErrors.phone}>
+                    <PhoneInput value={customCustomer.phone} placeholder="10-digit mobile"
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, phone: e.target.value })); clearErr("phone"); }} />
+                  </FormField>
+                  <FormField label="Email" error={customErrors.email}>
+                    <Input type="email" placeholder="customer@example.com" value={customCustomer.email}
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, email: e.target.value })); clearErr("email"); }} />
+                  </FormField>
+                </div>
+                {!customerEditId && (
+                  <label className={styles.customFormCheckbox}>
+                    <input
+                      type="checkbox"
+                      checked={dontSaveCustomer}
+                      onChange={(e) => setDontSaveCustomer(e.target.checked)}
+                    />
+                    Just for this invoice — don&apos;t save to my customer list
+                  </label>
+                )}
                 <div className={styles.customModalActions}>
                   <Button
                     type="button"
                     variant="secondary"
+                    disabled={customerSaving}
                     onClick={() => {
-                      setCustomerMode("existing");
+                      // The State field's onChange live-updates placeOfSupply
+                      // as a preview even while editing — if the user abandons
+                      // the draft, put placeOfSupply back to where it actually
+                      // belongs: blank for an unsaved "add new customer" draft,
+                      // or the still-selected customer's real state when editing.
+                      applyPlaceOfSupply(customerEditId ? (selectedCustomer?.state ?? "") : "");
+                      setCustomerEditId(null);
                       setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
-                      setPlaceOfSupply("");
+                      setDontSaveCustomer(false);
                       setCustomModalOpen(false);
+                      customPincodeLookup.reset();
                     }}
                   >
                     Dismiss
@@ -418,15 +542,14 @@ export default function NewInvoicePage() {
                   <Button
                     type="button"
                     variant="primary"
-                    onClick={() => {
-                      if (!validateCustomCustomer()) return;
-                      setCustomModalOpen(false);
-                      toast({ type: "success", title: "Customer details saved", message: `"${customCustomer.name.trim()}" will be added to your directory when you save this invoice.` });
-                    }}
+                    disabled={customerSaving || (!!customerEditId && !customCustomerDirty.isDirty)}
+                    onClick={() => { if (customerEditId) saveCustomerEdit(); else saveNewCustomer(); }}
                   >
                     <span className={styles.customModalSubmitLabel}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                      Save &amp; Use This Customer
+                      {customerEditId
+                        ? (customerSaving ? "Saving…" : "Save Changes")
+                        : (customerSaving ? "Saving…" : dontSaveCustomer ? "Use For This Invoice Only" : "Save & Use This Customer")}
                     </span>
                   </Button>
                 </div>
@@ -514,11 +637,9 @@ export default function NewInvoicePage() {
                   <span>₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
-              {((customerMode === "existing" ? !customerId : (!customCustomer.name.trim() || !customCustomer.phone.trim())) || items.length === 0 || !placeOfSupply) && (
+              {(!customerId || items.length === 0 || !placeOfSupply) && (
                 <div className={styles.warningList}>
-                  {customerMode === "existing" && !customerId && <p className={styles.warningItem}>• Select a customer from dropdown</p>}
-                  {customerMode === "custom" && !customCustomer.name.trim() && <p className={styles.warningItem}>• Enter customer name</p>}
-                  {customerMode === "custom" && customCustomer.name.trim() && !customCustomer.phone.trim() && <p className={styles.warningItem}>• Enter customer phone number</p>}
+                  {!customerId && <p className={styles.warningItem}>• Select a customer from dropdown</p>}
                   {!placeOfSupply && <p className={styles.warningItem}>• Select place of supply</p>}
                   {items.length === 0 && <p className={styles.warningItem}>• Add at least one item</p>}
                 </div>
@@ -528,7 +649,7 @@ export default function NewInvoicePage() {
                   type="submit"
                   variant="primary"
                   size="full"
-                  disabled={saving || items.length === 0 || !placeOfSupply || (customerMode === "existing" ? !customerId : (!customCustomer.name.trim() || !customCustomer.phone.trim()))}
+                  disabled={saving || items.length === 0 || !placeOfSupply || !customerId}
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Create Invoice
                 </Button>

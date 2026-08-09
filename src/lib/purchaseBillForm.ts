@@ -16,28 +16,21 @@ export interface PurchaseBillProduct {
   id: string; name: string; sku: string | null; unit: string; price: number; purchasePrice: number | null; gstRate: number; hsn?: string | null;
 }
 
-export interface PurchaseBillVendor { id: string; name: string; company: string | null; gstin?: string | null; state?: string | null; }
+export interface PurchaseBillVendor {
+  id: string; name: string; company: string | null; gstin?: string | null; state?: string | null;
+  address?: string | null; city?: string | null; pincode?: string | null; phone?: string | null; email?: string | null;
+}
 
-export const PURCHASE_BILL_UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pack", "Set", "Mtr", "Dozen", "Pair"];
+export const PURCHASE_BILL_UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pkt", "Set", "Mtr", "Dozen", "Pair"];
 export const PURCHASE_BILL_GST_RATES = ["0", "5", "12", "18", "28"];
 export const PURCHASE_BILL_CATEGORIES = ["Raw Materials", "Lab Chemicals", "Lab Equipment", "Office Supplies", "Packaging", "Services", "Other"];
 export const PURCHASE_BILL_MARGIN_PRESETS = ["10", "15", "20", "25", "30", "40", "50"];
-const DISCOUNT_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 40, 50];
 
 // A stable per-row id, separate from array index.
 let itemKeySeq = 0;
 export function makePurchaseBillLineItemKey() {
   itemKeySeq += 1;
   return `item-${itemKeySeq}`;
-}
-
-// A custom typed amount rarely lands on a preset % exactly — inject it into
-// the option list (rounded to 2dp) so the select actually shows/highlights
-// it instead of falling back to blank.
-export function discountOptionsFor(percent: number) {
-  const rounded = Math.round(percent * 100) / 100;
-  if (DISCOUNT_OPTIONS.includes(rounded)) return DISCOUNT_OPTIONS;
-  return [...DISCOUNT_OPTIONS, rounded].sort((a, b) => a - b);
 }
 
 export function toNum(s: string) { const n = parseFloat(s); return isNaN(n) ? 0 : n; }

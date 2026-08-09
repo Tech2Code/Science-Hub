@@ -1,6 +1,6 @@
 @AGENTS.md
 
-<!-- AUTO-MAINTAINED PROJECT CONTINUITY DOCUMENT — updated 2026-07-27 -->
+<!-- AUTO-MAINTAINED PROJECT CONTINUITY DOCUMENT — updated 2026-08-09 -->
 
 # Project Overview
 
@@ -23,6 +23,7 @@ Science Hub is a GST billing and inventory management web app for a science supp
 - **Database Deployment**: Neon
 - **Route protection**: `middleware.ts` (project root) enforces a default-deny baseline on `/api/**` — any request without a valid session token is rejected before it reaches a route handler, except an explicit public allowlist (`/api/auth/*`, `/api/setup`, `/api/settings/branding`). This is in addition to, not a replacement for, each route's own `requireSession()`/`requireAdmin()`/`requireWriteAccess()`/`requireSectionAccess()` calls — it exists so a newly-added route is protected automatically even if a developer forgets to call one of those guards.
 - **Rate limiting**: `src/lib/rateLimit.ts` is an in-memory fixed-window counter — defense-in-depth, not a distributed guarantee (each serverless instance tracks its own counts, and a redeploy resets them). A Redis/Upstash-backed version was tried and reverted for now (2026-07-24) — if revisited later, re-add `@upstash/redis` and wire it in behind the same function signature so callers don't need to change.
+- **Testing**: Vitest (`tests/unit/**` pure `src/lib` logic, `tests/api/**` route-handler integration tests against a real disposable test database) + Playwright (`tests/e2e/**` full-browser flows). See **Testing** section below.
 
 ---
 
@@ -355,9 +356,31 @@ Stop the dev server first — the generated client DLL is locked while the serve
 ```bash
 npx tsx prisma/seed.ts
 ```
+⚠️ **Destructive** — wipes every table (customers/products/vendors/invoices/purchase bills/credit notes/stock movements/activity log) and every `User` except whichever account has email `dev@admin.com`, then regenerates a deterministic dummy dataset (30 products, 20 customers, 15 vendors, 70 invoices, 40 purchase bills, 8 credit notes, ~280 stock movements) spread across a fixed date range hardcoded near the top of the file, plus dummy `BusinessSettings` (name/GSTIN/PAN/bank details/address — state is set to `"Delhi"` so IGST logic has something real to compare against). Re-running it is idempotent (same seeded PRNG → identical output) — never run this against a database with real customer/invoice data without confirming with whoever owns that data first.
 
 **First admin user (production):**
 POST to `/api/setup` with `{ name, email, password }`. Refuses if any user already exists.
+
+**Run tests:**
+```bash
+npm run test              # Vitest — unit tests + API integration tests (skip themselves if no test DB)
+npm run test:watch        # Vitest watch mode
+npm run test:coverage     # Vitest with v8 coverage (src/lib/** and src/app/api/**)
+npm run test:e2e          # Playwright — full browser E2E, starts its own dev server on :3100
+npm run test:e2e:ui       # Playwright's interactive UI runner
+```
+See **Testing** below before adding new tests — in particular, `tests/api/**` and `tests/e2e/**` need `.env.test` (copy from `.env.test.example`) pointed at a disposable database, and self-skip (Vitest) or fail every login (Playwright) without it.
+
+---
+
+## Testing
+
+- **Vitest** (`vitest.config.mts`) runs two kinds of tests: `tests/unit/**` (pure `src/lib/*` functions, no DB, always run) and `tests/api/**` (imports route handler modules like `@/app/api/invoices/route.ts` directly and calls their exported `GET`/`POST`/`PUT` functions with a hand-built `NextRequest` — no HTTP server involved). `tests/e2e/**` is excluded from Vitest; Playwright owns it.
+- **`.env.test`** (gitignored, copy from `.env.test.example`) must define `TEST_DATABASE_URL` pointed at a disposable database — a dedicated Neon branch works well. `vitest.config.mts` refuses to start if `TEST_DATABASE_URL` is ever equal to `.env`'s real `DATABASE_URL` (integration tests truncate every table before each test). Without `.env.test`, `tests/api/**` files self-skip via `describe.skipIf(!hasTestDatabase)` (from `tests/helpers/db.ts`) rather than running against — or silently doing nothing useful against — the wrong database.
+- **API test pattern**: every `tests/api/*.test.ts` file starts with `vi.mock("next-auth/next", () => ({ getServerSession: vi.fn() }));` (must be written at that file's own top level — `vi.mock` hoisting doesn't work through a shared helper) then uses `mockSession()`/`mockNoSession()` from `tests/helpers/auth.ts` to control what `requireSession()`/`requireWriteAccess()` sees, `resetDb()`/`seedUser()`/`testPrisma` from `tests/helpers/db.ts` for a clean-slate real database per test, and `jsonRequest()`/`paramsOf()` from `tests/helpers/request.ts` to build the request. `next/cache`'s `revalidateTag` is mocked globally in `tests/setup/vitest.setup.ts` (it throws outside a real Next.js request context, which is what calling a route handler directly gives you).
+- **Playwright** (`playwright.config.ts`) spawns its own `next dev` on port 3100 with `DATABASE_URL` overridden to `TEST_DATABASE_URL`, and `tests/e2e/global-setup.ts` resets that database and seeds one login account (`E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`, exported from `global-setup.ts`) before the whole suite runs. Specs share that one seeded DB/server (`fullyParallel: false`) — create whatever else a spec needs (customers, products) inside the spec itself rather than assuming another spec's data exists.
+- When adding a regression test for a bug fix (see Testing Standards in the global engineering standards), prefer an API-level test over an E2E one if the bug lived in a route handler — it's faster and doesn't need a browser. Reserve Playwright for things that can only be verified through real DOM interaction (the customer/vendor/product comboboxes, modal flows, multi-step forms).
+- `src/components/ui/Select.tsx` (used everywhere a `<select>`-like field appears — State pickers, etc.) is a custom trigger-button + listbox combobox, not a native `<select>` — Playwright's `.selectOption()` doesn't work on it. Interact with it as `await field.getByLabel("State").click(); await page.getByRole("option", { name: "Delhi", exact: true }).click();` — the listbox is portaled to `document.body`, so the option locator is scoped to `page`, not to whatever dialog/form contains the trigger.
 
 ---
 
@@ -427,13 +450,14 @@ Nothing actively in progress — all recent features complete and deployed.
 - Verify email send flow end-to-end: Settings → configure Gmail → invoice detail → send button → customer inbox
 - Test forgot-password full flow in production (requires `NEXTAUTH_URL` set correctly on Vercel)
 - Test bin restore/permanent-delete and empty-bin for all 7 entity types
+- **Provision a real test database** and copy `.env.test.example` → `.env.test` — the `tests/api/**` and `tests/e2e/**` suites are written and pass type-checking/lint, but have never been run against a live database (no test DB was available at authoring time). Run `npm run test` and `npm run test:e2e` once `.env.test` exists to confirm they actually pass, not just compile.
+- Expand test coverage beyond the initial set (`src/lib/validation.ts`, `invoiceCalc.ts`, `roundOff.ts`, `gstLocation.ts`, `stockStatus.ts`, `purchaseBillForm.ts`, `listQuery.ts` unit-tested; `customers`/`vendors`/`invoices`/`bin` routes integration-tested) — purchase-bills, payments, returns/credit-notes, and the bin restore/permanent-delete routes have no tests yet
 
 ---
 
 ## Known Issues
 
 - ~~Theme flicker on initial load~~ — actually already fixed: `src/app/layout.tsx` has a pre-hydration inline script + `suppressHydrationWarning` that sets `.dark`/`--c-accent` before paint. This note was stale; leaving it struck through rather than silently deleting it in case there's a regression to watch for.
-- `src/lib/states.ts` currently only lists `["Delhi", "Haryana", "Uttar Pradesh"]` — the full India state list is commented out in the file
 - After schema changes (`prisma migrate dev`), must stop dev server → `npx prisma generate` → restart. The generated client DLL is locked while the server is running.
 - `package.json`'s `build` script runs `prisma migrate deploy` (applies committed migration files), not `prisma db push`. `db push` diffs the schema against the live DB and will permanently fail once a real Postgres `GENERATED ALWAYS AS (...) STORED` column exists (`Invoice.balanceDue`, `PurchaseBill.balanceDue`, `Product.isLowStock`) — Prisma's `@default(dbgenerated(...))` can't express a true stored-generated column, so `db push` always sees a false diff and tries to `ALTER COLUMN` a column Postgres won't let it touch. Always add new schema changes via `prisma migrate dev --name ...` (committed migration file), never rely on `db push` in this repo.
 - `payment/[paymentId]` PUT (edit payment) previously had no database transaction, unlike every other money-mutating flow — fixed to use the same Serializable transaction + P2034 retry pattern as payment creation.

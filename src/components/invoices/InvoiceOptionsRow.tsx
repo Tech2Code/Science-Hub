@@ -2,7 +2,7 @@
 
 import { Input, Select } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
-import { INDIA_STATES } from "@/lib/states";
+import { INDIA_STATES_FULL } from "@/lib/states";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./InvoiceOptionsRow.module.css";
 
@@ -39,7 +39,7 @@ export function InvoiceOptionsRow({
             className={`${styles.dueDateInput} ${styles.placeOfSupplySelect}`}
           >
             <option value="">Select state…</option>
-            {INDIA_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+            {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
           </Select>
         </div>
         <div className={styles.dueDateRow}>

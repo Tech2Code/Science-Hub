@@ -11,20 +11,23 @@ import styles from "./dashboardHome.module.css";
 interface RecentInvoice { id: string; invoiceNumber: string; date: string; customerName: string; total: number; paidAmount: number; status: string; }
 interface RecentBill { id: string; billNumber: string; billDate: string; vendorName: string; total: number; paidAmount: number; status: string; }
 interface CombinedDashboard {
+  // Null when the current user isn't granted the matching section
+  // (sales_overview/purchase_overview) — the server redacts these rather
+  // than relying on the client to just not render them.
   sales: {
     revenueThisMonth: number;
     outstandingAmount: number;
     overdueInvoices: number;
     collectedToday: number;
     recentInvoices: RecentInvoice[];
-  };
+  } | null;
   purchases: {
     spendThisMonth: number;
     payableBalance: number;
     overdueBills: number;
     paidToday: number;
     recentBills: RecentBill[];
-  };
+  } | null;
   lowStockCount: number;
 }
 
@@ -198,10 +201,10 @@ export default function DashboardPage() {
         <div className={styles.sideBySideCol}>
           <SectionLabel>Sales</SectionLabel>
           <div className={styles.kpiGrid}>
-            <KpiCard icon="trendUp" label="Revenue This Month" value={loading ? "—" : fmt(data?.sales.revenueThisMonth ?? 0)} tone="blue" loading={loading} />
-            <KpiCard icon="clock" label="Outstanding" value={loading ? "—" : fmt(data?.sales.outstandingAmount ?? 0)} tone="amber" loading={loading} />
-            <KpiCard icon="alert" label="Overdue Invoices" value={loading ? "—" : String(data?.sales.overdueInvoices ?? 0)} tone={(data?.sales.overdueInvoices ?? 0) > 0 ? "red" : "neutral"} loading={loading} />
-            <KpiCard icon="check" label="Collected Today" value={loading ? "—" : fmt(data?.sales.collectedToday ?? 0)} tone="green" loading={loading} />
+            <KpiCard icon="trendUp" label="Revenue This Month" value={loading ? "—" : fmt(data?.sales?.revenueThisMonth ?? 0)} tone="blue" loading={loading} />
+            <KpiCard icon="clock" label="Outstanding" value={loading ? "—" : fmt(data?.sales?.outstandingAmount ?? 0)} tone="amber" loading={loading} />
+            <KpiCard icon="alert" label="Overdue Invoices" value={loading ? "—" : String(data?.sales?.overdueInvoices ?? 0)} tone={(data?.sales?.overdueInvoices ?? 0) > 0 ? "red" : "neutral"} loading={loading} />
+            <KpiCard icon="check" label="Collected Today" value={loading ? "—" : fmt(data?.sales?.collectedToday ?? 0)} tone="green" loading={loading} />
           </div>
         </div>
         )}
@@ -210,10 +213,10 @@ export default function DashboardPage() {
         <div className={styles.sideBySideCol}>
           <SectionLabel>Purchases</SectionLabel>
           <div className={styles.kpiGrid}>
-            <KpiCard icon="trendDown" label="Spend This Month" value={loading ? "—" : fmt(data?.purchases.spendThisMonth ?? 0)} tone="amber" loading={loading} />
-            <KpiCard icon="wallet" label="Payable Balance" value={loading ? "—" : fmt(data?.purchases.payableBalance ?? 0)} tone="amber" loading={loading} />
-            <KpiCard icon="alert" label="Overdue Bills" value={loading ? "—" : String(data?.purchases.overdueBills ?? 0)} tone={(data?.purchases.overdueBills ?? 0) > 0 ? "red" : "neutral"} loading={loading} />
-            <KpiCard icon="check" label="Paid Today" value={loading ? "—" : fmt(data?.purchases.paidToday ?? 0)} tone="green" loading={loading} />
+            <KpiCard icon="trendDown" label="Spend This Month" value={loading ? "—" : fmt(data?.purchases?.spendThisMonth ?? 0)} tone="amber" loading={loading} />
+            <KpiCard icon="wallet" label="Payable Balance" value={loading ? "—" : fmt(data?.purchases?.payableBalance ?? 0)} tone="amber" loading={loading} />
+            <KpiCard icon="alert" label="Overdue Bills" value={loading ? "—" : String(data?.purchases?.overdueBills ?? 0)} tone={(data?.purchases?.overdueBills ?? 0) > 0 ? "red" : "neutral"} loading={loading} />
+            <KpiCard icon="check" label="Paid Today" value={loading ? "—" : fmt(data?.purchases?.paidToday ?? 0)} tone="green" loading={loading} />
           </div>
         </div>
         )}
@@ -233,9 +236,9 @@ export default function DashboardPage() {
               <tbody>
                 {loading ? [...Array(5)].map((_, i) => (
                   <tr key={i}><td colSpan={4}><div className={`${styles.rowSkeleton} ${styles.skeletonPulse}`} /></td></tr>
-                )) : (data?.sales.recentInvoices ?? []).length === 0 ? (
+                )) : (data?.sales?.recentInvoices ?? []).length === 0 ? (
                   <tr><td colSpan={4} className="table-empty-cell">No invoices yet. <Link href="/sales/invoices/new" className={styles.emptyLink}>Create one →</Link></td></tr>
-                ) : (data?.sales.recentInvoices ?? []).map((inv) => (
+                ) : (data?.sales?.recentInvoices ?? []).map((inv) => (
                   <tr key={inv.id}>
                     <td data-mobile-full><Link href={`/sales/invoices/${inv.id}`} className={styles.linkCell}>{inv.invoiceNumber}</Link></td>
                     <td data-label="Customer" className={styles.customerCell}>{inv.customerName}</td>
@@ -259,9 +262,9 @@ export default function DashboardPage() {
               <tbody>
                 {loading ? [...Array(5)].map((_, i) => (
                   <tr key={i}><td colSpan={4}><div className={`${styles.rowSkeleton} ${styles.skeletonPulse}`} /></td></tr>
-                )) : (data?.purchases.recentBills ?? []).length === 0 ? (
+                )) : (data?.purchases?.recentBills ?? []).length === 0 ? (
                   <tr><td colSpan={4} className="table-empty-cell">No bills yet. <Link href="/purchases/bills/new" className={styles.emptyLink}>Create one →</Link></td></tr>
-                ) : (data?.purchases.recentBills ?? []).map((b) => (
+                ) : (data?.purchases?.recentBills ?? []).map((b) => (
                   <tr key={b.id}>
                     <td data-mobile-full><Link href={`/purchases/bills/${b.id}`} className={styles.linkCell}>{b.billNumber}</Link></td>
                     <td data-label="Vendor" className={styles.customerCell}>{b.vendorName}</td>

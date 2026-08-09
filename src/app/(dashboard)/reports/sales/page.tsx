@@ -14,6 +14,7 @@ import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
 import { downloadXlsx } from "@/lib/downloadXlsx";
+import { formatDate } from "@/lib/formatDate";
 import styles from "./salesReports.module.css";
 
 interface SummaryRow { invoicesThisMonth: number; revenueThisMonth: number; totalRevenue: number; totalCollected: number; outstandingTotal: number; pendingCount: number; }
@@ -86,8 +87,8 @@ export default function SalesReportsPage() {
         ["Invoice No.", "Customer", "Invoice Date", "Due Date", "Total", "Paid", "Balance", "Status"],
         outstanding.map(inv => [
           inv.invoiceNumber, inv.customer.name,
-          new Date(inv.date).toLocaleDateString("en-IN"),
-          inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("en-IN") : "",
+          formatDate(inv.date),
+          inv.dueDate ? formatDate(inv.dueDate) : "",
           inv.total, inv.paidAmount, inv.total - inv.paidAmount, inv.status,
         ])
       );
@@ -226,7 +227,7 @@ export default function SalesReportsPage() {
                         </Cell>
                         <Cell col={OUT_COLUMNS[1]} className={styles.textMuted2}>{inv.customer.name}</Cell>
                         <Cell col={OUT_COLUMNS[2]} className={styles.textMuted3}>
-                          <div>{new Date(inv.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
+                          <div>{formatDate(inv.date)}</div>
                         </Cell>
                         <Cell col={OUT_COLUMNS[3]}>
                           {inv.dueDate ? (
@@ -234,7 +235,7 @@ export default function SalesReportsPage() {
                               className={styles.dueDate}
                               style={{ "--due-color": isOverdue ? "var(--c-red)" : "var(--c-text-3)", "--due-weight": isOverdue ? 500 : 400 } as React.CSSProperties}
                             >
-                              {new Date(inv.dueDate).toLocaleDateString("en-IN")}
+                              {formatDate(inv.dueDate)}
                               {isOverdue && " ⚠"}
                             </span>
                           ) : <span className={styles.textMuted4}>—</span>}

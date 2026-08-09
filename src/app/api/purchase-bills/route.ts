@@ -79,7 +79,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid attachment URL" }, { status: 400 });
     }
 
-    const vendor = await prisma.vendor.findFirst({ where: { id: vendorId, deletedAt: null } });
+    // Deliberately not filtered by deletedAt: a "just for this bill" vendor
+    // is soft-deleted the moment it's created (so it never surfaces in the
+    // vendor directory) but must still be usable for the bill being created
+    // right now — filtering it out here would make that flow impossible.
+    const vendor = await prisma.vendor.findUnique({ where: { id: vendorId } });
     if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 400 });
 
     if (dueDate) {

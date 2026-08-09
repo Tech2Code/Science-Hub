@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { needsRestock } from "@/lib/stockStatus";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { formatDate } from "@/lib/formatDate";
 import type { Column } from "@/components/ui/Table";
 import styles from "./view.module.css";
 
@@ -81,6 +82,8 @@ export default function ProductViewPage() {
   const [adjustSaving, setAdjustSaving] = useState(false);
   const [adjustStock, setAdjustStock] = useState("");
   const [adjustNotes, setAdjustNotes] = useState("");
+  const [adjustStockError, setAdjustStockError] = useState<string | undefined>(undefined);
+  const [adjustNotesError, setAdjustNotesError] = useState<string | undefined>(undefined);
 
   function loadProduct() {
     return fetchCached(`/api/products/${id}`)
@@ -96,6 +99,8 @@ export default function ProductViewPage() {
   function openAdjustDialog() {
     setAdjustStock(String(product?.stock ?? 0));
     setAdjustNotes("");
+    setAdjustStockError(undefined);
+    setAdjustNotesError(undefined);
     setAdjustOpen(true);
   }
 
@@ -103,17 +108,19 @@ export default function ProductViewPage() {
     if (!product) return;
     const parsed = Number(adjustStock);
     if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
-      toast({ type: "error", title: "Check the form", message: "New stock must be a whole number of 0 or more." });
+      setAdjustStockError("New stock must be a whole number of 0 or more.");
       return;
     }
     if (!adjustNotes.trim()) {
-      toast({ type: "error", title: "Check the form", message: "A reason is required for a manual stock adjustment." });
+      setAdjustNotesError("A reason is required for a manual stock adjustment.");
       return;
     }
     if (parsed === product.stock) {
       toast({ type: "error", title: "No change", message: "New stock is the same as the current stock." });
       return;
     }
+    setAdjustStockError(undefined);
+    setAdjustNotesError(undefined);
     setAdjustSaving(true);
     try {
       const res = await fetch(`/api/products/${id}/adjust-stock`, {
@@ -196,21 +203,21 @@ export default function ProductViewPage() {
         message={`Current stock: ${product?.stock ?? 0} ${product?.unit ?? ""}. Use this after a physical stock take to correct the recorded quantity — it will be logged in the stock ledger and activity log.`}
         detail={
           <div className={styles.adjustForm}>
-            <FormField label="New stock" required>
+            <FormField label="New stock" required error={adjustStockError}>
               <Input
                 type="number"
                 min={0}
                 step={1}
                 value={adjustStock}
-                onChange={(e) => setAdjustStock(e.target.value)}
+                onChange={(e) => { setAdjustStock(e.target.value); setAdjustStockError(undefined); }}
                 disabled={adjustSaving}
               />
             </FormField>
-            <FormField label="Reason" required hint={'e.g. "Physical count on 24 Jul found 3 fewer units"'}>
+            <FormField label="Reason" required error={adjustNotesError} hint={!adjustNotesError ? 'e.g. "Physical count on 24 Jul found 3 fewer units"' : undefined}>
               <Textarea
                 rows={3}
                 value={adjustNotes}
-                onChange={(e) => setAdjustNotes(e.target.value)}
+                onChange={(e) => { setAdjustNotes(e.target.value); setAdjustNotesError(undefined); }}
                 disabled={adjustSaving}
               />
             </FormField>
@@ -248,7 +255,7 @@ export default function ProductViewPage() {
               {!loading && (product?.createdBy || product?.createdAt) && (
                 <div className={styles.metaText}>
                   {product?.createdBy && <>Added by {product.createdBy}</>}
-                  {product?.createdAt && <> · {new Date(product.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</>}
+                  {product?.createdAt && <> · {formatDate(product.createdAt)}</>}
                 </div>
               )}
             </div>
@@ -339,7 +346,7 @@ export default function ProductViewPage() {
                   <td data-label="Balance After" className="table-td-right">{m.balanceAfter}</td>
                   <td data-label="Reference" className={styles.dateCellText}>{m.reference || m.notes || "—"}</td>
                   <td data-label="Date" className={styles.dateCellText}>
-                    {new Date(m.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                    {formatDate(m.createdAt)}
                   </td>
                 </tr>
               ))}

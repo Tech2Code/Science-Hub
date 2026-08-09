@@ -21,6 +21,7 @@ import { StatCardsRow } from "@/components/ui/StatCardsRow";
 import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { formatDate } from "@/lib/formatDate";
 import { useRouter } from "next/navigation";
 import styles from "./billsList.module.css";
 
@@ -320,7 +321,7 @@ export default function PurchasesPage() {
                     )}
                   </Cell>
                   <Cell col={COLUMNS[1]} className={styles.dateCell}>
-                    <div>{new Date(b.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
+                    <div>{formatDate(b.billDate)}</div>
                     <div className={["date-sub", styles.dateSub].join(" ")}>
                       {new Date(b.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
                     </div>

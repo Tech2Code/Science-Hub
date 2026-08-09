@@ -33,7 +33,7 @@ export function RecordPaymentDialog({ open, billDate, grandTotal, initial, onCan
   const [method, setMethod] = useState(initial.method);
   const [reference, setReference] = useState(initial.reference);
   const [date, setDate] = useState(initial.date);
-  const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ amount?: string; date?: string }>({});
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
 
@@ -46,7 +46,7 @@ export function RecordPaymentDialog({ open, billDate, grandTotal, initial, onCan
       setMethod(initial.method);
       setReference(initial.reference);
       setDate(initial.date);
-      setError("");
+      setFieldErrors({});
     }
   }
 
@@ -100,10 +100,11 @@ export function RecordPaymentDialog({ open, billDate, grandTotal, initial, onCan
 
   function handleSave() {
     const amt = toNum(amount);
-    if (amt <= 0) { setError("Enter a valid payment amount."); return; }
-    if (amt > grandTotal) { setError(`Amount cannot exceed the bill total (₹${fmtCurrency(grandTotal)}).`); return; }
-    if (date < billDate) { setError("Payment date cannot be before the bill date."); return; }
-    if (date > today) { setError("Payment date cannot be in the future."); return; }
+    if (amt <= 0) { setFieldErrors({ amount: "Enter a valid payment amount." }); return; }
+    if (amt > grandTotal) { setFieldErrors({ amount: `Amount cannot exceed the bill total (₹${fmtCurrency(grandTotal)}).` }); return; }
+    if (date < billDate) { setFieldErrors({ date: "Payment date cannot be before the bill date." }); return; }
+    if (date > today) { setFieldErrors({ date: "Payment date cannot be in the future." }); return; }
+    setFieldErrors({});
     onSave({ amount, method, reference, date });
   }
 
@@ -117,14 +118,14 @@ export function RecordPaymentDialog({ open, billDate, grandTotal, initial, onCan
             <p className={styles.subtitle}>Log a payment made against this bill right away.</p>
 
             <div className={styles.grid}>
-              <FormField label="Amount (₹)">
+              <FormField label="Amount (₹)" error={fieldErrors.amount}>
                 <div className={styles.amountRow}>
-                  <Input type="number" min="0" step="0.01" max={grandTotal} value={amount} onChange={(e) => { setAmount(e.target.value); setError(""); }} placeholder={`Max ₹${fmtCurrency(grandTotal)}`} className={styles.amountInput} />
-                  <FillMaxButton onClick={() => { setAmount(grandTotal.toFixed(2)); setError(""); }} title="Fill full bill amount" label="Pay Full" />
+                  <Input type="number" min="0" step="0.01" max={grandTotal} value={amount} onChange={(e) => { setAmount(e.target.value); setFieldErrors((p) => ({ ...p, amount: undefined })); }} placeholder={`Max ₹${fmtCurrency(grandTotal)}`} className={styles.amountInput} />
+                  <FillMaxButton onClick={() => { setAmount(grandTotal.toFixed(2)); setFieldErrors((p) => ({ ...p, amount: undefined })); }} title="Fill full bill amount" label="Pay Full" />
                 </div>
               </FormField>
-              <FormField label="Payment Date">
-                <Input type="date" value={date} onChange={(e) => { setDate(e.target.value); setError(""); }} min={billDate} max={today} />
+              <FormField label="Payment Date" error={fieldErrors.date}>
+                <Input type="date" value={date} onChange={(e) => { setDate(e.target.value); setFieldErrors((p) => ({ ...p, date: undefined })); }} min={billDate} max={today} />
               </FormField>
               <FormField label="Method">
                 <Select value={method} onChange={(e) => setMethod(e.target.value)}>
@@ -135,8 +136,6 @@ export function RecordPaymentDialog({ open, billDate, grandTotal, initial, onCan
                 <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. cheque no., UTR…" />
               </FormField>
             </div>
-
-            {error && <div className={styles.warning}>{error}</div>}
           </div>
 
           <div className={styles.actions}>

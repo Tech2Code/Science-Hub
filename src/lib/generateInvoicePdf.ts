@@ -41,6 +41,13 @@ export async function generateInvoicePdfBlob(
     const { jsPDF } = jspdfModule;
     const A4_PX = 794;
     const SCALE = 2;
+    // Cushion reserved on top of the footer's own measured height when
+    // deciding what fits on a page. Row-height measurements are taken from
+    // the live DOM before html2canvas's own capture runs, and can be a few
+    // px off from the actual captured canvas (font metrics / rounding) —
+    // without this margin, a borderline page had zero slack and the footer
+    // could end up pinned right at (or past) the physical page edge.
+    const FOOTER_MARGIN_PX = 6 * SCALE;
 
     // Temporarily resize to A4 width to measure exact row boundary positions.
     // Measurement is layout-only and identical across copies (the copy-label
@@ -136,18 +143,28 @@ export async function generateInvoicePdfBlob(
           printEl.style.maxWidth = `${A4_PX}px`;
 
           // Stamp the copy-label badge (e.g. "ORIGINAL COPY") for this pass.
+          // Uses visibility (not display) so the row keeps occupying the same
+          // layout space it had on the live page during measurement above —
+          // toggling display:none here would shrink this row only inside the
+          // clone, shifting every row below it out of sync with the already-
+          // captured tfootTop/tbodySplitPoints and corrupting the footer crop.
           const badge = printEl.querySelector<HTMLElement>("#invoice-copy-badge");
           if (badge) {
             if (copyLabel) {
               badge.textContent = copyLabel;
-              badge.style.display = "block";
+              badge.style.visibility = "visible";
             } else {
-              badge.style.display = "none";
+              badge.style.visibility = "hidden";
             }
           }
 
           // Receiver Signature block — only the Duplicate Copy (the seller's
-          // own retained copy) needs the recipient to sign it as proof of receipt.
+          // own retained copy) needs the recipient to sign it as proof of
+          // receipt. Its live-DOM default is display:none (zero height, same
+          // as every other pass), so — unlike the badge above — toggling
+          // display here for the Duplicate Copy pass only adds height that
+          // measurement never accounted for either; left as display (not
+          // visibility) to avoid a bigger behavior change than asked for here.
           const receiverSignature = printEl.querySelector<HTMLElement>("#invoice-receiver-signature");
           if (receiverSignature) {
             receiverSignature.style.display = copyLabel === "DUPLICATE COPY" ? "block" : "none";
@@ -318,18 +335,22 @@ export async function generateInvoicePdfBlob(
           ctx.drawImage(canvas, 0, theadTop, canvas.width, theadH, 0, y, canvas.width, theadH);
           y += theadH;
         }
-        const bodyEndPx = Math.min(tfootTop, endPx);
-        const bodySliceH = Math.max(0, bodyEndPx - startPx);
-        if (bodySliceH > 0) {
-          ctx.drawImage(canvas, 0, startPx, canvas.width, bodySliceH, 0, y, canvas.width, bodySliceH);
-        }
-        y += bodySliceH;
         // Connect the table's left/right border lines straight down through
         // the blank gap, so the box reads as one continuous frame ending at
         // the footer instead of the footer looking detached at the bottom.
         // Drawn once here — not baked into the DOM — so it can't double up
         // with any border already present in the captured image.
-        const footerTop = pageHeightPx - (tfootH > 0 ? tfootH : 0);
+        const footerTop = pageHeightPx - (tfootH > 0 ? tfootH : 0) - FOOTER_MARGIN_PX;
+        const bodyEndPx = Math.min(tfootTop, endPx);
+        // Capped at footerTop so a stale/under-measured row height can never
+        // push body content into (or past) the footer's reserved band — worst
+        // case a sliver of the last row is capped rather than the footer
+        // silently landing off the bottom of this fixed-height canvas.
+        const bodySliceH = Math.max(0, Math.min(bodyEndPx - startPx, footerTop - y));
+        if (bodySliceH > 0) {
+          ctx.drawImage(canvas, 0, startPx, canvas.width, bodySliceH, 0, y, canvas.width, bodySliceH);
+        }
+        y += bodySliceH;
         const drawGapBorders = footerTop > y && tableRightPx > tableLeftPx;
         // A touch thicker than the table's own borders (SCALE) — a plain
         // canvas stroke over a large blank area comes out visibly fainter
@@ -394,7 +415,7 @@ export async function generateInvoicePdfBlob(
         let start = 0, pNum = 0;
         while (start < canvas.height) {
           const fullAvail    = pNum === 0 ? pageHeightPx : page2HeightPx;
-          const contentAvail = fullAvail - tfootH;
+          const contentAvail = fullAvail - tfootH - FOOTER_MARGIN_PX;
           let idealEnd = Math.min(start + contentAvail, canvas.height);
           if (forcedItemSplitPoint != null && start < forcedItemSplitPoint) {
             idealEnd = Math.min(idealEnd, forcedItemSplitPoint);
@@ -404,7 +425,7 @@ export async function generateInvoicePdfBlob(
             const safe = tbodySplitPoints.filter(b => b > start && b <= idealEnd);
             splitAt = safe.length > 0 ? safe[safe.length - 1] : idealEnd;
             if (splitAt >= lastTbodyBottom) {
-              if (canvas.height - start <= fullAvail) {
+              if (canvas.height - start <= fullAvail - FOOTER_MARGIN_PX) {
                 splitAt = canvas.height;
               } else {
                 const prev = tbodySplitPoints.filter(b => b > start && b < lastTbodyBottom);

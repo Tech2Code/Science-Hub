@@ -4,11 +4,30 @@ import { safeDecrypt } from "@/lib/crypto";
 import { isLowStock } from "@/lib/stockStatus";
 
 export async function getBusinessSettings() {
-  const settings = await prisma.businessSettings.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton" },
-    update: {},
-  });
+  // Called on every server-rendered page (RootLayout) to resolve business
+  // branding/settings, so this is a hot path. Postgres's INSERT ... ON
+  // CONFLICT DO UPDATE (what Prisma's upsert compiles to here) isn't safe
+  // against two concurrent inserts racing to create the same not-yet-
+  // committed singleton row — the loser can still get a real unique-
+  // constraint violation rather than falling through to the update branch.
+  // Only reachable in the narrow window before this row has ever been
+  // created (a brand-new deploy's first burst of concurrent traffic); once
+  // it exists, every future upsert takes the plain update path and can't
+  // race. Falls back to reading the winner's row instead of 500ing.
+  let settings;
+  try {
+    settings = await prisma.businessSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton" },
+      update: {},
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      settings = await prisma.businessSettings.findUniqueOrThrow({ where: { id: "singleton" } });
+    } else {
+      throw error;
+    }
+  }
   const gmailAppPassword = settings.gmailAppPassword ? safeDecrypt(settings.gmailAppPassword) : { value: settings.gmailAppPassword, failed: false };
   const bankAccountNumber = settings.bankAccountNumber ? safeDecrypt(settings.bankAccountNumber) : { value: settings.bankAccountNumber, failed: false };
   return {
@@ -22,6 +41,19 @@ export async function getBusinessSettings() {
     bankAccountNumber: bankAccountNumber.value,
     bankAccountNumberDecryptFailed: bankAccountNumber.failed,
   };
+}
+
+// RootLayout renders on every route (including pages Next.js will try to
+// statically prerender at build time), so a transient DB outage there would
+// otherwise fail the entire production build rather than just one request.
+// Falls back to the same defaults Prisma would apply to a fresh singleton row.
+export async function getBrandingOrDefault(): Promise<{ name: string; tagline: string; logoUrl: string }> {
+  try {
+    const { name, tagline, logoUrl } = await getBusinessSettings();
+    return { name, tagline, logoUrl };
+  } catch {
+    return { name: "Science Hub", tagline: "", logoUrl: "" };
+  }
 }
 
 export type InvoiceSort = "newest" | "oldest" | "customer_az" | "customer_za" | "amount_high" | "amount_low" | "balance_high";

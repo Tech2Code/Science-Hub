@@ -15,13 +15,16 @@ interface PurchaseBillFormBodyProps {
   vendorId: string;
   onVendorIdChange: (id: string) => void;
   onVendorCreated: (vendor: PurchaseBillVendor) => void;
+  onVendorUpdated: (vendor: PurchaseBillVendor) => void;
   vendorError?: string;
   category: string;
   onCategoryChange: (category: string) => void;
   billDate: string;
   onBillDateChange: (date: string) => void;
+  billDateError?: string;
   dueDate: string;
   onDueDateChange: (date: string) => void;
+  dueDateError?: string;
   notes: string;
   onNotesChange: (notes: string) => void;
   attachmentUploading: boolean;
@@ -34,6 +37,8 @@ interface PurchaseBillFormBodyProps {
   setProducts: React.Dispatch<React.SetStateAction<PurchaseBillProduct[]>>;
   items: PurchaseBillLineItem[];
   setItems: React.Dispatch<React.SetStateAction<PurchaseBillLineItem[]>>;
+  /** Aggregate item-level validation message (e.g. missing quantity/price) shown under the Items table. */
+  itemsError?: string;
 
   grossTotal: number;
   itemDiscountTotal: number;
@@ -53,11 +58,11 @@ interface PurchaseBillFormBodyProps {
 // supplies its own `footer` (Create vs. Save Changes, optional payment, etc.).
 export function PurchaseBillFormBody({
   startIndex = 0,
-  vendors, vendorId, onVendorIdChange, onVendorCreated, vendorError,
-  category, onCategoryChange, billDate, onBillDateChange, dueDate, onDueDateChange,
+  vendors, vendorId, onVendorIdChange, onVendorCreated, onVendorUpdated, vendorError,
+  category, onCategoryChange, billDate, onBillDateChange, billDateError, dueDate, onDueDateChange, dueDateError,
   notes, onNotesChange, attachmentUploading, attachmentName, attachmentUrl,
   onAttachmentFileChange, onAttachmentRemove,
-  products, setProducts, items, setItems,
+  products, setProducts, items, setItems, itemsError,
   grossTotal, itemDiscountTotal, taxTotal, roundOff, grandTotal, discount, onDiscountChange,
   footer,
 }: PurchaseBillFormBodyProps) {
@@ -71,13 +76,16 @@ export function PurchaseBillFormBody({
           vendorId={vendorId}
           onVendorIdChange={onVendorIdChange}
           onVendorCreated={onVendorCreated}
+          onVendorUpdated={onVendorUpdated}
           vendorError={vendorError}
           category={category}
           onCategoryChange={onCategoryChange}
           billDate={billDate}
           onBillDateChange={onBillDateChange}
+          billDateError={billDateError}
           dueDate={dueDate}
           onDueDateChange={onDueDateChange}
+          dueDateError={dueDateError}
           notes={notes}
           onNotesChange={onNotesChange}
           attachmentUploading={attachmentUploading}
@@ -93,6 +101,7 @@ export function PurchaseBillFormBody({
           setProducts={setProducts}
           items={items}
           setItems={setItems}
+          itemsError={itemsError}
         />
       </div>
 

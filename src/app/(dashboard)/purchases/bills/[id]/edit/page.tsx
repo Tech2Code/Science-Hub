@@ -85,7 +85,14 @@ export default function EditPurchaseBillPage() {
   const [vendorId,  setVendorId]  = useState("");
   const [vendorError, setVendorError] = useState<string | undefined>(undefined);
   const [billDate,  setBillDate]  = useState("");
+  const [billDateError, setBillDateError] = useState<string | undefined>(undefined);
   const [dueDate,   setDueDate]   = useState("");
+  const [dueDateError, setDueDateError] = useState<string | undefined>(undefined);
+  const [itemsError, setItemsError] = useState<string | undefined>(undefined);
+  // Snapshot of the items array the current itemsError was raised against —
+  // lets the error auto-hide the moment the items list itself changes (add/
+  // remove/edit a line) without setting state from inside an effect.
+  const [itemsErrorFor, setItemsErrorFor] = useState<PurchaseBillLineItem[] | null>(null);
   const [category,  setCategory]  = useState("");
   const [notes,     setNotes]     = useState("");
   const [discount,  setDiscount]  = useState("0");
@@ -111,7 +118,13 @@ export default function EditPurchaseBillPage() {
       fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
     ]).then(([b, v, p]: [PurchaseBill, { data: PurchaseBillVendor[] }, { data: PurchaseBillProduct[] }]) => {
       setBill(b);
-      setVendors(v.data ?? []);
+      // The bill's own vendor might be a "one-off" vendor (created via the
+      // "just for this bill — don't save" option), which is soft-deleted at
+      // creation so /api/vendors never returns it — without this, the vendor
+      // <select> below would render as unselected/blank despite the bill's
+      // vendorId being intact.
+      const fetchedVendors = v.data ?? [];
+      setVendors(b.vendor && !fetchedVendors.some(x => x.id === b.vendor.id) ? [...fetchedVendors, b.vendor] : fetchedVendors);
       setProducts(p.data ?? []);
       setVendorId(b.vendorId ?? "");
       setBillDate(b.billDate ? b.billDate.slice(0, 10) : "");
@@ -186,6 +199,10 @@ export default function EditPurchaseBillPage() {
     setAttachmentName(null);
   }
 
+  // The itemsError message auto-hides once the items array it was raised
+  // against has since changed (add/remove/edit a line) — see itemsErrorFor.
+  const visibleItemsError = itemsError && itemsErrorFor === items ? itemsError : undefined;
+
   const { grossTotal, itemDiscountTotal, taxTotal } = computePurchaseBillTotals(items, "0");
   const subtotal = grossTotal - itemDiscountTotal;
   const rawTotal = subtotal + taxTotal - toNum(discount);
@@ -203,12 +220,16 @@ export default function EditPurchaseBillPage() {
     const vendorErr = validate(vendorId, rules.required("Please select a vendor."));
     setVendorError(vendorErr ?? undefined);
     if (vendorErr) return;
-    if (!billDate) { toast({ type: "error", title: "Check form", message: "Bill date is required." }); return; }
-    if (items.length === 0)                                             { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
-    if (items.some(i => validate(i.name, rules.required())))            { toast({ type: "error", title: "Check form", message: "All items must have a name." }); return; }
-    if (items.some(i => validate(i.quantity, rules.required(), rules.positiveNumber())))      { toast({ type: "error", title: "Check form", message: "All quantities must be greater than 0." }); return; }
-    if (items.some(i => validate(i.purchasePrice, rules.required(), rules.positiveNumber()))) { toast({ type: "error", title: "Check form", message: "All item prices must be greater than 0." }); return; }
-    if (dueDate && dueDate < billDate) { toast({ type: "error", title: "Check form", message: "Due date cannot be before the bill date." }); return; }
+    if (!billDate) { setBillDateError("Bill date is required."); return; }
+    setBillDateError(undefined);
+    function flagItemsError(message: string) { setItemsError(message); setItemsErrorFor(items); }
+    if (items.length === 0)                                             { flagItemsError("Add at least one item."); return; }
+    if (items.some(i => validate(i.name, rules.required())))            { flagItemsError("All items must have a name."); return; }
+    if (items.some(i => validate(i.quantity, rules.required(), rules.positiveNumber())))      { flagItemsError("All quantities must be greater than 0."); return; }
+    if (items.some(i => validate(i.purchasePrice, rules.required(), rules.positiveNumber()))) { flagItemsError("All item prices must be greater than 0."); return; }
+    setItemsError(undefined);
+    if (dueDate && dueDate < billDate) { setDueDateError("Due date cannot be before the bill date."); return; }
+    setDueDateError(undefined);
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
@@ -351,13 +372,16 @@ export default function EditPurchaseBillPage() {
           vendorId={vendorId}
           onVendorIdChange={(id) => { setVendorId(id); setVendorError(undefined); }}
           onVendorCreated={(v) => setVendors(prev => [...prev, v])}
+          onVendorUpdated={(v) => setVendors(prev => prev.map(p => p.id === v.id ? v : p))}
           vendorError={vendorError}
           category={category}
           onCategoryChange={setCategory}
           billDate={billDate}
-          onBillDateChange={setBillDate}
+          onBillDateChange={(v) => { setBillDate(v); setBillDateError(undefined); }}
+          billDateError={billDateError}
           dueDate={dueDate}
-          onDueDateChange={setDueDate}
+          onDueDateChange={(v) => { setDueDate(v); setDueDateError(undefined); }}
+          dueDateError={dueDateError}
           notes={notes}
           onNotesChange={setNotes}
           attachmentUploading={attachmentUploading}
@@ -369,6 +393,7 @@ export default function EditPurchaseBillPage() {
           setProducts={setProducts}
           items={items}
           setItems={setItems}
+          itemsError={visibleItemsError}
           grossTotal={grossTotal}
           itemDiscountTotal={itemDiscountTotal}
           taxTotal={taxTotal}

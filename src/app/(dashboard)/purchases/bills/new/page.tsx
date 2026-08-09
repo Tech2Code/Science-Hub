@@ -33,6 +33,13 @@ export default function NewPurchaseBillPage() {
   const [vendorError, setVendorError] = useState<string | undefined>(undefined);
   const [billDate,  setBillDate]  = useState(() => new Date().toISOString().slice(0, 10));
   const [dueDate,   setDueDate]   = useState("");
+  const [dueDateError, setDueDateError] = useState<string | undefined>(undefined);
+  const [itemsError, setItemsError] = useState<string | undefined>(undefined);
+  // Snapshot of the items array the current itemsError was raised against —
+  // lets the error auto-hide the moment the items list itself changes (add/
+  // remove/edit a line) without setting state from inside an effect.
+  const [itemsErrorFor, setItemsErrorFor] = useState<PurchaseBillLineItem[] | null>(null);
+  const [paymentDateError, setPaymentDateError] = useState<string | undefined>(undefined);
   const [category,  setCategory]  = useState("");
   const [discount,  setDiscount]  = useState("0");
   const [notes,     setNotes]     = useState("");
@@ -56,18 +63,24 @@ export default function NewPurchaseBillPage() {
     setPayDate(payment.date);
     setAddPayment(true);
     setShowPaymentDialog(false);
+    setPaymentDateError(undefined);
   }
 
   function removePayment() {
     setAddPayment(false);
     setPayAmount("");
     setPayReference("");
+    setPaymentDateError(undefined);
   }
 
   useEffect(() => {
     fetch("/api/vendors?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then((res: { data: PurchaseBillVendor[] }) => setVendors(res.data ?? [])).catch(() => {});
     fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then((res: { data: PurchaseBillProduct[] }) => setProducts(res.data ?? [])).catch(() => {});
   }, []);
+
+  // The itemsError message auto-hides once the items array it was raised
+  // against has since changed (add/remove/edit a line) — see itemsErrorFor.
+  const visibleItemsError = itemsError && itemsErrorFor === items ? itemsError : undefined;
 
   const { grossTotal, itemDiscountTotal, taxTotal, roundOff, grandTotal } = computePurchaseBillTotals(items, discount);
   const subtotal = grossTotal - itemDiscountTotal;
@@ -109,23 +122,23 @@ export default function NewPurchaseBillPage() {
     setAttachmentName(null);
   }
 
-  function validationToast(message: string) {
-    toast({ type: "error", title: "Check form", message });
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (attachmentUploading)                                            { validationToast("Please wait for the attachment to finish uploading."); return; }
+    if (attachmentUploading) { toast({ type: "error", title: "Check form", message: "Please wait for the attachment to finish uploading." }); return; }
     const vendorErr = validate(vendorId, rules.required("Please select a vendor."));
     setVendorError(vendorErr ?? undefined);
     if (vendorErr)                                                      { return; }
-    if (items.length === 0)                                             { validationToast("Add at least one item."); return; }
-    if (items.some(i => validate(i.name, rules.required())))            { validationToast("All items must have a name."); return; }
-    if (items.some(i => validate(i.quantity, rules.required(), rules.positiveNumber())))      { validationToast("All quantities must be greater than 0."); return; }
-    if (items.some(i => validate(i.purchasePrice, rules.required(), rules.positiveNumber()))) { validationToast("All item prices must be greater than 0."); return; }
-    if (dueDate && dueDate < billDate)               { validationToast("Due date cannot be before the bill date."); return; }
-    if (addPayment && toNum(payAmount) > 0 && payDate < billDate) { validationToast("Payment date cannot be before the bill date."); return; }
-    if (addPayment && toNum(payAmount) > 0 && payDate > new Date().toISOString().slice(0, 10)) { validationToast("Payment date cannot be in the future."); return; }
+    function flagItemsError(message: string) { setItemsError(message); setItemsErrorFor(items); }
+    if (items.length === 0)                                             { flagItemsError("Add at least one item."); return; }
+    if (items.some(i => validate(i.name, rules.required())))            { flagItemsError("All items must have a name."); return; }
+    if (items.some(i => validate(i.quantity, rules.required(), rules.positiveNumber())))      { flagItemsError("All quantities must be greater than 0."); return; }
+    if (items.some(i => validate(i.purchasePrice, rules.required(), rules.positiveNumber()))) { flagItemsError("All item prices must be greater than 0."); return; }
+    setItemsError(undefined);
+    if (dueDate && dueDate < billDate)               { setDueDateError("Due date cannot be before the bill date."); return; }
+    setDueDateError(undefined);
+    if (addPayment && toNum(payAmount) > 0 && payDate < billDate) { setPaymentDateError("Payment date cannot be before the bill date."); return; }
+    if (addPayment && toNum(payAmount) > 0 && payDate > new Date().toISOString().slice(0, 10)) { setPaymentDateError("Payment date cannot be in the future."); return; }
+    setPaymentDateError(undefined);
 
     const billItems = items.map(i => {
       const { discountAmount, gstAmount, total } = calcPurchaseBillItem(i);
@@ -215,13 +228,15 @@ export default function NewPurchaseBillPage() {
           vendorId={vendorId}
           onVendorIdChange={(id) => { setVendorId(id); setVendorError(undefined); }}
           onVendorCreated={(v) => setVendors(prev => [...prev, v])}
+          onVendorUpdated={(v) => setVendors(prev => prev.map(p => p.id === v.id ? v : p))}
           vendorError={vendorError}
           category={category}
           onCategoryChange={setCategory}
           billDate={billDate}
           onBillDateChange={setBillDate}
           dueDate={dueDate}
-          onDueDateChange={setDueDate}
+          onDueDateChange={(v) => { setDueDate(v); setDueDateError(undefined); }}
+          dueDateError={dueDateError}
           notes={notes}
           onNotesChange={setNotes}
           attachmentUploading={attachmentUploading}
@@ -232,6 +247,7 @@ export default function NewPurchaseBillPage() {
           setProducts={setProducts}
           items={items}
           setItems={setItems}
+          itemsError={visibleItemsError}
           grossTotal={grossTotal}
           itemDiscountTotal={itemDiscountTotal}
           taxTotal={taxTotal}
@@ -256,7 +272,9 @@ export default function NewPurchaseBillPage() {
                         <button type="button" className={styles.paymentSummaryBtn} onClick={removePayment}>Remove</button>
                       </div>
                     </div>
-                  ) : (
+                  ) : null}
+                  {paymentDateError && <p className={styles.paymentDateErrorMsg} role="alert">{paymentDateError}</p>}
+                  {!addPayment && (
                     <button type="button" className={styles.recordPaymentLink} onClick={() => setShowPaymentDialog(true)}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                       Record payment now

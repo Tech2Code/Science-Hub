@@ -2,9 +2,9 @@
 // one sheet per report, using accountant-friendly column names.
 import ExcelJS from "exceljs";
 import type { GstFilingReport } from "@/lib/gstFiling";
+import { formatDate } from "@/lib/formatDate";
 
 const money = (n: number) => Math.round(n * 100) / 100;
-const dateStr = (d: Date) => new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
 function addTable(wb: ExcelJS.Workbook, name: string, columns: Partial<ExcelJS.Column>[], rows: Record<string, unknown>[]) {
   const sheet = wb.addWorksheet(name);
@@ -46,7 +46,7 @@ export function buildGstFilingWorkbook(report: GstFilingReport): ExcelJS.Workboo
     { header: "Total", key: "total", width: 14 },
   ];
   const toSalesRow = (r: GstFilingReport["salesRegister"][number]) => ({
-    invoiceNumber: r.invoiceNumber, date: dateStr(r.date), customerName: r.customerName, customerGstin: r.customerGstin,
+    invoiceNumber: r.invoiceNumber, date: formatDate(r.date), customerName: r.customerName, customerGstin: r.customerGstin,
     placeOfSupply: r.placeOfSupply, supplyType: r.supplyType, taxableValue: money(r.taxableValue),
     cgst: money(r.cgst), sgst: money(r.sgst), igst: money(r.igst), total: money(r.total),
   });
@@ -73,7 +73,7 @@ export function buildGstFilingWorkbook(report: GstFilingReport): ExcelJS.Workboo
     ],
     report.creditNotes.map((r) => ({
       creditNoteNumber: r.creditNoteNumber,
-      date: dateStr(r.date), invoiceNumber: r.invoiceNumber, customerName: r.customerName, customerGstin: r.customerGstin,
+      date: formatDate(r.date), invoiceNumber: r.invoiceNumber, customerName: r.customerName, customerGstin: r.customerGstin,
       productName: r.productName, quantity: r.quantity, taxableValue: money(r.taxableValue), gstRate: r.gstRate,
       cgst: money(r.cgst), sgst: money(r.sgst), igst: money(r.igst), total: money(r.total),
     }))
@@ -91,7 +91,7 @@ export function buildGstFilingWorkbook(report: GstFilingReport): ExcelJS.Workboo
       { header: "Total", key: "total", width: 14 },
     ],
     report.purchaseRegister.map((r) => ({
-      billNumber: r.billNumber, date: dateStr(r.date), vendorName: r.vendorName, vendorGstin: r.vendorGstin,
+      billNumber: r.billNumber, date: formatDate(r.date), vendorName: r.vendorName, vendorGstin: r.vendorGstin,
       taxableValue: money(r.taxableValue), taxAmount: money(r.taxAmount), total: money(r.total),
     }))
   );

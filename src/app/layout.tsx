@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
-import { getBusinessSettings } from "@/lib/db";
+import { getBrandingOrDefault } from "@/lib/db";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const { name, logoUrl } = await getBusinessSettings();
+  const { name, logoUrl } = await getBrandingOrDefault();
   return {
     title: `${name} — Billing & Inventory`,
     description: `Professional GST billing and inventory management for ${name}`,
@@ -17,13 +17,13 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const { name, tagline, logoUrl } = await getBusinessSettings();
+  const { name, tagline, logoUrl } = await getBrandingOrDefault();
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.classList.toggle('dark',t==='dark');document.documentElement.style.colorScheme=t;var a=localStorage.getItem('accentColor');if(a)document.documentElement.style.setProperty('--c-accent',a)}catch(e){}})()`,
+            __html: `(function(){try{var t;if(localStorage.getItem('themeMode')==='auto'){var h=new Date().getHours();t=(h>=19||h<6)?'dark':'light';}else{t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}document.documentElement.classList.toggle('dark',t==='dark');document.documentElement.style.colorScheme=t;var a=localStorage.getItem('accentColor');if(a)document.documentElement.style.setProperty('--c-accent',a)}catch(e){}})()`,
           }}
         />
       </head>

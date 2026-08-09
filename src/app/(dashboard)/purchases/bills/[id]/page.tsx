@@ -22,6 +22,7 @@ import { animateSection } from "@/lib/animateSection";
 import { truncateFilename } from "@/lib/truncateFilename";
 import { AttachmentIcon } from "@/components/purchases/AttachmentIcon";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { formatDate } from "@/lib/formatDate";
 import styles from "./billDetail.module.css";
 
 interface PurchaseBillItem {
@@ -53,7 +54,6 @@ interface BusinessSettings {
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
 const fmt     = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtShort = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
 function StatCard({ label, value, color = "var(--c-text)", sub }: { label: string; value: string; color?: string; sub?: string }) {
   return (
@@ -396,8 +396,8 @@ export default function PurchaseBillDetailPage() {
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: "var(--bp-tx)" }}>PURCHASE BILL</div>
           <div style={{ fontSize: 12, color: "var(--bp-tx2)" }}>{bill.billNumber}</div>
-          <div style={{ fontSize: 11, color: "var(--bp-tx3)" }}>Date: {fmtDate(bill.billDate)}</div>
-          {bill.dueDate && <div style={{ fontSize: 11, color: "var(--bp-tx3)" }}>Due: {fmtDate(bill.dueDate)}</div>}
+          <div style={{ fontSize: 11, color: "var(--bp-tx3)" }}>Date: {formatDate(bill.billDate)}</div>
+          {bill.dueDate && <div style={{ fontSize: 11, color: "var(--bp-tx3)" }}>Due: {formatDate(bill.dueDate)}</div>}
         </div>
       </div>
 
@@ -717,8 +717,8 @@ export default function PurchaseBillDetailPage() {
         {/* Bill Meta */}
         <div className={`card ${styles.infoCard}`}>
           <div className={styles.infoCardLabel}>Bill Information</div>
-          <InfoRow label="Bill Date"   value={fmtDate(bill.billDate)} />
-          <InfoRow label="Due Date"    value={bill.dueDate ? fmtDate(bill.dueDate) : "Not set"} />
+          <InfoRow label="Bill Date"   value={formatDate(bill.billDate)} />
+          <InfoRow label="Due Date"    value={bill.dueDate ? formatDate(bill.dueDate) : "Not set"} />
           <InfoRow label="Category"    value={bill.category || "—"} />
           <InfoRow label="Created By"  value={bill.createdBy.name} />
           <InfoRow label="Created At"  value={new Date(bill.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })} />
@@ -857,7 +857,7 @@ export default function PurchaseBillDetailPage() {
               <tbody>
                 {bill.payments.map(p => (
                   <tr key={p.id}>
-                    <td data-label="Date" className={styles.paymentDateCell}>{fmtDate(p.date)}</td>
+                    <td data-label="Date" className={styles.paymentDateCell}>{formatDate(p.date)}</td>
                     <td data-label="Method">
                       <span className={styles.methodPill}>
                         {p.method}

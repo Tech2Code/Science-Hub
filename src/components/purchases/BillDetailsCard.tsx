@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { Modal } from "@/components/dialogs/Modal";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { AttachmentPicker } from "@/components/purchases/AttachmentPicker";
 import { useToast } from "@/components/ui/Toast";
 import { bustCachePrefix } from "@/lib/useCache";
 import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
+import { useDirty } from "@/lib/useDirty";
 import { INDIA_STATES_FULL } from "@/lib/states";
 import { usePincodeAutofill } from "@/lib/usePincodeLookup";
 import { PURCHASE_BILL_CATEGORIES, type PurchaseBillVendor } from "@/lib/purchaseBillForm";
@@ -24,13 +26,16 @@ interface BillDetailsCardProps {
   vendorId: string;
   onVendorIdChange: (id: string) => void;
   onVendorCreated: (vendor: PurchaseBillVendor) => void;
+  onVendorUpdated: (vendor: PurchaseBillVendor) => void;
   vendorError?: string;
   category: string;
   onCategoryChange: (category: string) => void;
   billDate: string;
   onBillDateChange: (date: string) => void;
+  billDateError?: string;
   dueDate: string;
   onDueDateChange: (date: string) => void;
+  dueDateError?: string;
   notes: string;
   onNotesChange: (notes: string) => void;
   attachmentUploading: boolean;
@@ -44,22 +49,69 @@ interface BillDetailsCardProps {
 // Notes / Attachment — shared by the New Purchase Bill and Edit Purchase
 // Bill pages so the two forms can't drift apart.
 export function BillDetailsCard({
-  sectionIndex, vendors, vendorId, onVendorIdChange, onVendorCreated, vendorError,
-  category, onCategoryChange, billDate, onBillDateChange, dueDate, onDueDateChange,
+  sectionIndex, vendors, vendorId, onVendorIdChange, onVendorCreated, onVendorUpdated, vendorError,
+  category, onCategoryChange, billDate, onBillDateChange, billDateError, dueDate, onDueDateChange, dueDateError,
   notes, onNotesChange, attachmentUploading, attachmentName, attachmentUrl,
   onAttachmentFileChange, onAttachmentRemove,
 }: BillDetailsCardProps) {
   const toast = useToast();
+  const vendorFieldId = useId();
+  const [vendorSearch, setVendorSearch] = useState("");
+  const [showVendorDropdown, setShowVendorDropdown] = useState(false);
   const [showVendorCreate, setShowVendorCreate] = useState(false);
+  const [ivEditId, setIvEditId] = useState<string | null>(null);
   const [ivForm, setIvForm] = useState<InlineVendorForm>(BLANK_INLINE_VENDOR);
   const [ivSaving, setIvSaving] = useState(false);
   const [ivError, setIvError] = useState("");
   const [ivFieldErrors, setIvFieldErrors] = useState<FormErrors<InlineVendorForm>>({});
+  const [ivDontSave, setIvDontSave] = useState(false);
+
+  const ivDirty = useDirty(ivForm);
+  const selectedVendor = vendors.find((v) => v.id === vendorId);
+  // While the user is actively typing a query, that text wins; otherwise fall
+  // back to the selected vendor's name — this way the input reflects the
+  // right vendor even if `vendors` (fetched by the parent page) loads after
+  // `vendorId` is already set (e.g. the Edit Purchase Bill page), with no
+  // extra effect/state-sync required.
+  const vendorSearchValue = vendorSearch || selectedVendor?.name || "";
+  const filteredVendors = vendors.filter((v) => {
+    const q = vendorSearch.toLowerCase();
+    return v.name.toLowerCase().includes(q) || (v.company ?? "").toLowerCase().includes(q) || (v.gstin ?? "").toLowerCase().includes(q);
+  });
+
+  function handleVendorSelect(v: PurchaseBillVendor) {
+    onVendorIdChange(v.id);
+    setVendorSearch("");
+    setShowVendorDropdown(false);
+  }
+
+  function removeVendor() {
+    onVendorIdChange("");
+    setVendorSearch("");
+    setShowVendorDropdown(false);
+  }
 
   function openVendorCreate() {
+    setIvEditId(null);
     setIvForm(BLANK_INLINE_VENDOR);
     setIvError("");
     setIvFieldErrors({});
+    setIvDontSave(false);
+    setShowVendorCreate(true);
+    ivPincodeLookup.reset();
+  }
+
+  function openVendorEdit(v: PurchaseBillVendor) {
+    const snapshot = {
+      name: v.name, company: v.company ?? "", phone: v.phone ?? "", email: v.email ?? "",
+      gstin: v.gstin ?? "", address: v.address ?? "", city: v.city ?? "", state: v.state ?? "", pincode: v.pincode ?? "",
+    };
+    setIvEditId(v.id);
+    setIvForm(snapshot);
+    ivDirty.markClean(snapshot);
+    setIvError("");
+    setIvFieldErrors({});
+    setIvDontSave(false);
     setShowVendorCreate(true);
     ivPincodeLookup.reset();
   }
@@ -91,7 +143,7 @@ export function BillDetailsCard({
   async function handleCreateInlineVendor() {
     const newErrors = validateForm<InlineVendorForm>(ivForm, {
       name:    [rules.required("Vendor name is required.")],
-      phone:   [rules.required("Phone number is required."), rules.phone10()],
+      phone:   [rules.phone10()],
       email:   [rules.email()],
       gstin:   [rules.maxLength(15), rules.gstin()],
       address: [rules.required("Address is required.")],
@@ -103,30 +155,37 @@ export function BillDetailsCard({
     setIvFieldErrors({});
     setIvSaving(true); setIvError("");
     try {
-      const res = await fetch("/api/vendors", {
-        method: "POST",
+      const body = {
+        name:    ivForm.name.trim(),
+        company: ivForm.company.trim() || null,
+        gstin:   ivForm.gstin.trim() || null,
+        phone:   ivForm.phone.trim() || null,
+        email:   ivForm.email.trim() || null,
+        address: ivForm.address.trim() || null,
+        city:    ivForm.city.trim() || null,
+        state:   ivForm.state.trim() || null,
+        pincode: ivForm.pincode.trim() || null,
+        ...(ivEditId ? {} : { oneOff: ivDontSave }),
+      };
+      const res = await fetch(ivEditId ? `/api/vendors/${ivEditId}` : "/api/vendors", {
+        method: ivEditId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name:    ivForm.name.trim(),
-          company: ivForm.company.trim() || null,
-          gstin:   ivForm.gstin.trim() || null,
-          phone:   ivForm.phone.trim() || null,
-          email:   ivForm.email.trim() || null,
-          address: ivForm.address.trim() || null,
-          city:    ivForm.city.trim() || null,
-          state:   ivForm.state.trim() || null,
-          pincode: ivForm.pincode.trim() || null,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (res.ok) {
-        onVendorCreated(data);
+        if (ivEditId) onVendorUpdated(data);
+        else onVendorCreated(data);
         onVendorIdChange(data.id);
+        setVendorSearch("");
         closeVendorCreate();
-        bustCachePrefix("/api/vendors");
-        toast({ type: "success", title: "Vendor created", message: `${data.name} added and selected.` });
+        if (ivEditId || !ivDontSave) bustCachePrefix("/api/vendors");
+        toast(ivEditId
+          ? { type: "success", title: "Vendor updated", message: `${data.name} saved.` }
+          : { type: "success", title: "Vendor created", message: ivDontSave ? `${data.name} added and selected for this bill only.` : `${data.name} added and selected.` }
+        );
       } else {
-        setIvError(data.error ?? "Failed to create vendor.");
+        setIvError(data.error ?? (ivEditId ? "Failed to update vendor." : "Failed to create vendor."));
       }
     } catch {
       setIvError("Network error — please try again.");
@@ -134,37 +193,70 @@ export function BillDetailsCard({
     setIvSaving(false);
   }
 
+  const section = animateSection(sectionIndex, "form-card");
+
   return (
-    <div {...animateSection(sectionIndex, "form-card")}>
+    <>
+    {ivSaving && <OverlayLoader text={ivEditId ? "Saving vendor…" : "Creating vendor…"} />}
+    <div className={section.className} style={{ ...section.style, position: "relative", zIndex: showVendorDropdown ? 5 : "auto" }}>
       <h2 className="form-section-title">Bill Details</h2>
 
-      <div className="form-grid-2">
-        <FormField label="Vendor" required error={vendorError}>
-          <Select value={vendorId} onChange={(e) => { onVendorIdChange(e.target.value); if (e.target.value) closeVendorCreate(); }}>
-            <option value="">Select a vendor…</option>
-            {vendors.map((v) => (
-              <option key={v.id} value={v.id}>{v.name}{v.company ? ` — ${v.company}` : ""}</option>
-            ))}
-          </Select>
-          {!vendorId && !showVendorCreate && (
+      <FormField label="Vendor" required error={vendorError} id={vendorFieldId}>
+        <div className={styles.searchWrap}>
+          <Input
+            id={vendorFieldId}
+            type="text"
+            placeholder="Search vendor…"
+            value={vendorSearchValue}
+            onChange={(e) => { setVendorSearch(e.target.value); onVendorIdChange(""); setShowVendorDropdown(true); }}
+            onFocus={() => setShowVendorDropdown(true)}
+            onBlur={() => setTimeout(() => setShowVendorDropdown(false), 150)}
+            onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur(); }}
+          />
+          {showVendorDropdown && (
+            <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
+              {filteredVendors.length > 0 ? filteredVendors.map((v) => (
+                <button key={v.id} type="button" onClick={() => handleVendorSelect(v)} className={styles.dropdownBtn}>
+                  <div className={styles.dropdownItemName} title={v.name}>{v.name}{v.company ? ` — ${v.company}` : ""}</div>
+                  <div className={styles.dropdownItemSub}>{[v.city, v.gstin].filter(Boolean).join(" · ")}</div>
+                </button>
+              )) : (
+                <div className={styles.dropdownEmpty}>
+                  No vendor found.{" "}
+                  <button type="button" onClick={() => { setShowVendorDropdown(false); openVendorCreate(); }} className={styles.dropdownEmptyLink}>Add new →</button>
+                </div>
+              )}
+            </div>
+          )}
+          {vendorSearch && !vendorId && (
+            <p className={styles.selectHint}>⚠ Please select a vendor from the dropdown</p>
+          )}
+          {!vendorId && !showVendorDropdown && (
             <button type="button" onClick={openVendorCreate} className={styles.addVendorLink}>
               + Add new vendor manually
             </button>
           )}
-        </FormField>
-        <FormField label="Attachment (bill copy / receipt)">
-          <AttachmentPicker
-            uploading={attachmentUploading}
-            name={attachmentName}
-            url={attachmentUrl}
-            onFileChange={onAttachmentFileChange}
-            onRemove={onAttachmentRemove}
-          />
-        </FormField>
-      </div>
+        </div>
 
-      <Modal open={showVendorCreate} onClose={closeVendorCreate} title="New Vendor" maxWidth="38rem">
-        <p className={styles.modalSub}>Not in your list — fill details and create</p>
+        {selectedVendor && (
+          <div className={styles.selectedVendor}>
+            <div className={styles.selectedVendorInfo}>
+              <div className={styles.selectedVendorName}>{selectedVendor.name}{selectedVendor.company ? ` — ${selectedVendor.company}` : ""}</div>
+              <div className={styles.selectedVendorSub}>
+                {[selectedVendor.city, selectedVendor.state].filter(Boolean).join(", ")}
+                {selectedVendor.gstin && ` · GSTIN: ${selectedVendor.gstin}`}
+              </div>
+            </div>
+            <div className={styles.selectedVendorActions}>
+              <button type="button" onClick={() => openVendorEdit(selectedVendor)} className={styles.dropdownEmptyLink}>Edit</button>
+              <button type="button" onClick={removeVendor} className={styles.removeVendorLink}>Remove</button>
+            </div>
+          </div>
+        )}
+      </FormField>
+
+      <Modal open={showVendorCreate} onClose={closeVendorCreate} title={ivEditId ? "Edit Vendor" : "Add New Vendor"} maxWidth="34rem">
+        <p className={styles.modalSub}>{ivEditId ? "Update this vendor's details" : "Not in your list — fill details and create"}</p>
 
         {ivError && <div className={styles.inlineVendorError}>{ivError}</div>}
 
@@ -175,14 +267,6 @@ export function BillDetailsCard({
             </FormField>
             <FormField label="Company / Trade Name">
               <Input value={ivForm.company} onChange={(e) => updateIvField("company", e.target.value)} placeholder="Optional" />
-            </FormField>
-          </div>
-          <div className="form-grid-2">
-            <FormField label="Phone" required error={ivFieldErrors.phone}>
-              <PhoneInput value={ivForm.phone} onChange={(e) => updateIvField("phone", e.target.value)} placeholder="10-digit mobile" />
-            </FormField>
-            <FormField label="Email" error={ivFieldErrors.email}>
-              <Input type="email" value={ivForm.email} onChange={(e) => updateIvField("email", e.target.value)} placeholder="vendor@example.com" />
             </FormField>
           </div>
           <FormField label="Address" required error={ivFieldErrors.address}>
@@ -198,14 +282,6 @@ export function BillDetailsCard({
             >
               <Input value={ivForm.pincode} onChange={(e) => handleIvPincodeChange(e.target.value)} placeholder="6-digit" maxLength={6} />
             </FormField>
-            <FormField label="GSTIN" error={ivFieldErrors.gstin}>
-              <Input value={ivForm.gstin} onChange={(e) => updateIvField("gstin", e.target.value)} placeholder="22AAAAA0000A1Z5" maxLength={15} mono />
-            </FormField>
-          </div>
-          <div className="form-grid-2">
-            <FormField label="City" required error={ivFieldErrors.city}>
-              <Input value={ivForm.city} onChange={(e) => updateIvField("city", e.target.value)} placeholder="City" />
-            </FormField>
             <FormField label="State" required error={ivFieldErrors.state}>
               <Select value={ivForm.state} onChange={(e) => updateIvField("state", e.target.value)}>
                 <option value="">Select state</option>
@@ -213,15 +289,38 @@ export function BillDetailsCard({
               </Select>
             </FormField>
           </div>
+          <div className="form-grid-2">
+            <FormField label="City" required error={ivFieldErrors.city}>
+              <Input value={ivForm.city} onChange={(e) => updateIvField("city", e.target.value)} placeholder="City" />
+            </FormField>
+            <FormField label="GSTIN" error={ivFieldErrors.gstin}>
+              <Input value={ivForm.gstin} onChange={(e) => updateIvField("gstin", e.target.value)} placeholder="22AAAAA0000A1Z5" maxLength={15} mono />
+            </FormField>
+          </div>
+          <div className="form-grid-2">
+            <FormField label="Phone" error={ivFieldErrors.phone}>
+              <PhoneInput value={ivForm.phone} onChange={(e) => updateIvField("phone", e.target.value)} placeholder="10-digit mobile" />
+            </FormField>
+            <FormField label="Email" error={ivFieldErrors.email}>
+              <Input type="email" value={ivForm.email} onChange={(e) => updateIvField("email", e.target.value)} placeholder="vendor@example.com" />
+            </FormField>
+          </div>
         </div>
+
+        {!ivEditId && (
+          <label className={styles.inlineVendorCheckbox}>
+            <input type="checkbox" checked={ivDontSave} onChange={(e) => setIvDontSave(e.target.checked)} />
+            Just for this bill — don&apos;t save to my vendor list
+          </label>
+        )}
 
         <div className={styles.modalActions}>
           <Button type="button" variant="secondary" onClick={closeVendorCreate}>Dismiss</Button>
-          <Button type="button" variant="primary" disabled={ivSaving} onClick={handleCreateInlineVendor}>
-            {ivSaving ? "Creating…" : (
+          <Button type="button" variant="primary" disabled={ivSaving || (!!ivEditId && !ivDirty.isDirty)} onClick={handleCreateInlineVendor}>
+            {ivSaving ? "Saving…" : (
               <span className={styles.inlineVendorSubmitLabel}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                Create &amp; Use This Vendor
+                {ivEditId ? "Save Changes" : ivDontSave ? "Use For This Bill Only" : "Create & Use This Vendor"}
               </span>
             )}
           </Button>
@@ -235,10 +334,10 @@ export function BillDetailsCard({
             {PURCHASE_BILL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
         </Select>
         </FormField>
-        <FormField label="Bill Date" required>
+        <FormField label="Bill Date" required error={billDateError}>
           <Input type="date" value={billDate} onChange={(e) => onBillDateChange(e.target.value)} max={dueDate || undefined} />
         </FormField>
-        <FormField label="Due Date">
+        <FormField label="Due Date" error={dueDateError}>
           <Input type="date" value={dueDate} onChange={(e) => onDueDateChange(e.target.value)} min={billDate} />
         </FormField>
       </div>
@@ -246,6 +345,17 @@ export function BillDetailsCard({
       <FormField label="Notes">
         <Textarea rows={2} value={notes} onChange={(e) => onNotesChange(e.target.value)} placeholder="Optional notes about this purchase…" />
       </FormField>
+
+      <FormField label="Attachment (bill copy / receipt)">
+        <AttachmentPicker
+          uploading={attachmentUploading}
+          name={attachmentName}
+          url={attachmentUrl}
+          onFileChange={onAttachmentFileChange}
+          onRemove={onAttachmentRemove}
+        />
+      </FormField>
     </div>
+    </>
   );
 }

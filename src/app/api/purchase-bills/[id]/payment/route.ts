@@ -21,6 +21,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const billCheck = await prisma.purchaseBill.findFirst({ where: { id, deletedAt: null } });
     if (!billCheck) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+    if (billCheck.status === "cancelled") {
+      return NextResponse.json({ error: "Cannot record a payment against a cancelled bill." }, { status: 400 });
+    }
 
     let paymentDate = new Date();
     if (date) {
@@ -46,13 +49,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     async function attemptPayment() {
       return prisma.$transaction(async (tx) => {
         const bill = await tx.purchaseBill.findUniqueOrThrow({ where: { id } });
+        if (bill.status === "cancelled") {
+          throw new PaymentExceedsBalanceError("Cannot record a payment against a cancelled bill.");
+        }
         const balance = bill.total - bill.paidAmount;
         if (amount > balance + 0.01) {
           throw new PaymentExceedsBalanceError(`Amount exceeds balance due (₹${balance.toFixed(2)}).`);
         }
-
-        const newPaid = bill.paidAmount + amount;
-        const newStatus = newPaid >= bill.total - 0.01 ? "paid" : "partial";
 
         const created = await tx.purchasePayment.create({
           data: {
@@ -64,6 +67,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             notes: notes || null,
           },
         });
+
+        // Recompute paidAmount from the actual sum of PurchasePayment rows
+        // rather than incrementing bill.paidAmount — matches the sales
+        // invoice payment route's pattern and can't drift if a payment is
+        // ever created/edited/deleted through any other path.
+        const agg = await tx.purchasePayment.aggregate({
+          where: { purchaseBillId: id },
+          _sum: { amount: true },
+        });
+        const newPaid = agg._sum.amount ?? 0;
+        const newStatus = newPaid >= bill.total - 0.01 ? "paid" : newPaid > 0 ? "partial" : "unpaid";
+
         await tx.purchaseBill.update({
           where: { id },
           data: { paidAmount: newPaid, status: newStatus },

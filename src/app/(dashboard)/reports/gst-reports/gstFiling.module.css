@@ -40,9 +40,9 @@
 }
 
 .errorText {
-  margin: 0 1.25rem 1.25rem;
+  margin-top: 0.25rem;
   color: var(--c-red);
-  font-size: 0.8125rem;
+  font-size: 0.7125rem;
 }
 
 .validationSummary {
@@ -143,6 +143,14 @@
   font-size: 1.125rem;
   font-weight: 700;
   color: var(--c-text);
+}
+
+.summaryCardValueRefund {
+  color: var(--c-green-text);
+}
+
+.summaryCardValueDue {
+  color: var(--c-red-text);
 }
 
 .downloadRow {

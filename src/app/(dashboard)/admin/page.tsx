@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { useScrollToHash } from "@/lib/useScrollToHash";
 import { useDirty } from "@/lib/useDirty";
+import { formatDate } from "@/lib/formatDate";
 import styles from "./admin.module.css";
 
 interface User {
@@ -580,7 +581,7 @@ export default function AdminPage() {
                 </div>
                 <div className={styles.profileMetaRow}>
                   <RoleBadge role={profile?.role ?? ""} />
-                  <span className={styles.metaText}>Joined {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</span>
+                  <span className={styles.metaText}>Joined {profile?.createdAt ? formatDate(profile.createdAt) : "—"}</span>
                   <span className={styles.metaText}>· {profile?._count.invoices ?? 0} invoices created</span>
                 </div>
               </div>
@@ -769,7 +770,7 @@ export default function AdminPage() {
                     <td data-label="Role"><RoleBadge role={u.role} /></td>
                     <td data-label="Invoices" className={`table-td-right ${styles.invoicesCell}`}>{u._count.invoices}</td>
                     <td data-label="Joined" className={styles.joinedCell}>
-                      {new Date(u.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                      {formatDate(u.createdAt)}
                     </td>
                     <td data-mobile-full data-label="Actions">
                       {isSelf ? (

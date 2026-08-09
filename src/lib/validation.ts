@@ -101,7 +101,6 @@ export function validateCustomerInput(input: {
   if (!name) return "Name is required.";
   if (name.length > 200) return "Name is too long (max 200 characters).";
   if (requireContactDetails) {
-    if (!(input.phone ?? "").trim()) return "Phone number is required.";
     if (!(input.address ?? "").trim()) return "Address is required.";
     if (!(input.city ?? "").trim()) return "City is required.";
     if (!(input.state ?? "").trim()) return "State is required.";
@@ -222,7 +221,6 @@ export function validateVendorInput(input: {
   if (!name) return "Vendor name is required.";
   if (name.length > 200) return "Name is too long (max 200 characters).";
   if (requireContactDetails) {
-    if (!(input.phone ?? "").trim()) return "Phone number is required.";
     if (!(input.address ?? "").trim()) return "Address is required.";
     if (!(input.city ?? "").trim()) return "City is required.";
     if (!(input.state ?? "").trim()) return "State is required.";

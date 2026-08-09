@@ -20,6 +20,7 @@ import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } f
 import { amountInWordsINR } from "@/lib/numberToWords";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { formatDate } from "@/lib/formatDate";
 import styles from "./invoiceDetail.module.css";
 
 interface InvoiceItem {
@@ -199,6 +200,7 @@ export default function InvoiceDetailPage() {
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentForm, setPaymentForm] = useState({ amount: "", method: "Cash", reference: "", date: new Date().toISOString().slice(0, 10) });
   const [paymentAmountError, setPaymentAmountError] = useState<string | undefined>(undefined);
+  const [paymentDateError, setPaymentDateError] = useState<string | undefined>(undefined);
   const [addingPayment, setAddingPayment] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
@@ -213,6 +215,7 @@ export default function InvoiceDetailPage() {
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [pdfPrinting, setPdfPrinting] = useState(false);
   const [pdfViewing, setPdfViewing] = useState(false);
+  const [pdfRegenerating, setPdfRegenerating] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
   const [showReturnForm, setShowReturnForm] = useState(false);
@@ -220,6 +223,8 @@ export default function InvoiceDetailPage() {
   const returnQtyRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [returnNotes, setReturnNotes] = useState("");
   const [returnDate, setReturnDate] = useState("");
+  const [returnDateError, setReturnDateError] = useState<string | undefined>(undefined);
+  const [returnItemsError, setReturnItemsError] = useState<string | undefined>(undefined);
   const [addingReturn, setAddingReturn] = useState(false);
   const [returnDeleteConfirm, setReturnDeleteConfirm] = useState<ReturnRecord | null>(null);
   const [deletingReturn, setDeletingReturn] = useState(false);
@@ -284,9 +289,10 @@ export default function InvoiceDetailPage() {
     if (amtErr) { setPaymentAmountError(amtErr); return; }
     const amt = parseFloat(paymentForm.amount);
     if (amt > balance) { setPaymentAmountError(`Amount cannot exceed balance due (₹${fmt(balance)}).`); return; }
-    if (invoice && paymentForm.date < invoice.date.slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be before the invoice date." }); return; }
-    if (paymentForm.date > new Date().toISOString().slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be in the future." }); return; }
+    if (invoice && paymentForm.date < invoice.date.slice(0, 10)) { setPaymentDateError("Payment date cannot be before the invoice date."); return; }
+    if (paymentForm.date > new Date().toISOString().slice(0, 10)) { setPaymentDateError("Payment date cannot be in the future."); return; }
     setPaymentAmountError(undefined);
+    setPaymentDateError(undefined);
     setAddingPayment(true);
     const res = await fetch(`/api/invoices/${id}/payment`, {
       method: "POST",
@@ -297,6 +303,8 @@ export default function InvoiceDetailPage() {
     if (res.ok) {
       setShowPaymentForm(false);
       setPaymentForm({ amount: "", method: "Cash", reference: "", date: new Date().toISOString().slice(0, 10) });
+      setPaymentAmountError(undefined);
+      setPaymentDateError(undefined);
       bustCache(`/api/invoices/${id}`);
       load(true);
       toast({ type: "success", title: "Payment recorded", message: `₹${parseFloat(paymentForm.amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via ${paymentForm.method}` });
@@ -325,6 +333,8 @@ export default function InvoiceDetailPage() {
     })).filter(ri => ri.maxQty > 0));
     setReturnNotes("");
     setReturnDate(new Date().toISOString().split("T")[0]);
+    setReturnDateError(undefined);
+    setReturnItemsError(undefined);
     setShowReturnForm(true);
   }
 
@@ -338,12 +348,14 @@ export default function InvoiceDetailPage() {
   async function handleAddReturn(e: React.FormEvent) {
     e.preventDefault();
     const selected = returnItems.filter(ri => ri.selected && ri.qty > 0);
-    if (selected.length === 0) { toast({ type: "error", title: "Check form", message: "Select at least one item to return." }); return; }
+    if (selected.length === 0) { setReturnItemsError("Select at least one item to return."); return; }
     for (const ri of selected) {
-      if (ri.qty > ri.maxQty) { toast({ type: "error", title: "Check form", message: `${ri.name}: quantity exceeds returnable amount (max ${ri.maxQty}).` }); return; }
+      if (ri.qty > ri.maxQty) { setReturnItemsError(`${ri.name}: quantity exceeds returnable amount (max ${ri.maxQty}).`); return; }
     }
-    if (invoice && returnDate < invoice.date.slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Return date cannot be before the invoice date." }); return; }
-    if (returnDate > new Date().toISOString().slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Return date cannot be in the future." }); return; }
+    if (invoice && returnDate < invoice.date.slice(0, 10)) { setReturnDateError("Return date cannot be before the invoice date."); return; }
+    if (returnDate > new Date().toISOString().slice(0, 10)) { setReturnDateError("Return date cannot be in the future."); return; }
+    setReturnItemsError(undefined);
+    setReturnDateError(undefined);
     setAddingReturn(true);
     try {
       const res = await fetch(`/api/invoices/${id}/returns`, {
@@ -432,21 +444,39 @@ export default function InvoiceDetailPage() {
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
 
-  async function generatePdfBlob(copyLabels?: string[]): Promise<Blob | null> {
+  async function generatePdfBlob(copyLabels?: string[], force = false): Promise<Blob | null> {
     const showLogo = settings?.showLogoOnInvoices !== false;
     const variantKey = buildPdfVariantKey(copyLabels, {
       p: showPaymentInPdf,
       r: showReturnInPdf,
       logo: showLogo,
-      settings: settings?.updatedAt ?? "",
+      settings: settings?.updatedAt ?? "loading",
     });
-    const cached = await getCachedPdf("invoice", id, variantKey);
-    if (cached) return cached;
+    if (!force) {
+      const cached = await getCachedPdf("invoice", id, variantKey);
+      if (cached) return cached;
+    }
     const el = document.getElementById("invoice-print-area");
     if (!el) return null;
     const blob = await generateInvoicePdfBlob(el, { copyLabels, logoUrl: showLogo ? settings?.logoUrl || undefined : undefined });
     if (blob) setCachedPdf("invoice", id, variantKey, blob);
     return blob;
+  }
+
+  // Discards whatever's cached for the current toggle state and forces a
+  // fresh render — for when something outside the invoice's own data
+  // changed (business logo/settings) and the cached copy needs replacing,
+  // mirroring the list page's "Regenerate" action.
+  async function handleRegeneratePdf() {
+    if (!invoice) return;
+    setPdfRegenerating(true);
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await document.fonts.ready;
+    const blob = await generatePdfBlob(undefined, true);
+    setPdfRegenerating(false);
+    if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
+    setPdfPreviewUrl(URL.createObjectURL(blob));
+    toast({ type: "success", title: "Regenerated", message: "Latest PDF generated and cached." });
   }
 
   function handleDownloadClick() {
@@ -755,7 +785,7 @@ export default function InvoiceDetailPage() {
             {(invoice.createdBy?.name || invoice.createdAt) && (
               <div className={styles.metaText}>
                 {invoice.createdBy?.name && <>Created by {invoice.createdBy.name}</>}
-                {invoice.createdAt && <> · {new Date(invoice.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</>}
+                {invoice.createdAt && <> · {formatDate(invoice.createdAt)}</>}
               </div>
             )}
           </div>
@@ -772,6 +802,7 @@ export default function InvoiceDetailPage() {
                     if (next) {
                       setPaymentForm({ amount: "", method: "Cash", reference: "", date: new Date().toISOString().slice(0, 10) });
                       setPaymentAmountError(undefined);
+                      setPaymentDateError(undefined);
                     }
                     return next;
                   });
@@ -798,6 +829,10 @@ export default function InvoiceDetailPage() {
               </Button>
             </span>
             )}
+            <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" loading={pdfRegenerating} onClick={handleRegeneratePdf}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>
+              Regenerate
+            </Button>
             <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
               View
@@ -901,11 +936,11 @@ export default function InvoiceDetailPage() {
                   </div>
                 </FormField>
                 <div className={styles.paymentDateField}>
-                  <FormField label="Date">
+                  <FormField label="Date" error={paymentDateError}>
                     <Input
                       type="date"
                       value={paymentForm.date}
-                      onChange={(e) => setPaymentForm((p) => ({ ...p, date: e.target.value }))}
+                      onChange={(e) => { setPaymentForm((p) => ({ ...p, date: e.target.value })); setPaymentDateError(undefined); }}
                       min={invoice.date.slice(0, 10)}
                       max={new Date().toISOString().slice(0, 10)}
                       sz="sm"
@@ -972,8 +1007,8 @@ export default function InvoiceDetailPage() {
                 {/* Meta row (pinned, outside the scrollable body) */}
                 <div className={styles.returnModalMetaRow}>
                   <div>
-                    <FormField label="Return Date">
-                      <Input type="date" sz="sm" value={returnDate} onChange={e => setReturnDate(e.target.value)} min={invoice?.date.slice(0, 10)} max={new Date().toISOString().slice(0, 10)} className={styles.returnDateInput} />
+                    <FormField label="Return Date" error={returnDateError}>
+                      <Input type="date" sz="sm" value={returnDate} onChange={e => { setReturnDate(e.target.value); setReturnDateError(undefined); }} min={invoice?.date.slice(0, 10)} max={new Date().toISOString().slice(0, 10)} className={styles.returnDateInput} />
                     </FormField>
                   </div>
                   <div className={styles.returnNotesField}>
@@ -985,7 +1020,7 @@ export default function InvoiceDetailPage() {
                 {/* Modal body (scrollable) */}
                 <div className={styles.returnModalBody}>
                   <div className={styles.returnItemsSection}>
-                    <div className={styles.returnItemsLabel}>Select Items to Return</div>
+                    <FormField label="Select Items to Return" error={returnItemsError}>
                     <div className={styles.returnItemsList}>
                       {returnItems.map((ri, idx) => (
                         <div key={idx} className={`${styles.returnItemRow} ${ri.selected ? styles.returnItemRowSelected : ""}`}>
@@ -996,6 +1031,7 @@ export default function InvoiceDetailPage() {
                             onChange={e => {
                               const checked = e.target.checked;
                               setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, selected: checked } : r));
+                              setReturnItemsError(undefined);
                               if (checked) setTimeout(() => returnQtyRefs.current[idx]?.focus(), 0);
                             }}
                             className={styles.returnItemCheckbox}
@@ -1014,6 +1050,7 @@ export default function InvoiceDetailPage() {
                             }}
                             onChange={e => {
                               const raw = e.target.value.replace(/\D/g, "");
+                              setReturnItemsError(undefined);
                               if (raw === "") { setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: "" } : r)); return; }
                               const clamped = String(Math.min(ri.maxQty, parseInt(raw, 10)));
                               if (clamped === ri.qtyText) { e.target.value = clamped; return; }
@@ -1032,6 +1069,7 @@ export default function InvoiceDetailPage() {
                         <p className={styles.returnItemsEmpty}>All items from this invoice have already been returned.</p>
                       )}
                     </div>
+                    </FormField>
                   </div>
                 </div>
                 {/* Modal footer (pinned, outside the scrollable body) */}
@@ -1152,7 +1190,7 @@ export default function InvoiceDetailPage() {
                 <tr>
                   <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Due Date</td>
                   <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)" }}>
-                    {invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                    {invoice.dueDate ? formatDate(invoice.dueDate) : "—"}
                   </td>
                   <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Place of Supply</td>
                   <td colSpan={5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)" }}>
@@ -1309,7 +1347,7 @@ export default function InvoiceDetailPage() {
                         <div>Total</div><div>Value (₹)</div>
                       </td>
                       {[
-                        ["Discount", "center", "5%"], ["Taxable (₹)", "right", "7%"],
+                        ["Discount %", "center", "5%"], ["Taxable (₹)", "right", "7%"],
                       ].map(([label, align, width]) => (
                         <td key={label} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align as "left" | "right" | "center", width, whiteSpace: "nowrap", verticalAlign: "middle" }}>{label}</td>
                       ))}
@@ -1347,7 +1385,7 @@ export default function InvoiceDetailPage() {
                       {c(item.quantity)}{c(item.unit)}
                       {c(fmt(item.price), "center", false, undefined, true)}
                       {c(fmt(grossValue), "center", false, undefined, true)}
-                      {c(discountAmount > 0 ? `₹${fmt(discountAmount)}` : "—", "center", false, undefined, true)}
+                      {c(`${(item.discountPercent ?? 0).toFixed(2)}%`, "center", false, undefined, true)}
                       {c(fmt(taxable), "right")}
                       {invoice.isInterState
                         ? <>{c(`${item.gstRate}%`, "center", false, "4.5%", true)}{c(fmt(item.gstAmount), "right", false, undefined, true)}</>
@@ -1659,8 +1697,8 @@ export default function InvoiceDetailPage() {
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
                       <div>
                         <div><strong>Credit Note No.:</strong> {creditNoteToRender.creditNoteNumber ?? "—"}</div>
-                        <div><strong>Date:</strong> {parseDate(creditNoteToRender.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
-                        <div><strong>Against Invoice:</strong> {invoice.invoiceNumber} ({parseDate(invoice.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })})</div>
+                        <div><strong>Date:</strong> {formatDate(parseDate(creditNoteToRender.date))}</div>
+                        <div><strong>Against Invoice:</strong> {invoice.invoiceNumber} ({formatDate(parseDate(invoice.date))})</div>
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div><strong>Customer:</strong> {invoice.customer.name}</div>

@@ -7,6 +7,14 @@
 }
 .warningItem { color: var(--c-amber-text); }
 
+/* Inline payment-date validation message (replaces a toast). */
+.paymentDateErrorMsg {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--c-red-text, #dc2626);
+  margin: 0.5rem 0 0;
+}
+
 /* ── Payment section (trigger / summary for the popup dialog) ─ */
 .paymentSection {
   border-top: 1px solid var(--c-border);

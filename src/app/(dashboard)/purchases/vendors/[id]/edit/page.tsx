@@ -57,7 +57,7 @@ export default function EditVendorPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const newErrors = validateVendorForm(form, { requirePhone: true, requireAddress: true, requireCity: true, requireState: true, requirePincode: true });
+    const newErrors = validateVendorForm(form, { requirePhone: false, requireAddress: true, requireCity: true, requireState: true, requirePincode: true });
     if (hasErrors(newErrors)) { setErrors(newErrors); return; }
     setErrors({});
     setSaving(true);
@@ -115,7 +115,7 @@ export default function EditVendorPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
-          <VendorFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} phoneRequired addressRequired cityRequired stateRequired pincodeRequired />
+          <VendorFormFields form={form} onChange={handleChange} errors={errors} disabled={disabled} addressRequired cityRequired stateRequired pincodeRequired />
 
           <div className="form-actions-wrap">
             <div className="form-actions">

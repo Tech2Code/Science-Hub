@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getReportSummary, getReportOutstanding, getReportStock } from "@/lib/db";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/apiAuth";
+import { requireSession, requireSectionAccess } from "@/lib/apiAuth";
 import { isLowStock } from "@/lib/stockStatus";
 
 async function getSalesDashboard() {
@@ -140,7 +140,7 @@ async function getPurchaseDashboard() {
       if (d > now) return Promise.resolve({ month: label, total: 0 });
       const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
       return prisma.purchaseBill.aggregate({
-        where: { deletedAt: null, billDate: { gte: d, lt: end } },
+        where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: d, lt: end } },
         _sum: { total: true },
       }).then((agg) => ({ month: label, total: agg._sum.total ?? 0 }));
     })
@@ -161,7 +161,7 @@ async function getPurchaseDashboard() {
   };
 }
 
-async function getCombinedDashboard() {
+async function getCombinedDashboard(canSeeSales: boolean, canSeePurchases: boolean) {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -177,7 +177,7 @@ async function getCombinedDashboard() {
     prisma.invoice.findMany({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] } }, select: { total: true, paidAmount: true } }),
     prisma.invoice.count({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } } }),
     prisma.payment.aggregate({ where: { date: { gte: todayStart, lt: todayEnd } }, _sum: { amount: true } }),
-    prisma.purchaseBill.aggregate({ where: { deletedAt: null, billDate: { gte: monthStart, lt: monthEnd } }, _sum: { total: true } }),
+    prisma.purchaseBill.aggregate({ where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: monthStart, lt: monthEnd } }, _sum: { total: true } }),
     prisma.purchaseBill.findMany({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] } }, select: { total: true, paidAmount: true } }),
     prisma.purchaseBill.count({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } } }),
     prisma.purchasePayment.aggregate({ where: { date: { gte: todayStart, lt: todayEnd } }, _sum: { amount: true } }),
@@ -189,8 +189,14 @@ async function getCombinedDashboard() {
     }),
   ]);
 
+  // Sales/purchase figures are only returned to callers actually granted the
+  // matching section — the dashboard page already hides these widgets from
+  // a staff/manager without sales_overview/purchase_overview, but that was
+  // purely a client-side render decision; the API itself returned the full
+  // numbers to any authenticated user. Redact server-side too, the same way
+  // /api/reports and /api/purchase-reports already gate their own types.
   return {
-    sales: {
+    sales: canSeeSales ? {
       revenueThisMonth: salesMonthAgg._sum.total ?? 0,
       outstandingAmount: salesOutstanding.reduce((s, i) => s + (i.total - i.paidAmount), 0),
       overdueInvoices: salesOverdue,
@@ -199,8 +205,8 @@ async function getCombinedDashboard() {
         id: inv.id, invoiceNumber: inv.invoiceNumber, date: inv.date,
         customerName: inv.customer.name, total: inv.total, paidAmount: inv.paidAmount, status: inv.status,
       })),
-    },
-    purchases: {
+    } : null,
+    purchases: canSeePurchases ? {
       spendThisMonth: spendMonthAgg._sum.total ?? 0,
       payableBalance: purchaseUnpaid.reduce((s, b) => s + (b.total - b.paidAmount), 0),
       overdueBills: purchaseOverdue,
@@ -209,7 +215,7 @@ async function getCombinedDashboard() {
         id: b.id, billNumber: b.billNumber, billDate: b.billDate,
         vendorName: b.vendor.name, total: b.total, paidAmount: b.paidAmount, status: b.status,
       })),
-    },
+    } : null,
     lowStockCount,
   };
 }
@@ -258,12 +264,36 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid endDate" }, { status: 400 });
     }
 
+    // These types back the dedicated Sales/Purchase Reports and Overview
+    // pages, each already gated client-side by the matching ProtectedSection
+    // (see ROUTE_SECTION_MAP) — enforce the same gate server-side so a
+    // staff/manager user without the section granted can't bypass the UI
+    // redirect by calling the API directly.
+    if (type === "summary" || type === "outstanding" || type === "gst-summary") {
+      const gate = await requireSectionAccess("reports_sales");
+      if (!gate.ok) return gate.response;
+    }
+    if (type === "sales-dashboard") {
+      const gate = await requireSectionAccess("sales_overview");
+      if (!gate.ok) return gate.response;
+    }
+    if (type === "purchase-dashboard") {
+      const gate = await requireSectionAccess("purchase_overview");
+      if (!gate.ok) return gate.response;
+    }
+
     if (type === "summary")            return NextResponse.json(await getReportSummary());
     if (type === "outstanding")        return NextResponse.json(await getReportOutstanding(startDate, endDate));
     if (type === "stock")              return NextResponse.json(await getReportStock());
     if (type === "sales-dashboard")    return NextResponse.json(await getSalesDashboard());
     if (type === "purchase-dashboard") return NextResponse.json(await getPurchaseDashboard());
-    if (type === "combined-dashboard") return NextResponse.json(await getCombinedDashboard());
+    if (type === "combined-dashboard") {
+      const role = auth.session.user.role;
+      const sections = Array.isArray(auth.session.user.sections) ? auth.session.user.sections : [];
+      const canSeeSales = role === "admin" || sections.includes("sales_overview");
+      const canSeePurchases = role === "admin" || sections.includes("purchase_overview");
+      return NextResponse.json(await getCombinedDashboard(canSeeSales, canSeePurchases));
+    }
     if (type === "gst-summary")        return NextResponse.json(await getGstSummary(startDate, endDate));
 
     return NextResponse.json({ error: `Unknown report type: ${type}` }, { status: 400 });

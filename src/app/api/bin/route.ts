@@ -124,6 +124,21 @@ export async function GET() {
     // Fetch remaining soft-deleted items
     const now = Date.now();
 
+    // A "one-off" customer/vendor (created via an invoice/purchase bill's
+    // "just for this X — don't save" option) is soft-deleted from the moment
+    // it's created and never gets an explicit delete_customer/delete_vendor
+    // log entry — exclude those from the bin listing since the user never
+    // asked to delete them; showing them here would just permanently
+    // clutter the list (they can never be purged while their invoice/bill
+    // exists) and risks an accidental "Restore" click un-deleting a record
+    // the user deliberately chose to keep out of the directory.
+    const [explicitlyDeletedCustomers, explicitlyDeletedVendors] = await Promise.all([
+      prisma.activityLog.findMany({ where: { entityType: "customer", action: "delete_customer" }, select: { entityId: true } }),
+      prisma.activityLog.findMany({ where: { entityType: "vendor", action: "delete_vendor" }, select: { entityId: true } }),
+    ]);
+    const explicitlyDeletedCustomerIds = [...new Set(explicitlyDeletedCustomers.map((l) => l.entityId).filter((id): id is string => !!id))];
+    const explicitlyDeletedVendorIds = [...new Set(explicitlyDeletedVendors.map((l) => l.entityId).filter((id): id is string => !!id))];
+
     const [invoices, customers, products, brands, categories, vendors, purchaseBills, returns] = await Promise.all([
       prisma.invoice.findMany({
         where: { deletedAt: { not: null } },
@@ -131,7 +146,7 @@ export async function GET() {
         orderBy: { deletedAt: "desc" },
       }),
       prisma.customer.findMany({
-        where: { deletedAt: { not: null } },
+        where: { deletedAt: { not: null }, id: { in: explicitlyDeletedCustomerIds } },
         select: { id: true, name: true, phone: true, city: true, deletedAt: true },
         orderBy: { deletedAt: "desc" },
       }),
@@ -151,7 +166,7 @@ export async function GET() {
         orderBy: { deletedAt: "desc" },
       }),
       prisma.vendor.findMany({
-        where: { deletedAt: { not: null } },
+        where: { deletedAt: { not: null }, id: { in: explicitlyDeletedVendorIds } },
         select: { id: true, name: true, company: true, phone: true, deletedAt: true },
         orderBy: { deletedAt: "desc" },
       }),

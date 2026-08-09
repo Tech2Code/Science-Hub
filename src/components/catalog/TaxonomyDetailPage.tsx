@@ -12,6 +12,7 @@ import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { isLowStock } from "@/lib/stockStatus";
+import { formatDate } from "@/lib/formatDate";
 import type { Column } from "@/components/ui/Table";
 import styles from "./TaxonomyDetailPage.module.css";
 
@@ -167,7 +168,7 @@ export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }
                 {!loading && (entity?.createdBy || entity?.createdAt) && (
                   <div className={styles.metaText}>
                     {entity?.createdBy && <>Added by {entity.createdBy}</>}
-                    {entity?.createdAt && <> · {new Date(entity.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</>}
+                    {entity?.createdAt && <> · {formatDate(entity.createdAt)}</>}
                   </div>
                 )}
               </div>
