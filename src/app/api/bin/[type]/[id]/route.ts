@@ -91,11 +91,19 @@ export async function POST(
         revalidateTag("customers", { expire: 0 });
         revalidateTag("reports", { expire: 0 });
         break;
-      case "product":
+      case "product": {
+        const duplicate = await prisma.product.findFirst({
+          where: { name: { equals: name, mode: "insensitive" }, deletedAt: null, NOT: { id } },
+          select: { id: true },
+        });
+        if (duplicate) {
+          return NextResponse.json({ error: `A product named "${name}" already exists — rename or remove it before restoring this one` }, { status: 409 });
+        }
         await prisma.product.update({ where: { id }, data: { deletedAt: null } });
         revalidateTag("products", { expire: 0 });
         revalidateTag("reports", { expire: 0 });
         break;
+      }
       case "brand":
         await prisma.brand.update({ where: { id }, data: { deletedAt: null } });
         revalidateTag("products", { expire: 0 });

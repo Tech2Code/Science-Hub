@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { requireSession, requireAdmin } from "@/lib/apiAuth";
 import { encrypt, safeDecrypt } from "@/lib/crypto";
 import { validateSettingsInput } from "@/lib/validation";
+import { deriveDefaultPrefix, getIndianFinancialYear, formatFinancialYearLabel, NUMBER_FORMATS, numberFormatDbFilter, findMaxSequence, resolveNumberFormat } from "@/lib/documentNumbering";
+import { logActivity } from "@/lib/activity";
 
 export async function GET() {
   try {
@@ -35,6 +37,7 @@ export async function GET() {
 const SIMPLE_STRING_KEYS = ["name", "tagline", "email", "phone", "address", "city", "state", "pincode", "gstin", "termsAndConditions"] as const;
 const BANK_KEYS = ["bankName", "bankAccountName", "bankAccountNumber", "bankIfsc", "bankBranch"] as const;
 const ADDRESS_KEYS = ["address", "city", "state", "pincode"] as const;
+const NUMBERING_KEYS = ["invoiceNumberPrefix", "nextInvoiceNumberOverride", "purchaseBillNumberPrefix", "nextPurchaseBillNumberOverride", "invoiceNumberFormat", "purchaseBillNumberFormat"] as const;
 
 export async function PUT(request: NextRequest) {
   try {
@@ -44,6 +47,8 @@ export async function PUT(request: NextRequest) {
     const {
       name, tagline, email, phone, address, city, state, pincode, gstin, pan, gmailUser, gmailAppPassword,
       bankName, bankAccountName, bankAccountNumber, bankIfsc, bankBranch, termsAndConditions, logoUrl, showLogoOnInvoices, expectedUpdatedAt,
+      invoiceNumberPrefix, nextInvoiceNumberOverride, purchaseBillNumberPrefix, nextPurchaseBillNumberOverride,
+      invoiceNumberFormat, purchaseBillNumberFormat,
     } = body;
     const fieldValues: Record<string, string | undefined> = {
       name, tagline, email, phone, address, city, state, pincode, gstin, termsAndConditions,
@@ -59,12 +64,19 @@ export async function PUT(request: NextRequest) {
     );
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
-    const existing = await prisma.businessSettings.findUnique({ where: { id: "singleton" }, select: { updatedAt: true } });
+    const existing = await prisma.businessSettings.findUnique({
+      where: { id: "singleton" },
+      select: {
+        updatedAt: true, name: true,
+        invoiceNumberPrefix: true, purchaseBillNumberPrefix: true,
+        invoiceNumberFormat: true, purchaseBillNumberFormat: true,
+      },
+    });
     if (existing && expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== existing.updatedAt.getTime()) {
       return NextResponse.json({ error: "Business settings were updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
     }
 
-    const updateData: Record<string, string | boolean> = {};
+    const updateData: Record<string, string | boolean | number | null> = {};
     for (const key of SIMPLE_STRING_KEYS) {
       if (key in body) updateData[key] = fieldValues[key] ?? "";
     }
@@ -85,11 +97,129 @@ export async function PUT(request: NextRequest) {
       updateData.bankAccountNumber = bankAccountNumber ? encrypt(bankAccountNumber) : "";
     }
 
+    // Document numbering (invoice/purchase-bill prefix + one-time "next
+    // number" override) — each field is independently optional, and an
+    // empty/blank value clears back to the auto-derived default rather than
+    // being rejected, mirroring how the rest of this route treats "not set".
+    const isNumberingSectionUpdate = NUMBERING_KEYS.some((k) => k in body);
+    const numberingActivityDetails: string[] = [];
+    if (isNumberingSectionUpdate) {
+      // Must match the same financial-year boundary/label /api/invoices and
+      // /api/purchase-bills use to generate numbers, or this validation
+      // would check the override against the wrong year's highest number.
+      const currentYearLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date()));
+
+      if ("invoiceNumberPrefix" in body) {
+        const raw = String(invoiceNumberPrefix ?? "").trim();
+        if (raw) {
+          if (!/^[A-Z0-9]{2,6}$/i.test(raw)) {
+            return NextResponse.json({ error: "Invoice prefix must be 2-6 letters/numbers (e.g. SH)." }, { status: 400 });
+          }
+          updateData.invoiceNumberPrefix = raw.toUpperCase();
+        } else {
+          updateData.invoiceNumberPrefix = null;
+        }
+        numberingActivityDetails.push(`invoice prefix -> ${updateData.invoiceNumberPrefix ?? "(auto)"}`);
+      }
+
+      if ("purchaseBillNumberPrefix" in body) {
+        const raw = String(purchaseBillNumberPrefix ?? "").trim();
+        if (raw) {
+          if (!/^[A-Z0-9]{2,6}$/i.test(raw)) {
+            return NextResponse.json({ error: "Purchase bill prefix must be 2-6 letters/numbers (e.g. PB)." }, { status: 400 });
+          }
+          updateData.purchaseBillNumberPrefix = raw.toUpperCase();
+        } else {
+          updateData.purchaseBillNumberPrefix = null;
+        }
+        numberingActivityDetails.push(`purchase bill prefix -> ${updateData.purchaseBillNumberPrefix ?? "(auto)"}`);
+      }
+
+      if ("invoiceNumberFormat" in body) {
+        const raw = String(invoiceNumberFormat ?? "").trim();
+        if (raw) {
+          if (!(raw in NUMBER_FORMATS)) {
+            return NextResponse.json({ error: "Unknown invoice number format." }, { status: 400 });
+          }
+          updateData.invoiceNumberFormat = raw;
+        } else {
+          updateData.invoiceNumberFormat = null;
+        }
+        numberingActivityDetails.push(`invoice number format -> ${updateData.invoiceNumberFormat ?? "(default)"}`);
+      }
+
+      if ("purchaseBillNumberFormat" in body) {
+        const raw = String(purchaseBillNumberFormat ?? "").trim();
+        if (raw) {
+          if (!(raw in NUMBER_FORMATS)) {
+            return NextResponse.json({ error: "Unknown purchase bill number format." }, { status: 400 });
+          }
+          updateData.purchaseBillNumberFormat = raw;
+        } else {
+          updateData.purchaseBillNumberFormat = null;
+        }
+        numberingActivityDetails.push(`purchase bill number format -> ${updateData.purchaseBillNumberFormat ?? "(default)"}`);
+      }
+
+      if ("nextInvoiceNumberOverride" in body) {
+        if (nextInvoiceNumberOverride === null || nextInvoiceNumberOverride === "" || nextInvoiceNumberOverride === undefined) {
+          updateData.nextInvoiceNumberOverride = null;
+        } else {
+          const n = parseInt(String(nextInvoiceNumberOverride), 10);
+          if (!Number.isInteger(n) || n <= 0) {
+            return NextResponse.json({ error: "Next invoice number must be a whole number greater than 0." }, { status: 400 });
+          }
+          const effectivePrefix =
+            ("invoiceNumberPrefix" in body ? (updateData.invoiceNumberPrefix as string | null) : existing?.invoiceNumberPrefix)
+            || deriveDefaultPrefix(existing?.name || "Science Hub");
+          const effectiveFormat = "invoiceNumberFormat" in body ? (updateData.invoiceNumberFormat as string | null) : existing?.invoiceNumberFormat;
+          const candidatesThisYear = await prisma.invoice.findMany({
+            where: { invoiceNumber: numberFormatDbFilter(effectiveFormat, effectivePrefix, currentYearLabel) },
+            select: { invoiceNumber: true },
+          });
+          const lastSeq = findMaxSequence(candidatesThisYear.map((c) => c.invoiceNumber), resolveNumberFormat(effectiveFormat).matcher(effectivePrefix, currentYearLabel));
+          if (n <= lastSeq) {
+            return NextResponse.json({ error: `Next invoice number must be greater than the highest existing number this year (${lastSeq}).` }, { status: 400 });
+          }
+          updateData.nextInvoiceNumberOverride = n;
+        }
+        numberingActivityDetails.push(`next invoice # -> ${updateData.nextInvoiceNumberOverride ?? "(cleared)"}`);
+      }
+
+      if ("nextPurchaseBillNumberOverride" in body) {
+        if (nextPurchaseBillNumberOverride === null || nextPurchaseBillNumberOverride === "" || nextPurchaseBillNumberOverride === undefined) {
+          updateData.nextPurchaseBillNumberOverride = null;
+        } else {
+          const n = parseInt(String(nextPurchaseBillNumberOverride), 10);
+          if (!Number.isInteger(n) || n <= 0) {
+            return NextResponse.json({ error: "Next purchase bill number must be a whole number greater than 0." }, { status: 400 });
+          }
+          const effectivePrefix =
+            ("purchaseBillNumberPrefix" in body ? (updateData.purchaseBillNumberPrefix as string | null) : existing?.purchaseBillNumberPrefix)
+            || "PB";
+          const effectiveFormat = "purchaseBillNumberFormat" in body ? (updateData.purchaseBillNumberFormat as string | null) : existing?.purchaseBillNumberFormat;
+          const candidatesThisYear = await prisma.purchaseBill.findMany({
+            where: { billNumber: numberFormatDbFilter(effectiveFormat, effectivePrefix, currentYearLabel) },
+            select: { billNumber: true },
+          });
+          const lastSeq = findMaxSequence(candidatesThisYear.map((c) => c.billNumber), resolveNumberFormat(effectiveFormat).matcher(effectivePrefix, currentYearLabel));
+          if (n <= lastSeq) {
+            return NextResponse.json({ error: `Next purchase bill number must be greater than the highest existing number this year (${lastSeq}).` }, { status: 400 });
+          }
+          updateData.nextPurchaseBillNumberOverride = n;
+        }
+        numberingActivityDetails.push(`next purchase bill # -> ${updateData.nextPurchaseBillNumberOverride ?? "(cleared)"}`);
+      }
+    }
+
     const { gmailAppPassword: storedPassword, bankAccountNumber: storedAccountNumber, ...settings } = await prisma.businessSettings.upsert({
       where: { id: "singleton" },
       create: { id: "singleton", ...updateData },
       update: updateData,
     });
+    if (numberingActivityDetails.length > 0) {
+      await logActivity(auth.session.user.id, "update_numbering_settings", `Updated document numbering: ${numberingActivityDetails.join(", ")}`);
+    }
     const decryptedAccountNumber = storedAccountNumber ? safeDecrypt(storedAccountNumber) : { value: "", failed: false };
     return NextResponse.json({
       ...settings,

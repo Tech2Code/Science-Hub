@@ -16,6 +16,8 @@ import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { patchCache } from "@/lib/useCache";
 import { usePincodeAutofill } from "@/lib/usePincodeLookup";
 import { OverlayLoader } from "@/components/ui/Spinner";
+import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { deriveDefaultPrefix, NUMBER_FORMATS, resolveNumberFormat, type NumberFormatId } from "@/lib/documentNumbering";
 import styles from "./settings.module.css";
 
 interface BusinessSettings {
@@ -27,6 +29,12 @@ interface BusinessSettings {
   termsAndConditions: string;
   logoUrl: string;
   showLogoOnInvoices: boolean;
+  invoiceNumberPrefix: string | null;
+  nextInvoiceNumberOverride: number | null;
+  purchaseBillNumberPrefix: string | null;
+  nextPurchaseBillNumberOverride: number | null;
+  invoiceNumberFormat: string | null;
+  purchaseBillNumberFormat: string | null;
   updatedAt: string;
 }
 
@@ -39,6 +47,12 @@ const EMPTY: BusinessSettings = {
   termsAndConditions: "",
   logoUrl: "",
   showLogoOnInvoices: true,
+  invoiceNumberPrefix: null,
+  nextInvoiceNumberOverride: null,
+  purchaseBillNumberPrefix: null,
+  nextPurchaseBillNumberOverride: null,
+  invoiceNumberFormat: null,
+  purchaseBillNumberFormat: null,
   updatedAt: "",
 };
 
@@ -108,6 +122,17 @@ function SectionHeader({ title, editing, onEdit }: { title: string; editing: boo
 type IdentityForm = Pick<BusinessSettings, "name" | "tagline" | "email" | "phone" | "gstin" | "pan">;
 type AddressForm = Pick<BusinessSettings, "address" | "city" | "state" | "pincode">;
 type BankForm = Pick<BusinessSettings, "bankName" | "bankAccountName" | "bankAccountNumber" | "bankIfsc" | "bankBranch">;
+// Kept as plain strings (not string | null / number | null) since these are
+// bound directly to text inputs — converted to the API's null/number shape
+// only when submitting.
+interface NumberingForm {
+  invoiceNumberPrefix: string;
+  nextInvoiceNumberOverride: string;
+  purchaseBillNumberPrefix: string;
+  nextPurchaseBillNumberOverride: string;
+  invoiceNumberFormat: NumberFormatId;
+  purchaseBillNumberFormat: NumberFormatId;
+}
 
 export default function SettingsPage() {
   const [saved, setSaved] = useState<BusinessSettings>(EMPTY);
@@ -153,6 +178,16 @@ export default function SettingsPage() {
   const [savingTerms, setSavingTerms] = useState(false);
   const [termsError, setTermsError] = useState<string | undefined>(undefined);
 
+  const [editingNumbering, setEditingNumbering] = useState(false);
+  const [numberingForm, setNumberingForm] = useState<NumberingForm>({
+    invoiceNumberPrefix: "", nextInvoiceNumberOverride: "", purchaseBillNumberPrefix: "", nextPurchaseBillNumberOverride: "",
+    invoiceNumberFormat: "seq_fy", purchaseBillNumberFormat: "seq_fy",
+  });
+  const numberingDirty = useDirty(numberingForm);
+  const [savingNumbering, setSavingNumbering] = useState(false);
+  const [numberingErrors, setNumberingErrors] = useState<Partial<Record<keyof NumberingForm, string>>>({});
+  const [numberingConfirmOpen, setNumberingConfirmOpen] = useState(false);
+
   const [logoUploading, setLogoUploading] = useState(false);
   const [savingBranding, setSavingBranding] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -164,7 +199,7 @@ export default function SettingsPage() {
   // OverlayLoader as every other async action in the app (e.g. Admin → create user).
   const brandingBusy = savingBranding || logoUploading;
 
-  function applyLoaded(d: Record<string, string | boolean>) {
+  function applyLoaded(d: Record<string, string | boolean | number | null>) {
     const s: BusinessSettings = {
       name: (d.name as string) ?? "", tagline: (d.tagline as string) ?? "", email: (d.email as string) ?? "",
       phone: (d.phone as string) ?? "", address: (d.address as string) ?? "", city: (d.city as string) ?? "",
@@ -179,6 +214,12 @@ export default function SettingsPage() {
       termsAndConditions: (d.termsAndConditions as string) ?? "",
       logoUrl: (d.logoUrl as string) ?? "",
       showLogoOnInvoices: d.showLogoOnInvoices === undefined ? true : Boolean(d.showLogoOnInvoices),
+      invoiceNumberPrefix: (d.invoiceNumberPrefix as string | null) ?? null,
+      nextInvoiceNumberOverride: (d.nextInvoiceNumberOverride as number | null) ?? null,
+      purchaseBillNumberPrefix: (d.purchaseBillNumberPrefix as string | null) ?? null,
+      nextPurchaseBillNumberOverride: (d.nextPurchaseBillNumberOverride as number | null) ?? null,
+      invoiceNumberFormat: (d.invoiceNumberFormat as string | null) ?? null,
+      purchaseBillNumberFormat: (d.purchaseBillNumberFormat as string | null) ?? null,
       updatedAt: (d.updatedAt as string) ?? "",
     };
     setSaved(s);
@@ -430,6 +471,66 @@ export default function SettingsPage() {
       toast({ type: "error", title: "Save failed", message: result.error ?? "Could not save settings." });
     }
     setSavingTerms(false);
+  }
+
+  // ── Document Numbering ──────────────────────────────────────────────────
+  // Always editable (no one-time lock) — a changed prefix/number only ever
+  // affects the *next* document created, never renumbers existing ones, so
+  // repeat edits are safe. The confirm dialog + activity log (server-side)
+  // exist purely to stop an accidental change, not to gate a legitimate one.
+
+  function handleEditNumbering() {
+    const initial: NumberingForm = {
+      invoiceNumberPrefix: saved.invoiceNumberPrefix ?? "",
+      nextInvoiceNumberOverride: "",
+      purchaseBillNumberPrefix: saved.purchaseBillNumberPrefix ?? "",
+      nextPurchaseBillNumberOverride: "",
+      invoiceNumberFormat: resolveNumberFormat(saved.invoiceNumberFormat).id,
+      purchaseBillNumberFormat: resolveNumberFormat(saved.purchaseBillNumberFormat).id,
+    };
+    setNumberingForm(initial);
+    numberingDirty.markClean(initial);
+    setNumberingErrors({});
+    setEditingNumbering(true);
+  }
+  function handleCancelNumbering() { setEditingNumbering(false); setNumberingErrors({}); }
+
+  function handleSubmitNumbering(e: React.FormEvent) {
+    e.preventDefault();
+    const errors: Partial<Record<keyof NumberingForm, string>> = {
+      invoiceNumberPrefix: validate(numberingForm.invoiceNumberPrefix, rules.docPrefix()) ?? undefined,
+      purchaseBillNumberPrefix: validate(numberingForm.purchaseBillNumberPrefix, rules.docPrefix()) ?? undefined,
+      nextInvoiceNumberOverride: validate(numberingForm.nextInvoiceNumberOverride, rules.positiveInteger()) ?? undefined,
+      nextPurchaseBillNumberOverride: validate(numberingForm.nextPurchaseBillNumberOverride, rules.positiveInteger()) ?? undefined,
+    };
+    setNumberingErrors(errors);
+    if (Object.values(errors).some(Boolean)) return;
+    setNumberingConfirmOpen(true);
+  }
+
+  async function handleConfirmNumbering() {
+    setSavingNumbering(true);
+    const result = await putSettings({
+      invoiceNumberPrefix: numberingForm.invoiceNumberPrefix.trim().toUpperCase() || null,
+      nextInvoiceNumberOverride: numberingForm.nextInvoiceNumberOverride.trim() ? parseInt(numberingForm.nextInvoiceNumberOverride, 10) : null,
+      purchaseBillNumberPrefix: numberingForm.purchaseBillNumberPrefix.trim().toUpperCase() || null,
+      nextPurchaseBillNumberOverride: numberingForm.nextPurchaseBillNumberOverride.trim() ? parseInt(numberingForm.nextPurchaseBillNumberOverride, 10) : null,
+      invoiceNumberFormat: numberingForm.invoiceNumberFormat,
+      purchaseBillNumberFormat: numberingForm.purchaseBillNumberFormat,
+    });
+    if (result.ok) {
+      applyLoaded(result.data);
+      setEditingNumbering(false);
+      setNumberingConfirmOpen(false);
+      toast({ type: "success", title: "Settings saved", message: "Document numbering updated. This only affects the next invoice/purchase bill created." });
+    } else if (result.conflict) {
+      setNumberingConfirmOpen(false);
+      toast({ type: "error", title: "Update conflict", message: result.error ?? "Business settings were changed by someone else. Please reload and try again." });
+    } else {
+      setNumberingConfirmOpen(false);
+      toast({ type: "error", title: "Save failed", message: result.error ?? "Could not save numbering settings." });
+    }
+    setSavingNumbering(false);
   }
 
   // ── Logo ─────────────────────────────────────────────────────────────────
@@ -1001,9 +1102,130 @@ export default function SettingsPage() {
               </form>
             )}
           </div>
+
+          {/* ── Document Numbering ────────────────────────────────────────── */}
+          <div id="numbering" {...animateSection(6, `card ${styles.cardPad}`)}>
+            <SectionHeader title="Document Numbering" editing={editingNumbering} onEdit={handleEditNumbering} />
+            {!editingNumbering ? (
+              <>
+                <p className={styles.stateHint}>
+                  Changing these only affects the <strong>next</strong> invoice/purchase bill created — existing documents keep their numbers.
+                </p>
+                <div className={styles.infoGrid}>
+                  <InfoRow
+                    label="Invoice Number Format"
+                    value={`${resolveNumberFormat(saved.invoiceNumberFormat).label} — e.g. ${resolveNumberFormat(saved.invoiceNumberFormat).example(saved.invoiceNumberPrefix ?? deriveDefaultPrefix(saved.name))}`}
+                  />
+                  <InfoRow
+                    label="Invoice Prefix"
+                    value={saved.invoiceNumberPrefix ?? `${deriveDefaultPrefix(saved.name)} (auto, from business name)`}
+                    mono
+                  />
+                  <InfoRow
+                    label="Next Invoice Number"
+                    value={saved.nextInvoiceNumberOverride ? String(saved.nextInvoiceNumberOverride) : "Continues automatically"}
+                  />
+                  <InfoRow
+                    label="Purchase Bill Number Format"
+                    value={`${resolveNumberFormat(saved.purchaseBillNumberFormat).label} — e.g. ${resolveNumberFormat(saved.purchaseBillNumberFormat).example(saved.purchaseBillNumberPrefix ?? "PB")}`}
+                  />
+                  <InfoRow
+                    label="Purchase Bill Prefix"
+                    value={saved.purchaseBillNumberPrefix ?? "PB (default)"}
+                    mono
+                  />
+                  <InfoRow
+                    label="Next Purchase Bill Number"
+                    value={saved.nextPurchaseBillNumberOverride ? String(saved.nextPurchaseBillNumberOverride) : "Continues automatically"}
+                  />
+                </div>
+              </>
+            ) : (
+              <form onSubmit={handleSubmitNumbering} noValidate>
+                <p className={styles.stateHint}>
+                  Leave a prefix/number field blank to keep the default. A &ldquo;next number&rdquo; only applies once, then clears itself.
+                </p>
+                <div className={styles.formGrid}>
+                  <FormField label="Invoice Number Format" hint={`Preview: ${NUMBER_FORMATS[numberingForm.invoiceNumberFormat].example(numberingForm.invoiceNumberPrefix.trim().toUpperCase() || deriveDefaultPrefix(saved.name))}`}>
+                    <Select
+                      value={numberingForm.invoiceNumberFormat}
+                      onChange={(e) => setNumberingForm((f) => ({ ...f, invoiceNumberFormat: e.target.value as NumberFormatId }))}
+                    >
+                      {Object.values(NUMBER_FORMATS).map((fmt) => <option key={fmt.id} value={fmt.id}>{fmt.label}</option>)}
+                    </Select>
+                  </FormField>
+                  <FormField label="Invoice Prefix" error={numberingErrors.invoiceNumberPrefix} hint={`Default: ${deriveDefaultPrefix(saved.name)}`}>
+                    <Input
+                      value={numberingForm.invoiceNumberPrefix}
+                      onChange={(e) => { setNumberingForm((f) => ({ ...f, invoiceNumberPrefix: e.target.value.toUpperCase() })); setNumberingErrors((p) => ({ ...p, invoiceNumberPrefix: undefined })); }}
+                      placeholder={deriveDefaultPrefix(saved.name)}
+                      maxLength={6}
+                      className={styles.gstinInput}
+                    />
+                  </FormField>
+                  <FormField label="Next Invoice Number (one-time)" error={numberingErrors.nextInvoiceNumberOverride}>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={numberingForm.nextInvoiceNumberOverride}
+                      onChange={(e) => { setNumberingForm((f) => ({ ...f, nextInvoiceNumberOverride: e.target.value })); setNumberingErrors((p) => ({ ...p, nextInvoiceNumberOverride: undefined })); }}
+                      placeholder="e.g. 19"
+                    />
+                  </FormField>
+                  <FormField label="Purchase Bill Number Format" hint={`Preview: ${NUMBER_FORMATS[numberingForm.purchaseBillNumberFormat].example(numberingForm.purchaseBillNumberPrefix.trim().toUpperCase() || "PB")}`}>
+                    <Select
+                      value={numberingForm.purchaseBillNumberFormat}
+                      onChange={(e) => setNumberingForm((f) => ({ ...f, purchaseBillNumberFormat: e.target.value as NumberFormatId }))}
+                    >
+                      {Object.values(NUMBER_FORMATS).map((fmt) => <option key={fmt.id} value={fmt.id}>{fmt.label}</option>)}
+                    </Select>
+                  </FormField>
+                  <FormField label="Purchase Bill Prefix" error={numberingErrors.purchaseBillNumberPrefix} hint="Default: PB">
+                    <Input
+                      value={numberingForm.purchaseBillNumberPrefix}
+                      onChange={(e) => { setNumberingForm((f) => ({ ...f, purchaseBillNumberPrefix: e.target.value.toUpperCase() })); setNumberingErrors((p) => ({ ...p, purchaseBillNumberPrefix: undefined })); }}
+                      placeholder="PB"
+                      maxLength={6}
+                      className={styles.gstinInput}
+                    />
+                  </FormField>
+                  <FormField label="Next Purchase Bill Number (one-time)" error={numberingErrors.nextPurchaseBillNumberOverride}>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={numberingForm.nextPurchaseBillNumberOverride}
+                      onChange={(e) => { setNumberingForm((f) => ({ ...f, nextPurchaseBillNumberOverride: e.target.value })); setNumberingErrors((p) => ({ ...p, nextPurchaseBillNumberOverride: undefined })); }}
+                      placeholder="e.g. 19"
+                    />
+                  </FormField>
+                </div>
+                <div className={styles.formActionsRow}>
+                  <Button type="button" variant="secondary" disabled={savingNumbering} onClick={handleCancelNumbering}>Cancel</Button>
+                  <Button type="submit" variant="primary" disabled={savingNumbering || !numberingDirty.isDirty}>{savingNumbering ? "Saving…" : "Save Changes"}</Button>
+                </div>
+              </form>
+            )}
+          </div>
         </>
       )}
       {brandingBusy && <OverlayLoader text={logoUploading ? "Updating logo…" : "Updating invoice logo setting…"} />}
+      <ConfirmDialog
+        open={numberingConfirmOpen}
+        title="Update document numbering?"
+        message="This changes numbering for the next invoice/purchase bill created. Existing documents keep their current numbers."
+        detail={
+          <ul className={styles.termsPreviewList}>
+            <li>Invoice format: <strong>{NUMBER_FORMATS[numberingForm.invoiceNumberFormat].example(numberingForm.invoiceNumberPrefix.trim().toUpperCase() || deriveDefaultPrefix(saved.name))}</strong></li>
+            {numberingForm.nextInvoiceNumberOverride.trim() && <li>Next invoice number: <strong>{numberingForm.nextInvoiceNumberOverride}</strong></li>}
+            <li>Purchase bill format: <strong>{NUMBER_FORMATS[numberingForm.purchaseBillNumberFormat].example(numberingForm.purchaseBillNumberPrefix.trim().toUpperCase() || "PB")}</strong></li>
+            {numberingForm.nextPurchaseBillNumberOverride.trim() && <li>Next purchase bill number: <strong>{numberingForm.nextPurchaseBillNumberOverride}</strong></li>}
+          </ul>
+        }
+        confirmLabel={savingNumbering ? "Saving…" : "Confirm"}
+        loading={savingNumbering}
+        onConfirm={handleConfirmNumbering}
+        onCancel={() => setNumberingConfirmOpen(false)}
+      />
     </div>
   );
 }

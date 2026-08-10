@@ -258,6 +258,21 @@ model BusinessSettings {
   bankBranch      String   @default("")
   termsAndConditions String @default("Interest @ 24%p.a would be charged after 45 days of Invoice\nMaterial sold strictly for lab use only\nWe are not responsible for any loss in transit.\nSubject to 'Delhi' Jurisdiction only.")
   showLogoOnInvoices Boolean @default(true)
+  // Null = not customized yet. Invoice prefix falls back to initials derived
+  // from `name` (see deriveDefaultPrefix in src/lib/documentNumbering.ts);
+  // purchase bill prefix falls back to the fixed "PB" the app always used.
+  // The "next" override is one-time-use: consumed and cleared back to null
+  // the moment a create picks it up, so admins can raise the counter as
+  // often as they like without it silently re-applying on a later invoice.
+  invoiceNumberPrefix            String?
+  nextInvoiceNumberOverride      Int?
+  purchaseBillNumberPrefix       String?
+  nextPurchaseBillNumberOverride Int?
+  // Which layout the number is rendered in — see NumberFormatId /
+  // NUMBER_FORMATS in src/lib/documentNumbering.ts. Null = the app's
+  // original "PREFIX-FY-0001" layout.
+  invoiceNumberFormat            String?
+  purchaseBillNumberFormat       String?
   updatedAt       DateTime @updatedAt
 }
 

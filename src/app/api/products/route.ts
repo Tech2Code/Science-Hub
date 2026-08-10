@@ -62,6 +62,14 @@ export async function POST(request: NextRequest) {
     const trimmedSku = typeof sku === "string" ? sku.trim() || null : null;
     const trimmedHsn = typeof hsn === "string" ? hsn.trim() || null : null;
 
+    const duplicate = await prisma.product.findFirst({
+      where: { name: { equals: trimmedName, mode: "insensitive" }, deletedAt: null },
+      select: { id: true },
+    });
+    if (duplicate) {
+      return NextResponse.json({ error: `A product named "${trimmedName}" already exists` }, { status: 409 });
+    }
+
     const product = await prisma.product.create({
       data: {
         name: trimmedName, description, sku: trimmedSku, hsn: trimmedHsn, unit,

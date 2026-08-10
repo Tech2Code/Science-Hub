@@ -55,6 +55,12 @@ export const rules = {
 
   passwordMatch: (other: string, msg = "Passwords do not match."): Validator =>
     (v) => v === other ? null : msg,
+
+  docPrefix: (msg = "Prefix must be 2-6 letters/numbers (e.g. SH)."): Validator =>
+    (v) => !v.trim() || /^[A-Z0-9]{2,6}$/i.test(v.trim()) ? null : msg,
+
+  positiveInteger: (msg = "Enter a whole number greater than 0."): Validator =>
+    (v) => !v.trim() || (/^\d+$/.test(v.trim()) && parseInt(v.trim(), 10) > 0) ? null : msg,
 };
 
 // Run a list of validators in order, return the first error or null.

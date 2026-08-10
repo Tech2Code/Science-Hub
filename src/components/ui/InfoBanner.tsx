@@ -1,0 +1,28 @@
+"use client";
+
+import Link from "next/link";
+import styles from "./InfoBanner.module.css";
+
+interface Props {
+  message: React.ReactNode;
+  actionHref?: string;
+  actionLabel?: string;
+  onDismiss: () => void;
+}
+
+export function InfoBanner({ message, actionHref, actionLabel, onDismiss }: Props) {
+  return (
+    <div className={styles.banner} role="status">
+      <span className={styles.icon} aria-hidden="true">ℹ️</span>
+      <p className={styles.message}>{message}</p>
+      <div className={styles.actions}>
+        {actionHref && actionLabel && (
+          <Link href={actionHref} className={styles.actionLink}>{actionLabel}</Link>
+        )}
+        <button type="button" className={styles.dismissBtn} onClick={onDismiss} aria-label="Dismiss">
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}

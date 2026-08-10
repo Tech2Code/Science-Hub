@@ -15,7 +15,14 @@ import {
   toNum, fmtCurrency, computePurchaseBillTotals, calcPurchaseBillItem,
   type PurchaseBillLineItem, type PurchaseBillProduct, type PurchaseBillVendor,
 } from "@/lib/purchaseBillForm";
+import { InfoBanner } from "@/components/ui/InfoBanner";
+import { getIndianFinancialYear, formatFinancialYearLabel, resolveNumberFormat } from "@/lib/documentNumbering";
 import styles from "./billNew.module.css";
+
+// Shown once, only before this business's very first purchase bill, if
+// numbering hasn't been customized yet in Settings — mirrors the invoice
+// page's nudge (see FIRST_INVOICE_NUDGE_DISMISSED_KEY there).
+const FIRST_BILL_NUDGE_DISMISSED_KEY = "sciencehub_first_purchase_bill_nudge_dismissed";
 
 export default function NewPurchaseBillPage() {
   const router = useRouter();
@@ -49,6 +56,9 @@ export default function NewPurchaseBillPage() {
   const [attachmentUploading, setAttachmentUploading] = useState(false);
 
   // Optional: record payment immediately, via a popup dialog
+  const [showFirstBillNudge, setShowFirstBillNudge] = useState(false);
+  const [firstBillPreviewNumber, setFirstBillPreviewNumber] = useState("");
+
   const [addPayment,   setAddPayment]   = useState(false);
   const [payAmount,    setPayAmount]    = useState("");
   const [payMethod,    setPayMethod]    = useState("Cash");
@@ -76,7 +86,23 @@ export default function NewPurchaseBillPage() {
   useEffect(() => {
     fetch("/api/vendors?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then((res: { data: PurchaseBillVendor[] }) => setVendors(res.data ?? [])).catch(() => {});
     fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then((res: { data: PurchaseBillProduct[] }) => setProducts(res.data ?? [])).catch(() => {});
+    fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((s) => {
+      const numberingUntouched = !s?.purchaseBillNumberPrefix && !s?.nextPurchaseBillNumberOverride && !s?.purchaseBillNumberFormat;
+      if (!numberingUntouched || localStorage.getItem(FIRST_BILL_NUDGE_DISMISSED_KEY)) return;
+      const prefix = s?.purchaseBillNumberPrefix || "PB";
+      const fyLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date()));
+      setFirstBillPreviewNumber(resolveNumberFormat(s?.purchaseBillNumberFormat).render(prefix, fyLabel, 1));
+      fetch("/api/purchase-bills?page=1&pageSize=1", { headers: { "x-no-loader": "1" } })
+        .then((r) => r.json())
+        .then((res: { total?: number }) => { if ((res.total ?? 0) === 0) setShowFirstBillNudge(true); })
+        .catch(() => {});
+    }).catch(() => {});
   }, []);
+
+  function dismissFirstBillNudge() {
+    localStorage.setItem(FIRST_BILL_NUDGE_DISMISSED_KEY, "1");
+    setShowFirstBillNudge(false);
+  }
 
   // The itemsError message auto-hides once the items array it was raised
   // against has since changed (add/remove/edit a line) — see itemsErrorFor.
@@ -224,6 +250,14 @@ export default function NewPurchaseBillPage() {
         <h1 className="page-title">Create Purchase Bill</h1>
         <p className="page-sub">Record a GST-compliant purchase bill</p>
       </div>
+      {showFirstBillNudge && (
+        <InfoBanner
+          message={`This is your first purchase bill — it will be numbered "${firstBillPreviewNumber}" by default. Want a different prefix or starting number?`}
+          actionHref="/settings#numbering"
+          actionLabel="Customize in Settings →"
+          onDismiss={dismissFirstBillNudge}
+        />
+      )}
 
       <form onSubmit={handleSubmit} noValidate>
         <PurchaseBillFormBody

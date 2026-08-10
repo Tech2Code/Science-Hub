@@ -11,6 +11,7 @@ import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { purchaseBillLineBreakdown } from "@/lib/purchaseBillForm";
 import { getBusinessSettings } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
+import { computeNextNumber, numberFormatDbFilter, getIndianFinancialYear, formatFinancialYearLabel } from "@/lib/documentNumbering";
 import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
 import { buildBillWhere, buildBillOrderBy, type PurchaseBillSort } from "@/lib/purchaseBillQuery";
 
@@ -165,20 +166,34 @@ export async function POST(req: NextRequest) {
     if (billTotal < 0) return NextResponse.json({ error: "Discount cannot exceed the bill total" }, { status: 400 });
     const paidAmount = Math.min(payAmt, billTotal);
     const status = paidAmount >= billTotal && billTotal > 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
-    const year = new Date(billDate ?? Date.now()).getFullYear();
+    // Financial year (Apr-Mar) of the bill's own date, not calendar year —
+    // see getIndianFinancialYear. Uses billDate (not "now") since a bill can
+    // be entered late, dated for an earlier period. Rendered as a "2026-27"
+    // label (not a bare year) so the printed number shows which FY it's in.
+    const yearLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date(billDate ?? Date.now())));
 
-    // Bill-number generation and the create both run inside one Serializable
-    // transaction, with a retry on the write-conflict Postgres reports when
-    // two requests race for the same number.
+    // Bill-number generation (highest-existing-number-for-year + 1, or the
+    // admin's one-time "next number" override from Settings if it's higher)
+    // and the create both run inside one Serializable transaction, with a
+    // retry on the write-conflict Postgres reports when two requests race
+    // for the same number.
+    const billPrefix = biz.purchaseBillNumberPrefix || "PB";
     async function attemptCreate() {
       return prisma.$transaction(async (tx) => {
-        const prefix = `PB-${year}-`;
-        const last = await tx.purchaseBill.findFirst({
-          where: { billNumber: { startsWith: prefix } },
-          orderBy: { billNumber: "desc" },
+        const candidatesThisYear = await tx.purchaseBill.findMany({
+          where: { billNumber: numberFormatDbFilter(biz.purchaseBillNumberFormat, billPrefix, yearLabel) },
+          select: { billNumber: true },
         });
-        const seq = last ? parseInt(last.billNumber.split("-")[2] ?? "0") + 1 : 1;
-        const billNumber = `${prefix}${String(seq).padStart(4, "0")}`;
+        const { documentNumber: billNumber, overrideUsed } = computeNextNumber(
+          candidatesThisYear.map((c) => c.billNumber),
+          biz.purchaseBillNumberFormat,
+          billPrefix,
+          yearLabel,
+          biz.nextPurchaseBillNumberOverride
+        );
+        if (overrideUsed) {
+          await tx.businessSettings.update({ where: { id: "singleton" }, data: { nextPurchaseBillNumberOverride: null } });
+        }
 
         const created = await tx.purchaseBill.create({
           data: {

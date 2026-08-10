@@ -22,6 +22,13 @@ import { useToast } from "@/components/ui/Toast";
 import { rules, validate, validateForm, hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { useDirty } from "@/lib/useDirty";
+import { InfoBanner } from "@/components/ui/InfoBanner";
+import { deriveDefaultPrefix, getIndianFinancialYear, formatFinancialYearLabel, resolveNumberFormat } from "@/lib/documentNumbering";
+
+// Shown once, only before this business's very first invoice, if numbering
+// hasn't been customized yet in Settings — see handling in the mount effect
+// below. Dismissing (or simply creating the invoice) hides it for good.
+const FIRST_INVOICE_NUDGE_DISMISSED_KEY = "sciencehub_first_invoice_nudge_dismissed";
 
 interface Customer {
   id: string; name: string; city: string; state: string; gstin: string;
@@ -61,6 +68,8 @@ export default function NewInvoicePage() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showStockDialog, setShowStockDialog] = useState(false);
   const [stockOutItems, setStockOutItems] = useState<{ name: string; available: number; requested: number }[]>([]);
+  const [showFirstInvoiceNudge, setShowFirstInvoiceNudge] = useState(false);
+  const [firstInvoicePreviewNumber, setFirstInvoicePreviewNumber] = useState("");
 
   useEffect(() => {
     fetch("/api/customers?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { data: Customer[] }) => {
@@ -76,9 +85,25 @@ export default function NewInvoicePage() {
       }
     }).catch(() => {});
     fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { data: Product[] }) => setProducts(res.data ?? [])).catch(() => {});
-    fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((s) => setBusinessState(s?.state ?? "")).catch(() => {});
+    fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((s) => {
+      setBusinessState(s?.state ?? "");
+      const numberingUntouched = !s?.invoiceNumberPrefix && !s?.nextInvoiceNumberOverride && !s?.invoiceNumberFormat;
+      if (!numberingUntouched || localStorage.getItem(FIRST_INVOICE_NUDGE_DISMISSED_KEY)) return;
+      const prefix = deriveDefaultPrefix(s?.name || "Science Hub");
+      const fyLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date()));
+      setFirstInvoicePreviewNumber(resolveNumberFormat(s?.invoiceNumberFormat).render(prefix, fyLabel, 1));
+      fetch("/api/invoices?page=1&pageSize=1", { headers: { "x-no-loader": "1" } })
+        .then((r) => r.json())
+        .then((res: { total?: number }) => { if ((res.total ?? 0) === 0) setShowFirstInvoiceNudge(true); })
+        .catch(() => {});
+    }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount prefill from the initial URL, not meant to re-run on searchParams changes
   }, []);
+
+  function dismissFirstInvoiceNudge() {
+    localStorage.setItem(FIRST_INVOICE_NUDGE_DISMISSED_KEY, "1");
+    setShowFirstInvoiceNudge(false);
+  }
 
   const filteredCustomers = customers.filter((c) => c.name.toLowerCase().includes(customerSearch.toLowerCase()));
   const selectedCustomer = customers.find((c) => c.id === customerId);
@@ -308,6 +333,14 @@ export default function NewInvoicePage() {
         <h1 className="page-title">Create Invoice</h1>
         <p className="page-sub">Generate a GST-compliant invoice</p>
       </div>
+      {showFirstInvoiceNudge && (
+        <InfoBanner
+          message={`This is your first invoice — it will be numbered "${firstInvoicePreviewNumber}" by default. Want a different prefix or starting number?`}
+          actionHref="/settings#numbering"
+          actionLabel="Customize in Settings →"
+          onDismiss={dismissFirstInvoiceNudge}
+        />
+      )}
       <ConfirmDialog
         open={showCancelConfirm}
         title="Discard this invoice?"

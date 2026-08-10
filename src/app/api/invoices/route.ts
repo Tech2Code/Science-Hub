@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getInvoices, getBusinessSettings, type InvoiceSort } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
+import { deriveDefaultPrefix, computeNextNumber, numberFormatDbFilter, getIndianFinancialYear, formatFinancialYearLabel } from "@/lib/documentNumbering";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
@@ -118,7 +119,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Selected customer was not found." }, { status: 400 });
     }
 
-    const currentYear = new Date().getFullYear();
+    // Financial year (Apr-Mar), not calendar year — see getIndianFinancialYear.
+    // Invoice.date always defaults to "now" at creation (not client-set), so
+    // "now" is the correct date to derive this invoice's FY from. Rendered
+    // as a "2026-27" label (not a bare year) so the printed number itself
+    // shows which FY it belongs to.
+    const currentYearLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date()));
 
     // Fetch product details for each item (custom/unlinked items have no productId)
     const productIds = items.map((item: { productId?: string }) => item.productId).filter(Boolean);
@@ -182,23 +188,29 @@ export async function POST(request: NextRequest) {
 
     const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + cgst + sgst + igst);
 
-    // Invoice-number generation (highest-existing-number-for-year + 1) and the
-    // create both run inside one Serializable transaction, with a retry on the
-    // write-conflict Postgres reports when two requests race for the same
-    // number — without this, concurrent requests would hand out duplicate
-    // invoice numbers instead of one of them safely retrying.
+    // Invoice-number generation (highest-existing-number-for-year + 1, or the
+    // admin's one-time "next number" override from Settings if it's higher)
+    // and the create both run inside one Serializable transaction, with a
+    // retry on the write-conflict Postgres reports when two requests race
+    // for the same number — without this, concurrent requests would hand
+    // out duplicate invoice numbers instead of one of them safely retrying.
+    const invoicePrefix = biz.invoiceNumberPrefix || deriveDefaultPrefix(biz.name);
     async function attemptCreate() {
       return prisma.$transaction(async (tx) => {
-        const lastInvoiceThisYear = await tx.invoice.findFirst({
-          where: { invoiceNumber: { startsWith: `SH-${currentYear}-` } },
-          orderBy: { invoiceNumber: "desc" },
+        const candidatesThisYear = await tx.invoice.findMany({
+          where: { invoiceNumber: numberFormatDbFilter(biz.invoiceNumberFormat, invoicePrefix, currentYearLabel) },
           select: { invoiceNumber: true },
         });
-        const lastSequentialNumber = lastInvoiceThisYear
-          ? parseInt(lastInvoiceThisYear.invoiceNumber.split("-")[2], 10)
-          : 0;
-        const sequentialNumber = String(lastSequentialNumber + 1).padStart(4, "0");
-        const invoiceNumber = `SH-${currentYear}-${sequentialNumber}`;
+        const { documentNumber: invoiceNumber, overrideUsed } = computeNextNumber(
+          candidatesThisYear.map((c) => c.invoiceNumber),
+          biz.invoiceNumberFormat,
+          invoicePrefix,
+          currentYearLabel,
+          biz.nextInvoiceNumberOverride
+        );
+        if (overrideUsed) {
+          await tx.businessSettings.update({ where: { id: "singleton" }, data: { nextInvoiceNumberOverride: null } });
+        }
 
         const inv = await tx.invoice.create({
           data: {

@@ -1197,7 +1197,7 @@ export default function InvoiceDetailPage() {
                   <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", fontWeight: 700, color: "var(--inv-tx)" }}>{invoice.invoiceNumber}</td>
                   <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Invoice Date</td>
                   <td colSpan={5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)" }}>
-                    {new Date(invoice.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
+                    {formatDate(invoice.date)}
                   </td>
                 </tr>
                 <tr>

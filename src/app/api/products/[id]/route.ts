@@ -71,7 +71,15 @@ export async function PUT(
     if (name !== undefined) {
       const coreErr = validateProductInput({ name });
       if (coreErr) return NextResponse.json({ error: coreErr }, { status: 400 });
-      data.name = (name as string).trim();
+      const trimmedName = (name as string).trim();
+      const duplicate = await prisma.product.findFirst({
+        where: { name: { equals: trimmedName, mode: "insensitive" }, deletedAt: null, NOT: { id } },
+        select: { id: true },
+      });
+      if (duplicate) {
+        return NextResponse.json({ error: `A product named "${trimmedName}" already exists` }, { status: 409 });
+      }
+      data.name = trimmedName;
     }
     if (description !== undefined) data.description = description;
     if (sku !== undefined) data.sku = typeof sku === "string" ? sku.trim() || null : null;
