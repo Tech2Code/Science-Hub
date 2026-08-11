@@ -36,6 +36,11 @@ export default function EditRateListPage() {
   const [itemsErrorFor, setItemsErrorFor] = useState<RateListLineItem[] | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Track initial state for dirty detection
+  const [initialTitle, setInitialTitle] = useState("");
+  const [initialNote, setInitialNote] = useState("");
+  const [initialItems, setInitialItems] = useState<RateListLineItem[]>([]);
+
   useEffect(() => {
     fetch(`/api/rate-lists/${id}`)
       .then((r) => r.json())
@@ -44,7 +49,7 @@ export default function EditRateListPage() {
         if (d.deletedAt) { setLoadError("This rate list is in the bin — restore it before editing."); setLoading(false); return; }
         setTitle(d.title);
         setNote(d.note ?? "");
-        setItems(d.items.map((i) => ({
+        const loadedItems = d.items.map((i) => ({
           key: makeRateListLineItemKey(),
           name: i.name,
           brand: i.brand ?? "",
@@ -52,13 +57,31 @@ export default function EditRateListPage() {
           isNetRate: i.isNetRate,
           discountPercent: String(i.discountPercent),
           listRate: String(i.listRate),
-        })));
+        }));
+        setItems(loadedItems);
+        setInitialTitle(d.title);
+        setInitialNote(d.note ?? "");
+        setInitialItems(loadedItems);
         setLoading(false);
       })
       .catch(() => { setLoadError("Failed to load rate list."); setLoading(false); });
   }, [id]);
 
   const visibleItemsError = itemsError && itemsErrorFor === items ? itemsError : undefined;
+
+  // Dirty detection: compare current state against loaded values
+  const isDirty = (() => {
+    if (title.trim() !== initialTitle.trim()) return true;
+    if ((note.trim() || "") !== (initialNote.trim() || "")) return true;
+    const currentNonEmpty = items.filter((i) => i.name.trim() || toNum(i.listRate) > 0);
+    const initialNonEmpty = initialItems.filter((i) => i.name.trim() || toNum(i.listRate) > 0);
+    if (currentNonEmpty.length !== initialNonEmpty.length) return true;
+    for (let i = 0; i < currentNonEmpty.length; i++) {
+      const a = currentNonEmpty[i], b = initialNonEmpty[i];
+      if (a.name.trim() !== b.name.trim() || a.brand.trim() !== b.brand.trim() || a.unit !== b.unit || a.isNetRate !== b.isNetRate || a.discountPercent !== b.discountPercent || a.listRate !== b.listRate) return true;
+    }
+    return false;
+  })();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -110,7 +133,7 @@ export default function EditRateListPage() {
     setSaving(false);
   }
 
-  const canSubmit = !saving && !!title.trim() && items.some((i) => i.name.trim());
+  const canSubmit = !saving && !!title.trim() && items.some((i) => i.name.trim()) && isDirty;
 
   if (loading) {
     return (

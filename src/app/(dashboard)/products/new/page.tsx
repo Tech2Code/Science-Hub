@@ -88,7 +88,7 @@ export default function NewProductPage() {
         <p className="page-sub">Add a product or item to your catalog</p>
       </div>
       <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
-        <ProductFormFields form={form} onChange={handleChange} fieldErrors={fieldErrors} brands={brands} categories={categories} />
+        <ProductFormFields form={form} onChange={handleChange} onUnitChange={(v) => { setForm((prev) => ({ ...prev, unit: v })); setFieldErrors((prev) => ({ ...prev, unit: undefined })); }} fieldErrors={fieldErrors} brands={brands} categories={categories} />
 
         <div className="form-actions">
           <Button type="submit" variant="primary" disabled={saving || !form.name.trim() || !form.price.trim()}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Save Product</Button>

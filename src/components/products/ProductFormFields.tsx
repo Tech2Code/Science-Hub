@@ -1,6 +1,7 @@
 "use client";
 
 import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
+import { UnitCombo } from "@/components/ui/UnitCombo";
 import { PRODUCT_UNITS, PRODUCT_GST_RATES, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
 
 interface Brand { id: string; name: string; }
@@ -9,6 +10,7 @@ interface Category { id: string; name: string; }
 interface ProductFormFieldsProps {
   form: ProductFormData;
   onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
+  onUnitChange: (value: string) => void;
   fieldErrors: ProductFieldErrors;
   brands: Brand[];
   categories: Category[];
@@ -18,7 +20,7 @@ interface ProductFormFieldsProps {
 
 // Product name/SKU/description/unit/price/GST/stock/brand/category fields —
 // shared by the New Product and Edit Product pages so the two forms can't drift apart.
-export function ProductFormFields({ form, onChange, fieldErrors, brands, categories, disabled, stockLabel = "Opening Stock" }: ProductFormFieldsProps) {
+export function ProductFormFields({ form, onChange, onUnitChange, fieldErrors, brands, categories, disabled, stockLabel = "Opening Stock" }: ProductFormFieldsProps) {
   return (
     <>
       <div className="form-grid-3">
@@ -42,9 +44,12 @@ export function ProductFormFields({ form, onChange, fieldErrors, brands, categor
 
       <div className="form-grid-3">
         <FormField label="Unit" required error={fieldErrors.unit}>
-          <Select name="unit" value={form.unit} onChange={onChange} disabled={disabled}>
-            {PRODUCT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-          </Select>
+          <UnitCombo
+            value={form.unit}
+            onChange={onUnitChange}
+            suggestions={PRODUCT_UNITS}
+            placeholder="e.g. Nos, Kg, Box"
+          />
         </FormField>
         <FormField label="Selling Price (₹)" required error={fieldErrors.price}>
           <Input name="price" type="number" min="0" step="0.01" value={form.price} onChange={onChange} placeholder="0.00" disabled={disabled} />

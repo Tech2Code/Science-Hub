@@ -164,7 +164,7 @@ export default function EditProductPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
-          <ProductFormFields form={form} onChange={handleChange} fieldErrors={fieldErrors} brands={brands} categories={categories} disabled={disabled} stockLabel="Current Stock" />
+          <ProductFormFields form={form} onChange={handleChange} onUnitChange={(v) => { setForm((prev) => ({ ...prev, unit: v })); setFieldErrors((prev) => ({ ...prev, unit: undefined })); }} fieldErrors={fieldErrors} brands={brands} categories={categories} disabled={disabled} stockLabel="Current Stock" />
 
           <div className="form-actions-wrap">
             <div className="form-actions">

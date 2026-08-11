@@ -66,7 +66,7 @@ export function RateListPrintArea({ rateList, settings }: RateListPrintAreaProps
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
           <thead>
             <tr style={{ background: "var(--rp-bg3)" }}>
-              {["S.No.", "Item", "Brand", "Unit", "Discount", "List Rate (₹)", "Amount (₹)"].map((h, i) => (
+              {["S.No.", "Item", "Brand", "Unit", "List Rate (₹)", "Discount", "Amount (₹)"].map((h, i) => (
                 <th key={h} style={{ border: `1px solid var(--rp-bd)`, padding: "6px 4px", textAlign: i >= 4 ? "right" : "left" }}>{h}</th>
               ))}
             </tr>
@@ -83,8 +83,8 @@ export function RateListPrintArea({ rateList, settings }: RateListPrintAreaProps
                   {td(item.name)}
                   {td(item.brand || "—")}
                   {td(item.unit)}
-                  {td(item.isNetRate ? "Net Rate" : `${item.discountPercent}%`, "right")}
                   {td(fmtCurrency(item.listRate), "right")}
+                  {td(item.isNetRate ? "Net Rate" : `${item.discountPercent}%`, "right")}
                   {td(fmtCurrency(item.amount), "right")}
                 </tr>
               );

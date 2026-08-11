@@ -140,14 +140,14 @@ export default function RateListDetailPage() {
       await downloadXlsx(
         `${rateList.title.replace(/[^a-z0-9]+/gi, "-")}.xlsx`,
         rateList.title.slice(0, 31),
-        ["#", "Item", "Brand", "Unit", "Discount", "List Rate (₹)", "Amount (₹)"],
+        ["#", "Item", "Brand", "Unit", "List Rate (₹)", "Discount", "Amount (₹)"],
         rateList.items.map((item, idx) => [
           idx + 1,
           item.name,
           item.brand ?? "",
           item.unit,
-          item.isNetRate ? "Net Rate" : `${item.discountPercent}%`,
           item.listRate,
+          item.isNetRate ? "Net Rate" : `${item.discountPercent}%`,
           item.amount,
         ])
       );
@@ -433,8 +433,8 @@ export default function RateListDetailPage() {
             <thead>
               <tr>
                 <th>#</th><th>Item</th><th>Brand</th><th>Unit</th>
-                <th className="table-th-right">Discount</th>
                 <th className="table-th-right">List Rate (₹)</th>
+                <th className="table-th-right">Discount</th>
                 <th className="table-th-right">Amount (₹)</th>
               </tr>
             </thead>
@@ -445,8 +445,8 @@ export default function RateListDetailPage() {
                   <td>{item.name}</td>
                   <td>{item.brand || <span className={styles.emptyValue}>—</span>}</td>
                   <td>{item.unit}</td>
-                  <td className="table-th-right">{item.isNetRate ? "Net Rate" : `${item.discountPercent}%`}</td>
                   <td className="table-th-right">₹{fmtCurrency(item.listRate)}</td>
+                  <td className="table-th-right">{item.isNetRate ? "Net Rate" : `${item.discountPercent}%`}</td>
                   <td className="table-th-right">₹{fmtCurrency(item.amount)}</td>
                 </tr>
               ))}
