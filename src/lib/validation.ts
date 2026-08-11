@@ -213,6 +213,14 @@ export function validateSettingsInput(input: {
   );
 }
 
+// Server-side counterpart to the rate-list form's client-side validation.
+export function validateRateListInput(input: { title?: string }): string | null {
+  const title = (input.title ?? "").trim();
+  if (!title) return "Title is required.";
+  if (title.length > 200) return "Title is too long (max 200 characters).";
+  return null;
+}
+
 // Server-side counterpart to the vendor form's client-side validation —
 // API route handlers must not rely solely on the browser to enforce this.
 // `requireContactDetails` is set on both creation and edit — a vendor with

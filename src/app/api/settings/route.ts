@@ -37,7 +37,11 @@ export async function GET() {
 const SIMPLE_STRING_KEYS = ["name", "tagline", "email", "phone", "address", "city", "state", "pincode", "gstin", "termsAndConditions"] as const;
 const BANK_KEYS = ["bankName", "bankAccountName", "bankAccountNumber", "bankIfsc", "bankBranch"] as const;
 const ADDRESS_KEYS = ["address", "city", "state", "pincode"] as const;
-const NUMBERING_KEYS = ["invoiceNumberPrefix", "nextInvoiceNumberOverride", "purchaseBillNumberPrefix", "nextPurchaseBillNumberOverride", "invoiceNumberFormat", "purchaseBillNumberFormat"] as const;
+const NUMBERING_KEYS = [
+  "invoiceNumberPrefix", "nextInvoiceNumberOverride", "purchaseBillNumberPrefix", "nextPurchaseBillNumberOverride",
+  "invoiceNumberFormat", "purchaseBillNumberFormat",
+  "creditNoteNumberPrefix", "nextCreditNoteNumberOverride", "creditNoteNumberFormat",
+] as const;
 
 export async function PUT(request: NextRequest) {
   try {
@@ -49,6 +53,7 @@ export async function PUT(request: NextRequest) {
       bankName, bankAccountName, bankAccountNumber, bankIfsc, bankBranch, termsAndConditions, logoUrl, showLogoOnInvoices, expectedUpdatedAt,
       invoiceNumberPrefix, nextInvoiceNumberOverride, purchaseBillNumberPrefix, nextPurchaseBillNumberOverride,
       invoiceNumberFormat, purchaseBillNumberFormat,
+      creditNoteNumberPrefix, nextCreditNoteNumberOverride, creditNoteNumberFormat,
     } = body;
     const fieldValues: Record<string, string | undefined> = {
       name, tagline, email, phone, address, city, state, pincode, gstin, termsAndConditions,
@@ -68,8 +73,8 @@ export async function PUT(request: NextRequest) {
       where: { id: "singleton" },
       select: {
         updatedAt: true, name: true,
-        invoiceNumberPrefix: true, purchaseBillNumberPrefix: true,
-        invoiceNumberFormat: true, purchaseBillNumberFormat: true,
+        invoiceNumberPrefix: true, purchaseBillNumberPrefix: true, creditNoteNumberPrefix: true,
+        invoiceNumberFormat: true, purchaseBillNumberFormat: true, creditNoteNumberFormat: true,
       },
     });
     if (existing && expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== existing.updatedAt.getTime()) {
@@ -135,6 +140,19 @@ export async function PUT(request: NextRequest) {
         numberingActivityDetails.push(`purchase bill prefix -> ${updateData.purchaseBillNumberPrefix ?? "(auto)"}`);
       }
 
+      if ("creditNoteNumberPrefix" in body) {
+        const raw = String(creditNoteNumberPrefix ?? "").trim();
+        if (raw) {
+          if (!/^[A-Z0-9]{2,6}$/i.test(raw)) {
+            return NextResponse.json({ error: "Credit note prefix must be 2-6 letters/numbers (e.g. CN)." }, { status: 400 });
+          }
+          updateData.creditNoteNumberPrefix = raw.toUpperCase();
+        } else {
+          updateData.creditNoteNumberPrefix = null;
+        }
+        numberingActivityDetails.push(`credit note prefix -> ${updateData.creditNoteNumberPrefix ?? "(auto)"}`);
+      }
+
       if ("invoiceNumberFormat" in body) {
         const raw = String(invoiceNumberFormat ?? "").trim();
         if (raw) {
@@ -159,6 +177,19 @@ export async function PUT(request: NextRequest) {
           updateData.purchaseBillNumberFormat = null;
         }
         numberingActivityDetails.push(`purchase bill number format -> ${updateData.purchaseBillNumberFormat ?? "(default)"}`);
+      }
+
+      if ("creditNoteNumberFormat" in body) {
+        const raw = String(creditNoteNumberFormat ?? "").trim();
+        if (raw) {
+          if (!(raw in NUMBER_FORMATS)) {
+            return NextResponse.json({ error: "Unknown credit note number format." }, { status: 400 });
+          }
+          updateData.creditNoteNumberFormat = raw;
+        } else {
+          updateData.creditNoteNumberFormat = null;
+        }
+        numberingActivityDetails.push(`credit note number format -> ${updateData.creditNoteNumberFormat ?? "(default)"}`);
       }
 
       if ("nextInvoiceNumberOverride" in body) {
@@ -209,6 +240,34 @@ export async function PUT(request: NextRequest) {
           updateData.nextPurchaseBillNumberOverride = n;
         }
         numberingActivityDetails.push(`next purchase bill # -> ${updateData.nextPurchaseBillNumberOverride ?? "(cleared)"}`);
+      }
+
+      if ("nextCreditNoteNumberOverride" in body) {
+        if (nextCreditNoteNumberOverride === null || nextCreditNoteNumberOverride === "" || nextCreditNoteNumberOverride === undefined) {
+          updateData.nextCreditNoteNumberOverride = null;
+        } else {
+          const n = parseInt(String(nextCreditNoteNumberOverride), 10);
+          if (!Number.isInteger(n) || n <= 0) {
+            return NextResponse.json({ error: "Next credit note number must be a whole number greater than 0." }, { status: 400 });
+          }
+          const effectivePrefix =
+            ("creditNoteNumberPrefix" in body ? (updateData.creditNoteNumberPrefix as string | null) : existing?.creditNoteNumberPrefix)
+            || "CN";
+          const effectiveFormat = "creditNoteNumberFormat" in body ? (updateData.creditNoteNumberFormat as string | null) : existing?.creditNoteNumberFormat;
+          const candidatesThisYear = await prisma.return.findMany({
+            where: { creditNoteNumber: numberFormatDbFilter(effectiveFormat, effectivePrefix, currentYearLabel) },
+            select: { creditNoteNumber: true },
+          });
+          const lastSeq = findMaxSequence(
+            candidatesThisYear.map((c) => c.creditNoteNumber).filter((v): v is string => v !== null),
+            resolveNumberFormat(effectiveFormat).matcher(effectivePrefix, currentYearLabel)
+          );
+          if (n <= lastSeq) {
+            return NextResponse.json({ error: `Next credit note number must be greater than the highest existing number this year (${lastSeq}).` }, { status: 400 });
+          }
+          updateData.nextCreditNoteNumberOverride = n;
+        }
+        numberingActivityDetails.push(`next credit note # -> ${updateData.nextCreditNoteNumberOverride ?? "(cleared)"}`);
       }
     }
 

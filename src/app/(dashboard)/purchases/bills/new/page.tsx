@@ -39,6 +39,7 @@ export default function NewPurchaseBillPage() {
   const [vendorId,  setVendorId]  = useState("");
   const [vendorError, setVendorError] = useState<string | undefined>(undefined);
   const [billDate,  setBillDate]  = useState(() => new Date().toISOString().slice(0, 10));
+  const [billDateError, setBillDateError] = useState<string | undefined>(undefined);
   const [dueDate,   setDueDate]   = useState("");
   const [dueDateError, setDueDateError] = useState<string | undefined>(undefined);
   const [itemsError, setItemsError] = useState<string | undefined>(undefined);
@@ -160,6 +161,8 @@ export default function NewPurchaseBillPage() {
     if (items.some(i => validate(i.quantity, rules.required(), rules.positiveNumber())))      { flagItemsError("All quantities must be greater than 0."); return; }
     if (items.some(i => validate(i.purchasePrice, rules.required(), rules.positiveNumber()))) { flagItemsError("All item prices must be greater than 0."); return; }
     setItemsError(undefined);
+    if (billDate > new Date().toISOString().slice(0, 10)) { setBillDateError("Bill date cannot be in the future."); return; }
+    setBillDateError(undefined);
     if (dueDate && dueDate < billDate)               { setDueDateError("Due date cannot be before the bill date."); return; }
     setDueDateError(undefined);
     if (addPayment && toNum(payAmount) > 0 && payDate < billDate) { setPaymentDateError("Payment date cannot be before the bill date."); return; }
@@ -270,7 +273,8 @@ export default function NewPurchaseBillPage() {
           category={category}
           onCategoryChange={setCategory}
           billDate={billDate}
-          onBillDateChange={setBillDate}
+          onBillDateChange={(v) => { setBillDate(v); setBillDateError(undefined); }}
+          billDateError={billDateError}
           dueDate={dueDate}
           onDueDateChange={(v) => { setDueDate(v); setDueDateError(undefined); }}
           dueDateError={dueDateError}

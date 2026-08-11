@@ -191,7 +191,7 @@ export default function BrandsPage() {
       </div>
 
       {canWrite && (
-        <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add New Brand">
+        <Modal open={addOpen} onClose={() => { if (!saving) setAddOpen(false); }} title="Add New Brand">
           <form onSubmit={handleAdd} className={styles.addForm} noValidate>
             <Input
               ref={inputRef}
@@ -210,7 +210,7 @@ export default function BrandsPage() {
       )}
 
       {canWrite && (
-        <Modal open={!!editingId} onClose={() => setEditingId(null)} title="Rename Brand">
+        <Modal open={!!editingId} onClose={() => { if (!renaming) setEditingId(null); }} title="Rename Brand">
           <form onSubmit={handleRename} className={styles.addForm} noValidate>
             <Input
               type="text"

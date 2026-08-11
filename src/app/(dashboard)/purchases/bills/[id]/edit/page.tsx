@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useDirty } from "@/lib/useDirty";
 import { rules, validate } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
+import { getIndianFinancialYear } from "@/lib/documentNumbering";
 import { truncateFilename } from "@/lib/truncateFilename";
 import { PurchaseBillFormBody } from "@/components/purchases/PurchaseBillFormBody";
 import {
@@ -86,6 +87,7 @@ export default function EditPurchaseBillPage() {
   const [vendorError, setVendorError] = useState<string | undefined>(undefined);
   const [billDate,  setBillDate]  = useState("");
   const [billDateError, setBillDateError] = useState<string | undefined>(undefined);
+  const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
   const [dueDate,   setDueDate]   = useState("");
   const [dueDateError, setDueDateError] = useState<string | undefined>(undefined);
   const [itemsError, setItemsError] = useState<string | undefined>(undefined);
@@ -221,6 +223,11 @@ export default function EditPurchaseBillPage() {
     setVendorError(vendorErr ?? undefined);
     if (vendorErr) return;
     if (!billDate) { setBillDateError("Bill date is required."); return; }
+    if (billDate > todayStr) { setBillDateError("Bill date cannot be in the future."); return; }
+    if (bill && getIndianFinancialYear(new Date(billDate)) !== getIndianFinancialYear(new Date(bill.billDate))) {
+      setBillDateError("Bill date cannot be moved into a different financial year — it would no longer match the bill number.");
+      return;
+    }
     setBillDateError(undefined);
     function flagItemsError(message: string) { setItemsError(message); setItemsErrorFor(items); }
     if (items.length === 0)                                             { flagItemsError("Add at least one item."); return; }

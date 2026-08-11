@@ -87,6 +87,10 @@ export async function POST(req: NextRequest) {
     const vendor = await prisma.vendor.findUnique({ where: { id: vendorId } });
     if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 400 });
 
+    if (billDate && isFutureIstDate(billDate)) {
+      return NextResponse.json({ error: "Bill date cannot be in the future" }, { status: 400 });
+    }
+
     if (dueDate) {
       const parsedDueDate = new Date(dueDate);
       if (isNaN(parsedDueDate.getTime())) {

@@ -58,7 +58,10 @@ export function ConfirmDialog({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onCancel();
+        // Mirrors the Cancel button's own `disabled={loading}` — without
+        // this, Escape (or the backdrop click below) could abandon an
+        // in-flight confirm action that the button itself refuses to let go.
+        if (!loading) onCancel();
         return;
       }
       if (e.key === "Tab") {
@@ -81,13 +84,13 @@ export function ConfirmDialog({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onCancel]);
+  }, [open, onCancel, loading]);
 
   if (!open) return null;
 
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true">
-      <div className={styles.backdrop} onClick={onCancel} />
+      <div className={styles.backdrop} onClick={() => { if (!loading) onCancel(); }} />
       <div className={styles.center}>
         <div className={styles.dialog} ref={dialogRef} tabIndex={-1}>
           <div className={styles.body}>

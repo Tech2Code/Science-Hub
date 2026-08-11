@@ -642,7 +642,7 @@ export default function AdminPage() {
           open={addOpen}
           title="New User"
           maxWidth="40rem"
-          onClose={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}
+          onClose={() => { if (addSaving) return; setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}
         >
           <form onSubmit={addUser} className={styles.formColTight} noValidate>
             <div className={styles.fg2}>
@@ -687,7 +687,7 @@ export default function AdminPage() {
           open={!!editUser}
           title={`Edit: ${editUser?.name ?? ""}`}
           maxWidth="40rem"
-          onClose={() => { setEditUser(null); setEditMsg(null); setEditFieldErrors({}); }}
+          onClose={() => { if (editSaving) return; setEditUser(null); setEditMsg(null); setEditFieldErrors({}); }}
         >
           <form onSubmit={saveEdit} className={styles.formCol} noValidate>
             <div className={styles.fg3}>

@@ -7,6 +7,8 @@ import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { assertInvoiceQuantitiesNotBelowReturned, InvoiceQuantityValidationError } from "@/lib/invoiceReturns";
+import { isFutureIstDate } from "@/lib/validation";
+import { getIndianFinancialYear } from "@/lib/documentNumbering";
 
 class InvoiceConflictError extends Error {}
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
@@ -41,7 +43,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, status, expectedUpdatedAt } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, status, expectedUpdatedAt, date } = body;
 
     const existingBase = await prisma.invoice.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existingBase) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -76,12 +78,31 @@ export async function PUT(
       return NextResponse.json({ error: "A fully paid invoice cannot be edited" }, { status: 400 });
     }
 
+    // Invoice date is editable (e.g. correcting a same-week typo), but never
+    // across a financial-year boundary — the invoice number was generated
+    // for a specific FY (see src/lib/documentNumbering.ts) and moving the
+    // date into a different one would leave the printed number pointing at
+    // the wrong period with no way to reconcile it automatically.
+    let parsedInvoiceDate: Date | undefined;
+    if (date) {
+      parsedInvoiceDate = new Date(date);
+      if (isNaN(parsedInvoiceDate.getTime())) {
+        return NextResponse.json({ error: "Invalid invoice date" }, { status: 400 });
+      }
+      if (isFutureIstDate(date)) {
+        return NextResponse.json({ error: "Invoice date cannot be in the future" }, { status: 400 });
+      }
+      if (getIndianFinancialYear(parsedInvoiceDate) !== getIndianFinancialYear(new Date(existing.date))) {
+        return NextResponse.json({ error: "Invoice date cannot be moved into a different financial year — it would no longer match the invoice number. Delete and re-create the invoice instead if it truly belongs to a different year." }, { status: 400 });
+      }
+    }
+
     if (dueDate) {
       const parsedDueDate = new Date(dueDate);
       if (isNaN(parsedDueDate.getTime())) {
         return NextResponse.json({ error: "Invalid due date" }, { status: 400 });
       }
-      const invoiceDate = new Date(existing.date); invoiceDate.setHours(0, 0, 0, 0);
+      const invoiceDate = parsedInvoiceDate ?? new Date(existing.date); invoiceDate.setHours(0, 0, 0, 0);
       if (parsedDueDate < invoiceDate) {
         return NextResponse.json({ error: "Due date cannot be before the invoice date" }, { status: 400 });
       }
@@ -224,6 +245,7 @@ export async function PUT(
           isInterState: inter,
           placeOfSupply: String(placeOfSupply).trim(),
           reverseCharge: Boolean(reverseCharge),
+          ...(date ? { date: new Date(date) } : {}),
           dueDate: dueDate ? new Date(dueDate) : null,
           notes: notes ?? null,
           subtotal,

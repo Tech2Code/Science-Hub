@@ -303,7 +303,6 @@ export default function NewInvoicePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    setSaving(false);
     if (res.ok) {
       const d = await res.json();
       bustCachePrefix("/api/invoices");
@@ -314,9 +313,13 @@ export default function NewInvoicePage() {
       if (d.stockWarnings?.length > 0) {
         toast({ type: "warning", title: "Stock went negative", message: d.stockWarnings.join(", ") });
       }
+      // Deliberately not resetting `saving` here — see the edit page for why:
+      // it must stay locked until navigation actually replaces this page.
       router.push(`/sales/invoices/${d.id}`);
+      return;
     }
-    else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to create invoice." }); }
+    { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to create invoice." }); }
+    setSaving(false);
   }
 
   const clearErr = (field: keyof typeof customCustomer) => {

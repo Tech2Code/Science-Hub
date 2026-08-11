@@ -42,16 +42,20 @@ export default function NewCustomerPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     });
-    setSaving(false);
     if (res.ok) {
       const created = await res.json();
       bustCachePrefix("/api/customers");
       toast({ type: "success", title: "Customer created", message: `"${created.name}" added.` });
+      // Deliberately not resetting `saving` here — it must stay locked until
+      // navigation actually replaces this page, or the form briefly
+      // re-enables during the gap between this await and the route change.
       router.push(`/sales/customers/${created.id}`);
+      return;
     } else {
       const d = await res.json().catch(() => ({}));
       toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to create customer." });
     }
+    setSaving(false);
   }
 
   return (

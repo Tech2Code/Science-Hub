@@ -129,7 +129,6 @@ export default function ProductViewPage() {
         body: JSON.stringify({ newStock: parsed, notes: adjustNotes.trim() }),
       });
       const data = await res.json().catch(() => ({}));
-      setAdjustSaving(false);
       if (res.ok) {
         setAdjustOpen(false);
         bustCachePrefix("/api/products");
@@ -139,6 +138,7 @@ export default function ProductViewPage() {
       } else {
         toast({ type: "error", title: "Adjustment failed", message: data.error ?? "Could not adjust stock." });
       }
+      setAdjustSaving(false);
     } catch {
       setAdjustSaving(false);
       toast({ type: "error", title: "Adjustment failed", message: "Network error." });

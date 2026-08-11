@@ -43,16 +43,19 @@ export default function NewVendorPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     });
-    setSaving(false);
     if (res.ok) {
       const created = await res.json();
       bustCachePrefix("/api/vendors");
       toast({ type: "success", title: "Vendor created", message: `"${form.name}" added.` });
+      // Deliberately not resetting `saving` here — it must stay locked until
+      // navigation actually replaces this page.
       router.push(`/purchases/vendors/${created.id}`);
+      return;
     } else {
       const d = await res.json().catch(() => ({}));
       toast({ type: "error", title: "Failed", message: d.error ?? "Failed to create vendor." });
     }
+    setSaving(false);
   }
 
   return (

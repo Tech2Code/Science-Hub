@@ -18,6 +18,7 @@ import { InvoiceOptionsRow } from "@/components/invoices/InvoiceOptionsRow";
 import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
 import { computeInvoiceTotals, makeInvoiceLineItemKey, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
 import { animateSection } from "@/lib/animateSection";
+import { getIndianFinancialYear } from "@/lib/documentNumbering";
 import styles from "./edit.module.css";
 
 type Product = InvoiceProduct;
@@ -47,8 +48,9 @@ export default function EditInvoicePage() {
   const [items, setItems] = useState<LineItem[]>([]);
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const { isDirty, markClean } = useDirty({ isInterState, placeOfSupply, reverseCharge, items, notes, dueDate });
   const [invoiceDate, setInvoiceDate] = useState("");
+  const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
+  const { isDirty, markClean } = useDirty({ isInterState, placeOfSupply, reverseCharge, items, notes, dueDate, invoiceDate });
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -91,7 +93,7 @@ export default function EditInvoicePage() {
       setInvoiceDate(invoice.date ? invoice.date.split("T")[0] : "");
       setLoadedUpdatedAt(invoice.updatedAt ?? null);
       setItems(lineItems);
-      markClean({ isInterState: inter, placeOfSupply: pos, reverseCharge: rc, items: lineItems, notes: notesVal, dueDate: dueDateVal });
+      markClean({ isInterState: inter, placeOfSupply: pos, reverseCharge: rc, items: lineItems, notes: notesVal, dueDate: dueDateVal, invoiceDate: invoice.date ? invoice.date.split("T")[0] : "" });
       setLoading(false);
     }).catch(() => { setError("Failed to load invoice."); setLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- markClean is a fresh function each render (not memoized); only `id` should retrigger this fetch
@@ -103,6 +105,11 @@ export default function EditInvoicePage() {
     e.preventDefault();
     if (items.length === 0) { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
     if (!placeOfSupply) { toast({ type: "error", title: "Check form", message: "Select place of supply." }); return; }
+    if (invoiceDate && invoiceDate > todayStr) { toast({ type: "error", title: "Check form", message: "Invoice date cannot be in the future." }); return; }
+    if (invoiceDate && invoice && getIndianFinancialYear(new Date(invoiceDate)) !== getIndianFinancialYear(new Date(invoice.date))) {
+      toast({ type: "error", title: "Check form", message: "Invoice date cannot be moved into a different financial year — it would no longer match the invoice number." });
+      return;
+    }
     if (dueDate && invoiceDate && dueDate < invoiceDate) { toast({ type: "error", title: "Check form", message: "Due date cannot be before the invoice date." }); return; }
     for (const item of items) {
       const qtyErr   = validate(String(item.qty),   rules.positiveNumber("Item quantity must be greater than 0."));
@@ -142,11 +149,11 @@ export default function EditInvoicePage() {
         reverseCharge,
         items: items.map((i) => ({ productId: i.productId || null, name: i.productName, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent })),
         notes,
+        date: invoiceDate || undefined,
         dueDate: dueDate || undefined,
         expectedUpdatedAt: loadedUpdatedAt,
       }),
     });
-    setSaving(false);
     if (res.ok) {
       const d = await res.json();
       bustCache(`/api/invoices/${id}`);
@@ -156,14 +163,21 @@ export default function EditInvoicePage() {
       if (d.stockWarnings?.length > 0) {
         toast({ type: "warning", title: "Stock went negative", message: d.stockWarnings.join(", ") });
       }
+      // Deliberately not resetting `saving` here — the overlay/disabled Save
+      // button must stay up until navigation actually completes, otherwise
+      // the form re-enables for the moment between this awaited json() call
+      // and router.push() taking effect, letting the user submit again or
+      // edit fields on a page that's already about to be replaced.
       router.push(`/sales/invoices/${id}`);
+      return;
     }
-    else if (res.status === 409) {
+    if (res.status === 409) {
       const d = await res.json().catch(() => ({}));
       bustCache(`/api/invoices/${id}`);
       toast({ type: "error", title: "Update conflict", message: d?.error ?? "This invoice was changed by someone else. Please reload and try again." });
     }
     else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to update invoice." }); }
+    setSaving(false);
   }
 
   if (loading) return (
@@ -300,6 +314,9 @@ export default function EditInvoicePage() {
               dueDate={dueDate}
               onDueDateChange={setDueDate}
               minDueDate={invoiceDate || undefined}
+              invoiceDate={invoiceDate}
+              onInvoiceDateChange={setInvoiceDate}
+              maxInvoiceDate={todayStr}
             />
 
             {/* Items */}

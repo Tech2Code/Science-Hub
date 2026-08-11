@@ -9,6 +9,8 @@ import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { purchaseBillLineBreakdown } from "@/lib/purchaseBillForm";
 import { getBusinessSettings } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
+import { isFutureIstDate } from "@/lib/validation";
+import { getIndianFinancialYear } from "@/lib/documentNumbering";
 
 const BILL_INCLUDE = {
   vendor: { select: { id: true, name: true, company: true, phone: true, email: true, gstin: true, address: true, state: true, updatedAt: true } },
@@ -58,12 +60,31 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       );
     }
 
+    // Bill date is editable (e.g. correcting a same-week typo), but never
+    // across a financial-year boundary — the bill number was generated for
+    // a specific FY (see src/lib/documentNumbering.ts) and moving the date
+    // into a different one would leave the printed number pointing at the
+    // wrong period with no way to reconcile it automatically.
+    let parsedBillDate: Date | undefined;
+    if (billDate) {
+      parsedBillDate = new Date(billDate);
+      if (isNaN(parsedBillDate.getTime())) {
+        return NextResponse.json({ error: "Invalid bill date" }, { status: 400 });
+      }
+      if (isFutureIstDate(billDate)) {
+        return NextResponse.json({ error: "Bill date cannot be in the future" }, { status: 400 });
+      }
+      if (getIndianFinancialYear(parsedBillDate) !== getIndianFinancialYear(new Date(existing.billDate))) {
+        return NextResponse.json({ error: "Bill date cannot be moved into a different financial year — it would no longer match the bill number. Delete and re-create the bill instead if it truly belongs to a different year." }, { status: 400 });
+      }
+    }
+
     if (dueDate) {
       const parsedDueDate = new Date(dueDate);
       if (isNaN(parsedDueDate.getTime())) {
         return NextResponse.json({ error: "Invalid due date" }, { status: 400 });
       }
-      const effectiveBillDate = billDate ? new Date(billDate) : existing.billDate;
+      const effectiveBillDate = parsedBillDate ?? existing.billDate;
       if (parsedDueDate < effectiveBillDate) {
         return NextResponse.json({ error: "Due date cannot be before the bill date" }, { status: 400 });
       }

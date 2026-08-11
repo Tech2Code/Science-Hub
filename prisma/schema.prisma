@@ -21,6 +21,7 @@ model User {
   purchaseBillsCreated  PurchaseBill[]       @relation("PurchaseBillCreator")
   stockMovementsCreated StockMovement[]      @relation("StockMovementCreator")
   sectionPermissions    SectionPermission[]
+  rateLists             RateList[]
 }
 
 model PasswordResetToken {
@@ -273,6 +274,11 @@ model BusinessSettings {
   // original "PREFIX-FY-0001" layout.
   invoiceNumberFormat            String?
   purchaseBillNumberFormat       String?
+  // Same pattern for credit notes (Return.creditNoteNumber) — prefix falls
+  // back to the fixed "CN" the app always used.
+  creditNoteNumberPrefix         String?
+  nextCreditNoteNumberOverride   Int?
+  creditNoteNumberFormat         String?
   updatedAt       DateTime @updatedAt
 }
 
@@ -401,6 +407,38 @@ model StockMovement {
   @@index([productId, createdAt])
   @@index([createdAt])
   @@index([documentType])
+}
+
+// ── Rate Lists (standalone product/price sheets, independent of Product catalog) ──
+
+model RateList {
+  id              String         @id @default(cuid())
+  title           String
+  note            String?
+  createdByUserId String
+  createdBy       User           @relation(fields: [createdByUserId], references: [id])
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+  items           RateListItem[]
+
+  @@index([deletedAt])
+}
+
+model RateListItem {
+  id              String   @id @default(cuid())
+  rateListId      String
+  rateList        RateList @relation(fields: [rateListId], references: [id], onDelete: Cascade)
+  serialNo        Int
+  name            String
+  brand           String?
+  unit            String
+  isNetRate       Boolean  @default(false)
+  discountPercent Float    @default(0)
+  listRate        Float
+  amount          Float
+
+  @@index([rateListId])
 }
 
 // ── Section Permissions (Access Control) ──────────────────────────────────────

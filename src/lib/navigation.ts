@@ -36,6 +36,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/sales/customers",   label: "Customers",         iconKey: "customers",      adminOnly: false },
       { href: "/sales/invoices",    label: "Invoices",          iconKey: "invoices",       adminOnly: false },
       { href: "/sales/credit-notes", label: "Credit Notes",     iconKey: "creditNotes",    adminOnly: false, keywords: ["returns"] },
+      { href: "/sales/rate-lists",  label: "Rate Lists",        iconKey: "rateLists",      adminOnly: false, keywords: ["price list", "catalog", "quotation"] },
       { href: "/sales/payments",    label: "Payments Received", iconKey: "payments",       adminOnly: false, sectionRequired: "payments_received" },
     ],
   },

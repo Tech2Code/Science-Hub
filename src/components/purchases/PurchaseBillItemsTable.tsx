@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/dialogs/Modal";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Input, Select, FormField } from "@/components/ui/Input";
+import { UnitCombo } from "@/components/ui/UnitCombo";
 import { useToast } from "@/components/ui/Toast";
 import { bustCachePrefix } from "@/lib/useCache";
 import { rules, validate } from "@/lib/validation";
@@ -45,8 +46,6 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
   const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "", purchasePrice: "", salePrice: "", gstRate: "18", hsn: "", skipCatalog: false });
   const [quickAddErrors, setQuickAddErrors] = useState<QuickAddErrors>({});
   const [quickAddSaving, setQuickAddSaving] = useState(false);
-  const [showUnitDropdown, setShowUnitDropdown] = useState(false);
-  const filteredUnits = PURCHASE_BILL_UNITS.filter((u) => u.toLowerCase().includes(quickAddProduct.unit.toLowerCase()));
   const unitFieldId = useId();
 
   const filteredProducts = products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase()));
@@ -69,7 +68,6 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
   function openQuickAddProduct(name = productSearch) {
     setQuickAddProduct({ name, unit: "", purchasePrice: "", salePrice: "", gstRate: "18", hsn: "", skipCatalog: false });
     setQuickAddErrors({});
-    setShowUnitDropdown(false);
     setShowQuickAddProduct(true);
     setShowProductDropdown(false);
   }
@@ -221,30 +219,12 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
           </FormField>
           <div className={styles.grid4}>
             <FormField label="Unit" required error={quickAddErrors.unit} id={unitFieldId}>
-              <div className={styles.unitCombo}>
-                <Input
-                  id={unitFieldId}
-                  type="text" placeholder="e.g. Nos, Kg, Box"
-                  value={quickAddProduct.unit}
-                  onChange={(e) => { setQuickAddProduct((p) => ({ ...p, unit: e.target.value })); setQuickAddErrors((p) => ({ ...p, unit: undefined })); setShowUnitDropdown(true); }}
-                  onFocus={() => setShowUnitDropdown(true)}
-                  onClick={() => setShowUnitDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowUnitDropdown(false), 150)}
-                  onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur(); }}
-                />
-                {showUnitDropdown && filteredUnits.length > 0 && (
-                  <div className={styles.unitDropdown} onMouseDown={(e) => e.preventDefault()}>
-                    {filteredUnits.map((u) => (
-                      <button
-                        key={u} type="button" className={styles.unitOption}
-                        onClick={() => { setQuickAddProduct((p) => ({ ...p, unit: u })); setQuickAddErrors((p) => ({ ...p, unit: undefined })); setShowUnitDropdown(false); }}
-                      >
-                        {u}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <UnitCombo
+                id={unitFieldId}
+                value={quickAddProduct.unit}
+                onChange={(v) => { setQuickAddProduct((p) => ({ ...p, unit: v })); setQuickAddErrors((p) => ({ ...p, unit: undefined })); }}
+                suggestions={PURCHASE_BILL_UNITS}
+              />
             </FormField>
             <FormField label="Purchase Price (₹)" required error={quickAddErrors.purchasePrice}>
               <Input

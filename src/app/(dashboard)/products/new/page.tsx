@@ -63,16 +63,19 @@ export default function NewProductPage() {
         categoryId: form.categoryId || undefined,
       }),
     });
-    setSaving(false);
     if (res.ok) {
       const created = await res.json();
       bustCachePrefix("/api/products");
       bustCache("/api/reports?type=summary");
       bustCache("/api/reports?type=stock");
       toast({ type: "success", title: "Product created", message: "New product added to catalog." });
+      // Deliberately not resetting `saving` here — it must stay locked until
+      // navigation actually replaces this page.
       router.push(`/products/${created.id}`);
+      return;
     }
-    else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to save product." }); }
+    { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to save product." }); }
+    setSaving(false);
   }
 
   return (

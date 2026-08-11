@@ -55,6 +55,7 @@ export function BillDetailsCard({
   onAttachmentFileChange, onAttachmentRemove,
 }: BillDetailsCardProps) {
   const toast = useToast();
+  const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
   const vendorFieldId = useId();
   const [vendorSearch, setVendorSearch] = useState("");
   const [showVendorDropdown, setShowVendorDropdown] = useState(false);
@@ -345,7 +346,7 @@ export function BillDetailsCard({
         </Select>
         </FormField>
         <FormField label="Bill Date" required error={billDateError}>
-          <Input type="date" value={billDate} onChange={(e) => onBillDateChange(e.target.value)} max={dueDate || undefined} />
+          <Input type="date" value={billDate} onChange={(e) => onBillDateChange(e.target.value)} max={dueDate && dueDate < todayStr ? dueDate : todayStr} />
         </FormField>
         <FormField label="Due Date" error={dueDateError}>
           <Input type="date" value={dueDate} onChange={(e) => onDueDateChange(e.target.value)} min={billDate} />

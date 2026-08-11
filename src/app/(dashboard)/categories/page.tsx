@@ -127,18 +127,21 @@ export default function CategoriesPage() {
       body: JSON.stringify({ name, expectedUpdatedAt: editingUpdatedAt }),
     });
     const d = await r.json().catch(() => ({}));
-    setRenaming(false);
     if (r.ok) {
       setEditingId(null);
       await mutate();
       toast({ type: "success", title: "Category renamed", message: `Renamed to "${name}".` });
+      // Deliberately not resetting `renaming` here — it must stay locked
+      // until navigation actually replaces this page.
       router.push(`/categories/${id}`);
+      return;
     } else if (r.status === 409) {
       bustCachePrefix("/api/categories");
       toast({ type: "error", title: "Update conflict", message: d.error ?? "This category was changed by someone else. Please reload and try again." });
     } else {
       toast({ type: "error", title: "Rename failed", message: d.error ?? "Could not rename category." });
     }
+    setRenaming(false);
   }
 
   function handleDelete(id: string, name: string) {
@@ -192,7 +195,7 @@ export default function CategoriesPage() {
       </div>
 
       {canWrite && (
-        <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add New Category">
+        <Modal open={addOpen} onClose={() => { if (!saving) setAddOpen(false); }} title="Add New Category">
           <form onSubmit={handleAdd} className={styles.addForm} noValidate>
             <Input
               ref={inputRef}
@@ -211,7 +214,7 @@ export default function CategoriesPage() {
       )}
 
       {canWrite && (
-        <Modal open={!!editingId} onClose={() => setEditingId(null)} title="Rename Category">
+        <Modal open={!!editingId} onClose={() => { if (!renaming) setEditingId(null); }} title="Rename Category">
           <form onSubmit={handleRename} className={styles.addForm} noValidate>
             <Input
               type="text"

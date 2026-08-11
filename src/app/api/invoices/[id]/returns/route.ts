@@ -8,6 +8,8 @@ import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { isFutureIstDate } from "@/lib/validation";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { computeRoundOff } from "@/lib/roundOff";
+import { getBusinessSettings } from "@/lib/db";
+import { computeNextNumber, numberFormatDbFilter, getIndianFinancialYear, formatFinancialYearLabel } from "@/lib/documentNumbering";
 
 export async function GET(
   _req: NextRequest,
@@ -108,10 +110,15 @@ export async function POST(
     const igst = invoice.isInterState ? totalGst : 0;
     const { roundOff, roundedTotal: creditNoteTotal } = computeRoundOff(subtotal + totalGst);
 
-    // Credit note numbering follows the same pattern as invoice/purchase-bill
-    // numbering: highest-existing-number-for-year + 1, generated inside the
-    // same Serializable transaction as the write, with a retry on the
-    // write-conflict Postgres reports (P2034) when two requests race.
+    // Credit note numbering follows the same configurable, FY-based pattern
+    // as invoice/purchase-bill numbering (see src/lib/documentNumbering.ts):
+    // highest-existing-number-for-this-FY + 1 (or the admin's one-time
+    // override, if higher), generated inside the same Serializable
+    // transaction as the write, with a retry on the write-conflict Postgres
+    // reports (P2034) when two requests race.
+    const biz = await getBusinessSettings();
+    const creditNotePrefix = biz.creditNoteNumberPrefix || "CN";
+    const creditNoteYearLabel = formatFinancialYearLabel(getIndianFinancialYear(returnDate));
     async function attemptCreate() {
       return prisma.$transaction(async (tx) => {
         const existingReturns = await tx.return.findMany({
@@ -158,16 +165,20 @@ export async function POST(
           }
         }
 
-        const year = returnDate.getFullYear();
-        const lastThisYear = await tx.return.findFirst({
-          where: { creditNoteNumber: { startsWith: `CN-${year}-` } },
-          orderBy: { creditNoteNumber: "desc" },
+        const candidatesThisYear = await tx.return.findMany({
+          where: { creditNoteNumber: numberFormatDbFilter(biz.creditNoteNumberFormat, creditNotePrefix, creditNoteYearLabel) },
           select: { creditNoteNumber: true },
         });
-        const lastSequential = lastThisYear?.creditNoteNumber
-          ? parseInt(lastThisYear.creditNoteNumber.split("-")[2], 10)
-          : 0;
-        const creditNoteNumber = `CN-${year}-${String(lastSequential + 1).padStart(4, "0")}`;
+        const { documentNumber: creditNoteNumber, overrideUsed } = computeNextNumber(
+          candidatesThisYear.map((c) => c.creditNoteNumber).filter((n): n is string => n !== null),
+          biz.creditNoteNumberFormat,
+          creditNotePrefix,
+          creditNoteYearLabel,
+          biz.nextCreditNoteNumberOverride
+        );
+        if (overrideUsed) {
+          await tx.businessSettings.update({ where: { id: "singleton" }, data: { nextCreditNoteNumberOverride: null } });
+        }
 
         const created = await tx.return.create({
           data: {

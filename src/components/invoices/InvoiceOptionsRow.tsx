@@ -17,6 +17,12 @@ interface InvoiceOptionsRowProps {
   dueDate: string;
   onDueDateChange: (date: string) => void;
   minDueDate?: string;
+  // Only the Edit Invoice page passes these — invoice date isn't user-set at
+  // creation (always "now" server-side), only correctable afterward. Kept
+  // optional so the New Invoice page's layout is untouched.
+  invoiceDate?: string;
+  onInvoiceDateChange?: (date: string) => void;
+  maxInvoiceDate?: string;
 }
 
 // Place of supply / inter-state (IGST) / reverse charge / due date — shared by
@@ -27,6 +33,7 @@ export function InvoiceOptionsRow({
   isInterState, onToggleInterState,
   reverseCharge, onToggleReverseCharge,
   dueDate, onDueDateChange, minDueDate,
+  invoiceDate, onInvoiceDateChange, maxInvoiceDate,
 }: InvoiceOptionsRowProps) {
   return (
     <div {...animateSection(sectionIndex, `card ${styles.cardPad}`)}>
@@ -42,6 +49,19 @@ export function InvoiceOptionsRow({
             {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
           </Select>
         </div>
+        {onInvoiceDateChange && (
+          <div className={styles.dueDateRow}>
+            <label className={styles.dueDateLabel}>Invoice date</label>
+            <Input
+              type="date"
+              value={invoiceDate}
+              max={maxInvoiceDate}
+              onChange={(e) => onInvoiceDateChange(e.target.value)}
+              onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
+              className={`${styles.dueDateInput} ${styles.dueDateDateInput}`}
+            />
+          </div>
+        )}
         <div className={styles.dueDateRow}>
           <label className={styles.dueDateLabel}>Due date</label>
           <Input

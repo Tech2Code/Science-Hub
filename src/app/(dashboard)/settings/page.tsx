@@ -35,6 +35,9 @@ interface BusinessSettings {
   nextPurchaseBillNumberOverride: number | null;
   invoiceNumberFormat: string | null;
   purchaseBillNumberFormat: string | null;
+  creditNoteNumberPrefix: string | null;
+  nextCreditNoteNumberOverride: number | null;
+  creditNoteNumberFormat: string | null;
   updatedAt: string;
 }
 
@@ -53,6 +56,9 @@ const EMPTY: BusinessSettings = {
   nextPurchaseBillNumberOverride: null,
   invoiceNumberFormat: null,
   purchaseBillNumberFormat: null,
+  creditNoteNumberPrefix: null,
+  nextCreditNoteNumberOverride: null,
+  creditNoteNumberFormat: null,
   updatedAt: "",
 };
 
@@ -132,6 +138,9 @@ interface NumberingForm {
   nextPurchaseBillNumberOverride: string;
   invoiceNumberFormat: NumberFormatId;
   purchaseBillNumberFormat: NumberFormatId;
+  creditNoteNumberPrefix: string;
+  nextCreditNoteNumberOverride: string;
+  creditNoteNumberFormat: NumberFormatId;
 }
 
 export default function SettingsPage() {
@@ -182,6 +191,7 @@ export default function SettingsPage() {
   const [numberingForm, setNumberingForm] = useState<NumberingForm>({
     invoiceNumberPrefix: "", nextInvoiceNumberOverride: "", purchaseBillNumberPrefix: "", nextPurchaseBillNumberOverride: "",
     invoiceNumberFormat: "seq_fy", purchaseBillNumberFormat: "seq_fy",
+    creditNoteNumberPrefix: "", nextCreditNoteNumberOverride: "", creditNoteNumberFormat: "seq_fy",
   });
   const numberingDirty = useDirty(numberingForm);
   const [savingNumbering, setSavingNumbering] = useState(false);
@@ -198,6 +208,19 @@ export default function SettingsPage() {
   // clear the whole page is briefly blocked mid-save. Uses the same shared
   // OverlayLoader as every other async action in the app (e.g. Admin → create user).
   const brandingBusy = savingBranding || logoUploading;
+  // Every other section's own Save/Clear action shows this same full-page
+  // overlay too, not just Branding — every section here mutates the one
+  // singleton BusinessSettings row, so a save in progress should read as
+  // "the whole page is busy," not just the one card being edited.
+  const savingBusyText =
+    savingIdentity ? "Saving business identity…" :
+    savingAddress ? "Saving address…" :
+    savingBank ? "Saving bank details…" :
+    savingTerms ? "Saving terms & conditions…" :
+    savingEmail ? "Saving email settings…" :
+    savingNumbering ? "Saving document numbering…" :
+    null;
+  const anySettingsSaving = Boolean(savingBusyText) || brandingBusy;
 
   function applyLoaded(d: Record<string, string | boolean | number | null>) {
     const s: BusinessSettings = {
@@ -220,6 +243,9 @@ export default function SettingsPage() {
       nextPurchaseBillNumberOverride: (d.nextPurchaseBillNumberOverride as number | null) ?? null,
       invoiceNumberFormat: (d.invoiceNumberFormat as string | null) ?? null,
       purchaseBillNumberFormat: (d.purchaseBillNumberFormat as string | null) ?? null,
+      creditNoteNumberPrefix: (d.creditNoteNumberPrefix as string | null) ?? null,
+      nextCreditNoteNumberOverride: (d.nextCreditNoteNumberOverride as number | null) ?? null,
+      creditNoteNumberFormat: (d.creditNoteNumberFormat as string | null) ?? null,
       updatedAt: (d.updatedAt as string) ?? "",
     };
     setSaved(s);
@@ -487,6 +513,9 @@ export default function SettingsPage() {
       nextPurchaseBillNumberOverride: "",
       invoiceNumberFormat: resolveNumberFormat(saved.invoiceNumberFormat).id,
       purchaseBillNumberFormat: resolveNumberFormat(saved.purchaseBillNumberFormat).id,
+      creditNoteNumberPrefix: saved.creditNoteNumberPrefix ?? "",
+      nextCreditNoteNumberOverride: "",
+      creditNoteNumberFormat: resolveNumberFormat(saved.creditNoteNumberFormat).id,
     };
     setNumberingForm(initial);
     numberingDirty.markClean(initial);
@@ -502,6 +531,8 @@ export default function SettingsPage() {
       purchaseBillNumberPrefix: validate(numberingForm.purchaseBillNumberPrefix, rules.docPrefix()) ?? undefined,
       nextInvoiceNumberOverride: validate(numberingForm.nextInvoiceNumberOverride, rules.positiveInteger()) ?? undefined,
       nextPurchaseBillNumberOverride: validate(numberingForm.nextPurchaseBillNumberOverride, rules.positiveInteger()) ?? undefined,
+      creditNoteNumberPrefix: validate(numberingForm.creditNoteNumberPrefix, rules.docPrefix()) ?? undefined,
+      nextCreditNoteNumberOverride: validate(numberingForm.nextCreditNoteNumberOverride, rules.positiveInteger()) ?? undefined,
     };
     setNumberingErrors(errors);
     if (Object.values(errors).some(Boolean)) return;
@@ -517,12 +548,15 @@ export default function SettingsPage() {
       nextPurchaseBillNumberOverride: numberingForm.nextPurchaseBillNumberOverride.trim() ? parseInt(numberingForm.nextPurchaseBillNumberOverride, 10) : null,
       invoiceNumberFormat: numberingForm.invoiceNumberFormat,
       purchaseBillNumberFormat: numberingForm.purchaseBillNumberFormat,
+      creditNoteNumberPrefix: numberingForm.creditNoteNumberPrefix.trim().toUpperCase() || null,
+      nextCreditNoteNumberOverride: numberingForm.nextCreditNoteNumberOverride.trim() ? parseInt(numberingForm.nextCreditNoteNumberOverride, 10) : null,
+      creditNoteNumberFormat: numberingForm.creditNoteNumberFormat,
     });
     if (result.ok) {
       applyLoaded(result.data);
       setEditingNumbering(false);
       setNumberingConfirmOpen(false);
-      toast({ type: "success", title: "Settings saved", message: "Document numbering updated. This only affects the next invoice/purchase bill created." });
+      toast({ type: "success", title: "Settings saved", message: "Document numbering updated. This only affects the next invoice/purchase bill/credit note created." });
     } else if (result.conflict) {
       setNumberingConfirmOpen(false);
       toast({ type: "error", title: "Update conflict", message: result.error ?? "Business settings were changed by someone else. Please reload and try again." });
@@ -1109,7 +1143,7 @@ export default function SettingsPage() {
             {!editingNumbering ? (
               <>
                 <p className={styles.stateHint}>
-                  Changing these only affects the <strong>next</strong> invoice/purchase bill created — existing documents keep their numbers.
+                  Changing these only affects the <strong>next</strong> invoice/purchase bill/credit note created — existing documents keep their numbers.
                 </p>
                 <div className={styles.infoGrid}>
                   <InfoRow
@@ -1137,6 +1171,19 @@ export default function SettingsPage() {
                   <InfoRow
                     label="Next Purchase Bill Number"
                     value={saved.nextPurchaseBillNumberOverride ? String(saved.nextPurchaseBillNumberOverride) : "Continues automatically"}
+                  />
+                  <InfoRow
+                    label="Credit Note Number Format"
+                    value={`${resolveNumberFormat(saved.creditNoteNumberFormat).label} — e.g. ${resolveNumberFormat(saved.creditNoteNumberFormat).example(saved.creditNoteNumberPrefix ?? "CN")}`}
+                  />
+                  <InfoRow
+                    label="Credit Note Prefix"
+                    value={saved.creditNoteNumberPrefix ?? "CN (default)"}
+                    mono
+                  />
+                  <InfoRow
+                    label="Next Credit Note Number"
+                    value={saved.nextCreditNoteNumberOverride ? String(saved.nextCreditNoteNumberOverride) : "Continues automatically"}
                   />
                 </div>
               </>
@@ -1198,6 +1245,32 @@ export default function SettingsPage() {
                       placeholder="e.g. 19"
                     />
                   </FormField>
+                  <FormField label="Credit Note Number Format" hint={`Preview: ${NUMBER_FORMATS[numberingForm.creditNoteNumberFormat].example(numberingForm.creditNoteNumberPrefix.trim().toUpperCase() || "CN")}`}>
+                    <Select
+                      value={numberingForm.creditNoteNumberFormat}
+                      onChange={(e) => setNumberingForm((f) => ({ ...f, creditNoteNumberFormat: e.target.value as NumberFormatId }))}
+                    >
+                      {Object.values(NUMBER_FORMATS).map((fmt) => <option key={fmt.id} value={fmt.id}>{fmt.label}</option>)}
+                    </Select>
+                  </FormField>
+                  <FormField label="Credit Note Prefix" error={numberingErrors.creditNoteNumberPrefix} hint="Default: CN">
+                    <Input
+                      value={numberingForm.creditNoteNumberPrefix}
+                      onChange={(e) => { setNumberingForm((f) => ({ ...f, creditNoteNumberPrefix: e.target.value.toUpperCase() })); setNumberingErrors((p) => ({ ...p, creditNoteNumberPrefix: undefined })); }}
+                      placeholder="CN"
+                      maxLength={6}
+                      className={styles.gstinInput}
+                    />
+                  </FormField>
+                  <FormField label="Next Credit Note Number (one-time)" error={numberingErrors.nextCreditNoteNumberOverride}>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={numberingForm.nextCreditNoteNumberOverride}
+                      onChange={(e) => { setNumberingForm((f) => ({ ...f, nextCreditNoteNumberOverride: e.target.value })); setNumberingErrors((p) => ({ ...p, nextCreditNoteNumberOverride: undefined })); }}
+                      placeholder="e.g. 5"
+                    />
+                  </FormField>
                 </div>
                 <div className={styles.formActionsRow}>
                   <Button type="button" variant="secondary" disabled={savingNumbering} onClick={handleCancelNumbering}>Cancel</Button>
@@ -1208,17 +1281,23 @@ export default function SettingsPage() {
           </div>
         </>
       )}
-      {brandingBusy && <OverlayLoader text={logoUploading ? "Updating logo…" : "Updating invoice logo setting…"} />}
+      {anySettingsSaving && (
+        <OverlayLoader
+          text={brandingBusy ? (logoUploading ? "Updating logo…" : "Updating invoice logo setting…") : savingBusyText!}
+        />
+      )}
       <ConfirmDialog
         open={numberingConfirmOpen}
         title="Update document numbering?"
-        message="This changes numbering for the next invoice/purchase bill created. Existing documents keep their current numbers."
+        message="This changes numbering for the next invoice/purchase bill/credit note created. Existing documents keep their current numbers."
         detail={
           <ul className={styles.termsPreviewList}>
             <li>Invoice format: <strong>{NUMBER_FORMATS[numberingForm.invoiceNumberFormat].example(numberingForm.invoiceNumberPrefix.trim().toUpperCase() || deriveDefaultPrefix(saved.name))}</strong></li>
             {numberingForm.nextInvoiceNumberOverride.trim() && <li>Next invoice number: <strong>{numberingForm.nextInvoiceNumberOverride}</strong></li>}
             <li>Purchase bill format: <strong>{NUMBER_FORMATS[numberingForm.purchaseBillNumberFormat].example(numberingForm.purchaseBillNumberPrefix.trim().toUpperCase() || "PB")}</strong></li>
             {numberingForm.nextPurchaseBillNumberOverride.trim() && <li>Next purchase bill number: <strong>{numberingForm.nextPurchaseBillNumberOverride}</strong></li>}
+            <li>Credit note format: <strong>{NUMBER_FORMATS[numberingForm.creditNoteNumberFormat].example(numberingForm.creditNoteNumberPrefix.trim().toUpperCase() || "CN")}</strong></li>
+            {numberingForm.nextCreditNoteNumberOverride.trim() && <li>Next credit note number: <strong>{numberingForm.nextCreditNoteNumberOverride}</strong></li>}
           </ul>
         }
         confirmLabel={savingNumbering ? "Saving…" : "Confirm"}

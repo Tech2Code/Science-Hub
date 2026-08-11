@@ -70,6 +70,12 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
       <polyline points="1 4 1 10 7 10" /><path strokeLinecap="round" strokeLinejoin="round" d="M3.51 15a9 9 0 102.13-9.36L1 10" />
     </svg>
   ),
+  rateLists: ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17V7a2 2 0 012-2h6a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V9a2 2 0 012-2h2" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 8h4m-4 3h4m-4 3h2" />
+    </svg>
+  ),
   gstFiling: ({ className }) => (
     <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m-9 4h12a2 2 0 002-2V6.828a2 2 0 00-.586-1.414l-2.828-2.828A2 2 0 0014.172 2H6a2 2 0 00-2 2v14a2 2 0 002 2z" />

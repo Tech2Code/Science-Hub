@@ -102,37 +102,6 @@
   .grid2 { grid-template-columns: 1fr; }
 }
 
-/* ── Unit combobox (typeable input + suggestion dropdown) ────────────────── */
-.unitCombo { position: relative; }
-
-.unitDropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 20;
-  margin-top: 0.25rem;
-  background: var(--c-bg-card);
-  border: 1px solid var(--c-border);
-  border-radius: 0.5rem;
-  box-shadow: var(--c-shadow-lg);
-  max-height: 11rem;
-  overflow-y: auto;
-}
-
-.unitOption {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 0.5rem 0.75rem;
-  background: none;
-  border: none;
-  font-size: 0.8125rem;
-  color: var(--c-text);
-  cursor: pointer;
-}
-.unitOption:hover { background: var(--c-bg-sub); }
-
 .skipCatalogLabel {
   display: flex;
   align-items: center;
