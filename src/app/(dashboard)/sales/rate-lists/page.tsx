@@ -20,6 +20,7 @@ import { formatDate } from "@/lib/formatDate";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { RateListPrintArea } from "@/components/rateLists/RateListPrintArea";
+import { downloadXlsx } from "@/lib/downloadXlsx";
 import styles from "./rateListsList.module.css";
 
 interface RateListSummary {
@@ -95,6 +96,7 @@ export default function RateListsPage() {
   const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewTitle, setPdfPreviewTitle] = useState("");
+  const [exportingId, setExportingId] = useState<string | null>(null);
 
   async function handlePreview(rl: RateListSummary) {
     setPreviewLoadingId(rl.id);
@@ -119,6 +121,36 @@ export default function RateListsPage() {
     } finally {
       setPreviewLoadingId(null);
       setPreviewTarget(null);
+    }
+  }
+
+  async function handleExport(rl: RateListSummary) {
+    setExportingId(rl.id);
+    try {
+      const res = await fetch(`/api/rate-lists/${rl.id}`);
+      const detail: RateListDetail & { error?: string } = await res.json();
+      if (!res.ok || detail.error) {
+        toast({ type: "error", title: "Failed", message: detail.error ?? "Could not load rate list." });
+        return;
+      }
+      await downloadXlsx(
+        `${detail.title.replace(/[^a-z0-9]+/gi, "-")}.xlsx`,
+        detail.title.slice(0, 31),
+        ["#", "Item", "Brand", "Unit", "Discount", "List Rate (₹)", "Amount (₹)"],
+        detail.items.map((item, idx) => [
+          idx + 1,
+          item.name,
+          item.brand ?? "",
+          item.unit,
+          item.isNetRate ? "Net Rate" : `${item.discountPercent}%`,
+          item.listRate,
+          item.amount,
+        ])
+      );
+    } catch {
+      toast({ type: "error", title: "Export failed", message: "Could not generate the Excel file." });
+    } finally {
+      setExportingId(null);
     }
   }
 
@@ -147,6 +179,7 @@ export default function RateListsPage() {
     <>
     {openingEditId && <OverlayLoader text="Opening editor…" />}
     {previewLoadingId && <OverlayLoader text="Generating preview…" />}
+    {exportingId && <OverlayLoader text="Generating Excel file…" />}
     {previewTarget && <RateListPrintArea rateList={previewTarget} settings={settings ?? null} />}
     {pdfPreviewUrl && (
       <PdfPreviewModal
@@ -228,6 +261,10 @@ export default function RateListsPage() {
                       <Button variant="secondary" size="sm" loading={previewLoadingId === rl.id} onClick={() => handlePreview(rl)}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                         Preview
+                      </Button>
+                      <Button variant="secondary" size="sm" loading={exportingId === rl.id} onClick={() => handleExport(rl)}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="17"/><line x1="15" y1="13" x2="9" y2="17"/></svg>
+                        Export
                       </Button>
                       {canWrite && (<Button variant="editOutline" size="sm" onClick={() => { setOpeningEditId(rl.id); router.push(`/sales/rate-lists/${rl.id}/edit`); }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>

@@ -15,6 +15,7 @@ import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { RateListPrintArea } from "@/components/rateLists/RateListPrintArea";
+import { downloadXlsx } from "@/lib/downloadXlsx";
 import { fmtCurrency } from "@/lib/rateListForm";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
@@ -49,6 +50,7 @@ export default function RateListDetailPage() {
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [pdfViewing, setPdfViewing] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const [shareOpen, setShareOpen] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
@@ -129,6 +131,30 @@ export default function RateListDetailPage() {
     a.href = url; a.download = `${rateList.title.replace(/[^a-z0-9]+/gi, "-")}.pdf`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  async function handleExportExcel() {
+    if (!rateList) return;
+    setExportingExcel(true);
+    try {
+      await downloadXlsx(
+        `${rateList.title.replace(/[^a-z0-9]+/gi, "-")}.xlsx`,
+        rateList.title.slice(0, 31),
+        ["#", "Item", "Brand", "Unit", "Discount", "List Rate (₹)", "Amount (₹)"],
+        rateList.items.map((item, idx) => [
+          idx + 1,
+          item.name,
+          item.brand ?? "",
+          item.unit,
+          item.isNetRate ? "Net Rate" : `${item.discountPercent}%`,
+          item.listRate,
+          item.amount,
+        ])
+      );
+    } catch {
+      toast({ type: "error", title: "Export failed", message: "Could not generate the Excel file." });
+    }
+    setExportingExcel(false);
   }
 
   async function handleShare(channel: "native" | "whatsapp" | "email") {
@@ -262,6 +288,7 @@ export default function RateListDetailPage() {
     {(pdfDownloading || pdfViewing) && <OverlayLoader text={pdfDownloading ? "Generating PDF…" : "Opening preview…"} />}
     {shareLoading && <OverlayLoader text="Preparing PDF…" />}
     {sendingEmail && <OverlayLoader text="Sending email…" />}
+    {exportingExcel && <OverlayLoader text="Generating Excel file…" />}
 
     {pdfPreviewUrl && (
       <PdfPreviewModal
@@ -330,6 +357,10 @@ export default function RateListDetailPage() {
           <Button variant="secondary" size="sm" onClick={handleDownloadPdf} loading={pdfDownloading}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Download PDF
+          </Button>
+          <Button variant="secondary" size="sm" onClick={handleExportExcel} loading={exportingExcel}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="17"/><line x1="15" y1="13" x2="9" y2="17"/></svg>
+            Export Excel
           </Button>
           <div className={styles.shareWrap} ref={shareContainerRef}>
             <Button variant="secondary" size="sm" disabled={shareLoading} onClick={() => {

@@ -1,0 +1,102 @@
+// Shared bulk-import parsing for Rate List items — one brain used by both
+// the client-side "Paste from Excel" flow (a tab-separated clipboard paste
+// needs no server round-trip) and the server-side /api/rate-lists/parse-import
+// route (an uploaded .xlsx/.csv file, where ExcelJS has already reduced the
+// sheet to plain string rows before calling into this same parser).
+
+export interface ParsedRateListRow {
+  name: string;
+  brand: string;
+  unit: string;
+  isNetRate: boolean;
+  discountPercent: string;
+  listRate: string;
+}
+
+type ColumnKey = "serial" | "name" | "brand" | "unit" | "discount" | "listRate" | "amount";
+
+// Order matters — checked top to bottom, first match wins per column, so
+// "List Rate" is tried before the looser "amount"/"rate" catch-alls would
+// otherwise also match it.
+const COLUMN_PATTERNS: { key: ColumnKey; pattern: RegExp }[] = [
+  { key: "serial", pattern: /^(s\.?\s*no\.?|sr\.?\s*no\.?|#)$/i },
+  { key: "listRate", pattern: /list\s*rate|^rate$|^price$/i },
+  { key: "amount", pattern: /amount/i },
+  { key: "name", pattern: /name|item|chemical|product|description/i },
+  { key: "brand", pattern: /brand/i },
+  { key: "unit", pattern: /unit/i },
+  { key: "discount", pattern: /discount/i },
+];
+
+function detectColumns(headerRow: string[]): Partial<Record<ColumnKey, number>> {
+  const map: Partial<Record<ColumnKey, number>> = {};
+  headerRow.forEach((cell, idx) => {
+    const trimmed = cell.trim();
+    if (!trimmed) return;
+    for (const { key, pattern } of COLUMN_PATTERNS) {
+      if (!(key in map) && pattern.test(trimmed)) { map[key] = idx; break; }
+    }
+  });
+  return map;
+}
+
+function parseDiscountCell(raw: string): { isNetRate: boolean; discountPercent: string } {
+  const t = raw.trim();
+  if (!t || /net\s*rate/i.test(t)) return { isNetRate: true, discountPercent: "0" };
+  const num = parseFloat(t.replace(/%/g, ""));
+  return { isNetRate: false, discountPercent: isNaN(num) ? "0" : String(Math.min(100, Math.max(0, num))) };
+}
+
+const cellAt = (row: string[], idx: number | undefined): string => (idx !== undefined ? (row[idx] ?? "").trim() : "");
+
+/**
+ * Parses a rectangular grid of string cells (already split into rows/columns
+ * by the caller) into Rate List items. Recognizes a header row by column-name
+ * matching (Name/Brand/Unit/Discount/List Rate, in any order, any casing);
+ * falls back to a positional guess by column count when no header is
+ * detected — matching either the app's own item order (Name, Brand, Unit,
+ * Discount, List Rate) or the common "S.No, Chemical, Brand, Unit, Discount,
+ * List Rate, Amount" shape (e.g. a supplier's printed rate list table).
+ */
+export function parseRateListRows(rows: string[][]): { items: ParsedRateListRow[]; skipped: number } {
+  if (rows.length === 0) return { items: [], skipped: 0 };
+
+  let dataRows = rows;
+  let cols = detectColumns(rows[0]);
+  const looksLikeHeader = Object.keys(cols).length >= 2;
+  if (looksLikeHeader) {
+    dataRows = rows.slice(1);
+  } else {
+    const width = rows[0].length;
+    if (width >= 7) cols = { serial: 0, name: 1, brand: 2, unit: 3, discount: 4, listRate: 5, amount: 6 };
+    else if (width >= 5) cols = { name: 0, brand: 1, unit: 2, discount: 3, listRate: 4 };
+    else if (width >= 3) cols = { name: 0, unit: 1, listRate: 2 };
+    else cols = { name: 0, listRate: 1 };
+  }
+
+  const items: ParsedRateListRow[] = [];
+  let skipped = 0;
+  for (const row of dataRows) {
+    if (row.every((c) => !c.trim())) continue;
+    const name = cellAt(row, cols.name);
+    const listRate = cellAt(row, cols.listRate).replace(/[^\d.]/g, "");
+    if (!name || !listRate) { skipped++; continue; }
+    const { isNetRate, discountPercent } = cols.discount !== undefined ? parseDiscountCell(cellAt(row, cols.discount)) : { isNetRate: false, discountPercent: "0" };
+    items.push({
+      name,
+      brand: cellAt(row, cols.brand),
+      unit: cellAt(row, cols.unit) || "Nos",
+      isNetRate,
+      discountPercent,
+      listRate,
+    });
+  }
+  return { items, skipped };
+}
+
+/** Excel copy places a tab between columns — falls back to comma-split for a plain CSV snippet pasted instead of a spreadsheet range. */
+export function parsePastedRateListText(text: string): { items: ParsedRateListRow[]; skipped: number } {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const rows = lines.map((line) => (line.includes("\t") ? line.split("\t") : line.split(",")));
+  return parseRateListRows(rows);
+}
