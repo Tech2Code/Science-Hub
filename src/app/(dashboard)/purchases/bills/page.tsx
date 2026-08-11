@@ -213,7 +213,7 @@ export default function PurchasesPage() {
     <>
     <ConfirmDialog
       open={!!deleteTarget}
-      title="Move to Bin"
+      title="Delete Purchase Bill"
       message={`Move bill ${deleteTarget?.billNumber} to bin? You can restore it within 30 days.`}
       confirmLabel="Move to Bin"
       variant="danger"

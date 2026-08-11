@@ -6,6 +6,8 @@ import { INDIA_STATES_FULL } from "@/lib/states";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./InvoiceOptionsRow.module.css";
 
+const RequiredStar = () => <span style={{ color: "var(--c-red, #dc2626)" }}> *</span>;
+
 interface InvoiceOptionsRowProps {
   sectionIndex: number;
   placeOfSupply: string;
@@ -23,10 +25,19 @@ interface InvoiceOptionsRowProps {
   invoiceDate?: string;
   onInvoiceDateChange?: (date: string) => void;
   maxInvoiceDate?: string;
+
+  transportChargeEnabled: boolean;
+  onToggleTransportCharge: () => void;
+  transportCharge: string;
+  onTransportChargeChange: (value: string) => void;
+  transportChargeGstRate: string;
+  onTransportChargeGstRateChange: (value: string) => void;
+  transportChargeError?: string;
 }
 
-// Place of supply / inter-state (IGST) / reverse charge / due date — shared by
-// the New Invoice and Edit Invoice pages so the two forms can't drift apart.
+// Place of supply / inter-state (IGST) / reverse charge / due date / transport
+// charge — shared by the New Invoice and Edit Invoice pages so the two forms
+// can't drift apart.
 export function InvoiceOptionsRow({
   sectionIndex,
   placeOfSupply, onPlaceOfSupplyChange,
@@ -34,12 +45,14 @@ export function InvoiceOptionsRow({
   reverseCharge, onToggleReverseCharge,
   dueDate, onDueDateChange, minDueDate,
   invoiceDate, onInvoiceDateChange, maxInvoiceDate,
+  transportChargeEnabled, onToggleTransportCharge, transportCharge, onTransportChargeChange,
+  transportChargeGstRate, onTransportChargeGstRateChange, transportChargeError,
 }: InvoiceOptionsRowProps) {
   return (
     <div {...animateSection(sectionIndex, `card ${styles.cardPad}`)}>
       <div className={styles.toggleRow}>
         <div className={styles.dueDateRow}>
-          <label className={styles.dueDateLabel}>Place of supply *</label>
+          <label className={styles.dueDateLabel}>Place of supply<RequiredStar /></label>
           <Select
             value={placeOfSupply}
             onChange={(e) => onPlaceOfSupplyChange(e.target.value)}
@@ -82,6 +95,45 @@ export function InvoiceOptionsRow({
           <span className={styles.switchText}>Reverse charge applicable</span>
         </label>
       </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0.75rem 0" }}>
+        <Switch checked={transportChargeEnabled} onChange={onToggleTransportCharge} aria-label="Transport charge" />
+        <span style={{ fontSize: "0.875rem", fontWeight: 600 }}>Transport Charge</span>
+      </div>
+      {transportChargeEnabled && (
+        <div className={styles.toggleRow}>
+          <div className={styles.dueDateRow}>
+            <label className={styles.dueDateLabel}>Amount (₹)</label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={transportCharge}
+              onChange={(e) => onTransportChargeChange(e.target.value)}
+              placeholder="0.00"
+              className={`${styles.dueDateInput} ${styles.dueDateDateInput}`}
+            />
+          </div>
+          <div className={styles.dueDateRow}>
+            <label className={styles.dueDateLabel}>GST Rate (%)<RequiredStar /></label>
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={transportChargeGstRate}
+              onChange={(e) => onTransportChargeGstRateChange(e.target.value)}
+              placeholder="18"
+              className={`${styles.dueDateInput} ${styles.dueDateDateInput}`}
+            />
+          </div>
+        </div>
+      )}
+      {transportChargeEnabled && transportChargeError && (
+        <p style={{ color: "var(--c-red, #dc2626)", fontSize: "0.8rem", margin: "0.25rem 0 0" }} role="alert">
+          {transportChargeError}
+        </p>
+      )}
     </div>
   );
 }

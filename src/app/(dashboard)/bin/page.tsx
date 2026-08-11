@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import type { ReactNode } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
@@ -41,6 +42,11 @@ const TYPE_META: Record<BinType, { plural: string; pillCls: string }> = {
 const TYPE_ORDER: BinType[] = ["invoice", "customer", "product", "brand", "category", "vendor", "purchase_bill", "return"];
 
 function DaysLeftPill({ daysLeft }: { daysLeft: number }) {
+  // -1 = invoices/purchase bills/credit notes, exempt from auto-purge
+  // because their numbers are legally significant GST document numbers.
+  if (daysLeft < 0) {
+    return <span className={`${styles.daysLeftPill} ${styles.daysLeftGreen}`}>Retained (GST)</span>;
+  }
   const red    = daysLeft <= 7;
   const yellow = !red && daysLeft <= 14;
   const toneCls = red ? styles.daysLeftRed : yellow ? styles.daysLeftYellow : styles.daysLeftGreen;
@@ -175,6 +181,7 @@ export default function BinPage() {
   const [search, setSearch] = useState("");
   const [confirmState, setConfirmState] = useState<{
     title: string; message: string; confirmLabel: string; variant: "default" | "danger";
+    detail?: ReactNode;
     onConfirm: () => void;
   } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
@@ -212,11 +219,20 @@ export default function BinPage() {
   }
 
   function handleDeleteForever(item: BinItem) {
+    const isNumberedDocument = item.type === "invoice" || item.type === "purchase_bill" || item.type === "return";
     setConfirmState({
       title: "Delete Forever",
       message: `Permanently delete "${item.name}"? This cannot be undone.`,
       confirmLabel: "Delete Forever",
       variant: "danger",
+      detail: isNumberedDocument ? (
+        <div className={styles.gstWarning}>
+          <strong>Warning:</strong> {item.name} is a sequentially numbered GST document.
+          Deleting it permanently will leave a gap in the numbering sequence that cannot be
+          explained during GST filing. Only proceed if you understand this risk — in most
+          cases it&rsquo;s safer to leave it in the bin.
+        </div>
+      ) : undefined,
       onConfirm: async () => {
         setConfirmLoading(true);
         try {
@@ -298,6 +314,7 @@ export default function BinPage() {
         open={!!confirmState}
         title={confirmState?.title ?? ""}
         message={confirmState?.message ?? ""}
+        detail={confirmState?.detail}
         confirmLabel={confirmState?.confirmLabel ?? "Confirm"}
         variant={confirmState?.variant ?? "default"}
         loading={confirmLoading}
@@ -344,7 +361,7 @@ export default function BinPage() {
               ? "Bin is empty"
               : search.trim()
               ? `${filteredCount} of ${totalCount} items`
-              : `${totalCount} item${totalCount !== 1 ? "s" : ""} — auto-purged after 30 days`}
+              : `${totalCount} item${totalCount !== 1 ? "s" : ""} — most types auto-purge after 30 days; invoices, purchase bills and credit notes are retained indefinitely`}
           </p>
         </div>
         {isAdmin && !loading && totalCount > 0 && (

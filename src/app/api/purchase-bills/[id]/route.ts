@@ -38,7 +38,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!auth.ok) return auth.response;
     const { id } = await params;
     const body = await req.json();
-    const { vendorId, billDate, dueDate, discount, notes, category, status, items, attachmentUrl, attachmentName, expectedUpdatedAt } = body;
+    const { vendorId, billDate, dueDate, discount, notes, category, status, items, attachmentUrl, attachmentName, expectedUpdatedAt, transportCharge, transportChargeGstRate } = body;
 
     if (attachmentUrl && !isPurchaseBillBlobUrl(attachmentUrl)) {
       return NextResponse.json({ error: "Invalid attachment URL" }, { status: 400 });
@@ -153,9 +153,30 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Discount cannot be negative" }, { status: 400 });
     }
     const effectiveDiscount = parsedDiscount !== undefined ? parsedDiscount : existing.discount;
-    const rawTotal = subtotal !== undefined && taxAmount !== undefined
+
+    // Transport/freight charge — same "only touch what was sent" partial-
+    // update semantics as discount above, own line/GST kept out of the
+    // CGST/SGST/IGST split, always server-recomputed rather than trusted.
+    const parsedTransportCharge = transportCharge !== undefined && transportCharge !== null && transportCharge !== ""
+      ? parseFloat(String(transportCharge))
+      : undefined;
+    if (parsedTransportCharge !== undefined && (Number.isNaN(parsedTransportCharge) || parsedTransportCharge < 0)) {
+      return NextResponse.json({ error: "Transport charge cannot be negative" }, { status: 400 });
+    }
+    const effectiveTransportCharge = parsedTransportCharge !== undefined ? parsedTransportCharge : existing.transportCharge;
+
+    const parsedTransportGstRate = transportChargeGstRate !== undefined && transportChargeGstRate !== null && transportChargeGstRate !== ""
+      ? parseFloat(String(transportChargeGstRate))
+      : undefined;
+    if (parsedTransportGstRate !== undefined && (Number.isNaN(parsedTransportGstRate) || parsedTransportGstRate < 0)) {
+      return NextResponse.json({ error: "Transport charge GST rate cannot be negative" }, { status: 400 });
+    }
+    const effectiveTransportGstRate = parsedTransportGstRate !== undefined ? parsedTransportGstRate : existing.transportChargeGstRate;
+    const effectiveTransportGstAmount = (effectiveTransportCharge * effectiveTransportGstRate) / 100;
+
+    const rawTotal = (subtotal !== undefined && taxAmount !== undefined
       ? subtotal + taxAmount - effectiveDiscount
-      : existing.subtotal + existing.taxAmount - effectiveDiscount;
+      : existing.subtotal + existing.taxAmount - effectiveDiscount) + effectiveTransportCharge + effectiveTransportGstAmount;
     const { roundOff, roundedTotal: total } = computeRoundOff(rawTotal);
 
     if (total < 0) {
@@ -226,6 +247,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           sgst,
           igst,
           ...(parsedDiscount !== undefined && { discount: parsedDiscount }),
+          ...(parsedTransportCharge !== undefined && { transportCharge: parsedTransportCharge }),
+          ...(parsedTransportGstRate !== undefined && { transportChargeGstRate: parsedTransportGstRate }),
+          transportChargeGstAmount: effectiveTransportGstAmount,
           total,
           roundOff,
           ...(notes !== undefined && { notes: notes || null }),
@@ -313,25 +337,32 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
     const { id } = await params;
 
+    // Deliberately soft-delete only — a bill number is part of the GST
+    // filing sequence, so this route never permanently removes the row.
+    // Permanent deletion (admin-only, from the Bin page) is a separate,
+    // explicit decision — see src/app/api/bin/[type]/[id]/route.ts.
+    //
     // Reverse the stock this bill added at creation — and guard against a
     // repeated delete call double-reversing it. A cancelled bill already had
     // its stock reversed when it was cancelled, so deleting it must not
     // reverse it again.
     const result = await prisma.$transaction(async (tx) => {
+      const bill = await tx.purchaseBill.findUnique({ where: { id }, select: { billNumber: true, status: true, deletedAt: true } });
+      if (!bill) return null;
+
       const updateResult = await tx.purchaseBill.updateMany({
         where: { id, deletedAt: null },
         data: { deletedAt: new Date() },
       });
-      if (updateResult.count === 0) return null;
+      if (updateResult.count === 0) return { billNumber: bill.billNumber, alreadyDeleted: true };
 
-      const bill = await tx.purchaseBill.findUnique({ where: { id }, select: { billNumber: true, status: true } });
-      if (bill?.status !== "cancelled") {
+      if (bill.status !== "cancelled") {
         const items = await tx.purchaseBillItem.findMany({
           where: { purchaseBillId: id },
           select: { productId: true, quantity: true },
@@ -341,17 +372,19 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
           items.filter(i => i.productId).map((item) => ({ productId: item.productId!, quantity: -item.quantity })),
           {
             type: "purchase_delete_restore",
-            reference: bill?.billNumber,
+            reference: bill.billNumber,
             purchaseBillId: id,
             notes: "Purchase bill deleted",
             createdByUserId: auth.session.user.id,
           }
         );
       }
-      return bill;
+
+      return { billNumber: bill.billNumber, alreadyDeleted: false };
     }, { timeout: 20000, maxWait: 10000 });
 
-    if (!result) return NextResponse.json({ message: "Bill already deleted" });
+    if (!result) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+    if (result.alreadyDeleted) return NextResponse.json({ message: "Bill already moved to bin" });
 
     await logActivity(auth.session.user.id, "delete_purchase_bill", `Deleted purchase bill ${result.billNumber}`, id, "purchase_bill");
     revalidateTag("purchase-bills", { expire: 0 });

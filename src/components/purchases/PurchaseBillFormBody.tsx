@@ -33,6 +33,14 @@ interface PurchaseBillFormBodyProps {
   onAttachmentFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onAttachmentRemove: () => void;
 
+  transportChargeEnabled: boolean;
+  onToggleTransportCharge: () => void;
+  transportCharge: string;
+  onTransportChargeChange: (value: string) => void;
+  transportChargeGstRate: string;
+  onTransportChargeGstRateChange: (value: string) => void;
+  transportChargeError?: string;
+
   products: PurchaseBillProduct[];
   setProducts: React.Dispatch<React.SetStateAction<PurchaseBillProduct[]>>;
   items: PurchaseBillLineItem[];
@@ -43,6 +51,7 @@ interface PurchaseBillFormBodyProps {
   grossTotal: number;
   itemDiscountTotal: number;
   taxTotal: number;
+  transportChargeGstAmount: number;
   roundOff: number;
   grandTotal: number;
   discount: string;
@@ -62,8 +71,10 @@ export function PurchaseBillFormBody({
   category, onCategoryChange, billDate, onBillDateChange, billDateError, dueDate, onDueDateChange, dueDateError,
   notes, onNotesChange, attachmentUploading, attachmentName, attachmentUrl,
   onAttachmentFileChange, onAttachmentRemove,
+  transportChargeEnabled, onToggleTransportCharge, transportCharge, onTransportChargeChange,
+  transportChargeGstRate, onTransportChargeGstRateChange, transportChargeError,
   products, setProducts, items, setItems, itemsError,
-  grossTotal, itemDiscountTotal, taxTotal, roundOff, grandTotal, discount, onDiscountChange,
+  grossTotal, itemDiscountTotal, taxTotal, transportChargeGstAmount, roundOff, grandTotal, discount, onDiscountChange,
   footer,
 }: PurchaseBillFormBodyProps) {
   return (
@@ -93,6 +104,13 @@ export function PurchaseBillFormBody({
           attachmentUrl={attachmentUrl}
           onAttachmentFileChange={onAttachmentFileChange}
           onAttachmentRemove={onAttachmentRemove}
+          transportChargeEnabled={transportChargeEnabled}
+          onToggleTransportCharge={onToggleTransportCharge}
+          transportCharge={transportCharge}
+          onTransportChargeChange={onTransportChargeChange}
+          transportChargeGstRate={transportChargeGstRate}
+          onTransportChargeGstRateChange={onTransportChargeGstRateChange}
+          transportChargeError={transportChargeError}
         />
 
         <PurchaseBillItemsTable
@@ -112,6 +130,9 @@ export function PurchaseBillFormBody({
           grossTotal={grossTotal}
           itemDiscountTotal={itemDiscountTotal}
           taxTotal={taxTotal}
+          transportCharge={transportChargeEnabled ? parseFloat(transportCharge) || 0 : 0}
+          transportChargeGstRate={transportChargeEnabled ? parseFloat(transportChargeGstRate) || 0 : 0}
+          transportChargeGstAmount={transportChargeGstAmount}
           roundOff={roundOff}
           grandTotal={grandTotal}
           discount={discount}

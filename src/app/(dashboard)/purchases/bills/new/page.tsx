@@ -55,6 +55,11 @@ export default function NewPurchaseBillPage() {
   const [attachmentUrl,  setAttachmentUrl]  = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
+  // Default ON, mirrors the invoice side — see InvoiceOptionsRow's note.
+  const [transportChargeEnabled, setTransportChargeEnabled] = useState(true);
+  const [transportCharge, setTransportCharge] = useState("");
+  const [transportChargeGstRate, setTransportChargeGstRate] = useState("18");
+  const [transportChargeError, setTransportChargeError] = useState<string | undefined>(undefined);
 
   // Optional: record payment immediately, via a popup dialog
   const [showFirstBillNudge, setShowFirstBillNudge] = useState(false);
@@ -109,7 +114,10 @@ export default function NewPurchaseBillPage() {
   // against has since changed (add/remove/edit a line) — see itemsErrorFor.
   const visibleItemsError = itemsError && itemsErrorFor === items ? itemsError : undefined;
 
-  const { grossTotal, itemDiscountTotal, taxTotal, roundOff, grandTotal } = computePurchaseBillTotals(items, discount);
+  const effectiveTransportCharge = transportChargeEnabled ? (toNum(transportCharge)) : 0;
+  const effectiveTransportGstRate = transportChargeEnabled ? (toNum(transportChargeGstRate)) : 0;
+  const { grossTotal, itemDiscountTotal, taxTotal, roundOff, grandTotal, transportChargeGstAmount } =
+    computePurchaseBillTotals(items, discount, effectiveTransportCharge, effectiveTransportGstRate);
   const subtotal = grossTotal - itemDiscountTotal;
   const disc = toNum(discount);
 
@@ -168,6 +176,11 @@ export default function NewPurchaseBillPage() {
     if (addPayment && toNum(payAmount) > 0 && payDate < billDate) { setPaymentDateError("Payment date cannot be before the bill date."); return; }
     if (addPayment && toNum(payAmount) > 0 && payDate > new Date().toISOString().slice(0, 10)) { setPaymentDateError("Payment date cannot be in the future."); return; }
     setPaymentDateError(undefined);
+    if (transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim()) {
+      setTransportChargeError("Enter a GST rate for the transport charge.");
+      return;
+    }
+    setTransportChargeError(undefined);
 
     const billItems = items.map(i => {
       const { discountAmount, gstAmount, total } = calcPurchaseBillItem(i);
@@ -199,6 +212,8 @@ export default function NewPurchaseBillPage() {
       items:     billItems,
       attachmentUrl,
       attachmentName,
+      transportCharge: effectiveTransportCharge,
+      transportChargeGstRate: effectiveTransportGstRate,
     };
 
     if (addPayment && toNum(payAmount) > 0) {
@@ -234,7 +249,11 @@ export default function NewPurchaseBillPage() {
 
   const missingVendor = !vendorId;
   const noItems = items.length === 0;
-  const canSubmit = !saving && !attachmentUploading && !missingVendor && !noItems;
+  // Amount is the trigger — a blank/zero amount is a valid "no transport
+  // charge" default, so only require the GST rate once a real amount has
+  // actually been entered.
+  const missingTransportCharge = transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim();
+  const canSubmit = !saving && !attachmentUploading && !missingVendor && !noItems && !missingTransportCharge;
 
   return (
     <>
@@ -284,6 +303,13 @@ export default function NewPurchaseBillPage() {
           attachmentName={attachmentName}
           onAttachmentFileChange={handleAttachmentChange}
           onAttachmentRemove={removeAttachment}
+          transportChargeEnabled={transportChargeEnabled}
+          onToggleTransportCharge={() => { setTransportChargeEnabled((v) => !v); setTransportChargeError(undefined); }}
+          transportCharge={transportCharge}
+          onTransportChargeChange={(v) => { setTransportCharge(v); setTransportChargeError(undefined); }}
+          transportChargeGstRate={transportChargeGstRate}
+          onTransportChargeGstRateChange={(v) => { setTransportChargeGstRate(v); setTransportChargeError(undefined); }}
+          transportChargeError={transportChargeError}
           products={products}
           setProducts={setProducts}
           items={items}
@@ -292,6 +318,7 @@ export default function NewPurchaseBillPage() {
           grossTotal={grossTotal}
           itemDiscountTotal={itemDiscountTotal}
           taxTotal={taxTotal}
+          transportChargeGstAmount={transportChargeGstAmount}
           roundOff={roundOff}
           grandTotal={grandTotal}
           discount={discount}
@@ -324,10 +351,11 @@ export default function NewPurchaseBillPage() {
                 </div>
               )}
 
-              {(missingVendor || noItems) && (
+              {(missingVendor || noItems || missingTransportCharge) && (
                 <div className={styles.warningList}>
                   {missingVendor && <p className={styles.warningItem}>• Select a vendor</p>}
                   {noItems && <p className={styles.warningItem}>• Add at least one item</p>}
+                  {missingTransportCharge && <p className={styles.warningItem}>• Enter a GST rate for the transport charge</p>}
                 </div>
               )}
               <div className="summary-actions">

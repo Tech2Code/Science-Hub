@@ -38,6 +38,7 @@ interface PurchaseBill {
   status: string; category: string | null; notes: string | null;
   subtotal: number; taxAmount: number; isInterState: boolean; placeOfSupply: string | null;
   cgst: number; sgst: number; igst: number;
+  transportCharge?: number; transportChargeGstRate?: number; transportChargeGstAmount?: number;
   discount: number; total: number; roundOff: number; paidAmount: number;
   vendor: { id: string; name: string; company: string | null; gstin: string | null; phone: string | null; email: string | null; address: string | null; state: string | null; updatedAt?: string; };
   createdBy: { id: string; name: string };
@@ -472,6 +473,30 @@ export default function PurchaseBillDetailPage() {
               </tr>
             );
           })}
+          {!!bill.transportCharge && bill.transportCharge > 0 && (() => {
+            const tcTaxable = bill.transportCharge ?? 0;
+            const tcGst = bill.transportChargeGstAmount ?? 0;
+            const tcRate = bill.transportChargeGstRate ?? 0;
+            const tcHalfRate = tcRate / 2;
+            const tcHalfGst = tcGst / 2;
+            const tcTd = (content: React.ReactNode, bold = false) => (
+              <td style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", textAlign: "right", background: "var(--bp-bg)", fontWeight: bold ? 700 : undefined, color: bold ? "var(--bp-tx)" : undefined, whiteSpace: "nowrap" }}>
+                {content}
+              </td>
+            );
+            return (
+              <tr>
+                <td colSpan={7} style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", background: "var(--bp-bg)", fontWeight: 600, color: "var(--bp-tx)" }}>
+                  Transportation Charges
+                </td>
+                {tcTd(fmt(tcTaxable))}
+                {bill.isInterState
+                  ? tcTd(`${tcRate}% (₹${fmt(tcGst)})`)
+                  : <>{tcTd(`${tcHalfRate}% (₹${fmt(tcHalfGst)})`)}{tcTd(`${tcHalfRate}% (₹${fmt(tcHalfGst)})`)}</>}
+                {tcTd(fmt(tcTaxable + tcGst), true)}
+              </tr>
+            );
+          })()}
           {(() => {
             const bpLabelCell: CSSProperties = { border: `1px solid var(--bp-bd)`, padding: "5px 8px", color: "var(--bp-tx2)", background: "var(--bp-bg2)" };
             const bpValueCell: CSSProperties = { ...bpLabelCell, textAlign: "right" };
@@ -485,11 +510,14 @@ export default function PurchaseBillDetailPage() {
                     {bill.notes && <div style={{ marginTop: 6 }}><strong>Note:</strong> {bill.notes}</div>}
                   </td>
                   <td style={bpLabelCell}>Subtotal</td>
-                  <td style={bpValueCell}>₹{fmt(bill.subtotal)}</td>
+                  <td style={bpValueCell}>₹{fmt(bill.subtotal + (bill.transportCharge ?? 0))}</td>
                 </tr>
+                {/* Includes Transportation Charges' own GST (shown split
+                    out on its own row above) — otherwise this would
+                    silently under-report the tax actually charged. */}
                 <tr>
                   <td style={bpLabelCell}>GST</td>
-                  <td style={bpValueCell}>₹{fmt(bill.taxAmount)}</td>
+                  <td style={bpValueCell}>₹{fmt(bill.taxAmount + (bill.transportChargeGstAmount ?? 0))}</td>
                 </tr>
                 {bill.discount > 0 && (
                   <>
@@ -543,7 +571,7 @@ export default function PurchaseBillDetailPage() {
       open={confirmDelete}
       title="Delete Purchase Bill"
       message={`Move bill ${bill.billNumber} to bin? You can restore it within 30 days.`}
-      confirmLabel="Delete"
+      confirmLabel="Move to Bin"
       variant="danger"
       loading={deleting}
       onConfirm={handleDelete}
@@ -795,6 +823,18 @@ export default function PurchaseBillDetailPage() {
               ))}
             </tbody>
             <tfoot>
+              {!!bill.transportCharge && bill.transportCharge > 0 && (
+                <tr>
+                  <td colSpan={8} className={`${styles.textRight} ${styles.textMuted}`}>Transport Charge</td>
+                  <td className={`${styles.textRight} ${styles.textMuted}`}>₹{fmt(bill.transportCharge)}</td>
+                </tr>
+              )}
+              {!!bill.transportChargeGstAmount && bill.transportChargeGstAmount > 0 && (
+                <tr>
+                  <td colSpan={8} className={`${styles.textRight} ${styles.textMuted}`}>Transport GST {bill.transportChargeGstRate}%</td>
+                  <td className={`${styles.textRight} ${styles.textMuted}`}>₹{fmt(bill.transportChargeGstAmount)}</td>
+                </tr>
+              )}
               {bill.roundOff !== 0 && (
                 <tr>
                   <td colSpan={8} className={`${styles.textRight} ${styles.textMuted}`}>Round Off</td>

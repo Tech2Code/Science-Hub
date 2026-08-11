@@ -32,6 +32,7 @@ interface PurchaseBill {
   id: string; billNumber: string; vendorId: string; billDate: string; dueDate: string | null; updatedAt?: string;
   category: string | null; notes: string | null; status: string;
   subtotal: number; taxAmount: number; discount: number; total: number; paidAmount: number;
+  transportCharge?: number; transportChargeGstRate?: number;
   attachmentUrl: string | null; attachmentName: string | null;
   vendor: { id: string; name: string; company: string | null; gstin: string | null };
   items: BillItem[];
@@ -102,6 +103,14 @@ export default function EditPurchaseBillPage() {
   const [attachmentUrl,  setAttachmentUrl]  = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
+  // Always shown open on Edit too (matches New Bill's default-ON toggle) —
+  // an existing bill's saved amount/rate (if any) is loaded into it below.
+  // Note: the useEffect that loads the bill will set this to false if the
+  // saved transportCharge was 0 or absent (i.e. user previously disabled it).
+  const [transportChargeEnabled, setTransportChargeEnabled] = useState(true);
+  const [transportCharge, setTransportCharge] = useState("");
+  const [transportChargeGstRate, setTransportChargeGstRate] = useState("18");
+  const [transportChargeError, setTransportChargeError] = useState<string | undefined>(undefined);
   // The bill's persisted attachment when the page loaded — used to tell a
   // saved attachment apart from one uploaded this session but not saved yet,
   // so an unsaved upload that gets replaced/removed can be discarded right
@@ -111,6 +120,7 @@ export default function EditPurchaseBillPage() {
 
   const { isDirty, markClean } = useDirty({
     vendorId, billDate, dueDate, category, notes, discount, items, attachmentUrl, attachmentName,
+    transportCharge, transportChargeGstRate,
   });
 
   useEffect(() => {
@@ -140,6 +150,11 @@ export default function EditPurchaseBillPage() {
       setAttachmentName(b.attachmentName ?? null);
       originalAttachmentUrl.current = b.attachmentUrl ?? null;
       setLoadedUpdatedAt(b.updatedAt ?? null);
+      const transportChargeVal = b.transportCharge && b.transportCharge > 0 ? String(b.transportCharge) : "";
+      const transportChargeGstRateVal = b.transportChargeGstRate ? String(b.transportChargeGstRate) : "18";
+      setTransportChargeEnabled(b.transportCharge != null && b.transportCharge > 0);
+      setTransportCharge(transportChargeVal);
+      setTransportChargeGstRate(transportChargeGstRateVal);
       // Snapshot the freshly-loaded values directly rather than relying on
       // the state set above — those updates haven't committed yet at this
       // point in the callback, so reading them back here would be stale.
@@ -153,6 +168,8 @@ export default function EditPurchaseBillPage() {
         items: lineItems,
         attachmentUrl: b.attachmentUrl ?? null,
         attachmentName: b.attachmentName ?? null,
+        transportCharge: transportChargeVal,
+        transportChargeGstRate: transportChargeGstRateVal,
       });
       setLoading(false);
     }).catch(() => { setLoadErr("Failed to load bill."); setLoading(false); });
@@ -207,11 +224,18 @@ export default function EditPurchaseBillPage() {
 
   const { grossTotal, itemDiscountTotal, taxTotal } = computePurchaseBillTotals(items, "0");
   const subtotal = grossTotal - itemDiscountTotal;
-  const rawTotal = subtotal + taxTotal - toNum(discount);
+  const effectiveTransportCharge = transportChargeEnabled ? (toNum(transportCharge)) : 0;
+  const effectiveTransportGstRate = transportChargeEnabled ? (toNum(transportChargeGstRate)) : 0;
+  const transportChargeGstAmount = (effectiveTransportCharge * effectiveTransportGstRate) / 100;
+  const rawTotal = subtotal + taxTotal - toNum(discount) + effectiveTransportCharge + transportChargeGstAmount;
   const { roundOff, roundedTotal: computedTotal } = computeRoundOff(rawTotal);
   const outstanding   = bill ? computedTotal - bill.paidAmount : 0;
   const missingVendor = !vendorId;
   const noItems = items.length === 0;
+  // Amount is the trigger — a blank/zero amount is a valid "no transport
+  // charge" default, so only require the GST rate once a real amount has
+  // actually been entered.
+  const missingTransportCharge = transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -237,6 +261,11 @@ export default function EditPurchaseBillPage() {
     setItemsError(undefined);
     if (dueDate && dueDate < billDate) { setDueDateError("Due date cannot be before the bill date."); return; }
     setDueDateError(undefined);
+    if (transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim()) {
+      setTransportChargeError("Enter a GST rate for the transport charge.");
+      return;
+    }
+    setTransportChargeError(undefined);
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
@@ -248,6 +277,8 @@ export default function EditPurchaseBillPage() {
         discount: toNum(discount),
         attachmentUrl,
         attachmentName,
+        transportCharge: effectiveTransportCharge,
+        transportChargeGstRate: effectiveTransportGstRate,
         expectedUpdatedAt: loadedUpdatedAt,
         items: items.map(i => {
           const { discountAmount, gstAmount, total } = calcPurchaseBillItem(i);
@@ -396,6 +427,13 @@ export default function EditPurchaseBillPage() {
           attachmentUrl={attachmentUrl}
           onAttachmentFileChange={handleAttachmentChange}
           onAttachmentRemove={removeAttachment}
+          transportChargeEnabled={transportChargeEnabled}
+          onToggleTransportCharge={() => { setTransportChargeEnabled((v) => !v); setTransportChargeError(undefined); }}
+          transportCharge={transportCharge}
+          onTransportChargeChange={(v) => { setTransportCharge(v); setTransportChargeError(undefined); }}
+          transportChargeGstRate={transportChargeGstRate}
+          onTransportChargeGstRateChange={(v) => { setTransportChargeGstRate(v); setTransportChargeError(undefined); }}
+          transportChargeError={transportChargeError}
           products={products}
           setProducts={setProducts}
           items={items}
@@ -404,24 +442,26 @@ export default function EditPurchaseBillPage() {
           grossTotal={grossTotal}
           itemDiscountTotal={itemDiscountTotal}
           taxTotal={taxTotal}
+          transportChargeGstAmount={transportChargeGstAmount}
           roundOff={roundOff}
           grandTotal={computedTotal}
           discount={discount}
           onDiscountChange={setDiscount}
           footer={
             <>
-              {(missingVendor || noItems) && (
+              {(missingVendor || noItems || missingTransportCharge) && (
                 <div className={styles.warningList}>
                   {missingVendor && <p className={styles.warningItem}>• Select a vendor</p>}
                   {noItems && <p className={styles.warningItem}>• Add at least one item</p>}
+                  {missingTransportCharge && <p className={styles.warningItem}>• Enter a GST rate for the transport charge</p>}
                 </div>
               )}
               <div className="summary-actions">
-                <Button type="submit" variant="primary" size="full" disabled={saving || !isDirty || missingVendor || noItems} title={!isDirty ? "No changes to save" : undefined}>
+                <Button type="submit" variant="primary" size="full" disabled={saving || !isDirty || missingVendor || noItems || missingTransportCharge} title={!isDirty ? "No changes to save" : undefined}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
                   Update Purchase Bill
                 </Button>
-                {!isDirty && !missingVendor && !noItems && !saving && (
+                {!isDirty && !missingVendor && !noItems && !missingTransportCharge && !saving && (
                   <p className={styles.noChangesHint}>No changes detected.</p>
                 )}
                 <Button variant="secondary" size="full" href={`/purchases/bills/${id}`}>

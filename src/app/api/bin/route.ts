@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { deleteAttachmentBlob } from "@/lib/blobStorage";
 import { requireWriteAccess } from "@/lib/apiAuth";
 
 export async function GET() {
@@ -12,26 +11,15 @@ export async function GET() {
 
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    // Auto-purge items older than 30 days. Invoices and purchase bills go
-    // first (cascade handles their items/payments) so a product/customer/
-    // vendor blocked only by a to-be-purged invoice or bill gets freed up
-    // in this same pass, matching /api/bin/empty's ordering.
-    const oldInvoices = await prisma.invoice.findMany({
-      where: { deletedAt: { not: null, lt: cutoff } },
-      select: { id: true },
-    });
-    if (oldInvoices.length > 0) {
-      await prisma.invoice.deleteMany({ where: { id: { in: oldInvoices.map((i) => i.id) } } });
-    }
-
-    const oldPurchaseBills = await prisma.purchaseBill.findMany({
-      where: { deletedAt: { not: null, lt: cutoff } },
-      select: { id: true, attachmentUrl: true },
-    });
-    if (oldPurchaseBills.length > 0) {
-      await prisma.purchaseBill.deleteMany({ where: { id: { in: oldPurchaseBills.map((b) => b.id) } } });
-      await Promise.all(oldPurchaseBills.map((b) => deleteAttachmentBlob(b.attachmentUrl)));
-    }
+    // Invoices, purchase bills, and credit notes (returns) are deliberately
+    // EXEMPT from auto-purge: their numbers (SH-YYYY-0001, PB-YYYY-0001,
+    // CN-YYYY-0001) are legally significant sequential GST document numbers.
+    // Silently hard-deleting one after 30 days would leave an unexplained
+    // gap in the sequence that GST filing can't account for — a staff member
+    // could delete a mis-entered bill, create the next one, and have the
+    // original vanish from the bin before anyone notices the gap. These three
+    // types can only be permanently deleted via an explicit, warned,
+    // admin-only action from this page (see /api/bin/[type]/[id] DELETE).
 
     // Products — only purge if not referenced by invoice items or purchase
     // items (matches the manual permanent-delete rule; an unguarded
@@ -100,24 +88,12 @@ export async function GET() {
       }
     }
 
-    // Credit notes (returns) — nothing else references them, so always safe
-    // to purge outright; the stock reversal already happened at delete-time.
-    const oldReturns = await prisma.return.findMany({
-      where: { deletedAt: { not: null, lt: cutoff } },
-      select: { id: true },
-    });
-    if (oldReturns.length > 0) {
-      await prisma.return.deleteMany({ where: { id: { in: oldReturns.map((r) => r.id) } } });
-    }
-
-    const purged = oldInvoices.length + oldPurchaseBills.length + oldProducts.length
-      + oldCustomers.length + oldBrands.length + oldCategories.length + oldVendors.length + oldReturns.length;
+    const purged = oldProducts.length + oldCustomers.length + oldBrands.length
+      + oldCategories.length + oldVendors.length;
     if (purged > 0) {
-      revalidateTag("invoices", { expire: 0 });
       revalidateTag("customers", { expire: 0 });
       revalidateTag("products", { expire: 0 });
       revalidateTag("vendors", { expire: 0 });
-      revalidateTag("purchase-bills", { expire: 0 });
       revalidateTag("reports", { expire: 0 });
     }
 
@@ -248,18 +224,16 @@ export async function GET() {
     };
 
     const items: BinItem[] = [
-      ...invoices.map((inv) => {
-        const daysSince = Math.floor((now - (inv.deletedAt as Date).getTime()) / (1000 * 60 * 60 * 24));
-        return {
-          id: inv.id,
-          type: "invoice" as const,
-          name: inv.invoiceNumber,
-          meta: `${inv.customer.name} • ₹${inv.total.toLocaleString("en-IN")}`,
-          deletedAt: (inv.deletedAt as Date).toISOString(),
-          daysLeft: Math.max(0, 30 - daysSince),
-          deletedBy: deletedByMap.get(inv.id),
-        };
-      }),
+      ...invoices.map((inv) => ({
+        id: inv.id,
+        type: "invoice" as const,
+        name: inv.invoiceNumber,
+        meta: `${inv.customer.name} • ₹${inv.total.toLocaleString("en-IN")}`,
+        deletedAt: (inv.deletedAt as Date).toISOString(),
+        // Retained indefinitely — never auto-purged, see comment above.
+        daysLeft: -1,
+        deletedBy: deletedByMap.get(inv.id),
+      })),
       ...customers.map((c) => {
         const daysSince = Math.floor((now - (c.deletedAt as Date).getTime()) / (1000 * 60 * 60 * 24));
         return {
@@ -323,30 +297,26 @@ export async function GET() {
           protectedReason: vendorBlockMap.get(v.id),
         };
       }),
-      ...purchaseBills.map((b) => {
-        const daysSince = Math.floor((now - (b.deletedAt as Date).getTime()) / (1000 * 60 * 60 * 24));
-        return {
-          id: b.id,
-          type: "purchase_bill" as const,
-          name: b.billNumber,
-          meta: `${b.vendor.name} • ₹${b.total.toLocaleString("en-IN")}`,
-          deletedAt: (b.deletedAt as Date).toISOString(),
-          daysLeft: Math.max(0, 30 - daysSince),
-          deletedBy: deletedByMap.get(b.id),
-        };
-      }),
-      ...returns.map((r) => {
-        const daysSince = Math.floor((now - (r.deletedAt as Date).getTime()) / (1000 * 60 * 60 * 24));
-        return {
-          id: r.id,
-          type: "return" as const,
-          name: r.creditNoteNumber ?? "Credit Note",
-          meta: `${r.invoice.invoiceNumber} • ${r.invoice.customer.name} • ₹${r.total.toLocaleString("en-IN")}`,
-          deletedAt: (r.deletedAt as Date).toISOString(),
-          daysLeft: Math.max(0, 30 - daysSince),
-          deletedBy: deletedByMap.get(r.id),
-        };
-      }),
+      ...purchaseBills.map((b) => ({
+        id: b.id,
+        type: "purchase_bill" as const,
+        name: b.billNumber,
+        meta: `${b.vendor.name} • ₹${b.total.toLocaleString("en-IN")}`,
+        deletedAt: (b.deletedAt as Date).toISOString(),
+        // Retained indefinitely — never auto-purged, see comment above.
+        daysLeft: -1,
+        deletedBy: deletedByMap.get(b.id),
+      })),
+      ...returns.map((r) => ({
+        id: r.id,
+        type: "return" as const,
+        name: r.creditNoteNumber ?? "Credit Note",
+        meta: `${r.invoice.invoiceNumber} • ${r.invoice.customer.name} • ₹${r.total.toLocaleString("en-IN")}`,
+        deletedAt: (r.deletedAt as Date).toISOString(),
+        // Retained indefinitely — never auto-purged, see comment above.
+        daysLeft: -1,
+        deletedBy: deletedByMap.get(r.id),
+      })),
     ];
 
     // Sort by deletedAt desc

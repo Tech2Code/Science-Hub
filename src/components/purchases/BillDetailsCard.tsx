@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
+import { Switch } from "@/components/ui/Switch";
 import { Modal } from "@/components/dialogs/Modal";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { AttachmentPicker } from "@/components/purchases/AttachmentPicker";
@@ -43,16 +44,26 @@ interface BillDetailsCardProps {
   attachmentUrl?: string | null;
   onAttachmentFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onAttachmentRemove: () => void;
+
+  transportChargeEnabled: boolean;
+  onToggleTransportCharge: () => void;
+  transportCharge: string;
+  onTransportChargeChange: (value: string) => void;
+  transportChargeGstRate: string;
+  onTransportChargeGstRateChange: (value: string) => void;
+  transportChargeError?: string;
 }
 
 // Vendor (+ inline "create vendor" flow) / Category / Bill Date / Due Date /
-// Notes / Attachment — shared by the New Purchase Bill and Edit Purchase
-// Bill pages so the two forms can't drift apart.
+// Notes / Attachment / Transport Charge — shared by the New Purchase Bill
+// and Edit Purchase Bill pages so the two forms can't drift apart.
 export function BillDetailsCard({
   sectionIndex, vendors, vendorId, onVendorIdChange, onVendorCreated, onVendorUpdated, vendorError,
   category, onCategoryChange, billDate, onBillDateChange, billDateError, dueDate, onDueDateChange, dueDateError,
   notes, onNotesChange, attachmentUploading, attachmentName, attachmentUrl,
   onAttachmentFileChange, onAttachmentRemove,
+  transportChargeEnabled, onToggleTransportCharge, transportCharge, onTransportChargeChange,
+  transportChargeGstRate, onTransportChargeGstRateChange, transportChargeError,
 }: BillDetailsCardProps) {
   const toast = useToast();
   const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
@@ -203,43 +214,7 @@ export function BillDetailsCard({
       <h2 className="form-section-title">Bill Details</h2>
 
       <FormField label="Vendor" required error={vendorError} id={vendorFieldId}>
-        <div className={styles.searchWrap}>
-          <Input
-            id={vendorFieldId}
-            type="text"
-            placeholder="Search vendor…"
-            value={vendorSearchValue}
-            onChange={(e) => { setVendorSearch(e.target.value); onVendorIdChange(""); setShowVendorDropdown(true); }}
-            onFocus={() => setShowVendorDropdown(true)}
-            onBlur={() => setTimeout(() => setShowVendorDropdown(false), 150)}
-            onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur(); }}
-          />
-          {showVendorDropdown && (
-            <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
-              {filteredVendors.length > 0 ? filteredVendors.map((v) => (
-                <button key={v.id} type="button" onClick={() => handleVendorSelect(v)} className={styles.dropdownBtn}>
-                  <div className={styles.dropdownItemName} title={v.name}>{v.name}{v.company ? ` — ${v.company}` : ""}</div>
-                  <div className={styles.dropdownItemSub}>{[v.city, v.gstin].filter(Boolean).join(" · ")}</div>
-                </button>
-              )) : (
-                <div className={styles.dropdownEmpty}>
-                  No vendor found.{" "}
-                  <button type="button" onClick={() => { setShowVendorDropdown(false); openVendorCreate(); }} className={styles.dropdownEmptyLink}>Add new →</button>
-                </div>
-              )}
-            </div>
-          )}
-          {vendorSearch && !vendorId && (
-            <p className={styles.selectHint}>⚠ Please select a vendor from the dropdown</p>
-          )}
-          {!vendorId && !showVendorDropdown && (
-            <button type="button" onClick={openVendorCreate} className={styles.addVendorLink}>
-              + Add new vendor manually
-            </button>
-          )}
-        </div>
-
-        {selectedVendor && (
+        {selectedVendor ? (
           <div className={styles.selectedVendor}>
             <div className={styles.selectedVendorInfo}>
               <div className={styles.selectedVendorName}>{selectedVendor.name}{selectedVendor.company ? ` — ${selectedVendor.company}` : ""}</div>
@@ -252,6 +227,43 @@ export function BillDetailsCard({
               <button type="button" onClick={() => openVendorEdit(selectedVendor)} className={styles.dropdownEmptyLink}>Edit</button>
               <button type="button" onClick={removeVendor} className={styles.removeVendorLink}>Remove</button>
             </div>
+          </div>
+        ) : (
+          <div className={styles.searchWrap}>
+            <Input
+              id={vendorFieldId}
+              type="text"
+              placeholder="Search vendor…"
+              autoFocus
+              value={vendorSearchValue}
+              onChange={(e) => { setVendorSearch(e.target.value); onVendorIdChange(""); setShowVendorDropdown(true); }}
+              onFocus={() => setShowVendorDropdown(true)}
+              onBlur={() => setTimeout(() => setShowVendorDropdown(false), 150)}
+              onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur(); }}
+            />
+            {showVendorDropdown && (
+              <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
+                {filteredVendors.length > 0 ? filteredVendors.map((v) => (
+                  <button key={v.id} type="button" onClick={() => handleVendorSelect(v)} className={styles.dropdownBtn}>
+                    <div className={styles.dropdownItemName} title={v.name}>{v.name}{v.company ? ` — ${v.company}` : ""}</div>
+                    <div className={styles.dropdownItemSub}>{[v.city, v.gstin].filter(Boolean).join(" · ")}</div>
+                  </button>
+                )) : (
+                  <div className={styles.dropdownEmpty}>
+                    No vendor found.{" "}
+                    <button type="button" onClick={() => { setShowVendorDropdown(false); openVendorCreate(); }} className={styles.dropdownEmptyLink}>Add new →</button>
+                  </div>
+                )}
+              </div>
+            )}
+            {vendorSearch && !vendorId && (
+              <p className={styles.selectHint}>⚠ Please select a vendor from the dropdown</p>
+            )}
+            {!showVendorDropdown && (
+              <button type="button" onClick={openVendorCreate} className={styles.addVendorLink}>
+                + Add new vendor manually
+              </button>
+            )}
           </div>
         )}
       </FormField>
@@ -352,6 +364,34 @@ export function BillDetailsCard({
           <Input type="date" value={dueDate} onChange={(e) => onDueDateChange(e.target.value)} min={billDate} />
         </FormField>
       </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0.5rem 0" }}>
+        <Switch checked={transportChargeEnabled} onChange={onToggleTransportCharge} aria-label="Transport charge" />
+        <span style={{ fontSize: "0.875rem", fontWeight: 600 }}>Transport Charge</span>
+      </div>
+      {transportChargeEnabled && (
+        <div className="form-grid-2">
+          <FormField label="Transport Charge Amount (₹)">
+            <Input type="number" min="0" step="0.01" value={transportCharge} onChange={(e) => onTransportChargeChange(e.target.value)} placeholder="0.00" />
+          </FormField>
+          <FormField label="GST Rate on Transport Charge (%)" required>
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={transportChargeGstRate}
+              onChange={(e) => onTransportChargeGstRateChange(e.target.value)}
+              placeholder="18"
+            />
+          </FormField>
+        </div>
+      )}
+      {transportChargeEnabled && transportChargeError && (
+        <p style={{ color: "var(--c-red, #dc2626)", fontSize: "0.8rem", margin: "0.25rem 0 0.5rem" }} role="alert">
+          {transportChargeError}
+        </p>
+      )}
 
       <FormField label="Notes">
         <Textarea rows={2} value={notes} onChange={(e) => onNotesChange(e.target.value)} placeholder="Optional notes about this purchase…" />

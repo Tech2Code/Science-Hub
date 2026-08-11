@@ -48,6 +48,7 @@ interface Invoice {
   items: InvoiceItem[];
   payments: Payment[];
   subtotal: number; cgst: number; sgst: number; igst: number;
+  transportCharge?: number; transportChargeGstRate?: number; transportChargeGstAmount?: number;
   total: number; roundOff: number; paidAmount: number; notes: string;
 }
 
@@ -698,7 +699,7 @@ export default function InvoiceDetailPage() {
     try {
       const res = await fetch(`/api/invoices/${id}`, { method: "DELETE" });
       if (res.ok) {
-        toast({ type: "success", title: "Deleted", message: `Invoice moved to bin.` });
+        toast({ type: "success", title: "Deleted", message: "Invoice moved to bin." });
         router.push("/sales/invoices");
       } else {
         const d = await res.json().catch(() => ({}));
@@ -729,7 +730,7 @@ export default function InvoiceDetailPage() {
         open={deleteConfirm}
         title="Delete Invoice"
         message={`Move invoice ${invoice?.invoiceNumber} to bin? You can restore it within 30 days.`}
-        confirmLabel="Delete"
+        confirmLabel="Move to Bin"
         variant="danger"
         loading={deleting}
         onConfirm={handleDelete}
@@ -1367,7 +1368,7 @@ export default function InvoiceDetailPage() {
                         ? taxGroup("IGST", "9%")
                         : <>{taxGroup("CGST", "8%")}{taxGroup("SGST", "8%")}</>
                       }
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "9%", whiteSpace: "nowrap", verticalAlign: "middle" }}>Total (₹)</td>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "9%", whiteSpace: "nowrap", verticalAlign: "middle" }}>Amount (₹)</td>
                     </tr>
                   );
                 })()}
@@ -1411,9 +1412,47 @@ export default function InvoiceDetailPage() {
                   );
                 })}
 
-                {/* Notes + Totals */}
+                {/* Transportation Charges — its own row right after the item
+                    rows end, broken into Taxable/CGST+SGST(or IGST)/Amount
+                    columns exactly like an item row, rather than a single
+                    merged amount+GST figure, so its tax is as visible as any
+                    product line's. Kept out of the Notes+Totals merged block
+                    below so it reads as "one more line item". */}
+                {!!invoice.transportCharge && invoice.transportCharge > 0 && (() => {
+                  const tcTaxable = invoice.transportCharge ?? 0;
+                  const tcGst = invoice.transportChargeGstAmount ?? 0;
+                  const tcRate = invoice.transportChargeGstRate ?? 0;
+                  const tcHalfRate = tcRate / 2;
+                  const tcHalfGst = tcGst / 2;
+                  const tcTd = (content: React.ReactNode, align: "right" | "center" = "right", bold = false) => (
+                    <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align, background: "var(--inv-bg)", fontWeight: bold ? 700 : undefined, color: bold ? "var(--inv-tx)" : "var(--inv-tx2)", whiteSpace: "nowrap" }}>
+                      {content}
+                    </td>
+                  );
+                  return (
+                    <tr>
+                      <td colSpan={8} style={{ border: "1px solid var(--inv-bd)", padding: "5px 6px", background: "var(--inv-bg)", fontWeight: 600, color: "var(--inv-tx)" }}>
+                        Transportation Charges
+                      </td>
+                      {tcTd(fmt(tcTaxable))}
+                      {invoice.isInterState
+                        ? <>{tcTd(`${tcRate}%`, "center")}{tcTd(fmt(tcGst))}</>
+                        : <>{tcTd(`${tcHalfRate}%`, "center")}{tcTd(fmt(tcHalfGst))}{tcTd(`${tcHalfRate}%`, "center")}{tcTd(fmt(tcHalfGst))}</>}
+                      {tcTd(fmt(tcTaxable + tcGst), "right", true)}
+                    </tr>
+                  );
+                })()}
+
+                {/* Notes + Totals — rowSpan must equal the exact number of
+                    rows this merged Notes cell needs to cover: Subtotal +
+                    Grand Total + Amount in Words + Paid + Balance Due (5,
+                    always present) + tax rows (1 for IGST, 2 for CGST+SGST)
+                    + Round Off (only when non-zero). A stale/hardcoded count
+                    here desyncs the table the moment Round Off is nonzero —
+                    the rows past the rowSpan's end silently lose their left
+                    offset and collapse against the table's left edge. */}
                 <tr>
-                  <td colSpan={8} rowSpan={invoice.isInterState ? 7 : 8}
+                  <td colSpan={8} rowSpan={5 + (invoice.isInterState ? 1 : 2) + (invoice.roundOff !== 0 ? 1 : 0)}
                     style={{ border: "1px solid var(--inv-bd)", padding: "14px 16px", verticalAlign: "top", color: "var(--inv-tx3)" }}>
                     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 120 }}>
                       <div style={{ marginTop: "auto" }}>
@@ -1469,22 +1508,27 @@ export default function InvoiceDetailPage() {
                     </div>
                   </td>
                   <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Subtotal</td>
-                  <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.subtotal)}</td>
+                  <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.subtotal + (invoice.transportCharge ?? 0))}</td>
                 </tr>
+                {/* Transportation Charges' own IGST/CGST/SGST (shown split
+                    out on its own row above) must be folded into these
+                    footer totals too, or "Total CGST"/"Total SGST" would
+                    silently under-report the tax actually charged on the
+                    invoice whenever a transport charge is present. */}
                 {invoice.isInterState ? (
                   <tr>
                     <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total IGST</td>
-                    <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.igst)}</td>
+                    <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.igst + (invoice.transportChargeGstAmount ?? 0))}</td>
                   </tr>
                 ) : (
                   <>
                     <tr>
                       <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total CGST</td>
-                      <td colSpan={4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.cgst)}</td>
+                      <td colSpan={4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.cgst + (invoice.transportChargeGstAmount ?? 0) / 2)}</td>
                     </tr>
                     <tr>
                       <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total SGST</td>
-                      <td colSpan={4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.sgst)}</td>
+                      <td colSpan={4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.sgst + (invoice.transportChargeGstAmount ?? 0) / 2)}</td>
                     </tr>
                   </>
                 )}

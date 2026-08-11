@@ -1,19 +1,23 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
-import { Textarea, FormField } from "@/components/ui/Input";
+import { Input, Select, Textarea, FormField } from "@/components/ui/Input";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Sk } from "@/components/ui/Skeleton";
 import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { invalidateCachedPdf } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
-import { rules, validate } from "@/lib/validation";
+import { rules, validate, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
 import { useDirty } from "@/lib/useDirty";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Modal } from "@/components/dialogs/Modal";
+import { INDIA_STATES_FULL } from "@/lib/states";
+import { usePincodeAutofill } from "@/lib/usePincodeLookup";
 import { InvoiceOptionsRow } from "@/components/invoices/InvoiceOptionsRow";
 import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
 import { computeInvoiceTotals, makeInvoiceLineItemKey, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
@@ -24,12 +28,21 @@ import styles from "./edit.module.css";
 type Product = InvoiceProduct;
 type LineItem = InvoiceLineItem;
 
+interface Customer {
+  id: string; name: string; city: string; state: string; gstin: string;
+  phone?: string | null; email?: string | null; address?: string | null; pincode?: string | null;
+}
+
 interface InvoiceData {
   id: string; invoiceNumber: string; status: string; date: string; updatedAt?: string;
   isInterState: boolean; placeOfSupply?: string; reverseCharge?: boolean; dueDate?: string; notes?: string;
-  customer: { id: string; name: string; city: string; state: string; gstin: string; };
+  transportCharge?: number; transportChargeGstRate?: number;
+  customer: Customer;
   items: Array<{ productId: string | null; name: string; unit: string; quantity: number; price: number; gstRate: number; hsn?: string; discountPercent?: number; }>;
 }
+
+type CustomerForm = { name: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; gstin: string };
+const BLANK_CUSTOMER_FORM: CustomerForm = { name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" };
 
 export default function EditInvoicePage() {
   const router = useRouter();
@@ -50,24 +63,216 @@ export default function EditInvoicePage() {
   const [dueDate, setDueDate] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
-  const { isDirty, markClean } = useDirty({ isInterState, placeOfSupply, reverseCharge, items, notes, dueDate, invoiceDate });
+  // Always shown open on Edit too (matches New Invoice's default-ON toggle) —
+  // an existing invoice's saved amount/rate (if any) is loaded into it below.
+  // Note: the useEffect that loads the invoice will set this to false if the
+  // saved transportCharge was 0 or absent (i.e. user previously disabled it).
+  const [transportChargeEnabled, setTransportChargeEnabled] = useState(true);
+  const [transportCharge, setTransportCharge] = useState("");
+  const [transportChargeGstRate, setTransportChargeGstRate] = useState("18");
+  const [transportChargeError, setTransportChargeError] = useState<string | undefined>(undefined);
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showStockDialog, setShowStockDialog] = useState(false);
   const [stockOutItems, setStockOutItems] = useState<{ name: string; available: number; requested: number }[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerId, setCustomerId] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [customerEditId, setCustomerEditId] = useState<string | null>(null);
+  const [dontSaveCustomer, setDontSaveCustomer] = useState(false);
+  const [customerModalOpen, setCustomerModalOpen] = useState(false);
+  const [customerForm, setCustomerForm] = useState<CustomerForm>(BLANK_CUSTOMER_FORM);
+  const [customerErrors, setCustomerErrors] = useState<FormErrors<CustomerForm>>({});
+  const [customerSaving, setCustomerSaving] = useState(false);
+  const { isDirty, markClean } = useDirty({ customerId, isInterState, placeOfSupply, reverseCharge, items, notes, dueDate, invoiceDate, transportChargeEnabled, transportCharge, transportChargeGstRate });
+
+  const filteredCustomers = customers.filter((c) => c.name.toLowerCase().includes(customerSearch.toLowerCase()));
+  const selectedCustomer = customers.find((c) => c.id === customerId);
+
+  const customerPincodeLookup = usePincodeAutofill((city, state) => {
+    setCustomerForm((p) => ({ ...p, city: city || p.city, state: state || p.state }));
+    if (city) setCustomerErrors((p) => ({ ...p, city: undefined }));
+    if (state) setCustomerErrors((p) => ({ ...p, state: undefined }));
+  });
+
+  function updateCustomerField<K extends keyof CustomerForm>(field: K, value: string) {
+    setCustomerForm((p) => ({ ...p, [field]: value }));
+    setCustomerErrors((p) => ({ ...p, [field]: undefined }));
+  }
+
+  function handleCustomerPincodeChange(value: string) {
+    const digits = value.replace(/\D/g, "").slice(0, 6);
+    updateCustomerField("pincode", digits);
+    if (digits.length === 6) customerPincodeLookup.run(digits);
+    else customerPincodeLookup.reset();
+  }
+
+  const handleCustomerSelect = useCallback((c: Customer) => {
+    setCustomerId(c.id);
+    setCustomerSearch(c.name);
+    setShowCustomerDropdown(false);
+    setPlaceOfSupply(c.state ?? "");
+    if (c.state && businessState) setIsInterState(c.state !== businessState);
+  }, [businessState]);
+
+  function handleRemoveCustomer() {
+    setCustomerId("");
+    setCustomerSearch("");
+    setShowCustomerDropdown(true);
+  }
+
+  function openCustomerCreate() {
+    setCustomerEditId(null);
+    setCustomerForm(BLANK_CUSTOMER_FORM);
+    setCustomerErrors({});
+    setDontSaveCustomer(false);
+    customerPincodeLookup.reset();
+    setCustomerModalOpen(true);
+  }
+
+  function openCustomerEdit(c: Customer) {
+    setCustomerEditId(c.id);
+    setCustomerForm({
+      name: c.name,
+      phone: c.phone ?? "",
+      email: c.email ?? "",
+      address: c.address ?? "",
+      city: c.city ?? "",
+      state: c.state ?? "",
+      pincode: c.pincode ?? "",
+      gstin: c.gstin ?? "",
+    });
+    setCustomerErrors({});
+    customerPincodeLookup.reset();
+    setCustomerModalOpen(true);
+  }
+
+  function closeCustomerModal() {
+    if (customerSaving) return;
+    setCustomerModalOpen(false);
+    setCustomerEditId(null);
+    setCustomerForm(BLANK_CUSTOMER_FORM);
+    setDontSaveCustomer(false);
+    customerPincodeLookup.reset();
+  }
+
+  function validateCustomerForm(): boolean {
+    const errs = validateForm<CustomerForm>(customerForm, {
+      name:    [rules.required("Customer name is required.")],
+      phone:   [rules.phone10()],
+      email:   [rules.email()],
+      address: [rules.required("Address is required.")],
+      city:    [rules.required("City is required.")],
+      state:   [rules.required("State is required.")],
+      pincode: [rules.required("Pincode is required."), rules.pincode()],
+      gstin:   [rules.gstin()],
+    });
+    setCustomerErrors(errs);
+    return !hasErrors(errs);
+  }
+
+  async function saveCustomerEdit() {
+    if (!customerEditId || !validateCustomerForm()) return;
+    setCustomerSaving(true);
+    try {
+      const res = await fetch(`/api/customers/${customerEditId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: customerForm.name.trim(),
+          phone: customerForm.phone.trim() || null,
+          email: customerForm.email.trim() || null,
+          address: customerForm.address.trim() || null,
+          city: customerForm.city.trim() || null,
+          state: customerForm.state.trim() || null,
+          pincode: customerForm.pincode.trim() || null,
+          gstin: customerForm.gstin.trim() || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setCustomers((prev) => prev.map((c) => (c.id === data.id ? data : c)));
+        if (customerId === data.id) setCustomerSearch(data.name);
+        bustCachePrefix("/api/customers");
+        setCustomerModalOpen(false);
+        setCustomerEditId(null);
+        setCustomerForm(BLANK_CUSTOMER_FORM);
+        toast({ type: "success", title: "Customer updated", message: `${data.name} saved.` });
+      } else {
+        toast({ type: "error", title: "Failed to save", message: data.error ?? "Failed to update customer." });
+      }
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Please try again." });
+    }
+    setCustomerSaving(false);
+  }
+
+  async function saveNewCustomer() {
+    if (!validateCustomerForm()) return;
+    setCustomerSaving(true);
+    try {
+      const res = await fetch("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: customerForm.name.trim(),
+          phone: customerForm.phone.trim() || null,
+          email: customerForm.email.trim() || null,
+          address: customerForm.address.trim() || null,
+          city: customerForm.city.trim() || null,
+          state: customerForm.state.trim() || null,
+          pincode: customerForm.pincode.trim() || null,
+          gstin: customerForm.gstin.trim() || null,
+          oneOff: dontSaveCustomer,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setCustomers((prev) => [...prev, data]);
+        setCustomerId(data.id);
+        setCustomerSearch(data.name);
+        setPlaceOfSupply(data.state ?? "");
+        if (data.state && businessState) setIsInterState(data.state !== businessState);
+        if (!dontSaveCustomer) bustCachePrefix("/api/customers");
+        setCustomerModalOpen(false);
+        setCustomerForm(BLANK_CUSTOMER_FORM);
+        setDontSaveCustomer(false);
+        toast({
+          type: "success", title: "Customer created",
+          message: dontSaveCustomer ? `${data.name} added and selected for this invoice only.` : `${data.name} added and selected.`,
+        });
+      } else {
+        toast({ type: "error", title: "Failed to save", message: data.error ?? "Failed to create customer." });
+      }
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Please try again." });
+    }
+    setCustomerSaving(false);
+  }
 
   useEffect(() => {
     Promise.all([
       fetchCached(`/api/invoices/${id}`),
       fetchCached("/api/products?pageSize=5000").catch(() => ({ data: [] })),
       fetchCached("/api/settings").catch(() => null),
-    ]).then(([inv, prods, settings]) => {
+      fetchCached("/api/customers?pageSize=5000").catch(() => ({ data: [] })),
+    ]).then(([inv, prods, settings, custs]) => {
       const invoice = inv as InvoiceData;
       const products = (prods as { data: Product[] }).data ?? [];
+      const customerList = (custs as { data: Customer[] }).data ?? [];
+      // The invoice's own customer may be a one-off (soft-deleted) row that
+      // /api/customers doesn't return — keep it selectable/visible either way.
+      const mergedCustomers = customerList.some((c) => c.id === invoice.customer.id)
+        ? customerList
+        : [...customerList, invoice.customer];
       setInvoice(invoice);
       setProducts(products);
+      setCustomers(mergedCustomers);
+      setCustomerId(invoice.customer.id);
+      setCustomerSearch(invoice.customer.name);
       setBusinessState((settings as { state?: string } | null)?.state ?? "");
       const inter = invoice.isInterState ?? false;
       const pos = invoice.placeOfSupply ?? invoice.customer.state ?? "";
@@ -85,24 +290,43 @@ export default function EditInvoicePage() {
         discountPercent: item.discountPercent ?? 0,
       }));
       const rc = invoice.reverseCharge ?? false;
+      const transportChargeVal = invoice.transportCharge && invoice.transportCharge > 0 ? String(invoice.transportCharge) : "";
+      const transportChargeGstRateVal = invoice.transportChargeGstRate ? String(invoice.transportChargeGstRate) : "18";
       setIsInterState(inter);
       setPlaceOfSupply(pos);
       setReverseCharge(rc);
       setNotes(notesVal);
       setDueDate(dueDateVal);
       setInvoiceDate(invoice.date ? invoice.date.split("T")[0] : "");
+      const transportEnabled = invoice.transportCharge != null && invoice.transportCharge > 0;
+      setTransportChargeEnabled(transportEnabled);
+      setTransportCharge(transportChargeVal);
+      setTransportChargeGstRate(transportChargeGstRateVal);
       setLoadedUpdatedAt(invoice.updatedAt ?? null);
       setItems(lineItems);
-      markClean({ isInterState: inter, placeOfSupply: pos, reverseCharge: rc, items: lineItems, notes: notesVal, dueDate: dueDateVal, invoiceDate: invoice.date ? invoice.date.split("T")[0] : "" });
+      markClean({
+        customerId: invoice.customer.id,
+        isInterState: inter, placeOfSupply: pos, reverseCharge: rc, items: lineItems, notes: notesVal, dueDate: dueDateVal,
+        invoiceDate: invoice.date ? invoice.date.split("T")[0] : "",
+        transportChargeEnabled: transportEnabled, transportCharge: transportChargeVal, transportChargeGstRate: transportChargeGstRateVal,
+      });
       setLoading(false);
     }).catch(() => { setError("Failed to load invoice."); setLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- markClean is a fresh function each render (not memoized); only `id` should retrigger this fetch
   }, [id]);
 
-  const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal } = computeInvoiceTotals(items);
+  const effectiveTransportCharge = transportChargeEnabled ? (parseFloat(transportCharge) || 0) : 0;
+  const effectiveTransportGstRate = transportChargeEnabled ? (parseFloat(transportChargeGstRate) || 0) : 0;
+  const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal, transportChargeGstAmount } =
+    computeInvoiceTotals(items, effectiveTransportCharge, effectiveTransportGstRate);
+  // Amount is the trigger — a blank/zero amount is a valid "no transport
+  // charge" default (the toggle itself defaults to open), so only require
+  // the GST rate once a real amount has actually been entered.
+  const missingTransportCharge = transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!customerId) { toast({ type: "error", title: "Check form", message: "Select a customer." }); return; }
     if (items.length === 0) { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
     if (!placeOfSupply) { toast({ type: "error", title: "Check form", message: "Select place of supply." }); return; }
     if (invoiceDate && invoiceDate > todayStr) { toast({ type: "error", title: "Check form", message: "Invoice date cannot be in the future." }); return; }
@@ -111,6 +335,12 @@ export default function EditInvoicePage() {
       return;
     }
     if (dueDate && invoiceDate && dueDate < invoiceDate) { toast({ type: "error", title: "Check form", message: "Due date cannot be before the invoice date." }); return; }
+    if (transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim()) {
+      setTransportChargeError("Enter a GST rate for the transport charge.");
+      toast({ type: "error", title: "Check form", message: "Enter a GST rate for the transport charge." });
+      return;
+    }
+    setTransportChargeError(undefined);
     for (const item of items) {
       const qtyErr   = validate(String(item.qty),   rules.positiveNumber("Item quantity must be greater than 0."));
       const priceErr = validate(String(item.price), rules.nonNegativeNumber("Item price cannot be negative."));
@@ -144,6 +374,7 @@ export default function EditInvoicePage() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        customerId,
         isInterState,
         placeOfSupply,
         reverseCharge,
@@ -151,6 +382,8 @@ export default function EditInvoicePage() {
         notes,
         date: invoiceDate || undefined,
         dueDate: dueDate || undefined,
+        transportCharge: effectiveTransportCharge,
+        transportChargeGstRate: effectiveTransportGstRate,
         expectedUpdatedAt: loadedUpdatedAt,
       }),
     });
@@ -287,17 +520,138 @@ export default function EditInvoicePage() {
         <div className={styles.layout}>
           {/* Left column */}
           <div className={styles.leftCol}>
-            {/* Customer (read-only) */}
-            <div {...animateSection(0, `card ${styles.sectionCard}`)}>
-              <h2 className={styles.sectionTitle}>Bill To</h2>
-              <div className={styles.billToBox}>
-                <div className={styles.billToName} title={invoice.customer.name}>{invoice.customer.name}</div>
-                <div className={styles.billToMeta}>
-                  {[invoice.customer.city, invoice.customer.state].filter(Boolean).join(", ")}
-                  {invoice.customer.gstin && ` · GSTIN: ${invoice.customer.gstin}`}
+            {/* Customer */}
+            {(() => {
+              const section = animateSection(0, `card ${styles.sectionCard}`);
+              return (
+                <div
+                  className={section.className}
+                  style={{ ...section.style, position: "relative", zIndex: showCustomerDropdown ? 5 : "auto" }}
+                >
+              <div className={styles.billToHeaderRow}>
+                <h2 className={styles.sectionTitle}>Bill To</h2>
+              </div>
+
+              {selectedCustomer ? (
+                <div className={styles.customSummary}>
+                  <div className={styles.selectedCustomer}>
+                    <div className={styles.selectedCustomerName} title={selectedCustomer.name}>{selectedCustomer.name}</div>
+                    <div className={styles.selectedCustomerSub}>
+                      {[selectedCustomer.city, selectedCustomer.state].filter(Boolean).join(", ")}
+                      {selectedCustomer.gstin && ` · GSTIN: ${selectedCustomer.gstin}`}
+                    </div>
+                  </div>
+                  <div className={styles.customSummaryActions}>
+                    <button type="button" onClick={() => openCustomerEdit(selectedCustomer)} className={styles.billToEditLink}>Edit</button>
+                    <button type="button" onClick={handleRemoveCustomer} className={styles.removeCustomLink}>Remove</button>
+                  </div>
+                </div>
+              ) : (
+                <div className={styles.searchWrap}>
+                  <Input
+                    type="text"
+                    placeholder="Search customer…"
+                    autoFocus
+                    value={customerSearch}
+                    onChange={(e) => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
+                    onFocus={() => setShowCustomerDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                    onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur(); }}
+                  />
+                  {showCustomerDropdown && (
+                    <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
+                      {filteredCustomers.length > 0 ? filteredCustomers.map((c) => (
+                        <button key={c.id} type="button" onClick={() => handleCustomerSelect(c)} className={styles.dropdownBtn}>
+                          <div className={styles.dropdownItemName} title={c.name}>{c.name}</div>
+                          <div className={styles.dropdownItemSub}>{c.city}{c.gstin ? ` · ${c.gstin}` : ""}</div>
+                        </button>
+                      )) : (
+                        <div className={styles.dropdownEmpty}>No customer found.</div>
+                      )}
+                    </div>
+                  )}
+                  {!showCustomerDropdown && (
+                    <button type="button" onClick={openCustomerCreate} className={styles.addCustomerLink}>
+                      + Add new customer manually
+                    </button>
+                  )}
+                </div>
+              )}
+                </div>
+              );
+            })()}
+
+            <Modal
+              open={customerModalOpen}
+              onClose={closeCustomerModal}
+              title={customerEditId ? "Edit Customer" : "Add New Customer"}
+              maxWidth="34rem"
+            >
+              <p className={styles.customModalSub}>{customerEditId ? "Update this customer's details" : "Not in your list — fill details and create"}</p>
+              <div className={styles.customForm}>
+                <FormField label="Customer Name" required error={customerErrors.name}>
+                  <Input autoFocus value={customerForm.name} onChange={(e) => updateCustomerField("name", e.target.value)} placeholder="e.g. Acme Traders" />
+                </FormField>
+                <FormField label="Address" required error={customerErrors.address}>
+                  <Input value={customerForm.address} onChange={(e) => updateCustomerField("address", e.target.value)} placeholder="Street / locality" />
+                </FormField>
+                <div className="form-grid-2">
+                  <FormField
+                    label="Pincode"
+                    required
+                    error={customerErrors.pincode}
+                    hint={customerPincodeLookup.status.status === "loading" ? "Looking up city/state…" : customerPincodeLookup.status.label}
+                    hintSuccess={customerPincodeLookup.status.status === "found"}
+                  >
+                    <Input value={customerForm.pincode} onChange={(e) => handleCustomerPincodeChange(e.target.value)} placeholder="6-digit" maxLength={6} />
+                  </FormField>
+                  <FormField label="State" required error={customerErrors.state}>
+                    <Select value={customerForm.state} onChange={(e) => updateCustomerField("state", e.target.value)}>
+                      <option value="">Select state</option>
+                      {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </Select>
+                  </FormField>
+                </div>
+                <div className="form-grid-2">
+                  <FormField label="City" required error={customerErrors.city}>
+                    <Input value={customerForm.city} onChange={(e) => updateCustomerField("city", e.target.value)} placeholder="City" />
+                  </FormField>
+                  <FormField label="GSTIN" error={customerErrors.gstin}>
+                    <Input value={customerForm.gstin} onChange={(e) => updateCustomerField("gstin", e.target.value)} placeholder="22AAAAA0000A1Z5" maxLength={15} mono />
+                  </FormField>
+                </div>
+                <div className="form-grid-2">
+                  <FormField label="Phone" error={customerErrors.phone}>
+                    <PhoneInput value={customerForm.phone} onChange={(e) => updateCustomerField("phone", e.target.value)} placeholder="10-digit mobile" />
+                  </FormField>
+                  <FormField label="Email" error={customerErrors.email}>
+                    <Input type="email" value={customerForm.email} onChange={(e) => updateCustomerField("email", e.target.value)} placeholder="customer@example.com" />
+                  </FormField>
+                </div>
+                {!customerEditId && (
+                  <label className={styles.customFormCheckbox}>
+                    <input
+                      type="checkbox"
+                      checked={dontSaveCustomer}
+                      onChange={(e) => setDontSaveCustomer(e.target.checked)}
+                    />
+                    Just for this invoice — don&apos;t save to my customer list
+                  </label>
+                )}
+                <div className={styles.customModalActions}>
+                  <Button type="button" variant="secondary" disabled={customerSaving} onClick={closeCustomerModal}>Cancel</Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    loading={customerSaving}
+                    disabled={customerSaving || !customerForm.name.trim() || !customerForm.address.trim() || !customerForm.city.trim() || !customerForm.state.trim() || !customerForm.pincode.trim()}
+                    onClick={() => { if (customerEditId) saveCustomerEdit(); else saveNewCustomer(); }}
+                  >
+                    {customerEditId ? "Save Changes" : (dontSaveCustomer ? "Use For This Invoice Only" : "Save & Use This Customer")}
+                  </Button>
                 </div>
               </div>
-            </div>
+            </Modal>
 
             {/* Place of supply + inter-state + due date */}
             <InvoiceOptionsRow
@@ -317,6 +671,13 @@ export default function EditInvoicePage() {
               invoiceDate={invoiceDate}
               onInvoiceDateChange={setInvoiceDate}
               maxInvoiceDate={todayStr}
+              transportChargeEnabled={transportChargeEnabled}
+              onToggleTransportCharge={() => { setTransportChargeEnabled((v) => !v); setTransportChargeError(undefined); }}
+              transportCharge={transportCharge}
+              onTransportChargeChange={(v) => { setTransportCharge(v); setTransportChargeError(undefined); }}
+              transportChargeGstRate={transportChargeGstRate}
+              onTransportChargeGstRateChange={(v) => { setTransportChargeGstRate(v); setTransportChargeError(undefined); }}
+              transportChargeError={transportChargeError}
             />
 
             {/* Items */}
@@ -375,6 +736,33 @@ export default function EditInvoicePage() {
                     </div>
                   )
                 )}
+                {effectiveTransportCharge > 0 && (
+                  <>
+                    <div className={styles.summaryRow}>
+                      <span>Transport Charge</span>
+                      <span>₹{effectiveTransportCharge.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    {transportChargeGstAmount > 0 && (
+                      isInterState ? (
+                        <div className={styles.summaryRow}>
+                          <span>Transport IGST {effectiveTransportGstRate}%</span>
+                          <span>₹{transportChargeGstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      ) : (
+                        <div className={styles.summaryGstGroup}>
+                          <div className={styles.summaryRow}>
+                            <span>Transport CGST {effectiveTransportGstRate / 2}%</span>
+                            <span>₹{(transportChargeGstAmount / 2).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className={styles.summaryRow}>
+                            <span>Transport SGST {effectiveTransportGstRate / 2}%</span>
+                            <span>₹{(transportChargeGstAmount / 2).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </>
+                )}
                 {roundOff !== 0 && (
                   <div className={styles.summaryRow}>
                     <span>Round Off</span>
@@ -386,18 +774,24 @@ export default function EditInvoicePage() {
                   <span>₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
+              {!customerId && (
+                <p className={styles.summaryHint}>• Select a customer</p>
+              )}
               {items.length === 0 && (
                 <p className={styles.summaryHint}>• Add at least one item</p>
               )}
               {!placeOfSupply && items.length > 0 && (
                 <p className={styles.summaryHint}>• Select place of supply</p>
               )}
+              {missingTransportCharge && (
+                <p className={styles.summaryHint}>• Enter a GST rate for the transport charge</p>
+              )}
               <div className="summary-actions">
                 <Button
                   type="submit"
                   variant="primary"
                   size="full"
-                  disabled={saving || items.length === 0 || !placeOfSupply || !isDirty}
+                  disabled={saving || items.length === 0 || !placeOfSupply || !customerId || !isDirty || missingTransportCharge}
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Invoice
                 </Button>

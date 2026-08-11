@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     const userId = auth.session.user.id;
 
     const body = await req.json();
-    const { vendorId, billDate, dueDate, discount, notes, category, items, payment, attachmentUrl, attachmentName } = body;
+    const { vendorId, billDate, dueDate, discount, notes, category, items, payment, attachmentUrl, attachmentName, transportCharge, transportChargeGstRate } = body;
 
     if (!vendorId) return NextResponse.json({ error: "Vendor is required." }, { status: 400 });
     if (!Array.isArray(items) || items.length === 0) return NextResponse.json({ error: "At least one item is required." }, { status: 400 });
@@ -165,8 +165,20 @@ export async function POST(req: NextRequest) {
     const sgst = isInterState ? 0 : taxAmount / 2;
     const igst = isInterState ? taxAmount : 0;
 
+    // Transport/freight charge — own line, own GST, kept out of the
+    // CGST/SGST/IGST split, always server-recomputed rather than trusted.
+    const transportChargeVal = parseFloat(String(transportCharge ?? 0)) || 0;
+    const transportChargeGstRateVal = parseFloat(String(transportChargeGstRate ?? 0)) || 0;
+    if (transportChargeVal < 0) {
+      return NextResponse.json({ error: "Transport charge cannot be negative" }, { status: 400 });
+    }
+    if (transportChargeGstRateVal < 0) {
+      return NextResponse.json({ error: "Transport charge GST rate cannot be negative" }, { status: 400 });
+    }
+    const transportChargeGstAmountVal = (transportChargeVal * transportChargeGstRateVal) / 100;
+
     const payAmt = payment?.amount ?? 0;
-    const { roundOff, roundedTotal: billTotal } = computeRoundOff(subtotal + taxAmount - parsedDiscount);
+    const { roundOff, roundedTotal: billTotal } = computeRoundOff(subtotal + taxAmount - parsedDiscount + transportChargeVal + transportChargeGstAmountVal);
     if (billTotal < 0) return NextResponse.json({ error: "Discount cannot exceed the bill total" }, { status: 400 });
     const paidAmount = Math.min(payAmt, billTotal);
     const status = paidAmount >= billTotal && billTotal > 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
@@ -213,6 +225,9 @@ export async function POST(req: NextRequest) {
             sgst,
             igst,
             discount: parsedDiscount,
+            transportCharge: transportChargeVal,
+            transportChargeGstRate: transportChargeGstRateVal,
+            transportChargeGstAmount: transportChargeGstAmountVal,
             total: billTotal,
             roundOff,
             paidAmount,

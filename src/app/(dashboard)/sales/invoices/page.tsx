@@ -103,7 +103,7 @@ export default function InvoicesPage() {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewInvoice, setPdfPreviewInvoice] = useState<{ number: string; customer: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
-  const [deletingInvoice, setDeletingInvoice] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [pdfDialogInvoice, setPdfDialogInvoice] = useState<Invoice | null>(null);
   const [pdfDialogLoading, setPdfDialogLoading] = useState(false);
   const [openingEditId, setOpeningEditId] = useState<string | null>(null);
@@ -225,7 +225,7 @@ export default function InvoicesPage() {
   async function handleDelete() {
     if (!deleteTarget) return;
     const target = deleteTarget;
-    setDeletingInvoice(true);
+    setDeleting(true);
     try {
       const res = await fetch(`/api/invoices/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
@@ -239,7 +239,7 @@ export default function InvoicesPage() {
     } catch {
       toast({ type: "error", title: "Delete failed", message: "Network error." });
     } finally {
-      setDeletingInvoice(false);
+      setDeleting(false);
       setDeleteTarget(null);
     }
   }
@@ -248,11 +248,11 @@ export default function InvoicesPage() {
     <>
     <ConfirmDialog
       open={!!deleteTarget}
-      title="Move to Bin"
+      title="Delete Invoice"
       message={`Move invoice ${deleteTarget?.invoiceNumber} to bin? You can restore it within 30 days.`}
       confirmLabel="Move to Bin"
       variant="danger"
-      loading={deletingInvoice}
+      loading={deleting}
       onConfirm={handleDelete}
       onCancel={() => setDeleteTarget(null)}
     />

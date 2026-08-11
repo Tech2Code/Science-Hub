@@ -153,6 +153,14 @@ model Invoice {
   isInterState  Boolean       @default(false)
   placeOfSupply String?
   reverseCharge Boolean       @default(false)
+  // Optional transport/freight charge — shown as its own line on the printed
+  // invoice, with its own GST rate/amount, kept separate from cgst/sgst/igst
+  // (which stay a pure sum of item-level tax) rather than folded into the
+  // inter/intra-state split. transportChargeGstAmount is always server-
+  // recomputed from charge × rate, never trusted from the client.
+  transportCharge          Float @default(0)
+  transportChargeGstRate   Float @default(0)
+  transportChargeGstAmount Float @default(0)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
@@ -320,6 +328,11 @@ model PurchaseBill {
   sgst            Float             @default(0)
   igst            Float             @default(0)
   discount        Float             @default(0)
+  // Same shape/reasoning as Invoice.transportCharge — own line, own GST,
+  // kept out of cgst/sgst/igst, server-recomputed from charge × rate.
+  transportCharge          Float @default(0)
+  transportChargeGstRate   Float @default(0)
+  transportChargeGstAmount Float @default(0)
   total           Float
   roundOff        Float             @default(0)
   paidAmount      Float             @default(0)

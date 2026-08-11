@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const user = auth.session.user;
 
     const body = await request.json();
-    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, transportCharge, transportChargeGstRate } = body;
     const { customerId } = body;
 
     if (!items || items.length === 0) {
@@ -186,7 +186,22 @@ export async function POST(request: NextRequest) {
       sgst = totalGst / 2;
     }
 
-    const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + cgst + sgst + igst);
+    // Transport/freight charge — its own line and its own GST, kept out of
+    // the CGST/SGST/IGST split (which stays a pure sum of item tax) rather
+    // than folded into whichever rate bucket happens to match. The amount is
+    // never trusted from the client: always recomputed server-side from the
+    // charge and rate the client sent.
+    const transportChargeVal = parseFloat(String(transportCharge ?? 0)) || 0;
+    const transportChargeGstRateVal = parseFloat(String(transportChargeGstRate ?? 0)) || 0;
+    if (transportChargeVal < 0) {
+      return NextResponse.json({ error: "Transport charge cannot be negative" }, { status: 400 });
+    }
+    if (transportChargeGstRateVal < 0) {
+      return NextResponse.json({ error: "Transport charge GST rate cannot be negative" }, { status: 400 });
+    }
+    const transportChargeGstAmountVal = (transportChargeVal * transportChargeGstRateVal) / 100;
+
+    const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + cgst + sgst + igst + transportChargeVal + transportChargeGstAmountVal);
 
     // Invoice-number generation (highest-existing-number-for-year + 1, or the
     // admin's one-time "next number" override from Settings if it's higher)
@@ -224,6 +239,9 @@ export async function POST(request: NextRequest) {
             igst,
             total,
             roundOff,
+            transportCharge: transportChargeVal,
+            transportChargeGstRate: transportChargeGstRateVal,
+            transportChargeGstAmount: transportChargeGstAmountVal,
             paidAmount: 0,
             notes: notes || null,
             dueDate: dueDate ? new Date(dueDate) : null,

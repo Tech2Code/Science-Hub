@@ -124,7 +124,10 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
     if (!amountsMatch(inv.cgst + inv.sgst + inv.igst, itemTaxSum)) {
       issues.push(issue("error", "Sales", `Invoice ${inv.invoiceNumber}: stored tax (₹${(inv.cgst + inv.sgst + inv.igst).toFixed(2)}) doesn't match line-item tax (₹${itemTaxSum.toFixed(2)}).`, inv.invoiceNumber));
     }
-    const expectedTotal = inv.subtotal + inv.cgst + inv.sgst + inv.igst + inv.roundOff;
+    // Transport charge (+ its own GST) is a real, separate addition to the
+    // total — see src/lib/invoiceCalc.ts — so it must be included here too,
+    // or every invoice carrying one would falsely fail this check.
+    const expectedTotal = inv.subtotal + inv.cgst + inv.sgst + inv.igst + inv.transportCharge + inv.transportChargeGstAmount + inv.roundOff;
     if (!amountsMatch(inv.total, expectedTotal)) {
       issues.push(issue("error", "Sales", `Invoice ${inv.invoiceNumber}: total (₹${inv.total.toFixed(2)}) doesn't match subtotal + tax + round-off (₹${expectedTotal.toFixed(2)}).`, inv.invoiceNumber));
     }

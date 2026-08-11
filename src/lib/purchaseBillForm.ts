@@ -54,13 +54,21 @@ export function calcPurchaseBillItem(item: PurchaseBillLineItem) {
   return purchaseBillLineBreakdown(toNum(item.quantity), toNum(item.purchasePrice), toNum(item.gstRate), toNum(item.discountPercent));
 }
 
-export function computePurchaseBillTotals(items: PurchaseBillLineItem[], discount: string) {
+// transportCharge/transportChargeGstRate mirror the sales-invoice side
+// (src/lib/invoiceCalc.ts) — own line, own GST, kept out of the item tax
+// total and the CGST/SGST/IGST split, added straight into the grand total.
+export function computePurchaseBillTotals(items: PurchaseBillLineItem[], discount: string, transportCharge = 0, transportChargeGstRate = 0) {
   const grossTotal        = items.reduce((s, i) => s + calcPurchaseBillItem(i).gross, 0);
   const itemDiscountTotal = items.reduce((s, i) => s + calcPurchaseBillItem(i).discountAmount, 0);
   const subtotal          = items.reduce((s, i) => s + calcPurchaseBillItem(i).subtotal, 0);
   const taxTotal          = items.reduce((s, i) => s + calcPurchaseBillItem(i).gstAmount, 0);
   const disc = toNum(discount);
-  const rawTotal = subtotal + taxTotal - disc;
+  const transportChargeGstAmount = (transportCharge * transportChargeGstRate) / 100;
+  const rawTotal = subtotal + taxTotal - disc + transportCharge + transportChargeGstAmount;
   const { roundOff, roundedTotal } = computeRoundOff(rawTotal);
-  return { grossTotal, itemDiscountTotal, subtotal, taxTotal, rawTotal, roundOff, grandTotal: roundedTotal };
+  return {
+    grossTotal, itemDiscountTotal, subtotal, taxTotal,
+    transportCharge, transportChargeGstRate, transportChargeGstAmount,
+    rawTotal, roundOff, grandTotal: roundedTotal,
+  };
 }

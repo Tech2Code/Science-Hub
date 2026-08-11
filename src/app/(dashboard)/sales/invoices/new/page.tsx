@@ -63,6 +63,13 @@ export default function NewInvoicePage() {
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
+  // Default ON per product decision — most invoices in this business carry a
+  // transport/freight charge, so showing the section already open avoids an
+  // extra click on the common path; toggling off drops the amount to 0.
+  const [transportChargeEnabled, setTransportChargeEnabled] = useState(true);
+  const [transportCharge, setTransportCharge] = useState("");
+  const [transportChargeGstRate, setTransportChargeGstRate] = useState("18");
+  const [transportChargeError, setTransportChargeError] = useState<string | undefined>(undefined);
   const [customErrors, setCustomErrors] = useState<Partial<Record<keyof typeof customCustomer, string>>>({});
   const [saving, setSaving] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -244,7 +251,14 @@ export default function NewInvoicePage() {
     setCustomerSaving(false);
   }
 
-  const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal } = computeInvoiceTotals(items);
+  const effectiveTransportCharge = transportChargeEnabled ? (parseFloat(transportCharge) || 0) : 0;
+  const effectiveTransportGstRate = transportChargeEnabled ? (parseFloat(transportChargeGstRate) || 0) : 0;
+  const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal, transportChargeGstAmount } =
+    computeInvoiceTotals(items, effectiveTransportCharge, effectiveTransportGstRate);
+  // Amount is the trigger — a blank/zero amount is a valid "no transport
+  // charge" default (the toggle itself defaults to open, see above), so only
+  // require the GST rate once a real amount has actually been entered.
+  const missingTransportCharge = transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim();
 
   function validateCustomCustomer(): boolean {
     const errs = validateForm(customCustomer, {
@@ -267,6 +281,12 @@ export default function NewInvoicePage() {
     if (items.length === 0) { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
     if (!placeOfSupply) { toast({ type: "error", title: "Check form", message: "Select place of supply." }); return; }
     if (dueDate && dueDate < todayStr) { toast({ type: "error", title: "Check form", message: "Due date cannot be in the past." }); return; }
+    if (transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim()) {
+      setTransportChargeError("Enter a GST rate for the transport charge.");
+      toast({ type: "error", title: "Check form", message: "Enter a GST rate for the transport charge." });
+      return;
+    }
+    setTransportChargeError(undefined);
     for (const item of items) {
       const qtyErr   = validate(String(item.qty),   rules.positiveNumber("Item quantity must be greater than 0."));
       const priceErr = validate(String(item.price), rules.nonNegativeNumber("Item price cannot be negative."));
@@ -297,6 +317,8 @@ export default function NewInvoicePage() {
       items: items.map((i) => ({ productId: i.productId || null, name: i.productName, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent })),
       notes, dueDate: dueDate || undefined,
       customerId,
+      transportCharge: effectiveTransportCharge,
+      transportChargeGstRate: effectiveTransportGstRate,
     };
     const res = await fetch("/api/invoices", {
       method: "POST",
@@ -609,6 +631,13 @@ export default function NewInvoicePage() {
               dueDate={dueDate}
               onDueDateChange={setDueDate}
               minDueDate={todayStr}
+              transportChargeEnabled={transportChargeEnabled}
+              onToggleTransportCharge={() => { setTransportChargeEnabled((v) => !v); setTransportChargeError(undefined); }}
+              transportCharge={transportCharge}
+              onTransportChargeChange={(v) => { setTransportCharge(v); setTransportChargeError(undefined); }}
+              transportChargeGstRate={transportChargeGstRate}
+              onTransportChargeGstRateChange={(v) => { setTransportChargeGstRate(v); setTransportChargeError(undefined); }}
+              transportChargeError={transportChargeError}
             />
 
             {/* Line items */}
@@ -667,6 +696,33 @@ export default function NewInvoicePage() {
                     </div>
                   )
                 )}
+                {effectiveTransportCharge > 0 && (
+                  <>
+                    <div className={styles.summaryLine}>
+                      <span>Transport Charge</span>
+                      <span>₹{effectiveTransportCharge.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    {transportChargeGstAmount > 0 && (
+                      isInterState ? (
+                        <div className={styles.summaryLine}>
+                          <span>Transport IGST {effectiveTransportGstRate}%</span>
+                          <span>₹{transportChargeGstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      ) : (
+                        <div className={styles.summaryGroup}>
+                          <div className={styles.summaryLine}>
+                            <span>Transport CGST {effectiveTransportGstRate / 2}%</span>
+                            <span>₹{(transportChargeGstAmount / 2).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className={styles.summaryLine}>
+                            <span>Transport SGST {effectiveTransportGstRate / 2}%</span>
+                            <span>₹{(transportChargeGstAmount / 2).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </>
+                )}
                 {roundOff !== 0 && (
                   <div className={styles.summaryLine}>
                     <span>Round Off</span>
@@ -678,11 +734,12 @@ export default function NewInvoicePage() {
                   <span>₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
-              {(!customerId || items.length === 0 || !placeOfSupply) && (
+              {(!customerId || items.length === 0 || !placeOfSupply || missingTransportCharge) && (
                 <div className={styles.warningList}>
                   {!customerId && <p className={styles.warningItem}>• Select a customer from dropdown</p>}
                   {!placeOfSupply && <p className={styles.warningItem}>• Select place of supply</p>}
                   {items.length === 0 && <p className={styles.warningItem}>• Add at least one item</p>}
+                  {missingTransportCharge && <p className={styles.warningItem}>• Enter a GST rate for the transport charge</p>}
                 </div>
               )}
               <div className="summary-actions">
@@ -690,7 +747,7 @@ export default function NewInvoicePage() {
                   type="submit"
                   variant="primary"
                   size="full"
-                  disabled={saving || items.length === 0 || !placeOfSupply || !customerId}
+                  disabled={saving || items.length === 0 || !placeOfSupply || !customerId || missingTransportCharge}
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Create Invoice
                 </Button>

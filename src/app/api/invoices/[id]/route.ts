@@ -43,7 +43,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, status, expectedUpdatedAt, date } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, status, expectedUpdatedAt, date, transportCharge, transportChargeGstRate, customerId } = body;
 
     const existingBase = await prisma.invoice.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existingBase) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -71,11 +71,27 @@ export async function PUT(
 
     const existing = await prisma.invoice.findUnique({
       where: { id },
-      select: { paidAmount: true, status: true, invoiceNumber: true, date: true },
+      select: { paidAmount: true, status: true, invoiceNumber: true, date: true, customerId: true },
     });
     if (!existing) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     if (existing.status === "paid") {
       return NextResponse.json({ error: "A fully paid invoice cannot be edited" }, { status: 400 });
+    }
+
+    // Allow re-billing an invoice to a different customer (e.g. it was
+    // created against the wrong one) — resolved and validated server-side
+    // rather than trusted, same as every other invoice field here.
+    let resolvedCustomerId = existing.customerId;
+    if (customerId && customerId !== existing.customerId) {
+      // Not filtered on deletedAt — a customer created "just for this
+      // invoice" (one-off) is soft-deleted immediately on creation (see
+      // POST /api/customers' oneOff handling) yet must still be assignable
+      // here, exactly as POST /api/invoices already allows at create time.
+      const customer = await prisma.customer.findUnique({ where: { id: String(customerId) }, select: { id: true } });
+      if (!customer) {
+        return NextResponse.json({ error: "Selected customer not found" }, { status: 400 });
+      }
+      resolvedCustomerId = customer.id;
     }
 
     // Invoice date is editable (e.g. correcting a same-week typo), but never
@@ -188,7 +204,20 @@ export async function PUT(
     const cgst = inter ? 0 : totalGst / 2;
     const sgst = inter ? 0 : totalGst / 2;
     const igst = inter ? totalGst : 0;
-    const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + totalGst);
+
+    // Same reasoning as POST /api/invoices: own line, own GST, kept out of
+    // the CGST/SGST/IGST split, server-recomputed rather than trusted.
+    const transportChargeVal = parseFloat(String(transportCharge ?? 0)) || 0;
+    const transportChargeGstRateVal = parseFloat(String(transportChargeGstRate ?? 0)) || 0;
+    if (transportChargeVal < 0) {
+      return NextResponse.json({ error: "Transport charge cannot be negative" }, { status: 400 });
+    }
+    if (transportChargeGstRateVal < 0) {
+      return NextResponse.json({ error: "Transport charge GST rate cannot be negative" }, { status: 400 });
+    }
+    const transportChargeGstAmountVal = (transportChargeVal * transportChargeGstRateVal) / 100;
+
+    const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + totalGst + transportChargeVal + transportChargeGstAmountVal);
 
     // Recalculate status based on paidAmount
     const paidAmount = existing.paidAmount;
@@ -242,6 +271,7 @@ export async function PUT(
       const inv = await tx.invoice.update({
         where: { id },
         data: {
+          customerId: resolvedCustomerId,
           isInterState: inter,
           placeOfSupply: String(placeOfSupply).trim(),
           reverseCharge: Boolean(reverseCharge),
@@ -254,6 +284,9 @@ export async function PUT(
           igst,
           total,
           roundOff,
+          transportCharge: transportChargeVal,
+          transportChargeGstRate: transportChargeGstRateVal,
+          transportChargeGstAmount: transportChargeGstAmountVal,
           status: newStatus,
           items: { create: invoiceItems },
         },
@@ -326,6 +359,13 @@ export async function DELETE(
     // only restore stock if this call is the one that actually transitions
     // the invoice from active to deleted — updateMany's count tells us that
     // atomically, so a repeat call finds count 0 and skips re-crediting stock.
+    //
+    // Deliberately soft-delete only — an invoice number is part of the GST
+    // filing sequence, so this route never permanently removes the row.
+    // Permanent deletion (admin-only, from the Bin page) is a separate,
+    // explicit decision — see src/app/api/bin/[type]/[id]/route.ts and the
+    // "Recycle Bin" section of CLAUDE.md for why invoices/purchase bills/
+    // credit notes are also exempt from the Bin's 30-day auto-purge.
     const result = await prisma.$transaction(async (tx) => {
       const inv = await tx.invoice.findUnique({
         where: { id },

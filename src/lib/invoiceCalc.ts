@@ -39,7 +39,12 @@ export function lineBreakdown(item: LineCalcInput) {
   return { gross, discountAmount, taxable, gstAmt, total: taxable + gstAmt };
 }
 
-export function computeInvoiceTotals(items: InvoiceLineItem[]) {
+// transportCharge/transportChargeGstRate are optional — a productless service
+// charge (freight, etc.) shown as its own line on the invoice, with its own
+// GST, kept out of the per-rate `taxBreakdown` (which stays item-only) and
+// out of the CGST/SGST/IGST split rather than folded into whichever rate
+// bucket happens to match; it just adds straight into the grand total.
+export function computeInvoiceTotals(items: InvoiceLineItem[], transportCharge = 0, transportChargeGstRate = 0) {
   const grossTotal = items.reduce((sum, item) => sum + lineBreakdown(item).gross, 0);
   const discountTotal = items.reduce((sum, item) => sum + lineBreakdown(item).discountAmount, 0);
   const subtotal = items.reduce((sum, item) => sum + lineBreakdown(item).taxable, 0);
@@ -49,7 +54,12 @@ export function computeInvoiceTotals(items: InvoiceLineItem[]) {
     return acc;
   }, {} as Record<number, number>);
   const totalTax = Object.values(taxBreakdown).reduce((a, b) => a + b, 0);
-  const rawTotal = subtotal + totalTax;
+  const transportChargeGstAmount = (transportCharge * transportChargeGstRate) / 100;
+  const rawTotal = subtotal + totalTax + transportCharge + transportChargeGstAmount;
   const { roundOff, roundedTotal } = computeRoundOff(rawTotal);
-  return { grossTotal, discountTotal, subtotal, taxBreakdown, totalTax, rawTotal, roundOff, grandTotal: roundedTotal };
+  return {
+    grossTotal, discountTotal, subtotal, taxBreakdown, totalTax,
+    transportCharge, transportChargeGstRate, transportChargeGstAmount,
+    rawTotal, roundOff, grandTotal: roundedTotal,
+  };
 }
