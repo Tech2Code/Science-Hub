@@ -1164,13 +1164,13 @@ export default function InvoiceDetailPage() {
                         }}>
                           {settings?.name}
                         </div>
+                        {settings?.tagline && (
+                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", marginBottom: 2 }}>{settings.tagline}</div>
+                        )}
                         {(settings?.address || settings?.city || settings?.state || settings?.pincode) && (
                           <div style={{ fontSize: 10, color: "var(--inv-tx2)", marginBottom: 2 }}>
                             {[settings?.address, settings?.city, settings?.state, settings?.pincode].filter(Boolean).join(", ")}
                           </div>
-                        )}
-                        {settings?.tagline && (
-                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", marginBottom: 2 }}>{settings.tagline}</div>
                         )}
                         {(settings?.phone || settings?.email) && (
                           <div style={{ fontSize: 10, color: "var(--inv-tx2)", marginBottom: 2 }}>
@@ -1424,8 +1424,8 @@ export default function InvoiceDetailPage() {
                   const tcRate = invoice.transportChargeGstRate ?? 0;
                   const tcHalfRate = tcRate / 2;
                   const tcHalfGst = tcGst / 2;
-                  const tcTd = (content: React.ReactNode, align: "right" | "center" = "right", bold = false) => (
-                    <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align, background: "var(--inv-bg)", fontWeight: bold ? 700 : undefined, color: bold ? "var(--inv-tx)" : "var(--inv-tx2)", whiteSpace: "nowrap" }}>
+                  const tcTd = (content: React.ReactNode, bold = false) => (
+                    <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", background: "var(--inv-bg)", fontWeight: bold ? 700 : undefined, color: bold ? "var(--inv-tx)" : "var(--inv-tx2)", whiteSpace: "nowrap" }}>
                       {content}
                     </td>
                   );
@@ -1436,9 +1436,9 @@ export default function InvoiceDetailPage() {
                       </td>
                       {tcTd(fmt(tcTaxable))}
                       {invoice.isInterState
-                        ? <>{tcTd(`${tcRate}%`, "center")}{tcTd(fmt(tcGst))}</>
-                        : <>{tcTd(`${tcHalfRate}%`, "center")}{tcTd(fmt(tcHalfGst))}{tcTd(`${tcHalfRate}%`, "center")}{tcTd(fmt(tcHalfGst))}</>}
-                      {tcTd(fmt(tcTaxable + tcGst), "right", true)}
+                        ? <>{tcTd(`${tcRate}%`)}{tcTd(fmt(tcGst))}</>
+                        : <>{tcTd(`${tcHalfRate}%`)}{tcTd(fmt(tcHalfGst))}{tcTd(`${tcHalfRate}%`)}{tcTd(fmt(tcHalfGst))}</>}
+                      {tcTd(fmt(tcTaxable + tcGst), true)}
                     </tr>
                   );
                 })()}
@@ -1508,7 +1508,7 @@ export default function InvoiceDetailPage() {
                     </div>
                   </td>
                   <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Subtotal</td>
-                  <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.subtotal + (invoice.transportCharge ?? 0))}</td>
+                  <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.subtotal)}</td>
                 </tr>
                 {/* Transportation Charges' own IGST/CGST/SGST (shown split
                     out on its own row above) must be folded into these
