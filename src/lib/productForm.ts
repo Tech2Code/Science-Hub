@@ -1,6 +1,6 @@
 import { rules, validate } from "@/lib/validation";
 
-export const PRODUCT_UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pack", "Set", "Mtr", "Dozen"];
+export const PRODUCT_UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pkt", "Set", "Mtr", "Dozen"];
 export const PRODUCT_GST_RATES = [0, 5, 12, 18, 28];
 
 export interface ProductFormData {
