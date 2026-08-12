@@ -2,11 +2,10 @@
 
 import { Input, Select } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
+import { RequiredStar } from "@/components/ui/RequiredStar";
 import { INDIA_STATES_FULL } from "@/lib/states";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./InvoiceOptionsRow.module.css";
-
-const RequiredStar = () => <span style={{ color: "var(--c-red, #dc2626)" }}> *</span>;
 
 interface InvoiceOptionsRowProps {
   sectionIndex: number;
@@ -103,7 +102,7 @@ export function InvoiceOptionsRow({
       {transportChargeEnabled && (
         <div className={styles.toggleRow}>
           <div className={styles.dueDateRow}>
-            <label className={styles.dueDateLabel}>Amount (₹)</label>
+            <label className={styles.dueDateLabel}>Transport Charge Amount (₹)<RequiredStar /></label>
             <Input
               type="number"
               min="0"
@@ -115,7 +114,7 @@ export function InvoiceOptionsRow({
             />
           </div>
           <div className={styles.dueDateRow}>
-            <label className={styles.dueDateLabel}>GST Rate (%)<RequiredStar /></label>
+            <label className={styles.dueDateLabel}>GST Rate on Transport Charge (%)<RequiredStar /></label>
             <Input
               type="number"
               min="0"

@@ -176,7 +176,11 @@ export default function NewPurchaseBillPage() {
     if (addPayment && toNum(payAmount) > 0 && payDate < billDate) { setPaymentDateError("Payment date cannot be before the bill date."); return; }
     if (addPayment && toNum(payAmount) > 0 && payDate > new Date().toISOString().slice(0, 10)) { setPaymentDateError("Payment date cannot be in the future."); return; }
     setPaymentDateError(undefined);
-    if (transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim()) {
+    if (missingTransportAmount) {
+      setTransportChargeError("Enter the transport charge amount.");
+      return;
+    }
+    if (missingTransportGstRate) {
       setTransportChargeError("Enter a GST rate for the transport charge.");
       return;
     }
@@ -252,7 +256,12 @@ export default function NewPurchaseBillPage() {
   // Amount is the trigger — a blank/zero amount is a valid "no transport
   // charge" default, so only require the GST rate once a real amount has
   // actually been entered.
-  const missingTransportCharge = transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim();
+  // Once the transport charge toggle is on, both the amount and the GST rate
+  // are mandatory — leaving the amount blank must not silently save a
+  // zero-value transport charge.
+  const missingTransportAmount = transportChargeEnabled && (!transportCharge.trim() || effectiveTransportCharge <= 0);
+  const missingTransportGstRate = transportChargeEnabled && !transportChargeGstRate.trim();
+  const missingTransportCharge = missingTransportAmount || missingTransportGstRate;
   const canSubmit = !saving && !attachmentUploading && !missingVendor && !noItems && !missingTransportCharge;
 
   return (
@@ -355,7 +364,8 @@ export default function NewPurchaseBillPage() {
                 <div className={styles.warningList}>
                   {missingVendor && <p className={styles.warningItem}>• Select a vendor</p>}
                   {noItems && <p className={styles.warningItem}>• Add at least one item</p>}
-                  {missingTransportCharge && <p className={styles.warningItem}>• Enter a GST rate for the transport charge</p>}
+                  {missingTransportAmount && <p className={styles.warningItem}>• Enter the transport charge amount</p>}
+                  {!missingTransportAmount && missingTransportGstRate && <p className={styles.warningItem}>• Enter a GST rate for the transport charge</p>}
                 </div>
               )}
               <div className="summary-actions">

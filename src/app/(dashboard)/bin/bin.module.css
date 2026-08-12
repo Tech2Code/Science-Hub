@@ -106,6 +106,12 @@
   border: 1px solid var(--c-orange-border);
 }
 
+.typePillRateList {
+  background: var(--c-amber-bg);
+  color: var(--c-amber-text);
+  border: 1px solid var(--c-amber-border);
+}
+
 .itemCount {
   font-size: 0.8125rem;
   color: var(--c-text-3);

@@ -115,23 +115,29 @@ export default function GstFilingPage() {
   }
 
   async function handleDownload() {
+    // A clean period (no validation issues) has nothing worth reviewing in a
+    // separate Validation-Report.csv, so skip the zip and hand back the
+    // workbook directly. A period with errors/warnings still gets the zip,
+    // since the CSV is what surfaces those issues outside of this page.
+    const clean = report ? report.validation.errorCount === 0 && report.validation.warningCount === 0 : false;
+    const format = clean ? "xlsx" : "zip";
     setDownloading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/gst-filing?startDate=${period.startDate}&endDate=${period.endDate}&format=zip`);
+      const res = await fetch(`/api/gst-filing?startDate=${period.startDate}&endDate=${period.endDate}&format=${format}`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Failed to download the GST package.");
+        setError(data.error ?? "Failed to download the GST filing package.");
         return;
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = `GST-Package-${period.startDate}_to_${period.endDate}.zip`;
+      a.href = url; a.download = `GST-Filing-${period.startDate}_to_${period.endDate}.${format}`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      setError("Failed to download the GST package.");
+      setError("Failed to download the GST filing package.");
     } finally {
       setDownloading(false);
     }
@@ -271,7 +277,11 @@ export default function GstFilingPage() {
             </div>
             <div className={styles.downloadRow}>
               <Button variant="primary" onClick={handleDownload} disabled={downloading || isReportEmpty}>
-                {downloading ? "Preparing…" : "Download ZIP"}
+                {downloading
+                  ? "Preparing…"
+                  : report.validation.errorCount === 0 && report.validation.warningCount === 0
+                    ? "Download Excel"
+                    : "Download ZIP"}
               </Button>
               {isReportEmpty && <p className={styles.errorText}>No sales, purchases, or credit notes in this period — nothing to download.</p>}
             </div>

@@ -6,7 +6,7 @@ import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { deleteAttachmentBlob } from "@/lib/blobStorage";
 import { requireWriteAccess, requireAdmin } from "@/lib/apiAuth";
 
-type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill" | "return";
+type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill" | "return" | "rate_list";
 
 async function getItemName(type: BinType, id: string): Promise<string> {
   switch (type) {
@@ -41,6 +41,10 @@ async function getItemName(type: BinType, id: string): Promise<string> {
     case "return": {
       const r = await prisma.return.findUnique({ where: { id }, select: { creditNoteNumber: true } });
       return r?.creditNoteNumber ?? id;
+    }
+    case "rate_list": {
+      const r = await prisma.rateList.findUnique({ where: { id }, select: { title: true } });
+      return r?.title ?? id;
     }
   }
 }
@@ -174,6 +178,10 @@ export async function POST(
         revalidateTag("reports", { expire: 0 });
         break;
       }
+      case "rate_list":
+        await prisma.rateList.update({ where: { id }, data: { deletedAt: null } });
+        revalidateTag("rate-lists", { expire: 0 });
+        break;
       default:
         return NextResponse.json({ error: "Invalid type" }, { status: 400 });
     }
@@ -299,6 +307,11 @@ export async function DELETE(
         // Nothing else references a credit note — cascade handles its items.
         await prisma.return.delete({ where: { id } });
         revalidateTag("reports", { expire: 0 });
+        break;
+      case "rate_list":
+        // Nothing else references a rate list — cascade handles its items.
+        await prisma.rateList.delete({ where: { id } });
+        revalidateTag("rate-lists", { expire: 0 });
         break;
       default:
         return NextResponse.json({ error: "Invalid type" }, { status: 400 });

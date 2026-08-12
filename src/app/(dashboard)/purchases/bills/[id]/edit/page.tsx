@@ -232,10 +232,12 @@ export default function EditPurchaseBillPage() {
   const outstanding   = bill ? computedTotal - bill.paidAmount : 0;
   const missingVendor = !vendorId;
   const noItems = items.length === 0;
-  // Amount is the trigger — a blank/zero amount is a valid "no transport
-  // charge" default, so only require the GST rate once a real amount has
-  // actually been entered.
-  const missingTransportCharge = transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim();
+  // Once the transport charge toggle is on, both the amount and the GST rate
+  // are mandatory — leaving the amount blank must not silently save a
+  // zero-value transport charge.
+  const missingTransportAmount = transportChargeEnabled && (!transportCharge.trim() || effectiveTransportCharge <= 0);
+  const missingTransportGstRate = transportChargeEnabled && !transportChargeGstRate.trim();
+  const missingTransportCharge = missingTransportAmount || missingTransportGstRate;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -261,7 +263,11 @@ export default function EditPurchaseBillPage() {
     setItemsError(undefined);
     if (dueDate && dueDate < billDate) { setDueDateError("Due date cannot be before the bill date."); return; }
     setDueDateError(undefined);
-    if (transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim()) {
+    if (missingTransportAmount) {
+      setTransportChargeError("Enter the transport charge amount.");
+      return;
+    }
+    if (missingTransportGstRate) {
       setTransportChargeError("Enter a GST rate for the transport charge.");
       return;
     }
@@ -453,7 +459,8 @@ export default function EditPurchaseBillPage() {
                 <div className={styles.warningList}>
                   {missingVendor && <p className={styles.warningItem}>• Select a vendor</p>}
                   {noItems && <p className={styles.warningItem}>• Add at least one item</p>}
-                  {missingTransportCharge && <p className={styles.warningItem}>• Enter a GST rate for the transport charge</p>}
+                  {missingTransportAmount && <p className={styles.warningItem}>• Enter the transport charge amount</p>}
+                  {!missingTransportAmount && missingTransportGstRate && <p className={styles.warningItem}>• Enter a GST rate for the transport charge</p>}
                 </div>
               )}
               <div className="summary-actions">

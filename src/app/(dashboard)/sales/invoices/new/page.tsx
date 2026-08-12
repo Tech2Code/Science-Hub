@@ -255,10 +255,12 @@ export default function NewInvoicePage() {
   const effectiveTransportGstRate = transportChargeEnabled ? (parseFloat(transportChargeGstRate) || 0) : 0;
   const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal, transportChargeGstAmount } =
     computeInvoiceTotals(items, effectiveTransportCharge, effectiveTransportGstRate);
-  // Amount is the trigger — a blank/zero amount is a valid "no transport
-  // charge" default (the toggle itself defaults to open, see above), so only
-  // require the GST rate once a real amount has actually been entered.
-  const missingTransportCharge = transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim();
+  // Once the transport charge toggle is on, both the amount and the GST rate
+  // are mandatory — leaving the amount blank must not silently save a
+  // zero-value transport charge.
+  const missingTransportAmount = transportChargeEnabled && (!transportCharge.trim() || effectiveTransportCharge <= 0);
+  const missingTransportGstRate = transportChargeEnabled && !transportChargeGstRate.trim();
+  const missingTransportCharge = missingTransportAmount || missingTransportGstRate;
 
   function validateCustomCustomer(): boolean {
     const errs = validateForm(customCustomer, {
@@ -281,7 +283,12 @@ export default function NewInvoicePage() {
     if (items.length === 0) { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
     if (!placeOfSupply) { toast({ type: "error", title: "Check form", message: "Select place of supply." }); return; }
     if (dueDate && dueDate < todayStr) { toast({ type: "error", title: "Check form", message: "Due date cannot be in the past." }); return; }
-    if (transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim()) {
+    if (missingTransportAmount) {
+      setTransportChargeError("Enter the transport charge amount.");
+      toast({ type: "error", title: "Check form", message: "Enter the transport charge amount." });
+      return;
+    }
+    if (missingTransportGstRate) {
       setTransportChargeError("Enter a GST rate for the transport charge.");
       toast({ type: "error", title: "Check form", message: "Enter a GST rate for the transport charge." });
       return;
@@ -739,7 +746,8 @@ export default function NewInvoicePage() {
                   {!customerId && <p className={styles.warningItem}>• Select a customer from dropdown</p>}
                   {!placeOfSupply && <p className={styles.warningItem}>• Select place of supply</p>}
                   {items.length === 0 && <p className={styles.warningItem}>• Add at least one item</p>}
-                  {missingTransportCharge && <p className={styles.warningItem}>• Enter a GST rate for the transport charge</p>}
+                  {missingTransportAmount && <p className={styles.warningItem}>• Enter the transport charge amount</p>}
+                  {!missingTransportAmount && missingTransportGstRate && <p className={styles.warningItem}>• Enter a GST rate for the transport charge</p>}
                 </div>
               )}
               <div className="summary-actions">

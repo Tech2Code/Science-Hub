@@ -319,10 +319,12 @@ export default function EditInvoicePage() {
   const effectiveTransportGstRate = transportChargeEnabled ? (parseFloat(transportChargeGstRate) || 0) : 0;
   const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal, transportChargeGstAmount } =
     computeInvoiceTotals(items, effectiveTransportCharge, effectiveTransportGstRate);
-  // Amount is the trigger — a blank/zero amount is a valid "no transport
-  // charge" default (the toggle itself defaults to open), so only require
-  // the GST rate once a real amount has actually been entered.
-  const missingTransportCharge = transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim();
+  // Once the transport charge toggle is on, both the amount and the GST rate
+  // are mandatory — leaving the amount blank must not silently save a
+  // zero-value transport charge.
+  const missingTransportAmount = transportChargeEnabled && (!transportCharge.trim() || effectiveTransportCharge <= 0);
+  const missingTransportGstRate = transportChargeEnabled && !transportChargeGstRate.trim();
+  const missingTransportCharge = missingTransportAmount || missingTransportGstRate;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -335,7 +337,12 @@ export default function EditInvoicePage() {
       return;
     }
     if (dueDate && invoiceDate && dueDate < invoiceDate) { toast({ type: "error", title: "Check form", message: "Due date cannot be before the invoice date." }); return; }
-    if (transportChargeEnabled && effectiveTransportCharge > 0 && !transportChargeGstRate.trim()) {
+    if (missingTransportAmount) {
+      setTransportChargeError("Enter the transport charge amount.");
+      toast({ type: "error", title: "Check form", message: "Enter the transport charge amount." });
+      return;
+    }
+    if (missingTransportGstRate) {
       setTransportChargeError("Enter a GST rate for the transport charge.");
       toast({ type: "error", title: "Check form", message: "Enter a GST rate for the transport charge." });
       return;
@@ -783,7 +790,10 @@ export default function EditInvoicePage() {
               {!placeOfSupply && items.length > 0 && (
                 <p className={styles.summaryHint}>• Select place of supply</p>
               )}
-              {missingTransportCharge && (
+              {missingTransportAmount && (
+                <p className={styles.summaryHint}>• Enter the transport charge amount</p>
+              )}
+              {!missingTransportAmount && missingTransportGstRate && (
                 <p className={styles.summaryHint}>• Enter a GST rate for the transport charge</p>
               )}
               <div className="summary-actions">

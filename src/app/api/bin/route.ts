@@ -88,12 +88,24 @@ export async function GET() {
       }
     }
 
+    // Rate lists — not a GST-numbered document, so they follow the standard
+    // 30-day auto-purge like customers/products/brands/vendors. Nothing else
+    // references a RateList and its items cascade, so no FK-safety check.
+    const oldRateLists = await prisma.rateList.findMany({
+      where: { deletedAt: { not: null, lt: cutoff } },
+      select: { id: true },
+    });
+    if (oldRateLists.length > 0) {
+      await prisma.rateList.deleteMany({ where: { id: { in: oldRateLists.map((r) => r.id) } } });
+    }
+
     const purged = oldProducts.length + oldCustomers.length + oldBrands.length
-      + oldCategories.length + oldVendors.length;
+      + oldCategories.length + oldVendors.length + oldRateLists.length;
     if (purged > 0) {
       revalidateTag("customers", { expire: 0 });
       revalidateTag("products", { expire: 0 });
       revalidateTag("vendors", { expire: 0 });
+      revalidateTag("rate-lists", { expire: 0 });
       revalidateTag("reports", { expire: 0 });
     }
 
@@ -115,7 +127,7 @@ export async function GET() {
     const explicitlyDeletedCustomerIds = [...new Set(explicitlyDeletedCustomers.map((l) => l.entityId).filter((id): id is string => !!id))];
     const explicitlyDeletedVendorIds = [...new Set(explicitlyDeletedVendors.map((l) => l.entityId).filter((id): id is string => !!id))];
 
-    const [invoices, customers, products, brands, categories, vendors, purchaseBills, returns] = await Promise.all([
+    const [invoices, customers, products, brands, categories, vendors, purchaseBills, returns, rateLists] = await Promise.all([
       prisma.invoice.findMany({
         where: { deletedAt: { not: null } },
         select: { id: true, invoiceNumber: true, deletedAt: true, total: true, customer: { select: { name: true } } },
@@ -159,6 +171,11 @@ export async function GET() {
         },
         orderBy: { deletedAt: "desc" },
       }),
+      prisma.rateList.findMany({
+        where: { deletedAt: { not: null } },
+        select: { id: true, title: true, deletedAt: true, _count: { select: { items: true } } },
+        orderBy: { deletedAt: "desc" },
+      }),
     ]);
 
     // Figure out which items are protected from permanent deletion by an FK
@@ -198,6 +215,7 @@ export async function GET() {
       ...vendors.map(v => v.id),
       ...purchaseBills.map(b => b.id),
       ...returns.map(r => r.id),
+      ...rateLists.map(r => r.id),
     ];
     const deleteLogs = await prisma.activityLog.findMany({
       where: { entityId: { in: allIds }, action: { startsWith: "delete_" } },
@@ -214,7 +232,7 @@ export async function GET() {
 
     type BinItem = {
       id: string;
-      type: "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill" | "return";
+      type: "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill" | "return" | "rate_list";
       name: string;
       meta: string;
       deletedAt: string;
@@ -317,6 +335,18 @@ export async function GET() {
         daysLeft: -1,
         deletedBy: deletedByMap.get(r.id),
       })),
+      ...rateLists.map((r) => {
+        const daysSince = Math.floor((now - (r.deletedAt as Date).getTime()) / (1000 * 60 * 60 * 24));
+        return {
+          id: r.id,
+          type: "rate_list" as const,
+          name: r.title,
+          meta: `${r._count.items} item${r._count.items !== 1 ? "s" : ""}`,
+          deletedAt: (r.deletedAt as Date).toISOString(),
+          daysLeft: Math.max(0, 30 - daysSince),
+          deletedBy: deletedByMap.get(r.id),
+        };
+      }),
     ];
 
     // Sort by deletedAt desc

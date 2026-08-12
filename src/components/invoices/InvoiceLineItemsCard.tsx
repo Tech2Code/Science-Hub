@@ -6,6 +6,7 @@ import { Modal } from "@/components/dialogs/Modal";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Input, FormField } from "@/components/ui/Input";
 import { UnitCombo } from "@/components/ui/UnitCombo";
+import { RequiredStar } from "@/components/ui/RequiredStar";
 import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
@@ -264,11 +265,11 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
             <thead>
               <tr>
                 <th className={styles.th}>#</th>
-                <th className={styles.th}>Item</th>
+                <th className={styles.th}>Item<RequiredStar /></th>
                 <th className={styles.thCenter}>HSN/SAC</th>
                 <th className={styles.thCenter}>Unit</th>
-                <th className={styles.thCenter}>Qty</th>
-                <th className={styles.thCenter}>List Price (₹)</th>
+                <th className={styles.thCenter}>Qty<RequiredStar /></th>
+                <th className={styles.thCenter}>List Price (₹)<RequiredStar /></th>
                 <th className={styles.thCenter}>Discount %</th>
                 <th className={styles.thCenter}>GST %</th>
                 <th className={styles.thRight}>GST Amt</th>

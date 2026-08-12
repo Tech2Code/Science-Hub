@@ -441,13 +441,13 @@ export default function RateListDetailPage() {
             <tbody>
               {rateList.items.map((item, idx) => (
                 <tr key={item.id}>
-                  <td>{idx + 1}</td>
-                  <td>{item.name}</td>
-                  <td>{item.brand || <span className={styles.emptyValue}>—</span>}</td>
-                  <td>{item.unit}</td>
-                  <td className="table-th-right">₹{fmtCurrency(item.listRate)}</td>
-                  <td className="table-th-right">{item.isNetRate ? "Net Rate" : `${item.discountPercent}%`}</td>
-                  <td className="table-th-right">₹{fmtCurrency(item.amount)}</td>
+                  <td data-label="#">{idx + 1}</td>
+                  <td data-label="Item">{item.name}</td>
+                  <td data-label="Brand">{item.brand || <span className={styles.emptyValue}>—</span>}</td>
+                  <td data-label="Unit">{item.unit}</td>
+                  <td data-label="List Rate (₹)" className="table-td-right">₹{fmtCurrency(item.listRate)}</td>
+                  <td data-label="Discount" className="table-td-right">{item.isNetRate ? "Net Rate" : `${item.discountPercent}%`}</td>
+                  <td data-label="Amount (₹)" className="table-td-right">₹{fmtCurrency(item.amount)}</td>
                 </tr>
               ))}
             </tbody>

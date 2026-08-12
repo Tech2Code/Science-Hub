@@ -15,7 +15,7 @@ import { Cell, type Column } from "@/components/ui/Table";
 import { formatDate } from "@/lib/formatDate";
 import styles from "./bin.module.css";
 
-type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill" | "return";
+type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill" | "return" | "rate_list";
 
 interface BinItem {
   id: string;
@@ -37,9 +37,10 @@ const TYPE_META: Record<BinType, { plural: string; pillCls: string }> = {
   vendor:        { plural: "Vendors",       pillCls: styles.typePillVendor },
   purchase_bill: { plural: "Purchase Bills", pillCls: styles.typePillPurchaseBill },
   return:        { plural: "Credit Notes",  pillCls: styles.typePillReturn },
+  rate_list:     { plural: "Rate Lists",    pillCls: styles.typePillRateList },
 };
 
-const TYPE_ORDER: BinType[] = ["invoice", "customer", "product", "brand", "category", "vendor", "purchase_bill", "return"];
+const TYPE_ORDER: BinType[] = ["invoice", "customer", "product", "brand", "category", "vendor", "purchase_bill", "return", "rate_list"];
 
 function DaysLeftPill({ daysLeft }: { daysLeft: number }) {
   // -1 = invoices/purchase bills/credit notes, exempt from auto-purge

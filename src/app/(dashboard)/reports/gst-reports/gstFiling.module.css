@@ -3,6 +3,13 @@
   gap: 0;
   border-bottom: 1px solid var(--c-border);
   padding: 0 1.25rem;
+  overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.tabsRow::-webkit-scrollbar {
+  display: none;
 }
 
 .tabBtn {
@@ -15,6 +22,8 @@
   border-bottom: 2px solid transparent;
   cursor: pointer;
   margin-bottom: -1px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tabBtn.active {
@@ -34,6 +43,7 @@
 .dateFilterLabel {
   display: flex;
   align-items: center;
+  white-space: nowrap;
   gap: 0.5rem;
   font-size: 0.75rem;
   color: var(--c-text-3);
@@ -155,4 +165,10 @@
 
 .downloadRow {
   padding: 0.875rem 1.25rem;
+}
+
+@media screen and (max-width: 540px) {
+  .dateFilterRow { flex-direction: column; }
+  .dateFilterRow .dateFilterLabel{ width: 100%; }
+  .dateFilterRow button{ width: 100%; }
 }

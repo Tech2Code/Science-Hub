@@ -32,6 +32,9 @@ function SkeletonRow() {
           <div className={styles.skeletonToggle} />
         </td>
       ))}
+      <td className={styles.tdToggle}>
+        <div className={styles.skeletonToggle} />
+      </td>
     </tr>
   );
 }
@@ -63,6 +66,24 @@ export function PermissionManager() {
 
   const isEnabled = (user: GrantableUser, section: string) =>
     user.sectionPermissions.some((p) => p.section === section && p.enabled);
+
+  // GST Reports has no section of its own — /api/gst-filing requires both
+  // reports_sales AND reports_purchases (see requireGstFilingAccess). This
+  // toggle is pure UI convenience over those two existing flags, not a
+  // separate permission.
+  const isGstEnabled = (user: GrantableUser) =>
+    isEnabled(user, "reports_sales") && isEnabled(user, "reports_purchases");
+
+  const isGstToggling = (userId: string) =>
+    togglingIds.has(`${userId}:reports_sales`) || togglingIds.has(`${userId}:reports_purchases`);
+
+  const handleGstToggle = (user: GrantableUser) => {
+    const target = !isGstEnabled(user);
+    const salesEnabled = isEnabled(user, "reports_sales");
+    const purchasesEnabled = isEnabled(user, "reports_purchases");
+    if (salesEnabled !== target) handleToggle(user.id, "reports_sales", salesEnabled);
+    if (purchasesEnabled !== target) handleToggle(user.id, "reports_purchases", purchasesEnabled);
+  };
 
   const handleToggle = async (userId: string, section: ProtectedSection, currentEnabled: boolean) => {
     const toggleKey = `${userId}:${section}`;
@@ -130,6 +151,7 @@ export function PermissionManager() {
                 {PROTECTED_SECTIONS.map((s) => (
                   <th key={s} className={styles.thSection}>{SECTION_LABELS[s]}</th>
                 ))}
+                <th className={styles.thSection}>GST Reports</th>
               </tr>
             </thead>
             <tbody>
@@ -180,33 +202,47 @@ export function PermissionManager() {
                       {PROTECTED_SECTIONS.map((s) => (
                         <th key={s} className={styles.thSection}>{SECTION_LABELS[s]}</th>
                       ))}
+                      <th className={styles.thSection} title="Requires both Sales Reports and Purchase Reports — toggling this sets both at once">GST Reports</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredUsers.map((user) => (
-                      <tr key={user.id}>
-                        <td className={styles.tdUser}>
-                          <div className={styles.userName}>{user.name}</div>
-                          <div className={styles.userEmail}>{user.email}</div>
-                          <div className={styles.userRole}>{user.role}</div>
-                        </td>
-                        {PROTECTED_SECTIONS.map((section) => {
-                          const enabled = isEnabled(user, section);
-                          const toggleKey = `${user.id}:${section}`;
-                          return (
-                            <td key={section} className={styles.tdToggle}>
-                              <Switch
-                                checked={enabled}
-                                onChange={() => handleToggle(user.id, section, enabled)}
-                                disabled={togglingIds.has(toggleKey)}
-                                aria-label={`${enabled ? "Disable" : "Enable"} ${SECTION_LABELS[section]} for ${user.name}`}
-                                title={`${enabled ? "Disable" : "Enable"} ${SECTION_LABELS[section]}`}
-                              />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                    {filteredUsers.map((user) => {
+                      const gstEnabled = isGstEnabled(user);
+                      const gstToggling = isGstToggling(user.id);
+                      return (
+                        <tr key={user.id}>
+                          <td className={styles.tdUser}>
+                            <div className={styles.userName}>{user.name}</div>
+                            <div className={styles.userEmail}>{user.email}</div>
+                            <div className={styles.userRole}>{user.role}</div>
+                          </td>
+                          {PROTECTED_SECTIONS.map((section) => {
+                            const enabled = isEnabled(user, section);
+                            const toggleKey = `${user.id}:${section}`;
+                            return (
+                              <td key={section} className={styles.tdToggle}>
+                                <Switch
+                                  checked={enabled}
+                                  onChange={() => handleToggle(user.id, section, enabled)}
+                                  disabled={togglingIds.has(toggleKey)}
+                                  aria-label={`${enabled ? "Disable" : "Enable"} ${SECTION_LABELS[section]} for ${user.name}`}
+                                  title={`${enabled ? "Disable" : "Enable"} ${SECTION_LABELS[section]}`}
+                                />
+                              </td>
+                            );
+                          })}
+                          <td className={styles.tdToggle}>
+                            <Switch
+                              checked={gstEnabled}
+                              onChange={() => handleGstToggle(user)}
+                              disabled={gstToggling}
+                              aria-label={`${gstEnabled ? "Disable" : "Enable"} GST Reports for ${user.name}`}
+                              title={`${gstEnabled ? "Disable" : "Enable"} GST Reports (sets Sales Reports + Purchase Reports together)`}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -236,6 +272,15 @@ export function PermissionManager() {
                           </div>
                         );
                       })}
+                      <div className={styles.mobileRow}>
+                        <span className={styles.mobileLabel}>GST Reports</span>
+                        <Switch
+                          checked={isGstEnabled(user)}
+                          onChange={() => handleGstToggle(user)}
+                          disabled={isGstToggling(user.id)}
+                          aria-label={`${isGstEnabled(user) ? "Disable" : "Enable"} GST Reports for ${user.name}`}
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}

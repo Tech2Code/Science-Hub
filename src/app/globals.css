@@ -623,6 +623,11 @@ select::-moz-focus-inner {
   color: var(--c-text-3);
   margin-top: 0.25rem;
 }
+@media (max-width: 640px) {
+  .stat-banners { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.75rem; }
+  .stat-banner { padding: 1rem; }
+  .stat-banner-value { font-size: 1.25rem; }
+}
 
 /* ── Table action button group ─────────────── */
 .table-actions {

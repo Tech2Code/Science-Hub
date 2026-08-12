@@ -37,7 +37,19 @@ export const authOptions: NextAuthOptions = {
         const accountLimit = rateLimit(`login:${email}`, 8, 15 * 60 * 1000);
         if (!ipLimit.allowed || !accountLimit.allowed) return null;
 
-        const user = await prisma.user.findUnique({ where: { email } });
+        // A DB error here (Neon cold-start, pooled-connection contention under
+        // connection_limit=1, transient network blip) must not surface to the
+        // user as a distinct message from a wrong password — that would leak
+        // which case occurred. NextAuth already collapses any thrown error
+        // into the same generic "Incorrect email or password", so this catch
+        // exists purely to log the real cause server-side for diagnosis.
+        let user;
+        try {
+          user = await prisma.user.findUnique({ where: { email } });
+        } catch (err) {
+          console.error("[auth] DB lookup failed during login attempt", { email, err });
+          return null;
+        }
         const valid = await bcrypt.compare(credentials.password, user?.password ?? DUMMY_HASH);
         if (!user || !valid) return null;
         return { id: user.id, name: user.name, email: user.email, role: user.role, tokenVersion: user.tokenVersion };

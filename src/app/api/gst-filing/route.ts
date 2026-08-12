@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
 import { buildGstFilingReport } from "@/lib/gstFiling";
 import { buildGstFilingZip } from "@/lib/gstFilingZip";
+import { buildGstFilingWorkbook } from "@/lib/gstFilingWorkbook";
 
 // The GST Filing package merges Sales AND Purchase data, which normally sit
 // behind separate section permissions (reports_sales / reports_purchases) —
@@ -33,7 +34,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
-    const format = searchParams.get("format") === "zip" ? "zip" : "json";
+    const formatParam = searchParams.get("format");
+    const format = formatParam === "zip" ? "zip" : formatParam === "xlsx" ? "xlsx" : "json";
 
     if (!startDate || !endDate) {
       return NextResponse.json({ error: "startDate and endDate are required" }, { status: 400 });
@@ -47,16 +49,28 @@ export async function GET(request: NextRequest) {
 
     const report = await buildGstFilingReport(startDate, endDate);
 
+    // Content-Disposition must be ASCII/Latin-1 — build the filename from the
+    // raw "YYYY-MM-DD" query dates, not report.period.label (which contains a
+    // non-Latin-1 en-dash "–" and throws when set as a header).
+    const fileLabel = `${startDate}_to_${endDate}`;
+
     if (format === "zip") {
       const zipBuffer = await buildGstFilingZip(report);
-      // Content-Disposition must be ASCII/Latin-1 — build the filename from
-      // the raw "YYYY-MM-DD" query dates, not report.period.label (which
-      // contains a non-Latin-1 en-dash "–" and throws when set as a header).
-      const fileLabel = `${startDate}_to_${endDate}`;
       return new NextResponse(new Uint8Array(zipBuffer), {
         headers: {
           "Content-Type": "application/zip",
-          "Content-Disposition": `attachment; filename="GST-Package-${fileLabel}.zip"`,
+          "Content-Disposition": `attachment; filename="GST-Filing-${fileLabel}.zip"`,
+        },
+      });
+    }
+
+    if (format === "xlsx") {
+      const workbook = buildGstFilingWorkbook(report);
+      const workbookBuffer = await workbook.xlsx.writeBuffer();
+      return new NextResponse(new Uint8Array(workbookBuffer), {
+        headers: {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `attachment; filename="GST-Filing-${fileLabel}.xlsx"`,
         },
       });
     }

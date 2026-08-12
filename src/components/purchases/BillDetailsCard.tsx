@@ -371,7 +371,7 @@ export function BillDetailsCard({
       </div>
       {transportChargeEnabled && (
         <div className="form-grid-2">
-          <FormField label="Transport Charge Amount (₹)">
+          <FormField label="Transport Charge Amount (₹)" required>
             <Input type="number" min="0" step="0.01" value={transportCharge} onChange={(e) => onTransportChargeChange(e.target.value)} placeholder="0.00" />
           </FormField>
           <FormField label="GST Rate on Transport Charge (%)" required>

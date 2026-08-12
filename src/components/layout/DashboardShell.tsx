@@ -281,13 +281,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (isMobile()) setSidebarOpen(false);
   }, []);
 
-  // Scroll active sidebar item into view instantly when navigating directly to a page
+  // Scroll active sidebar item into view instantly when navigating directly to a page,
+  // and again whenever the sidebar (re)opens — closed state hides the group-label headings
+  // (see `group.label && sidebarOpen` below), which shortens the nav layout and makes any
+  // scroll position computed while closed stale once the headings reappear on reopen.
   useEffect(() => {
     const nav = navRef.current;
-    if (!nav) return;
+    if (!nav || !sidebarOpen) return;
     const active = nav.querySelector("[data-active]") as HTMLElement | null;
     if (active) active.scrollIntoView({ behavior: "auto", block: "nearest" });
-  }, [pathname]);
+  }, [pathname, sidebarOpen]);
 
   if (status === "loading") {
     return (

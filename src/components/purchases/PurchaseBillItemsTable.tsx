@@ -6,6 +6,7 @@ import { Modal } from "@/components/dialogs/Modal";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { UnitCombo } from "@/components/ui/UnitCombo";
+import { RequiredStar } from "@/components/ui/RequiredStar";
 import { useToast } from "@/components/ui/Toast";
 import { bustCachePrefix } from "@/lib/useCache";
 import { rules, validate } from "@/lib/validation";
@@ -304,6 +305,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
                     }
                   >
                     {h}
+                    {["Item", "Qty", "Rate (₹)"].includes(h) && <RequiredStar />}
                   </th>
                 ))}
               </tr>

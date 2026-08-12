@@ -605,6 +605,7 @@
   top: calc(100% + 8px);
   right: 0;
   z-index: 50;
+  max-width: calc(100vw - 1rem);
   background: var(--c-bg-card);
   border: 1px solid var(--c-border);
   border-radius: var(--c-radius);
