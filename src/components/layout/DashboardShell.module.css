@@ -23,7 +23,7 @@
 .sidebarClosed { width: 4rem; }
 
 /* ── Mobile: sidebar becomes a fixed overlay drawer ── */
-@media (max-width: 767px) {
+@media (max-width: 1024px) {
   .sidebar {
     position: fixed;
     top: 0;
@@ -46,7 +46,7 @@
 .backdrop {
   display: none;
 }
-@media (max-width: 767px) {
+@media (max-width: 1024px) {
   .backdrop {
     display: block;
     position: fixed;
@@ -450,7 +450,7 @@
   background: var(--c-bg);
   transition: background-color 0.2s;
 }
-@media (max-width: 767px) {
+@media (max-width: 1024px) {
   .content { padding: 1rem; padding-bottom: 2rem; }
 }
 @media (max-width: 480px) {
@@ -579,7 +579,7 @@
 }
 
 /* ── Responsive topbar ───────────── */
-@media (max-width: 767px) {
+@media (max-width: 1024px) {
   .topbar { height: 2.75rem; padding: 0 0.5rem; gap: 0.5rem;}
    .topbarLeft { width: 8rem; }
   .topbarName { display: none; }

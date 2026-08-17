@@ -680,7 +680,7 @@ export default function PurchaseBillDetailPage() {
                 />
               </FormField>
               <div className={styles.paymentFormBtnRow}>
-                <Button type="submit" variant="primary" size="sm" disabled={submitting || !payAmount.trim()} loading={submitting}>
+                <Button type="submit" variant="primary" size="sm" disabled={submitting} loading={submitting}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
                   Save Payment
                 </Button>

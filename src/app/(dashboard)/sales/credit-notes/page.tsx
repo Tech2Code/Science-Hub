@@ -11,7 +11,7 @@ import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
-import { OverlayLoader } from "@/components/ui/Spinner";
+import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { formatDate } from "@/lib/formatDate";
 import { useFetch } from "@/lib/useCache";
@@ -122,6 +122,8 @@ export default function CreditNotesPage() {
   const { data: stats } = useFetch<CreditNoteStats>(statsUrl);
   const creditNotes = data?.data ?? [];
   const total = data?.total ?? 0;
+  const showSkeleton = loading && !data;
+  const isRefetching = loading && !!data;
 
   const totalCreditNotes = stats?.totalCreditNotes ?? 0;
   const totalCredited    = stats?.totalCredited ?? 0;
@@ -267,6 +269,7 @@ export default function CreditNotesPage() {
       {viewingId && <OverlayLoader text="Preparing preview…" />}
       {downloadingId && <OverlayLoader text="Preparing download…" />}
       {regeneratingId && <OverlayLoader text="Regenerating PDF…" />}
+      {isRefetching && <FloatingSpinner />}
       {pdfPreviewUrl && pdfPreviewNote && (
         <PdfPreviewModal
           url={pdfPreviewUrl}
@@ -281,7 +284,7 @@ export default function CreditNotesPage() {
           <div>
             <h1 className="page-title">Credit Notes</h1>
             <p className="page-sub">
-              {loading ? "Loading…" : `${total} credit note${total === 1 ? "" : "s"}`}
+              {showSkeleton ? "Loading…" : `${total} credit note${total === 1 ? "" : "s"}`}
             </p>
           </div>
         </div>
@@ -321,23 +324,23 @@ export default function CreditNotesPage() {
               />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-              {!loading && isAdmin && total > 0 && (
+              {data && isAdmin && total > 0 && (
                 <Button variant="secondary" size="sm" loading={exportingCsv} onClick={exportCsv}>Export Excel</Button>
               )}
-              {!loading && (
+              {data && (
                 <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
               )}
             </div>
           </div>
           <div className="table-wrap">
-            <table className="table-base">
+            <table className="table-base" style={isRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
               <thead>
                 <tr>
                   {COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
+                {showSkeleton ? (
                   <TableSkeleton columns={COLUMNS} />
                 ) : creditNotes.length === 0 ? (
                   <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
@@ -382,13 +385,14 @@ export default function CreditNotesPage() {
               </tbody>
             </table>
           </div>
-          {!loading && total > 0 && (
+          {data && total > 0 && (
             <Pagination
               total={total}
               page={page}
               showAll={showAll}
               onPage={setPage}
               label="credit notes"
+              loading={isRefetching}
             />
           )}
         </div>

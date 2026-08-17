@@ -13,7 +13,7 @@ import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
-import { OverlayLoader } from "@/components/ui/Spinner";
+import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import styles from "./vendorsList.module.css";
@@ -80,6 +80,8 @@ export default function VendorsPage() {
   const { data, loading, mutate } = useFetch<VendorListResponse>(apiUrl);
   const vendors = data?.data ?? [];
   const total = data?.total ?? 0;
+  const showSkeleton = loading && !data;
+  const isRefetching = loading && !!data;
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -105,6 +107,7 @@ export default function VendorsPage() {
   return (
     <>
     {openingEditId && <OverlayLoader text="Opening editor…" />}
+    {isRefetching && <FloatingSpinner />}
     <ConfirmDialog
       open={!!deleteTarget}
       title="Move to Bin"
@@ -143,17 +146,17 @@ export default function VendorsPage() {
             />
             <SortSelect ariaLabel="Sort vendors" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
-          {!loading && (
+          {data && (
             <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
-          <table className="table-base">
+          <table className="table-base" style={isRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
             <thead>
               <tr>{COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr>
             </thead>
             <tbody>
-              {loading ? (
+              {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
               ) : vendors.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
@@ -201,8 +204,8 @@ export default function VendorsPage() {
             </tbody>
           </table>
         </div>
-        {!loading && total > 0 && (
-          <Pagination total={total} page={page} showAll={showAll} onPage={setPage} label="vendors" />
+        {data && total > 0 && (
+          <Pagination total={total} page={page} showAll={showAll} onPage={setPage} label="vendors" loading={isRefetching} />
         )}
       </div>
     </div>

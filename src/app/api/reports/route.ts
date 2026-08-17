@@ -3,6 +3,7 @@ import { getReportSummary, getReportOutstanding, getReportStock } from "@/lib/db
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireSectionAccess } from "@/lib/apiAuth";
 import { isLowStock } from "@/lib/stockStatus";
+import { parsePageParams } from "@/lib/listQuery";
 
 async function getSalesDashboard() {
   const now = new Date();
@@ -283,7 +284,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (type === "summary")            return NextResponse.json(await getReportSummary());
-    if (type === "outstanding")        return NextResponse.json(await getReportOutstanding(startDate, endDate));
+    if (type === "outstanding") {
+      const { skip, take } = parsePageParams(searchParams, 2000);
+      return NextResponse.json(await getReportOutstanding(startDate, endDate, skip, take));
+    }
     if (type === "stock")              return NextResponse.json(await getReportStock());
     if (type === "sales-dashboard")    return NextResponse.json(await getSalesDashboard());
     if (type === "purchase-dashboard") return NextResponse.json(await getPurchaseDashboard());

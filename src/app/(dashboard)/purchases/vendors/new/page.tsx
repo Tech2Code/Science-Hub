@@ -69,7 +69,7 @@ export default function NewVendorPage() {
         <VendorFormFields form={form} onChange={handleChange} errors={errors} addressRequired cityRequired stateRequired pincodeRequired autoFocusName />
 
         <div className="form-actions">
-          <Button type="submit" variant="primary" disabled={saving || !form.name.trim() || !form.address.trim() || !form.city.trim() || !form.state.trim() || !form.pincode.trim()}>
+          <Button type="submit" variant="primary" disabled={saving}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
             Create Vendor
           </Button>

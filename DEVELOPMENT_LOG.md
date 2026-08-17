@@ -74,7 +74,7 @@ The first commit of the current numbering system: invoice/purchase-bill numbers 
 
 ---
 
-## Era 9 — This session (2026-08-10 → 2026-08-11, mostly uncommitted as of writing)
+## Era 9 — This session (2026-08-10 → 2026-08-11)
 
 ### 9.1 — Document numbering, taken further
 
@@ -149,6 +149,68 @@ Only Branding/Logo showed a full-page `OverlayLoader` while saving; every other 
 ### 9.7 — Rate List Email modal: field not disabled during send
 
 Smaller, specific version of 9.4/9.5's family: the "Recipient Email" input in the new Email-share modal had no `disabled={sendingEmail}` at all, so it stayed editable while the request was in flight. Fixed directly, and an `OverlayLoader` added to the modal for consistency with the rest of the app.
+
+---
+
+## Era 10 — Transport charges, Rate List bulk-import, GST filing XLSX, login DB-error safety (2026-08-11 → 2026-08-12)
+
+### 10.1 — `d83b21f`: Rate List bulk-import + Excel export
+
+Era 9.3 only covered Rate Lists' *layout/PDF/sharing* polish; this commit adds a genuinely new capability on top — retyping a 60+ row supplier rate list by hand was the actual complaint. Two entry points feed one parser:
+- **Paste from Excel** — a `Modal` with a `Textarea`, parsed entirely client-side (an Excel range copy is tab-separated between columns, so no server round-trip is needed).
+- **Upload .xlsx/.csv** — posts to the new `/api/rate-lists/parse-import`, which does the same job server-side after ExcelJS reduces the sheet to plain string rows.
+
+Both funnel through `parseRateListRows()` (`src/lib/rateListImport.ts`), which **detects a header row by column-name matching** (`Name`/`Brand`/`Unit`/`Discount`/`List Rate`, any order/casing, via a `COLUMN_PATTERNS` list checked top-to-bottom so `list rate` doesn't get eaten by the looser `amount`/`rate` catch-all) and **falls back to a positional guess by column count** when fewer than 2 columns are recognized — 7 columns assumes the "S.No, Chemical, Brand, Unit, Discount, List Rate, Amount" shape a supplier's own printed rate list commonly uses, 5 columns assumes the app's own item order (Name, Brand, Unit, Discount, List Rate). Parsed rows are **merged into the form's existing items state**, replacing only the still-empty scaffold rows rather than saving directly — same review-before-save step as a manually-typed row gets, and importing into a fresh form doesn't leave a stray blank row behind.
+
+Both the detail and list pages can also now **export a rate list's items to `.xlsx`**, reusing the app's existing generic `downloadXlsx()` + `/api/export-xlsx` infra (already used by Credit Notes/Sales/Purchase Reports) — no new export endpoint needed, just the column mapping. Fixed in the same commit: Export previously only showed a small inline button spinner during the async call, easy to miss; it now gets the same full-page `OverlayLoader` every other save/export flow in the app already uses (see Conventions).
+
+### 10.2 — `e379026`: Transportation charge on invoices/bills, GST-safe bin retention ships, inline Bill-To customer edit extended
+
+**Transportation charge** is a new set of three plain columns on both `Invoice` and `PurchaseBill` (`transportCharge`, `transportChargeGstRate`, `transportChargeGstAmount`, migration `20260811114859_add_transport_charge`) — not a line item, and deliberately **not folded into `cgst`/`sgst`/`igst`** (which stay a pure sum of item-level tax) or into whichever item tax-rate bucket happens to match. It's a productless service charge (freight, etc.) that gets its own line on the printed document with its own GST split, and adds straight into the grand total. `computeInvoiceTotals()`/`computePurchaseBillTotals()` (`src/lib/invoiceCalc.ts`/`purchaseBillForm.ts`) both gained optional `transportCharge`/`transportChargeGstRate` params for this; `transportChargeGstAmount` is always server-recomputed from `charge × rate`, never trusted from the client — same trust-boundary posture as `isInterState`. `gstFiling.ts`'s invoice total-consistency check (`subtotal + tax + roundOff === total`) had to grow the transport terms too, or every invoice carrying one would fail that GST-filing sanity check as a false positive.
+
+On the printed invoice PDF (`sales/invoices/[id]/page.tsx`), Transportation Charges get their own table row broken into Taxable/CGST+SGST-or-IGST/Amount columns exactly like a product line, rather than one merged figure — kept out of the Notes+Totals merged cell below so it reads as "one more line item," not an addendum. That merged cell's `rowSpan` had been a hardcoded `7`/`8` depending on inter-state; it's now computed (`5 + (isInterState ? 1 : 2) + (roundOff !== 0 ? 1 : 0)`) since a stale hardcoded count desyncs the table the moment Round Off is nonzero — rows past the rowSpan's end silently lose their left offset and collapse against the table's edge.
+
+**GST-safe bin retention ships in this commit** — `CLAUDE.md`'s Features Completed #33 and the Recycle Bin section already describe invoices/purchase-bills/credit-notes as exempt from the 30-day auto-purge (retained indefinitely, `daysLeft: -1`, only hard-deletable from the Bin page with an admin-only warning); `e379026`'s `src/app/api/bin/route.ts` diff is the actual landing of that logic — the auto-purge queries for these three types were deleted outright and their `daysLeft` computation replaced with a flat `-1`. (Era 9 didn't cover this because it hadn't been committed yet when Era 9 was written — the feature existed in the working tree, not in git history, until now.)
+
+The commit's title also mentions a "DocumentNumberingConfig model," but no such model appears in the actual `schema.prisma` diff — only the transport-charge columns landed schema-wise. Treat that phrase in the commit message as aspirational/stale, not a fact to design around.
+
+Also in this commit: the Invoice Edit page's "Bill To" customer block (previously just an inline read + a separate edit-modal per Feature #34) gained the **same searchable customer combobox / inline-create / inline-edit flow** New Invoice already had — select a different customer, quick-create one inline, or edit the selected one's details, all from the Edit page instead of just correcting the existing customer's fields. Purchase Bill Edit already had the equivalent via the shared `BillDetailsCard`, so this closes the gap on the sales side specifically.
+
+### 10.3 — `9805580`: PDF header/table polish
+
+One-line note: moved the printed business tagline above the address block instead of below it (closer to how a masthead usually reads name → tagline → address), and tightened the Transportation Charges row's cell alignment/signature (dropped a separate "center" alignment option, since every other percentage column in that row was already right-aligned). Small positioning fix only, not a new feature.
+
+### 10.4 — `01faba0`: `UnitCombo` replaces the Product unit `Select`, Rate List column reorder, Rate List Edit dirty-check
+
+**Product's Unit field switched from a constrained `<Select>` of `PRODUCT_UNITS` to `UnitCombo`** (`src/components/ui/UnitCombo.tsx` — typeable free text plus a filtered suggestion dropdown of the same list). A hard-coded dropdown meant an unusual size+unit string outside the fixed list (`"500 GM"`, `"1 LTR"`, a supplier's own odd unit) was previously impossible to enter on a product at all, not just inconvenient — `UnitCombo` keeps the common short units one click away via suggestions while never blocking a free-text value. Both `products/new` and `products/[id]/edit` now pass an `onUnitChange` callback into the shared `ProductFormFields` instead of relying on a plain `onChange` handler, since `UnitCombo` hands back a bare string rather than a synthetic input-change event.
+
+The Rate List items table's own Unit field **deliberately stayed a plain `Input`, not `UnitCombo`** — this is the origin of the exception now documented in `CLAUDE.md`'s "Do not" rules: `UnitCombo`'s suggestion dropdown is `position: absolute`, and the items table's wrapper is `overflow-x: auto` for horizontal scroll on narrow screens, which clips the dropdown before it can render below the fold. Confirmed broken and reverted the same day it was tried — worth remembering before re-attempting inside any other scrolling table without first teaching `UnitCombo` to portal to `document.body` the way `Select.tsx` already does.
+
+Two smaller fixes rode along: the Rate List detail/list pages' item table (and its Excel export) had its column order changed from **Discount → List Rate → Amount** to **List Rate → Discount → Amount**, reading closer to how a price sheet is normally laid out (base price first, then the adjustment, then the result). And Rate List Edit's Save button gained a real **dirty-check** — it compares current title/note/items against the values loaded on page-open (ignoring items that are still fully blank on both sides) and disables Save when nothing's actually changed, instead of allowing a no-op save on every visit to the page.
+
+### 10.5 — `b487fa1`: unit rename
+
+`PRODUCT_UNITS` (`src/lib/productForm.ts`) renamed one entry, `"Pack"` → `"Pkt"` — a one-line default-unit-list tweak, not a behavior change; existing products already saved with `"Pack"` are untouched since the field is free text (see 10.4) with this list only feeding suggestions.
+
+### 10.6 — `9bb66d7`: Rate List bin support, GST filing XLSX export, login DB-error safety
+
+**Rate Lists gained full Bin integration** — `RateList` now follows the same 30-day-auto-purge soft-delete pattern as customers/products/brands/vendors (not the indefinite-retention path invoices/bills/credit-notes get, since a rate list number carries no GST/legal significance), with restore and permanent-delete wired into `/api/bin/[type]/[id]` and the Bin page's type list. **This closes a gap `CLAUDE.md`'s Pending Tasks section still lists as open as of this writing** ("no Bin integration... currently `DELETE /api/rate-lists/[id]` soft-deletes via `deletedAt` with no way to undo it from the UI") — that line is now stale and should be removed the next time `CLAUDE.md` gets a pass, since the restore/permanent-delete UI it describes as missing shipped in this commit.
+
+**GST filing package gained an `.xlsx` download** (`buildGstFilingWorkbook()`, `src/lib/gstFilingWorkbook.ts`) alongside the existing JSON and `.zip` formats — `GET /api/gst-filing?format=xlsx` builds the workbook and streams it with the same ASCII-safe `Content-Disposition` filename convention the `.zip` path already established (built from the raw `YYYY-MM-DD` query dates, never `report.period.label`, which contains a non-Latin-1 en-dash that throws when set as a raw header value).
+
+**Login now survives a DB outage without leaking which failure occurred.** Previously `prisma.user.findUnique()` inside `authorize()` (`src/lib/auth.ts`) was unguarded — a Neon cold-start, pooled-connection contention (`connection_limit=1`), or any transient network blip during a login attempt would throw out of `authorize()` uncaught. NextAuth already collapses any thrown error into the same generic "Incorrect email or password" response, so this wasn't a crash bug, but it also logged nothing server-side to distinguish "wrong password" from "database unreachable" — a real outage would look identical to bad credentials in the logs, at exactly the moment someone's trying to diagnose it. The lookup is now wrapped in try/catch: on failure it logs `[auth] DB lookup failed during login attempt` server-side (email + error, no password) and returns `null` same as a bad password, keeping the user-facing behavior and timing identical while making the actual cause diagnosable from logs.
+
+Also bundled: a shared `RequiredStar` component (small `*` span, previously copy-pasted inline — see `InvoiceOptionsRow.tsx` in 10.2 for an example of the inline version this presumably now replaces) and misc UI polish across Permissions, Bin, Invoices, Purchase Bills, and Reports pages.
+
+---
+
+## Era 11 — Numbering default reverted back to `prefix_fy_seq` (2026-08-17)
+
+**Correction to Era 9.1's history above.** Era 9.1 recorded that the default document-numbering layout (used whenever `invoiceNumberFormat`/`purchaseBillNumberFormat`/`creditNoteNumberFormat` is `null`, i.e. nothing has been explicitly configured in Settings yet) was switched from `prefix_fy_seq` (`SH-2026-27-0001`) to `seq_fy` (`18/2026-27`). That switch shipped in code (`resolveNumberFormat()`'s fallback in `src/lib/documentNumbering.ts`) but `CLAUDE.md` was never updated to match — it kept describing `prefix_fy_seq`/`SH-YYYY-0001` as the default the whole time, a drift an audit of this app's own documentation surfaced while writing the 3rd-edition "Bible."
+
+Rather than fix the documentation to match the code, the explicit decision today was the opposite: **revert the code's fallback back to `prefix_fy_seq`**, so a brand-new business's very first invoice/purchase-bill/credit-note — before anyone has touched Settings → Document Numbering — numbers as `SH-2026-27-0001`-style (prefix auto-derived from the business name via `deriveDefaultPrefix()`), not the plain `18/2026-27` style. This only changes the fallback used when a `BusinessSettings` field is `null`; a business that already explicitly selected a format in Settings keeps exactly what it picked — this code path is never consulted for them at all.
+
+Changed: `resolveNumberFormat()`'s fallback (`documentNumbering.ts`) and the Settings page's `numberingForm` pre-open initial state (`settings/page.tsx`, cosmetic only — the modal always re-populates from `resolveNumberFormat(saved.xNumberFormat)` the instant it opens, so this only affected the very first render before that runs). `CLAUDE.md`'s existing `prefix_fy_seq`-as-default text needed no change — it was already describing the layout the code implements again as of this Era.
 
 ---
 

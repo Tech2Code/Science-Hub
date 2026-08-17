@@ -198,7 +198,22 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
         )}
       </div>
 
-      <Modal open={showQuickAddProduct} onClose={() => { if (!quickAddSaving) setShowQuickAddProduct(false); }} title="Add Custom Item" maxWidth="34rem">
+      <Modal
+        open={showQuickAddProduct}
+        onClose={() => { if (!quickAddSaving) setShowQuickAddProduct(false); }}
+        title="Add Custom Item"
+        variant="fullscreen"
+        footer={
+          <>
+            <Button type="button" variant="secondary" size="md" onClick={() => setShowQuickAddProduct(false)} disabled={quickAddSaving}>
+              Cancel
+            </Button>
+            <Button type="button" variant="primary" size="md" onClick={handleQuickAddProduct} disabled={quickAddSaving}>
+              {quickAddSaving ? "Adding…" : quickAddProduct.skipCatalog ? "Add to invoice" : "Save & use product"}
+            </Button>
+          </>
+        }
+      >
         <div className={styles.customForm}>
           <FormField label="Item Name" required error={quickAddErrors.name}>
             <Input
@@ -248,14 +263,6 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
             />
             Just for this invoice — don&apos;t save to catalog
           </label>
-          <div className={styles.formActions}>
-            <Button type="button" variant="secondary" size="md" onClick={() => setShowQuickAddProduct(false)} disabled={quickAddSaving}>
-              Cancel
-            </Button>
-            <Button type="button" variant="primary" size="md" onClick={handleQuickAddProduct} disabled={quickAddSaving || !quickAddProduct.name.trim() || !quickAddProduct.price.trim()}>
-              {quickAddSaving ? "Adding…" : quickAddProduct.skipCatalog ? "Add to invoice" : "Save & use product"}
-            </Button>
-          </div>
         </div>
       </Modal>
 

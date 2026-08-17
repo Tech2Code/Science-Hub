@@ -13,7 +13,7 @@ import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
-import { OverlayLoader } from "@/components/ui/Spinner";
+import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { isOutOfStock, isLowStock } from "@/lib/stockStatus";
@@ -111,6 +111,8 @@ export default function ProductsPage() {
   const { data: stats, mutate: mutateStats } = useFetch<ProductStats>("/api/products/stats");
   const products = data?.data ?? [];
   const total = data?.total ?? 0;
+  const showSkeleton = loading && !data;
+  const isRefetching = loading && !!data;
   const outOfStockCount = stats?.outOfStockCount ?? 0;
   const lowStockCount = stats?.lowStockCount ?? 0;
   const totalCount = stats?.totalCount ?? 0;
@@ -142,6 +144,7 @@ export default function ProductsPage() {
     <div className="page-stack">
       {openingEdit && <OverlayLoader text="Opening editor…" />}
       {openingView && <OverlayLoader text="Opening…" />}
+      {isRefetching && <FloatingSpinner />}
       <ConfirmDialog
         open={!!confirmState}
         title={confirmState?.title ?? ""}
@@ -201,20 +204,20 @@ export default function ProductsPage() {
                 </button>
               ))}
             </div>
-            {!loading && (
+            {data && (
               <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
             )}
           </div>
         </div>
         <div className="table-wrap">
-          <table className="table-base">
+          <table className="table-base" style={isRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
             <thead>
               <tr>
                 {COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
               ) : products.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
@@ -262,13 +265,14 @@ export default function ProductsPage() {
             </tbody>
           </table>
         </div>
-        {!loading && total > 0 && (
+        {data && total > 0 && (
           <Pagination
             total={total}
             page={page}
             showAll={showAll}
             onPage={setPage}
             label="products"
+            loading={isRefetching}
           />
         )}
       </div>

@@ -27,7 +27,7 @@
 /* Below this, keep inputs at their original, more compact size — the
    desktop bump above would otherwise eat too much vertical space on a
    phone-sized screen where every row of a scrolling form counts. */
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .input,
   .textarea {
     padding: 0.5rem 0.75rem;

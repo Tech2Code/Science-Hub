@@ -17,7 +17,7 @@ import { InvoiceOptionsRow } from "@/components/invoices/InvoiceOptionsRow";
 import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
 import { computeInvoiceTotals, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
 import styles from "./new.module.css";
-import { bustCache, bustCachePrefix } from "@/lib/useCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate, validateForm, hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -335,8 +335,7 @@ export default function NewInvoicePage() {
     if (res.ok) {
       const d = await res.json();
       bustCachePrefix("/api/invoices");
-      bustCache("/api/reports?type=summary");
-      bustCache("/api/reports?type=outstanding");
+      bustCachePrefix("/api/reports");
       bustCachePrefix("/api/products");
       toast({ type: "success", title: "Invoice created", message: "Invoice saved successfully." });
       if (d.stockWarnings?.length > 0) {
@@ -513,7 +512,47 @@ export default function NewInvoicePage() {
                 customPincodeLookup.reset();
               }}
               title={customerEditId ? "Edit Customer" : "Add New Customer"}
-              maxWidth="34rem"
+              variant="fullscreen"
+              footer={
+                <>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={customerSaving}
+                    onClick={() => {
+                      // The State field's onChange live-updates placeOfSupply
+                      // as a preview even while editing — if the user abandons
+                      // the draft, put placeOfSupply back to where it actually
+                      // belongs: blank for an unsaved "add new customer" draft,
+                      // or the still-selected customer's real state when editing.
+                      applyPlaceOfSupply(customerEditId ? (selectedCustomer?.state ?? "") : "");
+                      setCustomerEditId(null);
+                      setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
+                      setDontSaveCustomer(false);
+                      setCustomModalOpen(false);
+                      customPincodeLookup.reset();
+                    }}
+                  >
+                    Dismiss
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={
+                      customerSaving ||
+                      (!!customerEditId && !customCustomerDirty.isDirty)
+                    }
+                    onClick={() => { if (customerEditId) saveCustomerEdit(); else saveNewCustomer(); }}
+                  >
+                    <span className={styles.customModalSubmitLabel}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      {customerEditId
+                        ? (customerSaving ? "Saving…" : "Save Changes")
+                        : (customerSaving ? "Saving…" : dontSaveCustomer ? "Use For This Invoice Only" : "Save & Use This Customer")}
+                    </span>
+                  </Button>
+                </>
+              }
             >
               <p className={styles.customModalSub}>{customerEditId ? "Update this customer's details" : "Not in your list — fill details and create"}</p>
               <div className={styles.customForm}>
@@ -583,46 +622,6 @@ export default function NewInvoicePage() {
                     Just for this invoice — don&apos;t save to my customer list
                   </label>
                 )}
-                <div className={styles.customModalActions}>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={customerSaving}
-                    onClick={() => {
-                      // The State field's onChange live-updates placeOfSupply
-                      // as a preview even while editing — if the user abandons
-                      // the draft, put placeOfSupply back to where it actually
-                      // belongs: blank for an unsaved "add new customer" draft,
-                      // or the still-selected customer's real state when editing.
-                      applyPlaceOfSupply(customerEditId ? (selectedCustomer?.state ?? "") : "");
-                      setCustomerEditId(null);
-                      setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
-                      setDontSaveCustomer(false);
-                      setCustomModalOpen(false);
-                      customPincodeLookup.reset();
-                    }}
-                  >
-                    Dismiss
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    disabled={
-                      customerSaving ||
-                      (!!customerEditId && !customCustomerDirty.isDirty) ||
-                      !customCustomer.name.trim() || !customCustomer.address.trim() ||
-                      !customCustomer.city.trim() || !customCustomer.state.trim() || !customCustomer.pincode.trim()
-                    }
-                    onClick={() => { if (customerEditId) saveCustomerEdit(); else saveNewCustomer(); }}
-                  >
-                    <span className={styles.customModalSubmitLabel}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                      {customerEditId
-                        ? (customerSaving ? "Saving…" : "Save Changes")
-                        : (customerSaving ? "Saving…" : dontSaveCustomer ? "Use For This Invoice Only" : "Save & Use This Customer")}
-                    </span>
-                  </Button>
-                </div>
               </div>
             </Modal>
 

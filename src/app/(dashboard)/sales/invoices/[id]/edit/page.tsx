@@ -592,7 +592,21 @@ export default function EditInvoicePage() {
               open={customerModalOpen}
               onClose={closeCustomerModal}
               title={customerEditId ? "Edit Customer" : "Add New Customer"}
-              maxWidth="34rem"
+              variant="fullscreen"
+              footer={
+                <>
+                  <Button type="button" variant="secondary" disabled={customerSaving} onClick={closeCustomerModal}>Cancel</Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    loading={customerSaving}
+                    disabled={customerSaving || !customerForm.name.trim() || !customerForm.address.trim() || !customerForm.city.trim() || !customerForm.state.trim() || !customerForm.pincode.trim()}
+                    onClick={() => { if (customerEditId) saveCustomerEdit(); else saveNewCustomer(); }}
+                  >
+                    {customerEditId ? "Save Changes" : (dontSaveCustomer ? "Use For This Invoice Only" : "Save & Use This Customer")}
+                  </Button>
+                </>
+              }
             >
               <p className={styles.customModalSub}>{customerEditId ? "Update this customer's details" : "Not in your list — fill details and create"}</p>
               <div className={styles.customForm}>
@@ -645,18 +659,6 @@ export default function EditInvoicePage() {
                     Just for this invoice — don&apos;t save to my customer list
                   </label>
                 )}
-                <div className={styles.customModalActions}>
-                  <Button type="button" variant="secondary" disabled={customerSaving} onClick={closeCustomerModal}>Cancel</Button>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    loading={customerSaving}
-                    disabled={customerSaving || !customerForm.name.trim() || !customerForm.address.trim() || !customerForm.city.trim() || !customerForm.state.trim() || !customerForm.pincode.trim()}
-                    onClick={() => { if (customerEditId) saveCustomerEdit(); else saveNewCustomer(); }}
-                  >
-                    {customerEditId ? "Save Changes" : (dontSaveCustomer ? "Use For This Invoice Only" : "Save & Use This Customer")}
-                  </Button>
-                </div>
               </div>
             </Modal>
 

@@ -36,6 +36,14 @@
 .lg   { padding: 0.75rem 1.5rem; font-size: 1rem; }
 .full { width: 100%; padding: 0.625rem 1.25rem; justify-content: center; }
 
+@media (max-width: 640px) {
+  .btn  { font-size: 0.8125rem; }
+  .sm   { padding: 0.2rem 0.5rem; font-size: 0.6875rem; }
+  .md   { padding: 0.5rem 0.875rem; }
+  .lg   { padding: 0.625rem 1.125rem; font-size: 0.9375rem; }
+  .full { padding: 0.5rem 0.875rem; }
+}
+
 /* ── Variants ────────────────────────── */
 .primary {
   background: var(--c-blue);

@@ -138,7 +138,18 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
       </div>
       {itemsError && <p className={styles.itemsErrorMsg} role="alert">{itemsError}</p>}
 
-      <Modal open={pasteModalOpen} onClose={() => setPasteModalOpen(false)} title="Paste from Excel" maxWidth="34rem">
+      <Modal
+        open={pasteModalOpen}
+        onClose={() => setPasteModalOpen(false)}
+        title="Paste from Excel"
+        variant="fullscreen"
+        footer={
+          <>
+            <Button type="button" variant="secondary" size="md" onClick={() => setPasteModalOpen(false)}>Cancel</Button>
+            <Button type="button" variant="primary" size="md" onClick={handlePasteImport} disabled={!pasteText.trim()}>Import</Button>
+          </>
+        }
+      >
         <div className={styles.pasteForm}>
           <p className={styles.pasteHint}>
             Copy a range of rows/columns from Excel (Name, Brand, Unit, Discount %, List Rate — in that order, or with a header row) and paste below.
@@ -151,10 +162,6 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
             placeholder={"Sodium Nitrate\tQUALIGENS\t500 GM\t46%\t1130\nEthanol\tQUALIGENS\t500 ML\tNet Rate\t600"}
             className={styles.pasteTextarea}
           />
-          <div className={styles.pasteActions}>
-            <Button type="button" variant="secondary" size="md" onClick={() => setPasteModalOpen(false)}>Cancel</Button>
-            <Button type="button" variant="primary" size="md" onClick={handlePasteImport} disabled={!pasteText.trim()}>Import</Button>
-          </div>
         </div>
       </Modal>
 
@@ -175,7 +182,7 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
               <tr>
                 {["#", "Item", "Brand", "Unit", "Discount", "List Rate (₹)", "Amount (₹)", ""].map((h) => (
                   <th key={h} className={h === "List Rate (₹)" || h === "Amount (₹)" ? styles.thRight : ["Unit", "Discount"].includes(h) ? styles.thCenter : styles.th}>
-                    {h}
+                    {h}{["Item", "Unit", "List Rate (₹)"].includes(h) && <span className={styles.thRequired}> *</span>}
                   </th>
                 ))}
               </tr>

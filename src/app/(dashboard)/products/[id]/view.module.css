@@ -81,8 +81,8 @@
   grid-template-columns: repeat(5, 1fr);
   gap: 1rem;
 }
-@media (max-width: 991px) { .statsGrid { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 767px) { .statsGrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 990px) { .statsGrid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 768px) { .statsGrid { grid-template-columns: repeat(2, 1fr); } }
 
 .cardPadSm { padding: 1rem; }
 

@@ -17,6 +17,7 @@ import { patchCache } from "@/lib/useCache";
 import { usePincodeAutofill } from "@/lib/usePincodeLookup";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Modal } from "@/components/dialogs/Modal";
 import { deriveDefaultPrefix, NUMBER_FORMATS, resolveNumberFormat, type NumberFormatId } from "@/lib/documentNumbering";
 import styles from "./settings.module.css";
 
@@ -190,8 +191,8 @@ export default function SettingsPage() {
   const [editingNumbering, setEditingNumbering] = useState(false);
   const [numberingForm, setNumberingForm] = useState<NumberingForm>({
     invoiceNumberPrefix: "", nextInvoiceNumberOverride: "", purchaseBillNumberPrefix: "", nextPurchaseBillNumberOverride: "",
-    invoiceNumberFormat: "seq_fy", purchaseBillNumberFormat: "seq_fy",
-    creditNoteNumberPrefix: "", nextCreditNoteNumberOverride: "", creditNoteNumberFormat: "seq_fy",
+    invoiceNumberFormat: "prefix_fy_seq", purchaseBillNumberFormat: "prefix_fy_seq",
+    creditNoteNumberPrefix: "", nextCreditNoteNumberOverride: "", creditNoteNumberFormat: "prefix_fy_seq",
   });
   const numberingDirty = useDirty(numberingForm);
   const [savingNumbering, setSavingNumbering] = useState(false);
@@ -449,6 +450,7 @@ export default function SettingsPage() {
     e.preventDefault();
     const errors: Partial<Record<keyof BankForm, string>> = {
       bankName: validate(bankForm.bankName, rules.required("Bank name is required.")) ?? undefined,
+      bankAccountName: validate(bankForm.bankAccountName, rules.required("Account holder name is required.")) ?? undefined,
       bankAccountNumber: validate(bankForm.bankAccountNumber, rules.required("Account number is required."), rules.accountNumber()) ?? undefined,
       bankIfsc: validate(bankForm.bankIfsc, rules.required("IFSC code is required."), rules.ifsc()) ?? undefined,
       bankBranch: validate(bankForm.bankBranch, rules.required("Branch is required.")) ?? undefined,
@@ -827,193 +829,215 @@ export default function SettingsPage() {
           {/* ── Business Identity ─────────────────────────────────────── */}
           <div id="identity" {...animateSection(1, `card ${styles.cardPad}`)}>
             <SectionHeader title="Business Identity" editing={editingIdentity} onEdit={handleEditIdentity} />
-            {!editingIdentity ? (
-              <div className={styles.infoGrid}>
-                <InfoRow label="Business Name" value={saved.name} />
-                <InfoRow label="Tagline" value={saved.tagline} />
-                <InfoRow label="Business Email (on invoices)" value={saved.email} />
-                <InfoRow label="Phone" value={saved.phone} />
-                <InfoRow label="GSTIN" value={saved.gstin} mono />
-                <InfoRow label="PAN" value={saved.pan} mono />
-              </div>
-            ) : (
-              <form onSubmit={handleSaveIdentity} noValidate>
-                <div className={styles.formGrid}>
-                  <FormField label="Business Name" required error={identityErrors.name}>
-                    <Input value={identityForm.name} onChange={(e) => { setIdentityForm((f) => ({ ...f, name: e.target.value })); setIdentityErrors((p) => ({ ...p, name: undefined })); }} placeholder="e.g. Science Hub" />
-                  </FormField>
-                  <FormField label="Tagline">
-                    <Input value={identityForm.tagline} onChange={(e) => setIdentityForm((f) => ({ ...f, tagline: e.target.value }))} placeholder="e.g. Industrial & Laboratory Solutions" />
-                  </FormField>
-                  <FormField label="Business Email (on invoices)" error={identityErrors.email}>
-                    <Input type="email" value={identityForm.email} onChange={(e) => { setIdentityForm((f) => ({ ...f, email: e.target.value })); setIdentityErrors((p) => ({ ...p, email: undefined })); }} placeholder="e.g. info@sciencehub.com" />
-                  </FormField>
-                  <FormField label="Phone" error={identityErrors.phone}>
-                    <PhoneInput value={identityForm.phone} onChange={(e) => { setIdentityForm((f) => ({ ...f, phone: e.target.value })); setIdentityErrors((p) => ({ ...p, phone: undefined })); }} placeholder="10-digit mobile" />
-                  </FormField>
-                  <FormField label="GSTIN" error={identityErrors.gstin}>
-                    <Input value={identityForm.gstin} onChange={(e) => { setIdentityForm((f) => ({ ...f, gstin: e.target.value })); setIdentityErrors((p) => ({ ...p, gstin: undefined })); }} placeholder="e.g. 07AAAAA0000A1Z5" className={styles.gstinInput} maxLength={15} />
-                  </FormField>
-                  <FormField label="PAN" error={identityErrors.pan}>
-                    <Input value={identityForm.pan} onChange={(e) => { setIdentityForm((f) => ({ ...f, pan: e.target.value.toUpperCase() })); setIdentityErrors((p) => ({ ...p, pan: undefined })); }} placeholder="e.g. AAAAA0000A" className={styles.gstinInput} maxLength={10} />
-                  </FormField>
-                </div>
-                <div className={styles.formActionsRow}>
-                  <Button type="button" variant="secondary" disabled={savingIdentity} onClick={handleCancelIdentity}>Cancel</Button>
-                  <Button type="submit" variant="primary" disabled={savingIdentity || !identityDirty.isDirty || !identityForm.name.trim()}>{savingIdentity ? "Saving…" : "Save Changes"}</Button>
-                </div>
-              </form>
-            )}
+            <div className={styles.infoGrid}>
+              <InfoRow label="Business Name" value={saved.name} />
+              <InfoRow label="Tagline" value={saved.tagline} />
+              <InfoRow label="Business Email (on invoices)" value={saved.email} />
+              <InfoRow label="Phone" value={saved.phone} />
+              <InfoRow label="GSTIN" value={saved.gstin} mono />
+              <InfoRow label="PAN" value={saved.pan} mono />
+            </div>
           </div>
+
+          <Modal
+            open={editingIdentity}
+            title="Edit Business Identity"
+            onClose={handleCancelIdentity}
+            variant="fullscreen"
+            footer={
+              <>
+                <Button type="button" variant="secondary" disabled={savingIdentity} onClick={handleCancelIdentity}>Cancel</Button>
+                <Button type="submit" form="identity-form" variant="primary" disabled={savingIdentity || !identityDirty.isDirty}>{savingIdentity ? "Saving…" : "Save Changes"}</Button>
+              </>
+            }
+          >
+            <form id="identity-form" onSubmit={handleSaveIdentity} noValidate>
+              <div className={styles.formGrid}>
+                <FormField label="Business Name" required error={identityErrors.name}>
+                  <Input value={identityForm.name} onChange={(e) => { setIdentityForm((f) => ({ ...f, name: e.target.value })); setIdentityErrors((p) => ({ ...p, name: undefined })); }} placeholder="e.g. Science Hub" />
+                </FormField>
+                <FormField label="Tagline">
+                  <Input value={identityForm.tagline} onChange={(e) => setIdentityForm((f) => ({ ...f, tagline: e.target.value }))} placeholder="e.g. Industrial & Laboratory Solutions" />
+                </FormField>
+                <FormField label="Business Email (on invoices)" error={identityErrors.email}>
+                  <Input type="email" value={identityForm.email} onChange={(e) => { setIdentityForm((f) => ({ ...f, email: e.target.value })); setIdentityErrors((p) => ({ ...p, email: undefined })); }} placeholder="e.g. info@sciencehub.com" />
+                </FormField>
+                <FormField label="Phone" error={identityErrors.phone}>
+                  <PhoneInput value={identityForm.phone} onChange={(e) => { setIdentityForm((f) => ({ ...f, phone: e.target.value })); setIdentityErrors((p) => ({ ...p, phone: undefined })); }} placeholder="10-digit mobile" />
+                </FormField>
+                <FormField label="GSTIN" error={identityErrors.gstin}>
+                  <Input value={identityForm.gstin} onChange={(e) => { setIdentityForm((f) => ({ ...f, gstin: e.target.value })); setIdentityErrors((p) => ({ ...p, gstin: undefined })); }} placeholder="e.g. 07AAAAA0000A1Z5" className={styles.gstinInput} maxLength={15} />
+                </FormField>
+                <FormField label="PAN" error={identityErrors.pan}>
+                  <Input value={identityForm.pan} onChange={(e) => { setIdentityForm((f) => ({ ...f, pan: e.target.value.toUpperCase() })); setIdentityErrors((p) => ({ ...p, pan: undefined })); }} placeholder="e.g. AAAAA0000A" className={styles.gstinInput} maxLength={10} />
+                </FormField>
+              </div>
+            </form>
+          </Modal>
 
           {/* ── Address ────────────────────────────────────────────────── */}
           <div id="address" {...animateSection(2, `card ${styles.cardPad}`)}>
             <SectionHeader title="Address" editing={editingAddress} onEdit={handleEditAddress} />
-            {!editingAddress ? (
-              <>
-                <div className={styles.infoGrid}>
-                  <InfoRow label="Street Address" value={saved.address} />
-                  <InfoRow label="City" value={saved.city} />
-                  <InfoRow label="State" value={saved.state} />
-                  <InfoRow label="Pincode" value={saved.pincode} />
-                </div>
-                {address && (
-                  <div className={styles.fullAddressBlock}>
-                    <span className={styles.infoRowLabel}>Full Address</span>
-                    <p className={styles.fullAddressText}>{address}</p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <form onSubmit={handleSaveAddress} noValidate>
-                <p className={styles.stateHint}>
-                  The <strong>State</strong> field determines intra-state (CGST+SGST) vs inter-state (IGST) for new invoices.
-                </p>
-                <div className={styles.formGrid}>
-                  <FormField label="Street Address" required error={addressErrors.address}>
-                    <Input value={addressForm.address} onChange={(e) => { setAddressForm((f) => ({ ...f, address: e.target.value })); setAddressErrors((er) => ({ ...er, address: undefined })); }} placeholder="e.g. Pooth Khurd" />
-                  </FormField>
-                  <FormField
-                    label="Pincode"
-                    required
-                    error={addressErrors.pincode}
-                    hint={addressPincodeLookup.status.status === "loading" ? "Looking up city/state…" : addressPincodeLookup.status.label}
-                    hintSuccess={addressPincodeLookup.status.status === "found"}
-                  >
-                    <Input value={addressForm.pincode} onChange={handleAddressPincodeChange} placeholder="e.g. 110039" maxLength={6} />
-                  </FormField>
-                  <FormField label="City" required error={addressErrors.city}>
-                    <Input value={addressForm.city} onChange={(e) => { setAddressForm((f) => ({ ...f, city: e.target.value })); setAddressErrors((er) => ({ ...er, city: undefined })); }} placeholder="e.g. Delhi" />
-                  </FormField>
-                  <FormField label="State" required error={addressErrors.state}>
-                    <Select value={addressForm.state} onChange={(e) => { setAddressForm((f) => ({ ...f, state: e.target.value })); setAddressErrors((er) => ({ ...er, state: undefined })); }}>
-                      <option value="">Select state</option>
-                      {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </Select>
-                  </FormField>
-                </div>
-                <div className={styles.formActionsRow}>
-                  <Button type="button" variant="secondary" disabled={savingAddress} onClick={handleCancelAddress}>Cancel</Button>
-                  <Button type="submit" variant="primary" disabled={savingAddress || !addressDirty.isDirty}>{savingAddress ? "Saving…" : "Save Changes"}</Button>
-                </div>
-              </form>
+            <div className={styles.infoGrid}>
+              <InfoRow label="Street Address" value={saved.address} />
+              <InfoRow label="City" value={saved.city} />
+              <InfoRow label="State" value={saved.state} />
+              <InfoRow label="Pincode" value={saved.pincode} />
+            </div>
+            {address && (
+              <div className={styles.fullAddressBlock}>
+                <span className={styles.infoRowLabel}>Full Address</span>
+                <p className={styles.fullAddressText}>{address}</p>
+              </div>
             )}
           </div>
+
+          <Modal
+            open={editingAddress}
+            title="Edit Address"
+            onClose={handleCancelAddress}
+            variant="fullscreen"
+            footer={
+              <>
+                <Button type="button" variant="secondary" disabled={savingAddress} onClick={handleCancelAddress}>Cancel</Button>
+                <Button type="submit" form="address-form" variant="primary" disabled={savingAddress || !addressDirty.isDirty || !addressForm.address.trim() || !addressForm.city.trim() || !addressForm.state.trim() || !addressForm.pincode.trim()}>{savingAddress ? "Saving…" : "Save Changes"}</Button>
+              </>
+            }
+          >
+            <form id="address-form" onSubmit={handleSaveAddress} noValidate>
+              <p className={styles.stateHint}>
+                The <strong>State</strong> field determines intra-state (CGST+SGST) vs inter-state (IGST) for new invoices.
+              </p>
+              <div className={styles.formGrid}>
+                <FormField label="Street Address" required error={addressErrors.address}>
+                  <Input value={addressForm.address} onChange={(e) => { setAddressForm((f) => ({ ...f, address: e.target.value })); setAddressErrors((er) => ({ ...er, address: undefined })); }} placeholder="e.g. Pooth Khurd" />
+                </FormField>
+                <FormField
+                  label="Pincode"
+                  required
+                  error={addressErrors.pincode}
+                  hint={addressPincodeLookup.status.status === "loading" ? "Looking up city/state…" : addressPincodeLookup.status.label}
+                  hintSuccess={addressPincodeLookup.status.status === "found"}
+                >
+                  <Input value={addressForm.pincode} onChange={handleAddressPincodeChange} placeholder="e.g. 110039" maxLength={6} />
+                </FormField>
+                <FormField label="City" required error={addressErrors.city}>
+                  <Input value={addressForm.city} onChange={(e) => { setAddressForm((f) => ({ ...f, city: e.target.value })); setAddressErrors((er) => ({ ...er, city: undefined })); }} placeholder="e.g. Delhi" />
+                </FormField>
+                <FormField label="State" required error={addressErrors.state}>
+                  <Select value={addressForm.state} onChange={(e) => { setAddressForm((f) => ({ ...f, state: e.target.value })); setAddressErrors((er) => ({ ...er, state: undefined })); }}>
+                    <option value="">Select state</option>
+                    {INDIA_STATES_FULL.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </Select>
+                </FormField>
+              </div>
+            </form>
+          </Modal>
 
           {/* ── Bank Details ───────────────────────────────────────────── */}
           <div id="bank-details" {...animateSection(3, `card ${styles.cardPad}`)}>
             <SectionHeader title="Bank Details" editing={editingBank} onEdit={handleEditBank} />
             {saved.bankAccountNumberDecryptFailed && <DecryptWarning what="bank account number" />}
-            {!editingBank ? (
-              <>
-                <p className={styles.stateHint}>Printed on every invoice so customers can pay by bank transfer.</p>
-                <div className={styles.infoGrid}>
-                  <InfoRow label="Bank Name" value={saved.bankName} />
-                  <InfoRow label="Account Holder Name" value={saved.bankAccountName} />
-                  <InfoRow label="Account Number" value={saved.bankAccountNumber} mono />
-                  <InfoRow label="IFSC Code" value={saved.bankIfsc} mono />
-                  <InfoRow label="Branch" value={saved.bankBranch} />
-                </div>
-              </>
-            ) : (
-              <form onSubmit={handleSaveBank} noValidate>
-                <p className={styles.stateHint}>
-                  Printed on every invoice so customers can pay by bank transfer. Only admins can edit these.
-                </p>
-                <div className={styles.formGrid}>
-                  <FormField label="Bank Name" required error={bankErrors.bankName}>
-                    <Input value={bankForm.bankName} onChange={(e) => { setBankForm((f) => ({ ...f, bankName: toTitleCase(e.target.value) })); setBankErrors((p) => ({ ...p, bankName: undefined })); }} placeholder="e.g. HDFC Bank" />
-                  </FormField>
-                  <FormField label="Account Holder Name">
-                    <Input value={bankForm.bankAccountName} onChange={(e) => setBankForm((f) => ({ ...f, bankAccountName: e.target.value }))} placeholder="e.g. Science Hub" />
-                  </FormField>
-                  <FormField label="Account Number" required error={bankErrors.bankAccountNumber}>
-                    <Input value={bankForm.bankAccountNumber} onChange={(e) => { setBankForm((f) => ({ ...f, bankAccountNumber: e.target.value.replace(/\D/g, "").slice(0, 18) })); setBankErrors((p) => ({ ...p, bankAccountNumber: undefined })); }} placeholder="e.g. 123456789012" className={styles.gstinInput} maxLength={18} />
-                  </FormField>
-                  <FormField
-                    label="IFSC Code"
-                    required
-                    error={bankErrors.bankIfsc}
-                    hint={
-                      ifscLookup.status === "loading" ? "Checking IFSC…" :
-                      ifscLookup.status === "found" && !bankErrors.bankIfsc ? `✓ ${ifscLookup.label}` :
-                      undefined
-                    }
-                    hintSuccess={ifscLookup.status === "found" && !bankErrors.bankIfsc}
-                  >
-                    <Input
-                      value={bankForm.bankIfsc}
-                      onChange={handleBankIfscChange}
-                      onBlur={(e) => handleBankIfscBlur(e.target.value)}
-                      placeholder="e.g. HDFC0001234"
-                      className={styles.gstinInput}
-                      maxLength={11}
-                    />
-                  </FormField>
-                  <FormField label="Branch" required error={bankErrors.bankBranch}>
-                    <Input value={bankForm.bankBranch} onChange={(e) => { setBankForm((f) => ({ ...f, bankBranch: toTitleCase(e.target.value) })); setBankErrors((p) => ({ ...p, bankBranch: undefined })); }} placeholder="e.g. Noida" />
-                  </FormField>
-                </div>
-                <div className={styles.formActionsRow}>
-                  <Button type="button" variant="secondary" disabled={savingBank} onClick={handleCancelBank}>Cancel</Button>
-                  <Button type="submit" variant="primary" disabled={savingBank || !bankDirty.isDirty || !bankForm.bankName.trim() || !bankForm.bankAccountNumber.trim() || !bankForm.bankIfsc.trim() || !bankForm.bankBranch.trim()}>{savingBank ? "Saving…" : "Save Changes"}</Button>
-                </div>
-              </form>
-            )}
+            <p className={styles.stateHint}>Printed on every invoice so customers can pay by bank transfer.</p>
+            <div className={styles.infoGrid}>
+              <InfoRow label="Bank Name" value={saved.bankName} />
+              <InfoRow label="Account Holder Name" value={saved.bankAccountName} />
+              <InfoRow label="Account Number" value={saved.bankAccountNumber} mono />
+              <InfoRow label="IFSC Code" value={saved.bankIfsc} mono />
+              <InfoRow label="Branch" value={saved.bankBranch} />
+            </div>
           </div>
+
+          <Modal
+            open={editingBank}
+            title="Edit Bank Details"
+            onClose={handleCancelBank}
+            variant="fullscreen"
+            footer={
+              <>
+                <Button type="button" variant="secondary" disabled={savingBank} onClick={handleCancelBank}>Cancel</Button>
+                <Button type="submit" form="bank-form" variant="primary" disabled={savingBank || !bankDirty.isDirty}>{savingBank ? "Saving…" : "Save Changes"}</Button>
+              </>
+            }
+          >
+            <form id="bank-form" onSubmit={handleSaveBank} noValidate>
+              <p className={styles.stateHint}>
+                Printed on every invoice so customers can pay by bank transfer. Only admins can edit these.
+              </p>
+              <div className={styles.formGrid}>
+                <FormField label="Bank Name" required error={bankErrors.bankName}>
+                  <Input value={bankForm.bankName} onChange={(e) => { setBankForm((f) => ({ ...f, bankName: toTitleCase(e.target.value) })); setBankErrors((p) => ({ ...p, bankName: undefined })); }} placeholder="e.g. HDFC Bank" />
+                </FormField>
+                <FormField label="Account Holder Name" required error={bankErrors.bankAccountName}>
+                  <Input value={bankForm.bankAccountName} onChange={(e) => { setBankForm((f) => ({ ...f, bankAccountName: e.target.value })); setBankErrors((p) => ({ ...p, bankAccountName: undefined })); }} placeholder="e.g. Science Hub" />
+                </FormField>
+                <FormField label="Account Number" required error={bankErrors.bankAccountNumber}>
+                  <Input value={bankForm.bankAccountNumber} onChange={(e) => { setBankForm((f) => ({ ...f, bankAccountNumber: e.target.value.replace(/\D/g, "").slice(0, 18) })); setBankErrors((p) => ({ ...p, bankAccountNumber: undefined })); }} placeholder="e.g. 123456789012" className={styles.gstinInput} maxLength={18} />
+                </FormField>
+                <FormField
+                  label="IFSC Code"
+                  required
+                  error={bankErrors.bankIfsc}
+                  hint={
+                    ifscLookup.status === "loading" ? "Checking IFSC…" :
+                    ifscLookup.status === "found" && !bankErrors.bankIfsc ? `✓ ${ifscLookup.label}` :
+                    undefined
+                  }
+                  hintSuccess={ifscLookup.status === "found" && !bankErrors.bankIfsc}
+                >
+                  <Input
+                    value={bankForm.bankIfsc}
+                    onChange={handleBankIfscChange}
+                    onBlur={(e) => handleBankIfscBlur(e.target.value)}
+                    placeholder="e.g. HDFC0001234"
+                    className={styles.gstinInput}
+                    maxLength={11}
+                  />
+                </FormField>
+                <FormField label="Branch" required error={bankErrors.bankBranch}>
+                  <Input value={bankForm.bankBranch} onChange={(e) => { setBankForm((f) => ({ ...f, bankBranch: toTitleCase(e.target.value) })); setBankErrors((p) => ({ ...p, bankBranch: undefined })); }} placeholder="e.g. Noida" />
+                </FormField>
+              </div>
+            </form>
+          </Modal>
 
           {/* ── Terms & Conditions ────────────────────────────────────────── */}
           <div id="terms" {...animateSection(4, `card ${styles.cardPad}`)}>
             <SectionHeader title="Terms & Conditions" editing={editingTerms} onEdit={handleEditTerms} />
-            {!editingTerms ? (
-              <>
-                <p className={styles.stateHint}>Printed on every invoice, below the item table. One line per point.</p>
-                {saved.termsAndConditions.trim() ? (
-                  <ol className={styles.termsPreviewList}>
-                    {saved.termsAndConditions.split("\n").map((line, i) => line.trim() && <li key={i}>{line.trim()}</li>)}
-                  </ol>
-                ) : (
-                  <p className={styles.stateHint}>No terms configured — nothing will be printed on invoices.</p>
-                )}
-              </>
+            <p className={styles.stateHint}>Printed on every invoice, below the item table. One line per point.</p>
+            {saved.termsAndConditions.trim() ? (
+              <ol className={styles.termsPreviewList}>
+                {saved.termsAndConditions.split("\n").map((line, i) => line.trim() && <li key={i}>{line.trim()}</li>)}
+              </ol>
             ) : (
-              <form onSubmit={handleSaveTerms} noValidate>
-                <p className={styles.stateHint}>One point per line — each line becomes a numbered item on the invoice.</p>
-                <FormField label="Terms & Conditions" error={termsError}>
-                  <Textarea
-                    value={termsForm}
-                    onChange={(e) => { setTermsForm(e.target.value); setTermsError(undefined); }}
-                    rows={6}
-                    placeholder={"e.g. Interest @ 24%p.a would be charged after 45 days of Invoice\nMaterial sold strictly for lab use only"}
-                  />
-                </FormField>
-                <div className={styles.formActionsRow}>
-                  <Button type="button" variant="secondary" disabled={savingTerms} onClick={handleCancelTerms}>Cancel</Button>
-                  <Button type="submit" variant="primary" disabled={savingTerms || !termsDirty.isDirty}>{savingTerms ? "Saving…" : "Save Changes"}</Button>
-                </div>
-              </form>
+              <p className={styles.stateHint}>No terms configured — nothing will be printed on invoices.</p>
             )}
           </div>
+
+          <Modal
+            open={editingTerms}
+            title="Edit Terms & Conditions"
+            onClose={handleCancelTerms}
+            variant="fullscreen"
+            footer={
+              <>
+                <Button type="button" variant="secondary" disabled={savingTerms} onClick={handleCancelTerms}>Cancel</Button>
+                <Button type="submit" form="terms-form" variant="primary" disabled={savingTerms || !termsDirty.isDirty}>{savingTerms ? "Saving…" : "Save Changes"}</Button>
+              </>
+            }
+          >
+            <form id="terms-form" onSubmit={handleSaveTerms} noValidate>
+              <p className={styles.stateHint}>One point per line — each line becomes a numbered item on the invoice.</p>
+              <FormField label="Terms & Conditions" error={termsError}>
+                <Textarea
+                  value={termsForm}
+                  onChange={(e) => { setTermsForm(e.target.value); setTermsError(undefined); }}
+                  rows={6}
+                  placeholder={"e.g. Interest @ 24%p.a would be charged after 45 days of Invoice\nMaterial sold strictly for lab use only"}
+                />
+              </FormField>
+            </form>
+          </Modal>
 
           {/* ── Email Configuration card (always visible, own edit state) ── */}
           <div id="email" {...animateSection(5, `card ${styles.cardPad}`)}>
@@ -1027,258 +1051,260 @@ export default function SettingsPage() {
                 </p>
                 <StatusDot ok={emailConfigured} />
               </div>
-              {!editingEmail && (
-                <Button variant="editOutline" onClick={handleEditEmail}>
-                  {emailConfigured ? "Update Credentials" : "Set Up Email"}
-                </Button>
-              )}
+              <Button variant="editOutline" onClick={handleEditEmail}>
+                {emailConfigured ? "Update Credentials" : "Set Up Email"}
+              </Button>
             </div>
             {saved.gmailAppPasswordDecryptFailed && <DecryptWarning what="Gmail app password" />}
 
-            {!editingEmail ? (
-              /* View sub-mode */
-              emailConfigured ? (
-                <div className={styles.infoGrid}>
-                  <InfoRow label="Gmail (send-from address — not your login)" value={saved.gmailUser} />
-                  <InfoRow label="App Password" value="••••••••••••••••" />
-                </div>
-              ) : (
-                <div className={styles.emptyEmailBox}>
-                  <p className={styles.emptyEmailTitle}>
-                    No email credentials set.
-                  </p>
-                  <p className={styles.emptyEmailSub}>
-                    Invoices cannot be emailed until a Gmail address and App Password are configured.
-                  </p>
-                </div>
-              )
+            {emailConfigured ? (
+              <div className={styles.infoGrid}>
+                <InfoRow label="Gmail (send-from address — not your login)" value={saved.gmailUser} />
+                <InfoRow label="App Password" value="••••••••••••••••" />
+              </div>
             ) : (
-              /* Inline edit sub-mode */
-              <form onSubmit={handleSaveEmail} noValidate>
-                <div className={styles.appPasswordHintBox}>
-                  <p className={styles.appPasswordHintText}>
-                    Use a Gmail address with{" "}
-                    <a
-                      href="https://myaccount.google.com/apppasswords"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={styles.inlineLink}
-                    >
-                      2-Step Verification enabled
-                    </a>
-                    . Generate an App Password at{" "}
-                    <a
-                      href="https://myaccount.google.com/apppasswords"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={styles.inlineLink}
-                    >
-                      myaccount.google.com/apppasswords
-                    </a>
-                    {" "}— select Mail and copy the 16-character code.
-                  </p>
-                </div>
-
-                <div className={styles.emailFormGrid}>
-                  <FormField label="Gmail Address (send-from — not your login email)" error={emailErrors.gmailUser}>
-                    <Input
-                      type="email"
-                      value={emailForm.gmailUser}
-                      onChange={(e) => { setEmailForm((f) => ({ ...f, gmailUser: e.target.value })); setEmailErrors((p) => ({ ...p, gmailUser: undefined })); }}
-                      placeholder="yourbusiness@gmail.com"
-                    />
-                  </FormField>
-                  <FormField label={saved.gmailAppPasswordSet ? "New App Password (leave blank to keep current)" : "App Password"} error={emailErrors.gmailAppPassword}>
-                    <Input
-                      type="password"
-                      value={emailForm.gmailAppPassword}
-                      onChange={(e) => { setEmailForm((f) => ({ ...f, gmailAppPassword: e.target.value })); setEmailErrors((p) => ({ ...p, gmailAppPassword: undefined })); }}
-                      placeholder={saved.gmailAppPasswordSet ? "Leave blank to keep existing" : "16-character App Password"}
-                      autoComplete="new-password"
-                    />
-                  </FormField>
-                </div>
-
-                <div className={styles.emailFormActions}>
-                  {/* Clear / danger side */}
-                  {emailConfigured && (
-                    <div className={styles.clearGroup}>
-                      {confirmClear ? (
-                        <>
-                          <span className={styles.clearConfirmText}>
-                            Remove all credentials?
-                          </span>
-                          <Button type="button" variant="danger" disabled={savingEmail} onClick={handleClearEmail}>
-                            {savingEmail ? "Clearing…" : "Yes, Clear"}
-                          </Button>
-                          <Button type="button" variant="secondary" disabled={savingEmail} onClick={() => setConfirmClear(false)}>
-                            Cancel
-                          </Button>
-                        </>
-                      ) : (
-                        <Button type="button" variant="danger" disabled={savingEmail} onClick={handleClearEmail}>
-                          Clear Credentials
-                        </Button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Save / cancel side */}
-                  <div className={styles.saveCancelGroup}>
-                    <Button type="button" variant="secondary" disabled={savingEmail} onClick={handleCancelEmail}>
-                      Cancel
-                    </Button>
-                    <Button type="submit" variant="primary" disabled={savingEmail || !emailDirty.isDirty || !emailForm.gmailUser.trim()}>
-                      {savingEmail ? "Saving…" : "Save Credentials"}
-                    </Button>
-                  </div>
-                </div>
-              </form>
+              <div className={styles.emptyEmailBox}>
+                <p className={styles.emptyEmailTitle}>
+                  No email credentials set.
+                </p>
+                <p className={styles.emptyEmailSub}>
+                  Invoices cannot be emailed until a Gmail address and App Password are configured.
+                </p>
+              </div>
             )}
           </div>
+
+          <Modal
+            open={editingEmail}
+            title="Edit Email Configuration"
+            onClose={handleCancelEmail}
+            variant="fullscreen"
+            footer={
+              <>
+                <Button type="button" variant="secondary" disabled={savingEmail} onClick={handleCancelEmail}>
+                  Cancel
+                </Button>
+                <Button type="submit" form="email-form" variant="primary" disabled={savingEmail || !emailDirty.isDirty}>
+                  {savingEmail ? "Saving…" : "Save Credentials"}
+                </Button>
+              </>
+            }
+          >
+            {emailConfigured && (
+              <div className={styles.clearGroupBody}>
+                {confirmClear ? (
+                  <>
+                    <span className={styles.clearConfirmText}>
+                      Remove all credentials?
+                    </span>
+                    <Button type="button" variant="danger" disabled={savingEmail} onClick={handleClearEmail}>
+                      {savingEmail ? "Clearing…" : "Yes, Clear"}
+                    </Button>
+                    <Button type="button" variant="secondary" disabled={savingEmail} onClick={() => setConfirmClear(false)}>
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <Button type="button" variant="dangerOutline" size="sm" disabled={savingEmail} onClick={handleClearEmail}>
+                    Clear Credentials
+                  </Button>
+                )}
+              </div>
+            )}
+            <form id="email-form" onSubmit={handleSaveEmail} noValidate>
+              <div className={styles.appPasswordHintBox}>
+                <p className={styles.appPasswordHintText}>
+                  Use a Gmail address with{" "}
+                  <a
+                    href="https://myaccount.google.com/apppasswords"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.inlineLink}
+                  >
+                    2-Step Verification enabled
+                  </a>
+                  . Generate an App Password at{" "}
+                  <a
+                    href="https://myaccount.google.com/apppasswords"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.inlineLink}
+                  >
+                    myaccount.google.com/apppasswords
+                  </a>
+                  {" "}— select Mail and copy the 16-character code.
+                </p>
+              </div>
+
+              <div className={styles.emailFormGrid}>
+                <FormField label="Gmail Address (send-from — not your login email)" error={emailErrors.gmailUser}>
+                  <Input
+                    type="email"
+                    value={emailForm.gmailUser}
+                    onChange={(e) => { setEmailForm((f) => ({ ...f, gmailUser: e.target.value })); setEmailErrors((p) => ({ ...p, gmailUser: undefined })); }}
+                    placeholder="yourbusiness@gmail.com"
+                  />
+                </FormField>
+                <FormField label={saved.gmailAppPasswordSet ? "New App Password (leave blank to keep current)" : "App Password"} error={emailErrors.gmailAppPassword}>
+                  <Input
+                    type="password"
+                    value={emailForm.gmailAppPassword}
+                    onChange={(e) => { setEmailForm((f) => ({ ...f, gmailAppPassword: e.target.value })); setEmailErrors((p) => ({ ...p, gmailAppPassword: undefined })); }}
+                    placeholder={saved.gmailAppPasswordSet ? "Leave blank to keep existing" : "16-character App Password"}
+                    autoComplete="new-password"
+                  />
+                </FormField>
+              </div>
+            </form>
+          </Modal>
 
           {/* ── Document Numbering ────────────────────────────────────────── */}
           <div id="numbering" {...animateSection(6, `card ${styles.cardPad}`)}>
             <SectionHeader title="Document Numbering" editing={editingNumbering} onEdit={handleEditNumbering} />
-            {!editingNumbering ? (
-              <>
-                <p className={styles.stateHint}>
-                  Changing these only affects the <strong>next</strong> invoice/purchase bill/credit note created — existing documents keep their numbers.
-                </p>
-                <div className={styles.infoGrid}>
-                  <InfoRow
-                    label="Invoice Number Format"
-                    value={`${resolveNumberFormat(saved.invoiceNumberFormat).label} — e.g. ${resolveNumberFormat(saved.invoiceNumberFormat).example(saved.invoiceNumberPrefix ?? deriveDefaultPrefix(saved.name))}`}
-                  />
-                  <InfoRow
-                    label="Invoice Prefix"
-                    value={saved.invoiceNumberPrefix ?? `${deriveDefaultPrefix(saved.name)} (auto, from business name)`}
-                    mono
-                  />
-                  <InfoRow
-                    label="Next Invoice Number"
-                    value={saved.nextInvoiceNumberOverride ? String(saved.nextInvoiceNumberOverride) : "Continues automatically"}
-                  />
-                  <InfoRow
-                    label="Purchase Bill Number Format"
-                    value={`${resolveNumberFormat(saved.purchaseBillNumberFormat).label} — e.g. ${resolveNumberFormat(saved.purchaseBillNumberFormat).example(saved.purchaseBillNumberPrefix ?? "PB")}`}
-                  />
-                  <InfoRow
-                    label="Purchase Bill Prefix"
-                    value={saved.purchaseBillNumberPrefix ?? "PB (default)"}
-                    mono
-                  />
-                  <InfoRow
-                    label="Next Purchase Bill Number"
-                    value={saved.nextPurchaseBillNumberOverride ? String(saved.nextPurchaseBillNumberOverride) : "Continues automatically"}
-                  />
-                  <InfoRow
-                    label="Credit Note Number Format"
-                    value={`${resolveNumberFormat(saved.creditNoteNumberFormat).label} — e.g. ${resolveNumberFormat(saved.creditNoteNumberFormat).example(saved.creditNoteNumberPrefix ?? "CN")}`}
-                  />
-                  <InfoRow
-                    label="Credit Note Prefix"
-                    value={saved.creditNoteNumberPrefix ?? "CN (default)"}
-                    mono
-                  />
-                  <InfoRow
-                    label="Next Credit Note Number"
-                    value={saved.nextCreditNoteNumberOverride ? String(saved.nextCreditNoteNumberOverride) : "Continues automatically"}
-                  />
-                </div>
-              </>
-            ) : (
-              <form onSubmit={handleSubmitNumbering} noValidate>
-                <p className={styles.stateHint}>
-                  Leave a prefix/number field blank to keep the default. A &ldquo;next number&rdquo; only applies once, then clears itself.
-                </p>
-                <div className={styles.formGrid}>
-                  <FormField label="Invoice Number Format" hint={`Preview: ${NUMBER_FORMATS[numberingForm.invoiceNumberFormat].example(numberingForm.invoiceNumberPrefix.trim().toUpperCase() || deriveDefaultPrefix(saved.name))}`}>
-                    <Select
-                      value={numberingForm.invoiceNumberFormat}
-                      onChange={(e) => setNumberingForm((f) => ({ ...f, invoiceNumberFormat: e.target.value as NumberFormatId }))}
-                    >
-                      {Object.values(NUMBER_FORMATS).map((fmt) => <option key={fmt.id} value={fmt.id}>{fmt.label}</option>)}
-                    </Select>
-                  </FormField>
-                  <FormField label="Invoice Prefix" error={numberingErrors.invoiceNumberPrefix} hint={`Default: ${deriveDefaultPrefix(saved.name)}`}>
-                    <Input
-                      value={numberingForm.invoiceNumberPrefix}
-                      onChange={(e) => { setNumberingForm((f) => ({ ...f, invoiceNumberPrefix: e.target.value.toUpperCase() })); setNumberingErrors((p) => ({ ...p, invoiceNumberPrefix: undefined })); }}
-                      placeholder={deriveDefaultPrefix(saved.name)}
-                      maxLength={6}
-                      className={styles.gstinInput}
-                    />
-                  </FormField>
-                  <FormField label="Next Invoice Number (one-time)" error={numberingErrors.nextInvoiceNumberOverride}>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={numberingForm.nextInvoiceNumberOverride}
-                      onChange={(e) => { setNumberingForm((f) => ({ ...f, nextInvoiceNumberOverride: e.target.value })); setNumberingErrors((p) => ({ ...p, nextInvoiceNumberOverride: undefined })); }}
-                      placeholder="e.g. 19"
-                    />
-                  </FormField>
-                  <FormField label="Purchase Bill Number Format" hint={`Preview: ${NUMBER_FORMATS[numberingForm.purchaseBillNumberFormat].example(numberingForm.purchaseBillNumberPrefix.trim().toUpperCase() || "PB")}`}>
-                    <Select
-                      value={numberingForm.purchaseBillNumberFormat}
-                      onChange={(e) => setNumberingForm((f) => ({ ...f, purchaseBillNumberFormat: e.target.value as NumberFormatId }))}
-                    >
-                      {Object.values(NUMBER_FORMATS).map((fmt) => <option key={fmt.id} value={fmt.id}>{fmt.label}</option>)}
-                    </Select>
-                  </FormField>
-                  <FormField label="Purchase Bill Prefix" error={numberingErrors.purchaseBillNumberPrefix} hint="Default: PB">
-                    <Input
-                      value={numberingForm.purchaseBillNumberPrefix}
-                      onChange={(e) => { setNumberingForm((f) => ({ ...f, purchaseBillNumberPrefix: e.target.value.toUpperCase() })); setNumberingErrors((p) => ({ ...p, purchaseBillNumberPrefix: undefined })); }}
-                      placeholder="PB"
-                      maxLength={6}
-                      className={styles.gstinInput}
-                    />
-                  </FormField>
-                  <FormField label="Next Purchase Bill Number (one-time)" error={numberingErrors.nextPurchaseBillNumberOverride}>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={numberingForm.nextPurchaseBillNumberOverride}
-                      onChange={(e) => { setNumberingForm((f) => ({ ...f, nextPurchaseBillNumberOverride: e.target.value })); setNumberingErrors((p) => ({ ...p, nextPurchaseBillNumberOverride: undefined })); }}
-                      placeholder="e.g. 19"
-                    />
-                  </FormField>
-                  <FormField label="Credit Note Number Format" hint={`Preview: ${NUMBER_FORMATS[numberingForm.creditNoteNumberFormat].example(numberingForm.creditNoteNumberPrefix.trim().toUpperCase() || "CN")}`}>
-                    <Select
-                      value={numberingForm.creditNoteNumberFormat}
-                      onChange={(e) => setNumberingForm((f) => ({ ...f, creditNoteNumberFormat: e.target.value as NumberFormatId }))}
-                    >
-                      {Object.values(NUMBER_FORMATS).map((fmt) => <option key={fmt.id} value={fmt.id}>{fmt.label}</option>)}
-                    </Select>
-                  </FormField>
-                  <FormField label="Credit Note Prefix" error={numberingErrors.creditNoteNumberPrefix} hint="Default: CN">
-                    <Input
-                      value={numberingForm.creditNoteNumberPrefix}
-                      onChange={(e) => { setNumberingForm((f) => ({ ...f, creditNoteNumberPrefix: e.target.value.toUpperCase() })); setNumberingErrors((p) => ({ ...p, creditNoteNumberPrefix: undefined })); }}
-                      placeholder="CN"
-                      maxLength={6}
-                      className={styles.gstinInput}
-                    />
-                  </FormField>
-                  <FormField label="Next Credit Note Number (one-time)" error={numberingErrors.nextCreditNoteNumberOverride}>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={numberingForm.nextCreditNoteNumberOverride}
-                      onChange={(e) => { setNumberingForm((f) => ({ ...f, nextCreditNoteNumberOverride: e.target.value })); setNumberingErrors((p) => ({ ...p, nextCreditNoteNumberOverride: undefined })); }}
-                      placeholder="e.g. 5"
-                    />
-                  </FormField>
-                </div>
-                <div className={styles.formActionsRow}>
-                  <Button type="button" variant="secondary" disabled={savingNumbering} onClick={handleCancelNumbering}>Cancel</Button>
-                  <Button type="submit" variant="primary" disabled={savingNumbering || !numberingDirty.isDirty}>{savingNumbering ? "Saving…" : "Save Changes"}</Button>
-                </div>
-              </form>
-            )}
+            <p className={styles.stateHint}>
+              Changing these only affects the <strong>next</strong> invoice/purchase bill/credit note created — existing documents keep their numbers.
+            </p>
+            <div className={styles.infoGrid}>
+              <InfoRow
+                label="Invoice Number Format"
+                value={`${resolveNumberFormat(saved.invoiceNumberFormat).label} — e.g. ${resolveNumberFormat(saved.invoiceNumberFormat).example(saved.invoiceNumberPrefix ?? deriveDefaultPrefix(saved.name))}`}
+              />
+              <InfoRow
+                label="Invoice Prefix"
+                value={saved.invoiceNumberPrefix ?? `${deriveDefaultPrefix(saved.name)} (auto, from business name)`}
+                mono
+              />
+              <InfoRow
+                label="Next Invoice Number"
+                value={saved.nextInvoiceNumberOverride ? String(saved.nextInvoiceNumberOverride) : "Continues automatically"}
+              />
+              <InfoRow
+                label="Purchase Bill Number Format"
+                value={`${resolveNumberFormat(saved.purchaseBillNumberFormat).label} — e.g. ${resolveNumberFormat(saved.purchaseBillNumberFormat).example(saved.purchaseBillNumberPrefix ?? "PB")}`}
+              />
+              <InfoRow
+                label="Purchase Bill Prefix"
+                value={saved.purchaseBillNumberPrefix ?? "PB (default)"}
+                mono
+              />
+              <InfoRow
+                label="Next Purchase Bill Number"
+                value={saved.nextPurchaseBillNumberOverride ? String(saved.nextPurchaseBillNumberOverride) : "Continues automatically"}
+              />
+              <InfoRow
+                label="Credit Note Number Format"
+                value={`${resolveNumberFormat(saved.creditNoteNumberFormat).label} — e.g. ${resolveNumberFormat(saved.creditNoteNumberFormat).example(saved.creditNoteNumberPrefix ?? "CN")}`}
+              />
+              <InfoRow
+                label="Credit Note Prefix"
+                value={saved.creditNoteNumberPrefix ?? "CN (default)"}
+                mono
+              />
+              <InfoRow
+                label="Next Credit Note Number"
+                value={saved.nextCreditNoteNumberOverride ? String(saved.nextCreditNoteNumberOverride) : "Continues automatically"}
+              />
+            </div>
           </div>
+
+          <Modal
+            open={editingNumbering}
+            title="Edit Document Numbering"
+            onClose={handleCancelNumbering}
+            variant="fullscreen"
+            footer={
+              <>
+                <Button type="button" variant="secondary" disabled={savingNumbering} onClick={handleCancelNumbering}>Cancel</Button>
+                <Button type="submit" form="numbering-form" variant="primary" disabled={savingNumbering || !numberingDirty.isDirty}>{savingNumbering ? "Saving…" : "Save Changes"}</Button>
+              </>
+            }
+          >
+            <form id="numbering-form" onSubmit={handleSubmitNumbering} noValidate>
+              <p className={styles.stateHint}>
+                Leave a prefix/number field blank to keep the default. A &ldquo;next number&rdquo; only applies once, then clears itself.
+              </p>
+              <div className={styles.formGrid}>
+                <FormField label="Invoice Number Format" hint={`Preview: ${NUMBER_FORMATS[numberingForm.invoiceNumberFormat].example(numberingForm.invoiceNumberPrefix.trim().toUpperCase() || deriveDefaultPrefix(saved.name))}`}>
+                  <Select
+                    value={numberingForm.invoiceNumberFormat}
+                    onChange={(e) => setNumberingForm((f) => ({ ...f, invoiceNumberFormat: e.target.value as NumberFormatId }))}
+                  >
+                    {Object.values(NUMBER_FORMATS).map((fmt) => <option key={fmt.id} value={fmt.id}>{fmt.label}</option>)}
+                  </Select>
+                </FormField>
+                <FormField label="Invoice Prefix" error={numberingErrors.invoiceNumberPrefix} hint={`Default: ${deriveDefaultPrefix(saved.name)}`}>
+                  <Input
+                    value={numberingForm.invoiceNumberPrefix}
+                    onChange={(e) => { setNumberingForm((f) => ({ ...f, invoiceNumberPrefix: e.target.value.toUpperCase() })); setNumberingErrors((p) => ({ ...p, invoiceNumberPrefix: undefined })); }}
+                    placeholder={deriveDefaultPrefix(saved.name)}
+                    maxLength={6}
+                    className={styles.gstinInput}
+                  />
+                </FormField>
+                <FormField label="Next Invoice Number (one-time)" error={numberingErrors.nextInvoiceNumberOverride}>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={numberingForm.nextInvoiceNumberOverride}
+                    onChange={(e) => { setNumberingForm((f) => ({ ...f, nextInvoiceNumberOverride: e.target.value })); setNumberingErrors((p) => ({ ...p, nextInvoiceNumberOverride: undefined })); }}
+                    placeholder="e.g. 19"
+                  />
+                </FormField>
+                <FormField label="Purchase Bill Number Format" hint={`Preview: ${NUMBER_FORMATS[numberingForm.purchaseBillNumberFormat].example(numberingForm.purchaseBillNumberPrefix.trim().toUpperCase() || "PB")}`}>
+                  <Select
+                    value={numberingForm.purchaseBillNumberFormat}
+                    onChange={(e) => setNumberingForm((f) => ({ ...f, purchaseBillNumberFormat: e.target.value as NumberFormatId }))}
+                  >
+                    {Object.values(NUMBER_FORMATS).map((fmt) => <option key={fmt.id} value={fmt.id}>{fmt.label}</option>)}
+                  </Select>
+                </FormField>
+                <FormField label="Purchase Bill Prefix" error={numberingErrors.purchaseBillNumberPrefix} hint="Default: PB">
+                  <Input
+                    value={numberingForm.purchaseBillNumberPrefix}
+                    onChange={(e) => { setNumberingForm((f) => ({ ...f, purchaseBillNumberPrefix: e.target.value.toUpperCase() })); setNumberingErrors((p) => ({ ...p, purchaseBillNumberPrefix: undefined })); }}
+                    placeholder="PB"
+                    maxLength={6}
+                    className={styles.gstinInput}
+                  />
+                </FormField>
+                <FormField label="Next Purchase Bill Number (one-time)" error={numberingErrors.nextPurchaseBillNumberOverride}>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={numberingForm.nextPurchaseBillNumberOverride}
+                    onChange={(e) => { setNumberingForm((f) => ({ ...f, nextPurchaseBillNumberOverride: e.target.value })); setNumberingErrors((p) => ({ ...p, nextPurchaseBillNumberOverride: undefined })); }}
+                    placeholder="e.g. 19"
+                  />
+                </FormField>
+                <FormField label="Credit Note Number Format" hint={`Preview: ${NUMBER_FORMATS[numberingForm.creditNoteNumberFormat].example(numberingForm.creditNoteNumberPrefix.trim().toUpperCase() || "CN")}`}>
+                  <Select
+                    value={numberingForm.creditNoteNumberFormat}
+                    onChange={(e) => setNumberingForm((f) => ({ ...f, creditNoteNumberFormat: e.target.value as NumberFormatId }))}
+                  >
+                    {Object.values(NUMBER_FORMATS).map((fmt) => <option key={fmt.id} value={fmt.id}>{fmt.label}</option>)}
+                  </Select>
+                </FormField>
+                <FormField label="Credit Note Prefix" error={numberingErrors.creditNoteNumberPrefix} hint="Default: CN">
+                  <Input
+                    value={numberingForm.creditNoteNumberPrefix}
+                    onChange={(e) => { setNumberingForm((f) => ({ ...f, creditNoteNumberPrefix: e.target.value.toUpperCase() })); setNumberingErrors((p) => ({ ...p, creditNoteNumberPrefix: undefined })); }}
+                    placeholder="CN"
+                    maxLength={6}
+                    className={styles.gstinInput}
+                  />
+                </FormField>
+                <FormField label="Next Credit Note Number (one-time)" error={numberingErrors.nextCreditNoteNumberOverride}>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={numberingForm.nextCreditNoteNumberOverride}
+                    onChange={(e) => { setNumberingForm((f) => ({ ...f, nextCreditNoteNumberOverride: e.target.value })); setNumberingErrors((p) => ({ ...p, nextCreditNoteNumberOverride: undefined })); }}
+                    placeholder="e.g. 5"
+                  />
+                </FormField>
+              </div>
+            </form>
+          </Modal>
         </>
       )}
       {anySettingsSaving && (

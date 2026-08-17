@@ -161,7 +161,9 @@
 }
 .mobileBack:hover { background: var(--c-bg-sub); color: var(--c-text); }
 
-@media (max-width: 767px) {
+/* Tied to the sidebar hamburger breakpoint (DashboardShell), not the app's
+   generic 768px tier — must stay in sync with isMobile()/check() there. */
+@media (max-width: 1024px) {
   .wrap { max-width: none; }
 
   /* Expanded state overlays the whole topbar row so the input gets the

@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination, PAGE_SIZE } from "@/components/ui/Pagination";
+import { FloatingSpinner } from "@/components/ui/Spinner";
+import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
@@ -24,6 +25,7 @@ interface OutstandingBill {
   vendor: { id: string; name: string };
   total: number; paidAmount: number; balance: number; status: string; aging: string;
 }
+interface OutstandingResponse { data: OutstandingBill[]; total: number; totalBalance: number; overdueCount: number; }
 interface CategoryRow { category: string; count: number; totalSpend: number; pct: number; }
 interface LedgerRow {
   id: string; productId: string | null; productName: string; type: string; documentType: string; quantity: number;
@@ -116,12 +118,23 @@ export default function PurchaseReportsPage() {
   const [endDate, setEndDate] = useState("");
   const dateQuery = startDate || endDate ? `&startDate=${startDate}&endDate=${endDate}` : "";
 
+  const [outPage, setOutPage] = useState(1);
+  const [outShowAll, setOutShowAll] = useState(false);
+  const outPageSize = outShowAll ? 2000 : PAGE_SIZE;
+
   const { data: summaryData, loading: loadingSummary } = useFetch<SummaryRow[]>("/api/purchase-reports?type=summary");
-  const { data: outstandingData, loading: loadingOut } = useFetch<OutstandingBill[]>(`/api/purchase-reports?type=outstanding${dateQuery}`);
+  const { data: outstandingResponse, loading: loadingOut } = useFetch<OutstandingResponse>(
+    `/api/purchase-reports?type=outstanding${dateQuery}&page=${outPage}&pageSize=${outPageSize}`
+  );
   const { data: categoryData, loading: loadingCat } = useFetch<CategoryRow[]>("/api/purchase-reports?type=category");
 
   const summaryRows = summaryData ?? [];
-  const outstanding = outstandingData ?? [];
+  const outstanding = outstandingResponse?.data ?? [];
+  const outTotal = outstandingResponse?.total ?? 0;
+  const outTotalBalance = outstandingResponse?.totalBalance ?? 0;
+  const outOverdueCount = outstandingResponse?.overdueCount ?? 0;
+  const showOutSkeleton = loadingOut && !outstandingResponse;
+  const isOutRefetching = loadingOut && !!outstandingResponse;
   const categoryRows = categoryData ?? [];
 
   const [ledgerSearch, setLedgerSearch] = useState("");
@@ -137,6 +150,8 @@ export default function PurchaseReportsPage() {
   const { data: ledgerResponse, loading: loadingLedger } = useFetch<{ data: LedgerRow[]; total: number }>(`/api/purchase-reports?${ledgerParams.toString()}`);
   const filteredLedger = ledgerResponse?.data ?? [];
   const ledgerTotal = ledgerResponse?.total ?? 0;
+  const showLedgerSkeleton = loadingLedger && !ledgerResponse;
+  const isLedgerRefetching = loadingLedger && !!ledgerResponse;
 
   const [exportingOutstanding, setExportingOutstanding] = useState(false);
   const [exportingCategory, setExportingCategory] = useState(false);
@@ -145,11 +160,13 @@ export default function PurchaseReportsPage() {
   async function exportOutstandingCsv() {
     setExportingOutstanding(true);
     try {
+      const res = await fetch(`/api/purchase-reports?type=outstanding${dateQuery}&page=1&pageSize=2000`);
+      const exportData: OutstandingResponse = await res.json();
       await downloadXlsx(
         "outstanding-bills.xlsx",
         "Outstanding Bills",
         ["Bill No.", "Vendor", "Bill Date", "Due Date", "Aging", "Total", "Paid", "Balance", "Status"],
-        outstanding.map(b => [
+        exportData.data.map(b => [
           b.billNumber, b.vendor.name,
           formatDate(b.billDate),
           b.dueDate ? formatDate(b.dueDate) : "",
@@ -210,16 +227,11 @@ export default function PurchaseReportsPage() {
     }
   }
 
-  const [outPage, setOutPage] = useState(1);
-  const [outShowAll, setOutShowAll] = useState(false);
-  const { visible: visibleOut } = usePagination(outstanding, outPage, outShowAll);
-
-  const totalPayable = outstanding.reduce((s, b) => s + b.balance, 0);
   const totalSpend = summaryRows.reduce((s, r) => s + r.totalSpend, 0);
-  const overdueCount = outstanding.filter((b) => b.aging !== "Current").length;
 
   return (
     <div className="page-stack">
+      {(isLedgerRefetching || isOutRefetching) && <FloatingSpinner />}
       <div className="page-header">
         <div>
           <h1 className="page-title">Purchase Reports</h1>
@@ -236,12 +248,12 @@ export default function PurchaseReportsPage() {
         </div>
         <div className="stat-banner stat-banner-red">
           <div className="stat-banner-label">Total Payable</div>
-          <div className="stat-banner-value">{loadingOut ? "—" : fmt(totalPayable)}</div>
-          <div className="stat-banner-sub">{loadingOut ? "…" : `Across ${outstanding.length} unpaid/partial bill${outstanding.length !== 1 ? "s" : ""}`}</div>
+          <div className="stat-banner-value">{showOutSkeleton ? "—" : fmt(outTotalBalance)}</div>
+          <div className="stat-banner-sub">{showOutSkeleton ? "…" : `Across ${outTotal} unpaid/partial bill${outTotal !== 1 ? "s" : ""}`}</div>
         </div>
         <div className="stat-banner stat-banner-purple">
           <div className="stat-banner-label">Overdue Bills</div>
-          <div className="stat-banner-value">{loadingOut ? "—" : overdueCount}</div>
+          <div className="stat-banner-value">{showOutSkeleton ? "—" : outOverdueCount}</div>
           <div className="stat-banner-sub">Bills past their due date</div>
         </div>
         <div className="stat-banner stat-banner-blue">
@@ -271,6 +283,7 @@ export default function PurchaseReportsPage() {
                   const v = e.target.value;
                   setStartDate(v);
                   if (endDate && v > endDate) setEndDate(v);
+                  setOutPage(1);
                 }}
                 onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
                 className={styles.dateInput}
@@ -280,13 +293,13 @@ export default function PurchaseReportsPage() {
               To
               <Input
                 type="date" aria-label="End date" value={endDate} min={startDate || MIN_REPORT_DATE} max={todayStr}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => { setEndDate(e.target.value); setOutPage(1); }}
                 onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
                 className={styles.dateInput}
               />
             </label>
             {(startDate || endDate) && (
-              <Button variant="secondary" size="sm" onClick={() => { setStartDate(""); setEndDate(""); }}>Clear</Button>
+              <Button variant="secondary" size="sm" onClick={() => { setStartDate(""); setEndDate(""); setOutPage(1); }}>Clear</Button>
             )}
           </div>
         )}
@@ -300,21 +313,21 @@ export default function PurchaseReportsPage() {
                 <p className="card-header-sub">Unpaid and partially paid purchase bills with aging</p>
               </div>
               <div className={styles.headerActionsRow}>
-                {!loadingOut && outstanding.length > 0 && (
+                {outstandingResponse && outTotal > 0 && (
                   <Button variant="secondary" size="sm" loading={exportingOutstanding} onClick={exportOutstandingCsv}>Export Excel</Button>
                 )}
-                {!loadingOut && (
-                  <ShowAllToggle total={outstanding.length} showAll={outShowAll} onToggle={() => { setOutShowAll((v) => !v); setOutPage(1); }} />
+                {outstandingResponse && (
+                  <ShowAllToggle total={outTotal} showAll={outShowAll} onToggle={() => { setOutShowAll((v) => !v); setOutPage(1); }} />
                 )}
               </div>
             </div>
             <div className="table-wrap">
-              <table className="table-base">
+              <table className="table-base" style={isOutRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
                 <thead><tr>{OUT_COLS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr></thead>
                 <tbody>
-                  {loadingOut ? <TableSkeleton columns={OUT_COLS} /> : outstanding.length === 0 ? (
+                  {showOutSkeleton ? <TableSkeleton columns={OUT_COLS} /> : outstanding.length === 0 ? (
                     <tr><td colSpan={OUT_COLS.length} className="table-empty-cell">No outstanding bills. All settled.</td></tr>
-                  ) : visibleOut.map((b) => {
+                  ) : outstanding.map((b) => {
                     const isOverdue = b.aging !== "Current";
                     return (
                       <tr key={b.id} className={isOverdue ? styles.overdueRow : undefined}>
@@ -354,8 +367,8 @@ export default function PurchaseReportsPage() {
                 </tbody>
               </table>
             </div>
-            {!loadingOut && outstanding.length > 0 && (
-              <Pagination total={outstanding.length} page={outPage} showAll={outShowAll} onPage={setOutPage} label="bills" />
+            {outstandingResponse && outTotal > 0 && (
+              <Pagination total={outTotal} page={outPage} showAll={outShowAll} onPage={setOutPage} label="bills" loading={isOutRefetching} />
             )}
           </>
         )}
@@ -458,10 +471,10 @@ export default function PurchaseReportsPage() {
                 </p>
               </div>
               <div className={styles.headerActionsRow}>
-                {!loadingLedger && ledgerTotal > 0 && (
+                {ledgerResponse && ledgerTotal > 0 && (
                   <Button variant="secondary" size="sm" loading={exportingLedger} onClick={exportLedgerCsv}>Export Excel</Button>
                 )}
-                {!loadingLedger && (
+                {ledgerResponse && (
                   <ShowAllToggle total={ledgerTotal} showAll={ledgerShowAll} onToggle={() => { setLedgerShowAll((v) => !v); setLedgerPage(1); }} />
                 )}
               </div>
@@ -477,10 +490,10 @@ export default function PurchaseReportsPage() {
               />
             </div>
             <div className="table-wrap">
-              <table className="table-base">
+              <table className="table-base" style={isLedgerRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
                 <thead><tr>{LEDGER_COLS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr></thead>
                 <tbody>
-                  {loadingLedger ? <TableSkeleton columns={LEDGER_COLS} /> : filteredLedger.length === 0 ? (
+                  {showLedgerSkeleton ? <TableSkeleton columns={LEDGER_COLS} /> : filteredLedger.length === 0 ? (
                     <tr><td colSpan={LEDGER_COLS.length} className="table-empty-cell">{ledgerSearch ? "No stock movements match your search." : "No stock movements recorded."}</td></tr>
                   ) : filteredLedger.map((m) => (
                     <tr key={m.id}>
@@ -508,8 +521,8 @@ export default function PurchaseReportsPage() {
                 </tbody>
               </table>
             </div>
-            {!loadingLedger && ledgerTotal > 0 && (
-              <Pagination total={ledgerTotal} page={ledgerPage} showAll={ledgerShowAll} onPage={setLedgerPage} label="movements" />
+            {ledgerResponse && ledgerTotal > 0 && (
+              <Pagination total={ledgerTotal} page={ledgerPage} showAll={ledgerShowAll} onPage={setLedgerPage} label="movements" loading={isLedgerRefetching} />
             )}
           </>
         )}

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
+import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
@@ -15,10 +15,12 @@ import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
 import { downloadXlsx } from "@/lib/downloadXlsx";
 import { formatDate } from "@/lib/formatDate";
+import { FloatingSpinner } from "@/components/ui/Spinner";
 import styles from "./salesReports.module.css";
 
 interface SummaryRow { invoicesThisMonth: number; revenueThisMonth: number; totalRevenue: number; totalCollected: number; outstandingTotal: number; pendingCount: number; }
 interface OutstandingItem { id: string; invoiceNumber: string; date: string; createdAt: string; dueDate?: string; customer: { name: string }; total: number; paidAmount: number; balance: number; status: string; }
+interface OutstandingResponse { data: OutstandingItem[]; total: number; totalBalance: number; }
 interface GstRow { month: string; taxableValue: number; cgst: number; sgst: number; igst: number; }
 
 const OUT_COLUMNS: Column[] = [
@@ -68,11 +70,21 @@ export default function SalesReportsPage() {
   const [endDate, setEndDate] = useState("");
   const dateQuery = startDate || endDate ? `&startDate=${startDate}&endDate=${endDate}` : "";
 
+  const [outPage, setOutPage] = useState(1);
+  const [outShowAll, setOutShowAll] = useState(false);
+  const outPageSize = outShowAll ? 2000 : PAGE_SIZE;
+
   const { data: summaryData, loading: loadingSummary } = useFetch<SummaryRow>("/api/reports?type=summary");
-  const { data: outstandingData, loading: loadingOut } = useFetch<OutstandingItem[]>(`/api/reports?type=outstanding${dateQuery}`);
+  const { data: outstandingResponse, loading: loadingOut } = useFetch<OutstandingResponse>(
+    `/api/reports?type=outstanding${dateQuery}&page=${outPage}&pageSize=${outPageSize}`
+  );
   const { data: gstData, loading: loadingGst } = useFetch<GstRow[]>(`/api/reports?type=gst-summary${dateQuery}`);
 
-  const outstanding = outstandingData ?? [];
+  const outstanding = outstandingResponse?.data ?? [];
+  const outTotal = outstandingResponse?.total ?? 0;
+  const outTotalBalance = outstandingResponse?.totalBalance ?? 0;
+  const showOutSkeleton = loadingOut && !outstandingResponse;
+  const isOutRefetching = loadingOut && !!outstandingResponse;
   const gstRows = gstData ?? [];
 
   const [exportingOutstanding, setExportingOutstanding] = useState(false);
@@ -81,11 +93,13 @@ export default function SalesReportsPage() {
   async function exportOutstandingCsv() {
     setExportingOutstanding(true);
     try {
+      const res = await fetch(`/api/reports?type=outstanding${dateQuery}&page=1&pageSize=2000`);
+      const exportData: OutstandingResponse = await res.json();
       await downloadXlsx(
         "outstanding-invoices.xlsx",
         "Outstanding Invoices",
         ["Invoice No.", "Customer", "Invoice Date", "Due Date", "Total", "Paid", "Balance", "Status"],
-        outstanding.map(inv => [
+        exportData.data.map(inv => [
           inv.invoiceNumber, inv.customer.name,
           formatDate(inv.date),
           inv.dueDate ? formatDate(inv.dueDate) : "",
@@ -115,15 +129,11 @@ export default function SalesReportsPage() {
     }
   }
 
-  const [outPage, setOutPage] = useState(1);
-  const [outShowAll, setOutShowAll] = useState(false);
-  const { visible: visibleOut } = usePagination(outstanding, outPage, outShowAll);
-
-  const totalOutstanding = outstanding.reduce((sum, i) => sum + (i.total - i.paidAmount), 0);
   const totalGst = gstRows.reduce((s, r) => s + r.cgst + r.sgst + r.igst, 0);
 
   return (
     <div className="page-stack">
+      {isOutRefetching && <FloatingSpinner />}
       <div className="page-header">
         <div>
           <h1 className="page-title">Sales Reports</h1>
@@ -140,8 +150,8 @@ export default function SalesReportsPage() {
         </div>
         <div className="stat-banner stat-banner-amber">
           <div className="stat-banner-label">Total Outstanding</div>
-          <div className="stat-banner-value">{loadingOut ? "—" : fmt(totalOutstanding)}</div>
-          <div className="stat-banner-sub">{loadingOut ? "…" : `Across ${outstanding.length} unpaid/partial invoice${outstanding.length !== 1 ? "s" : ""}`}</div>
+          <div className="stat-banner-value">{showOutSkeleton ? "—" : fmt(outTotalBalance)}</div>
+          <div className="stat-banner-sub">{showOutSkeleton ? "…" : `Across ${outTotal} unpaid/partial invoice${outTotal !== 1 ? "s" : ""}`}</div>
         </div>
         <div className="stat-banner stat-banner-green">
           <div className="stat-banner-label">Total Collected</div>
@@ -175,6 +185,7 @@ export default function SalesReportsPage() {
                   const v = e.target.value;
                   setStartDate(v);
                   if (endDate && v > endDate) setEndDate(v);
+                  setOutPage(1);
                 }}
                 onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
                 className={styles.dateInput}
@@ -184,13 +195,13 @@ export default function SalesReportsPage() {
               To
               <Input
                 type="date" aria-label="End date" value={endDate} min={startDate || MIN_REPORT_DATE} max={todayStr}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => { setEndDate(e.target.value); setOutPage(1); }}
                 onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
                 className={styles.dateInput}
               />
             </label>
             {(startDate || endDate) && (
-              <Button variant="secondary" size="sm" onClick={() => { setStartDate(""); setEndDate(""); }}>Clear</Button>
+              <Button variant="secondary" size="sm" onClick={() => { setStartDate(""); setEndDate(""); setOutPage(1); }}>Clear</Button>
             )}
           </div>
         )}
@@ -204,21 +215,21 @@ export default function SalesReportsPage() {
                 <p className="card-header-sub">Invoices awaiting full payment</p>
               </div>
               <div className={styles.headerActionsRow}>
-                {!loadingOut && outstanding.length > 0 && (
+                {outstandingResponse && outTotal > 0 && (
                   <Button variant="secondary" size="sm" loading={exportingOutstanding} onClick={exportOutstandingCsv}>Export Excel</Button>
                 )}
-                {!loadingOut && (
-                  <ShowAllToggle total={outstanding.length} showAll={outShowAll} onToggle={() => { setOutShowAll((v) => !v); setOutPage(1); }} />
+                {outstandingResponse && (
+                  <ShowAllToggle total={outTotal} showAll={outShowAll} onToggle={() => { setOutShowAll((v) => !v); setOutPage(1); }} />
                 )}
               </div>
             </div>
             <div className="table-wrap">
-              <table className="table-base">
+              <table className="table-base" style={isOutRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
                 <thead><tr>{OUT_COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr></thead>
                 <tbody>
-                  {loadingOut ? <TableSkeleton columns={OUT_COLUMNS} /> : outstanding.length === 0 ? (
+                  {showOutSkeleton ? <TableSkeleton columns={OUT_COLUMNS} /> : outstanding.length === 0 ? (
                     <tr><td colSpan={OUT_COLUMNS.length} className="table-empty-cell">No outstanding invoices. All settled.</td></tr>
-                  ) : visibleOut.map((inv) => {
+                  ) : outstanding.map((inv) => {
                     const isOverdue = inv.dueDate && new Date(inv.dueDate) < new Date() && inv.status !== "paid";
                     return (
                       <tr key={inv.id} className={isOverdue ? styles.overdueRow : undefined}>
@@ -250,8 +261,8 @@ export default function SalesReportsPage() {
                 </tbody>
               </table>
             </div>
-            {!loadingOut && outstanding.length > 0 && (
-              <Pagination total={outstanding.length} page={outPage} showAll={outShowAll} onPage={setOutPage} label="invoices" />
+            {outstandingResponse && outTotal > 0 && (
+              <Pagination total={outTotal} page={outPage} showAll={outShowAll} onPage={setOutPage} label="invoices" loading={isOutRefetching} />
             )}
           </>
         )}

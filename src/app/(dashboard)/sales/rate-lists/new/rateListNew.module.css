@@ -1,0 +1,8 @@
+.warningList {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+}
+.warningItem { color: var(--c-amber-text); }

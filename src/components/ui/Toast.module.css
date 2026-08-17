@@ -9,7 +9,7 @@
   pointer-events: none;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .container {
     top: 3.25rem;
     right: 0.5rem;
@@ -122,7 +122,7 @@
   to { width: 0%; }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .toast {
     min-width: unset;
     max-width: unset;

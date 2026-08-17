@@ -92,7 +92,7 @@ function ResetPasswordForm() {
                   placeholder="repeat your new password"
                 />
               </FormField>
-              <button type="submit" className={styles.submitBtn} disabled={loading || !token || !password.trim() || !confirm.trim()}>
+              <button type="submit" className={styles.submitBtn} disabled={loading || !token}>
                 {loading ? "Updating…" : "Update password"}
               </button>
             </form>

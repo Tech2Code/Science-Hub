@@ -50,7 +50,7 @@
   outline: none;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .input {
     padding: 0.5rem 0.75rem;
     font-size: 0.875rem;

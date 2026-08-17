@@ -4,8 +4,8 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { OverlayLoader } from "@/components/ui/Spinner";
+import { Input, FormField } from "@/components/ui/Input";
+import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -60,8 +60,10 @@ export default function CategoriesPage() {
   const [saving, setSaving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [newName, setNewName] = useState("");
+  const [addNameError, setAddNameError] = useState<string | undefined>(undefined);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [renameNameError, setRenameNameError] = useState<string | undefined>(undefined);
   const [editingOriginalName, setEditingOriginalName] = useState("");
   const [editingUpdatedAt, setEditingUpdatedAt] = useState<string | undefined>(undefined);
   const [renaming, setRenaming] = useState(false);
@@ -84,11 +86,15 @@ export default function CategoriesPage() {
   const { data, loading, mutate } = useFetch<CategoryListResponse>(apiUrl);
   const categories = data?.data ?? [];
   const total = data?.total ?? 0;
+  const showSkeleton = loading && !data;
+  const isRefetching = loading && !!data;
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     const name = newName.trim();
-    if (validate(name, rules.required("Category name is required."))) return;
+    const err = validate(name, rules.required("Category name is required."));
+    if (err) { setAddNameError(err); return; }
+    setAddNameError(undefined);
     setSaving(true);
     const r = await fetch("/api/categories", {
       method: "POST",
@@ -112,6 +118,7 @@ export default function CategoriesPage() {
     setEditingName(cat.name);
     setEditingOriginalName(cat.name);
     setEditingUpdatedAt(cat.updatedAt);
+    setRenameNameError(undefined);
   }
 
   async function handleRename(e: React.FormEvent) {
@@ -119,7 +126,9 @@ export default function CategoriesPage() {
     const id = editingId;
     const name = editingName.trim();
     if (!id) return;
-    if (validate(name, rules.required("Category name is required."))) return;
+    const err = validate(name, rules.required("Category name is required."));
+    if (err) { setRenameNameError(err); return; }
+    setRenameNameError(undefined);
     setRenaming(true);
     const r = await fetch(`/api/categories/${id}`, {
       method: "PUT",
@@ -170,6 +179,7 @@ export default function CategoriesPage() {
     <>
     {(saving || renaming) && <OverlayLoader text={renaming ? "Renaming…" : "Adding…"} />}
     {openingView && <OverlayLoader text="Opening…" />}
+    {isRefetching && <FloatingSpinner />}
     <div className="page-stack">
       <ConfirmDialog
         open={!!confirmState}
@@ -188,43 +198,67 @@ export default function CategoriesPage() {
           <p className="page-sub">{loading ? "Loading…" : `${total} categories in catalog`}</p>
         </div>
         {canWrite && (
-          <Button variant="primary" onClick={() => { setNewName(""); setAddOpen(true); }}>
+          <Button variant="primary" onClick={() => { setNewName(""); setAddNameError(undefined); setAddOpen(true); }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Category
           </Button>
         )}
       </div>
 
       {canWrite && (
-        <Modal open={addOpen} onClose={() => { if (!saving) setAddOpen(false); }} title="Add New Category">
-          <form onSubmit={handleAdd} className={styles.addForm} noValidate>
-            <Input
-              ref={inputRef}
-              type="text"
-              autoFocus
-              placeholder="Category name (e.g. Lab Glassware, Instruments…)"
-              value={newName}
-              onChange={(e) => { setNewName(e.target.value); }}
-              className={`${styles.addInput}`}
-            />
-            <Button type="submit" variant="primary" disabled={!newName.trim() || saving}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Category
-            </Button>
+        <Modal
+          open={addOpen}
+          onClose={() => { if (!saving) setAddOpen(false); }}
+          title="Add New Category"
+          variant="fullscreen"
+          footer={
+            <>
+              <Button type="button" variant="secondary" disabled={saving} onClick={() => setAddOpen(false)}>Cancel</Button>
+              <Button type="submit" form="add-category-form" variant="primary" disabled={saving}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Category
+              </Button>
+            </>
+          }
+        >
+          <form id="add-category-form" onSubmit={handleAdd} className={styles.addForm} noValidate>
+            <FormField label="Category Name" required error={addNameError}>
+              <Input
+                ref={inputRef}
+                type="text"
+                autoFocus
+                placeholder="Category name (e.g. Lab Glassware, Instruments…)"
+                value={newName}
+                onChange={(e) => { setNewName(e.target.value); setAddNameError(undefined); }}
+                className={`${styles.addInput}`}
+              />
+            </FormField>
           </form>
         </Modal>
       )}
 
       {canWrite && (
-        <Modal open={!!editingId} onClose={() => { if (!renaming) setEditingId(null); }} title="Rename Category">
-          <form onSubmit={handleRename} className={styles.addForm} noValidate>
-            <Input
-              type="text"
-              autoFocus
-              placeholder="Category name"
-              value={editingName}
-              onChange={(e) => setEditingName(e.target.value)}
-              className={`${styles.addInput}`}
-            />
-            <Button type="submit" variant="primary" disabled={!editingName.trim() || editingName.trim() === editingOriginalName || renaming}>Save</Button>
+        <Modal
+          open={!!editingId}
+          onClose={() => { if (!renaming) setEditingId(null); }}
+          title="Rename Category"
+          variant="fullscreen"
+          footer={
+            <>
+              <Button type="button" variant="secondary" disabled={renaming} onClick={() => setEditingId(null)}>Cancel</Button>
+              <Button type="submit" form="rename-category-form" variant="primary" disabled={renaming || editingName.trim() === editingOriginalName}>Save</Button>
+            </>
+          }
+        >
+          <form id="rename-category-form" onSubmit={handleRename} className={styles.addForm} noValidate>
+            <FormField label="Category Name" required error={renameNameError}>
+              <Input
+                type="text"
+                autoFocus
+                placeholder="Category name"
+                value={editingName}
+                onChange={(e) => { setEditingName(e.target.value); setRenameNameError(undefined); }}
+                className={`${styles.addInput}`}
+              />
+            </FormField>
           </form>
         </Modal>
       )}
@@ -243,19 +277,19 @@ export default function CategoriesPage() {
             />
             <SortSelect ariaLabel="Sort categories" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
-          {!loading && (
+          {data && (
             <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
-          <table className="table-base">
+          <table className="table-base" style={isRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
             <thead>
               <tr>
                 {COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
               ) : categories.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
@@ -294,13 +328,14 @@ export default function CategoriesPage() {
             </tbody>
           </table>
         </div>
-        {!loading && total > 0 && (
+        {data && total > 0 && (
           <Pagination
             total={total}
             page={page}
             showAll={showAll}
             onPage={setPage}
             label="categories"
+            loading={isRefetching}
           />
         )}
       </div>

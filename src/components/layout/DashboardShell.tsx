@@ -125,7 +125,7 @@ const allNavItems = NAV_GROUPS.flatMap((g) => g.items);
 const EXACT_MATCH_HREFS = new Set(["/dashboard", "/sales", "/purchases"]);
 
 function isMobile() {
-  return typeof window !== "undefined" && window.innerWidth < 768;
+  return typeof window !== "undefined" && window.innerWidth < 1024;
 }
 
 function ThemeToggle() {
@@ -260,7 +260,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const check = () => {
-      const mob = window.innerWidth < 768;
+      const mob = window.innerWidth < 1024;
       setMobile(mob);
       if (!mob) setSidebarOpen(true);
       else setSidebarOpen(false);

@@ -983,7 +983,7 @@ export default function InvoiceDetailPage() {
                   />
                 </FormField>
                 <div className={styles.paymentFormBtnRow}>
-                  <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment || !paymentForm.amount.trim()} loading={addingPayment}>
+                  <Button type="submit" variant="greenPrimary" size="sm" disabled={addingPayment} loading={addingPayment}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
                     Save Payment
                   </Button>
@@ -1424,8 +1424,8 @@ export default function InvoiceDetailPage() {
                   const tcRate = invoice.transportChargeGstRate ?? 0;
                   const tcHalfRate = tcRate / 2;
                   const tcHalfGst = tcGst / 2;
-                  const tcTd = (content: React.ReactNode, bold = false) => (
-                    <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", background: "var(--inv-bg)", fontWeight: bold ? 700 : undefined, color: bold ? "var(--inv-tx)" : "var(--inv-tx2)", whiteSpace: "nowrap" }}>
+                  const tcTd = (content: React.ReactNode, bold = false, align: "right" | "center" = "right") => (
+                    <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align, background: "var(--inv-bg)", fontWeight: bold ? 700 : undefined, color: bold ? "var(--inv-tx)" : "var(--inv-tx2)", whiteSpace: "nowrap" }}>
                       {content}
                     </td>
                   );
@@ -1436,8 +1436,8 @@ export default function InvoiceDetailPage() {
                       </td>
                       {tcTd(fmt(tcTaxable))}
                       {invoice.isInterState
-                        ? <>{tcTd(`${tcRate}%`)}{tcTd(fmt(tcGst))}</>
-                        : <>{tcTd(`${tcHalfRate}%`)}{tcTd(fmt(tcHalfGst))}{tcTd(`${tcHalfRate}%`)}{tcTd(fmt(tcHalfGst))}</>}
+                        ? <>{tcTd(`${tcRate}%`, false, "center")}{tcTd(fmt(tcGst))}</>
+                        : <>{tcTd(`${tcHalfRate}%`, false, "center")}{tcTd(fmt(tcHalfGst))}{tcTd(`${tcHalfRate}%`, false, "center")}{tcTd(fmt(tcHalfGst))}</>}
                       {tcTd(fmt(tcTaxable + tcGst), true)}
                     </tr>
                   );

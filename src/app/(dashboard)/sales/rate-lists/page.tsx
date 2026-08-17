@@ -13,7 +13,7 @@ import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
-import { OverlayLoader } from "@/components/ui/Spinner";
+import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
@@ -90,6 +90,8 @@ export default function RateListsPage() {
   const { data, loading, mutate } = useFetch<RateListListResponse>(apiUrl);
   const rateLists = data?.data ?? [];
   const total = data?.total ?? 0;
+  const showSkeleton = loading && !data;
+  const isRefetching = loading && !!data;
 
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
   const [previewTarget, setPreviewTarget] = useState<RateListDetail | null>(null);
@@ -163,7 +165,7 @@ export default function RateListsPage() {
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
         await mutate();
-        toast({ type: "success", title: "Deleted", message: `"${target.title}" was deleted.` });
+        toast({ type: "success", title: "Moved to bin", message: `"${target.title}" moved to bin. You can restore it within 30 days.` });
       } else {
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete rate list." });
       }
@@ -180,6 +182,7 @@ export default function RateListsPage() {
     {openingEditId && <OverlayLoader text="Opening editor…" />}
     {previewLoadingId && <OverlayLoader text="Generating preview…" />}
     {exportingId && <OverlayLoader text="Generating Excel file…" />}
+    {isRefetching && <FloatingSpinner />}
     {previewTarget && <RateListPrintArea rateList={previewTarget} settings={settings ?? null} />}
     {pdfPreviewUrl && (
       <PdfPreviewModal
@@ -191,9 +194,9 @@ export default function RateListsPage() {
     )}
     <ConfirmDialog
       open={!!deleteTarget}
-      title="Delete Rate List"
-      message={`Delete "${deleteTarget?.title}"? This cannot be undone.`}
-      confirmLabel="Delete"
+      title="Move to Bin"
+      message={`Move "${deleteTarget?.title}" to bin? You can restore it within 30 days.`}
+      confirmLabel="Move to Bin"
       variant="danger"
       loading={deleting}
       onConfirm={handleDelete}
@@ -205,7 +208,7 @@ export default function RateListsPage() {
         <div>
           <h1 className="page-title">Rate Lists</h1>
           <p className="page-sub">
-            {loading ? "Loading…" : `${total} rate list${total === 1 ? "" : "s"}`}
+            {showSkeleton ? "Loading…" : `${total} rate list${total === 1 ? "" : "s"}`}
           </p>
         </div>
         {canWrite && (<Button variant="primary" href="/sales/rate-lists/new">
@@ -227,17 +230,17 @@ export default function RateListsPage() {
             />
             <SortSelect ariaLabel="Sort rate lists" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
-          {!loading && (
+          {data && (
             <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
-          <table className="table-base">
+          <table className="table-base" style={isRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
             <thead>
               <tr>{COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr>
             </thead>
             <tbody>
-              {loading ? (
+              {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
               ) : rateLists.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
@@ -281,8 +284,8 @@ export default function RateListsPage() {
             </tbody>
           </table>
         </div>
-        {!loading && total > 0 && (
-          <Pagination total={total} page={page} showAll={showAll} onPage={setPage} label="rate lists" />
+        {data && total > 0 && (
+          <Pagination total={total} page={page} showAll={showAll} onPage={setPage} label="rate lists" loading={isRefetching} />
         )}
       </div>
     </div>

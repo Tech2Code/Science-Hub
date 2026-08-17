@@ -42,6 +42,22 @@
   color: var(--c-text-2);
 }
 
+/* FloatingSpinner — dims the whole page like a translucent scrim (not a
+   solid dark card) while a spinner stays fixed at the viewport center */
+.floatingSpinner {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: rgba(248, 250, 252, 0.6);
+}
+:global(.dark) .floatingSpinner {
+  background: rgba(2, 6, 23, 0.6);
+}
+
 /* PageLoader */
 .pageLoader {
   display: flex;

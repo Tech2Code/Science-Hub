@@ -10,6 +10,7 @@ import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { RateListFormBody } from "@/components/rateLists/RateListFormBody";
 import { toNum, calcRateListItem, makeRateListLineItemKey, type RateListLineItem } from "@/lib/rateListForm";
+import styles from "./rateListNew.module.css";
 
 export default function NewRateListPage() {
   const router = useRouter();
@@ -24,6 +25,10 @@ export default function NewRateListPage() {
   const [saving, setSaving] = useState(false);
 
   const visibleItemsError = itemsError && itemsErrorFor === items ? itemsError : undefined;
+  const missingTitle = !title.trim();
+  const nonEmptyItems = items.filter((i) => i.name.trim() || toNum(i.listRate) > 0);
+  const noItems = nonEmptyItems.length === 0;
+  const itemsIncomplete = !noItems && nonEmptyItems.some((i) => !i.name.trim() || !i.unit.trim() || !!validate(i.listRate, rules.required(), rules.nonNegativeNumber()));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -74,8 +79,6 @@ export default function NewRateListPage() {
     setSaving(false);
   }
 
-  const canSubmit = !saving && !!title.trim() && items.some((i) => i.name.trim());
-
   return (
     <>
     {saving && <OverlayLoader text="Creating rate list…" />}
@@ -97,16 +100,25 @@ export default function NewRateListPage() {
           setItems={setItems}
           itemsError={visibleItemsError}
           footer={
-            <div className="summary-actions">
-              <Button type="submit" variant="primary" size="full" disabled={!canSubmit}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                Create Rate List
-              </Button>
-              <Button variant="secondary" size="full" href="/sales/rate-lists">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                Cancel
-              </Button>
-            </div>
+            <>
+              {(missingTitle || noItems || itemsIncomplete) && (
+                <div className={styles.warningList}>
+                  {missingTitle && <p className={styles.warningItem}>• Enter a title</p>}
+                  {noItems && <p className={styles.warningItem}>• Add at least one item</p>}
+                  {!noItems && itemsIncomplete && <p className={styles.warningItem}>• Fill in Item, Unit &amp; List Rate for every row</p>}
+                </div>
+              )}
+              <div className="summary-actions">
+                <Button type="submit" variant="primary" size="full" disabled={saving || missingTitle || noItems || itemsIncomplete}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                  Create Rate List
+                </Button>
+                <Button variant="secondary" size="full" href="/sales/rate-lists">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  Cancel
+                </Button>
+              </div>
+            </>
           }
         />
       </form>

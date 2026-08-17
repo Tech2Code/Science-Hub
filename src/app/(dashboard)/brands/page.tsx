@@ -4,13 +4,13 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
-import { OverlayLoader } from "@/components/ui/Spinner";
+import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
-import { Input } from "@/components/ui/Input";
+import { Input, FormField } from "@/components/ui/Input";
 import { rules, validate } from "@/lib/validation";
 import { useFetch, bustCachePrefix } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
@@ -62,8 +62,10 @@ export default function BrandsPage() {
   const [openingView, setOpeningView] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [newName, setNewName] = useState("");
+  const [addNameError, setAddNameError] = useState<string | undefined>(undefined);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [renameNameError, setRenameNameError] = useState<string | undefined>(undefined);
   const [editingOriginalName, setEditingOriginalName] = useState("");
   const [editingUpdatedAt, setEditingUpdatedAt] = useState<string | undefined>(undefined);
   const [renaming, setRenaming] = useState(false);
@@ -85,11 +87,15 @@ export default function BrandsPage() {
   const { data, loading, mutate } = useFetch<BrandListResponse>(apiUrl);
   const brands = data?.data ?? [];
   const total = data?.total ?? 0;
+  const showSkeleton = loading && !data;
+  const isRefetching = loading && !!data;
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     const name = newName.trim();
-    if (validate(name, rules.required("Brand name is required."))) return;
+    const err = validate(name, rules.required("Brand name is required."));
+    if (err) { setAddNameError(err); return; }
+    setAddNameError(undefined);
     setSaving(true);
     const r = await fetch("/api/brands", {
       method: "POST",
@@ -113,13 +119,17 @@ export default function BrandsPage() {
     setEditingName(brand.name);
     setEditingOriginalName(brand.name);
     setEditingUpdatedAt(brand.updatedAt);
+    setRenameNameError(undefined);
   }
 
   async function handleRename(e: React.FormEvent) {
     e.preventDefault();
     const id = editingId;
     const name = editingName.trim();
-    if (!id || !name) return;
+    if (!id) return;
+    const err = validate(name, rules.required("Brand name is required."));
+    if (err) { setRenameNameError(err); return; }
+    setRenameNameError(undefined);
     setRenaming(true);
     const r = await fetch(`/api/brands/${id}`, {
       method: "PUT",
@@ -166,6 +176,7 @@ export default function BrandsPage() {
     <>
     {(saving || renaming) && <OverlayLoader text={renaming ? "Renaming…" : "Adding…"} />}
     {openingView && <OverlayLoader text="Opening…" />}
+    {isRefetching && <FloatingSpinner />}
     <div className="page-stack">
       <ConfirmDialog
         open={!!confirmState}
@@ -184,43 +195,67 @@ export default function BrandsPage() {
           <p className="page-sub">{loading ? "Loading…" : `${total} brands in catalog`}</p>
         </div>
         {canWrite && (
-          <Button variant="primary" onClick={() => { setNewName(""); setAddOpen(true); }}>
+          <Button variant="primary" onClick={() => { setNewName(""); setAddNameError(undefined); setAddOpen(true); }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Brand
           </Button>
         )}
       </div>
 
       {canWrite && (
-        <Modal open={addOpen} onClose={() => { if (!saving) setAddOpen(false); }} title="Add New Brand">
-          <form onSubmit={handleAdd} className={styles.addForm} noValidate>
-            <Input
-              ref={inputRef}
-              type="text"
-              autoFocus
-              placeholder="Brand name (e.g. Merck, Borosil…)"
-              value={newName}
-              onChange={(e) => { setNewName(e.target.value); }}
-              className={`${styles.addInput}`}
-            />
-            <Button type="submit" variant="primary" disabled={!newName.trim() || saving}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Brand
-            </Button>
+        <Modal
+          open={addOpen}
+          onClose={() => { if (!saving) setAddOpen(false); }}
+          title="Add New Brand"
+          variant="fullscreen"
+          footer={
+            <>
+              <Button type="button" variant="secondary" disabled={saving} onClick={() => setAddOpen(false)}>Cancel</Button>
+              <Button type="submit" form="add-brand-form" variant="primary" disabled={saving}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Brand
+              </Button>
+            </>
+          }
+        >
+          <form id="add-brand-form" onSubmit={handleAdd} className={styles.addForm} noValidate>
+            <FormField label="Brand Name" required error={addNameError}>
+              <Input
+                ref={inputRef}
+                type="text"
+                autoFocus
+                placeholder="Brand name (e.g. Merck, Borosil…)"
+                value={newName}
+                onChange={(e) => { setNewName(e.target.value); setAddNameError(undefined); }}
+                className={`${styles.addInput}`}
+              />
+            </FormField>
           </form>
         </Modal>
       )}
 
       {canWrite && (
-        <Modal open={!!editingId} onClose={() => { if (!renaming) setEditingId(null); }} title="Rename Brand">
-          <form onSubmit={handleRename} className={styles.addForm} noValidate>
-            <Input
-              type="text"
-              autoFocus
-              placeholder="Brand name"
-              value={editingName}
-              onChange={(e) => setEditingName(e.target.value)}
-              className={`${styles.addInput}`}
-            />
-            <Button type="submit" variant="primary" disabled={!editingName.trim() || editingName.trim() === editingOriginalName || renaming}>Save</Button>
+        <Modal
+          open={!!editingId}
+          onClose={() => { if (!renaming) setEditingId(null); }}
+          title="Rename Brand"
+          variant="fullscreen"
+          footer={
+            <>
+              <Button type="button" variant="secondary" disabled={renaming} onClick={() => setEditingId(null)}>Cancel</Button>
+              <Button type="submit" form="rename-brand-form" variant="primary" disabled={renaming || editingName.trim() === editingOriginalName}>Save</Button>
+            </>
+          }
+        >
+          <form id="rename-brand-form" onSubmit={handleRename} className={styles.addForm} noValidate>
+            <FormField label="Brand Name" required error={renameNameError}>
+              <Input
+                type="text"
+                autoFocus
+                placeholder="Brand name"
+                value={editingName}
+                onChange={(e) => { setEditingName(e.target.value); setRenameNameError(undefined); }}
+                className={`${styles.addInput}`}
+              />
+            </FormField>
           </form>
         </Modal>
       )}
@@ -239,19 +274,19 @@ export default function BrandsPage() {
             />
             <SortSelect ariaLabel="Sort brands" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
-          {!loading && (
+          {data && (
             <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
-          <table className="table-base">
+          <table className="table-base" style={isRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
             <thead>
               <tr>
                 {COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
               ) : brands.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
@@ -290,13 +325,14 @@ export default function BrandsPage() {
             </tbody>
           </table>
         </div>
-        {!loading && total > 0 && (
+        {data && total > 0 && (
           <Pagination
             total={total}
             page={page}
             showAll={showAll}
             onPage={setPage}
             label="brands"
+            loading={isRefetching}
           />
         )}
       </div>

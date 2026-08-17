@@ -522,8 +522,8 @@ export default function AdminPage() {
       <div id="profile" {...animateSection(0, "card")}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>My Profile</h2>
-          {!editingProfile && !profileLoading && (
-            <Button variant="secondary" size="sm" onClick={() => { profileDirty.markClean(profileForm); setEditingProfile(true); setChangingPw(false); setProfileMsg(null); setProfileFieldErrors({}); }}>
+          {!profileLoading && (
+            <Button variant="secondary" size="sm" onClick={() => { profileDirty.markClean(profileForm); setEditingProfile(true); setProfileMsg(null); setProfileFieldErrors({}); }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               Edit Profile
             </Button>
@@ -543,22 +543,6 @@ export default function AdminPage() {
                 </div>
               </div>
             </div>
-          ) : editingProfile ? (
-            <form onSubmit={saveProfile} className={styles.formCol} noValidate>
-              <div className={styles.fg2}>
-                <FormField label="Full Name" required error={profileFieldErrors.name}>
-                  <Input className={`${styles.inp} ${profileFieldErrors.name ? styles.inpError : ""}`} value={profileForm.name} onChange={e => { setProfileForm(p => ({ ...p, name: e.target.value })); setProfileFieldErrors(prev => ({ ...prev, name: undefined })); }} />
-                </FormField>
-                <FormField label="Login Email — used to sign in to this app" required error={profileFieldErrors.email}>
-                  <Input className={`${styles.inp} ${profileFieldErrors.email ? styles.inpError : ""}`} type="email" value={profileForm.email} onChange={e => { setProfileForm(p => ({ ...p, email: e.target.value })); setProfileFieldErrors(prev => ({ ...prev, email: undefined })); }} />
-                </FormField>
-              </div>
-              {profileMsg && <Msg m={profileMsg} />}
-              <div className={styles.formActions}>
-                <Button type="button" variant="secondary" size="sm" onClick={() => { setEditingProfile(false); setProfileForm({ name: profile!.name, email: profile!.email }); setProfileFieldErrors({}); }}>Cancel</Button>
-                <Button type="submit" variant="primary" size="sm" disabled={profileSaving || !profileDirty.isDirty || !profileForm.name.trim() || !profileForm.email.trim()}>Save Changes</Button>
-              </div>
-            </form>
           ) : (
             <div className={styles.profileRow}>
               <div className={styles.avatarWrapRelative}>
@@ -595,35 +579,66 @@ export default function AdminPage() {
               <div className={styles.footerTitle}>Password</div>
               <div className={styles.footerSub}>Change your login password</div>
             </div>
-            {!changingPw && (
-              <Button variant="secondary" size="sm" onClick={() => { setChangingPw(true); setEditingProfile(false); setPwMsg(null); setPwFieldErrors({}); }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                Change Password
-              </Button>
-            )}
+            <Button variant="secondary" size="sm" onClick={() => { setChangingPw(true); setPwMsg(null); setPwFieldErrors({}); }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              Change Password
+            </Button>
           </div>
-          {changingPw && (
-            <form onSubmit={savePassword} className={styles.pwFormSpacing} noValidate>
-              <div className={styles.fg3pw}>
-                <FormField label="Current Password" required error={pwFieldErrors.current}>
-                  <Input className={`${styles.inp} ${pwFieldErrors.current ? styles.inpError : ""}`} type="password" value={pwForm.current} onChange={e => { setPwForm(p => ({ ...p, current: e.target.value })); setPwFieldErrors(prev => ({ ...prev, current: undefined })); }} placeholder="••••••••" autoComplete="current-password" />
-                </FormField>
-                <FormField label="New Password" required error={pwFieldErrors.next}>
-                  <Input className={`${styles.inp} ${pwFieldErrors.next ? styles.inpError : ""}`} type="password" value={pwForm.next} onChange={e => { setPwForm(p => ({ ...p, next: e.target.value })); setPwFieldErrors(prev => ({ ...prev, next: undefined })); }} placeholder="min. 8 characters" autoComplete="new-password" />
-                </FormField>
-                <FormField label="Confirm Password" required error={pwFieldErrors.confirm}>
-                  <Input className={`${styles.inp} ${pwFieldErrors.confirm ? styles.inpError : ""}`} type="password" value={pwForm.confirm} onChange={e => { setPwForm(p => ({ ...p, confirm: e.target.value })); setPwFieldErrors(prev => ({ ...prev, confirm: undefined })); }} placeholder="repeat new password" autoComplete="new-password" />
-                </FormField>
-              </div>
-              {pwMsg && <Msg m={pwMsg} />}
-              <div className={styles.formActions}>
-                <Button type="button" variant="secondary" size="sm" onClick={() => { setChangingPw(false); setPwForm({ current: "", next: "", confirm: "" }); setPwMsg(null); setPwFieldErrors({}); }}>Cancel</Button>
-                <Button type="submit" variant="primary" size="sm" disabled={pwSaving || !pwForm.current.trim() || !pwForm.next.trim() || !pwForm.confirm.trim()}>Update Password</Button>
-              </div>
-            </form>
-          )}
         </div>
       </div>
+
+      <Modal
+        open={editingProfile}
+        title="Edit Profile"
+        variant="fullscreen"
+        onClose={() => { if (profileSaving) return; setEditingProfile(false); setProfileForm({ name: profile!.name, email: profile!.email }); setProfileFieldErrors({}); setProfileMsg(null); }}
+        footer={
+          <>
+            <Button type="button" variant="secondary" size="sm" onClick={() => { setEditingProfile(false); setProfileForm({ name: profile!.name, email: profile!.email }); setProfileFieldErrors({}); setProfileMsg(null); }}>Cancel</Button>
+            <Button type="submit" form="edit-profile-form" variant="primary" size="sm" disabled={profileSaving || !profileDirty.isDirty || !profileForm.name.trim() || !profileForm.email.trim()}>Save Changes</Button>
+          </>
+        }
+      >
+        <form id="edit-profile-form" onSubmit={saveProfile} className={styles.formCol} noValidate>
+          <div className={styles.fg2}>
+            <FormField label="Full Name" required error={profileFieldErrors.name}>
+              <Input className={`${styles.inp} ${profileFieldErrors.name ? styles.inpError : ""}`} value={profileForm.name} onChange={e => { setProfileForm(p => ({ ...p, name: e.target.value })); setProfileFieldErrors(prev => ({ ...prev, name: undefined })); }} />
+            </FormField>
+            <FormField label="Login Email — used to sign in to this app" required error={profileFieldErrors.email}>
+              <Input className={`${styles.inp} ${profileFieldErrors.email ? styles.inpError : ""}`} type="email" value={profileForm.email} onChange={e => { setProfileForm(p => ({ ...p, email: e.target.value })); setProfileFieldErrors(prev => ({ ...prev, email: undefined })); }} />
+            </FormField>
+          </div>
+          {profileMsg && <Msg m={profileMsg} />}
+        </form>
+      </Modal>
+
+      <Modal
+        open={changingPw}
+        title="Change Password"
+        variant="fullscreen"
+        onClose={() => { if (pwSaving) return; setChangingPw(false); setPwForm({ current: "", next: "", confirm: "" }); setPwMsg(null); setPwFieldErrors({}); }}
+        footer={
+          <>
+            <Button type="button" variant="secondary" size="sm" onClick={() => { setChangingPw(false); setPwForm({ current: "", next: "", confirm: "" }); setPwMsg(null); setPwFieldErrors({}); }}>Cancel</Button>
+            <Button type="submit" form="change-password-form" variant="primary" size="sm" disabled={pwSaving}>Update Password</Button>
+          </>
+        }
+      >
+        <form id="change-password-form" onSubmit={savePassword} className={styles.formCol} noValidate>
+          <div className={styles.fg2}>
+            <FormField label="Current Password" required error={pwFieldErrors.current}>
+              <Input className={`${styles.inp} ${pwFieldErrors.current ? styles.inpError : ""}`} type="password" value={pwForm.current} onChange={e => { setPwForm(p => ({ ...p, current: e.target.value })); setPwFieldErrors(prev => ({ ...prev, current: undefined })); }} placeholder="••••••••" autoComplete="current-password" />
+            </FormField>
+            <FormField label="New Password" required error={pwFieldErrors.next}>
+              <Input className={`${styles.inp} ${pwFieldErrors.next ? styles.inpError : ""}`} type="password" value={pwForm.next} onChange={e => { setPwForm(p => ({ ...p, next: e.target.value })); setPwFieldErrors(prev => ({ ...prev, next: undefined })); }} placeholder="min. 8 characters" autoComplete="new-password" />
+            </FormField>
+            <FormField label="Confirm Password" required error={pwFieldErrors.confirm}>
+              <Input className={`${styles.inp} ${pwFieldErrors.confirm ? styles.inpError : ""}`} type="password" value={pwForm.confirm} onChange={e => { setPwForm(p => ({ ...p, confirm: e.target.value })); setPwFieldErrors(prev => ({ ...prev, confirm: undefined })); }} placeholder="repeat new password" autoComplete="new-password" />
+            </FormField>
+          </div>
+          {pwMsg && <Msg m={pwMsg} />}
+        </form>
+      </Modal>
 
       {/* ── User Management ────────────────────────────────────── */}
       <div id="users" {...animateSection(1, "card")}>
@@ -641,10 +656,16 @@ export default function AdminPage() {
         <Modal
           open={addOpen}
           title="New User"
-          maxWidth="40rem"
+          variant="fullscreen"
           onClose={() => { if (addSaving) return; setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}
+          footer={
+            <>
+              <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}>Cancel</Button>
+              <Button type="submit" form="add-user-form" variant="primary" size="sm" disabled={addSaving || !!addFieldErrors.name || !!addFieldErrors.email || !!addFieldErrors.password || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
+            </>
+          }
         >
-          <form onSubmit={addUser} className={styles.formColTight} noValidate>
+          <form id="add-user-form" onSubmit={addUser} className={styles.formColTight} noValidate>
             <div className={styles.fg2}>
               <FormField label="Full Name" required error={addFieldErrors.name}>
                 <Input className={`${styles.inp} ${addFieldErrors.name ? styles.inpError : ""}`} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} placeholder="Jane Smith" />
@@ -676,20 +697,22 @@ export default function AdminPage() {
               </FormField>
             </div>
             {addMsg && <Msg m={addMsg} />}
-            <div className={styles.formActions}>
-              <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}>Cancel</Button>
-              <Button type="submit" variant="primary" size="sm" disabled={addSaving || !!addFieldErrors.name || !!addFieldErrors.email || !!addFieldErrors.password || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
-            </div>
           </form>
         </Modal>
 
         <Modal
           open={!!editUser}
           title={`Edit: ${editUser?.name ?? ""}`}
-          maxWidth="40rem"
+          variant="fullscreen"
           onClose={() => { if (editSaving) return; setEditUser(null); setEditMsg(null); setEditFieldErrors({}); }}
+          footer={
+            <>
+              <Button type="button" variant="secondary" size="sm" onClick={() => { setEditUser(null); setEditMsg(null); setEditFieldErrors({}); }}>Cancel</Button>
+              <Button type="submit" form="edit-user-form" variant="primary" size="sm" disabled={editSaving || !editFormDirty.isDirty || !editForm.name.trim() || !editForm.email.trim()}>Save Changes</Button>
+            </>
+          }
         >
-          <form onSubmit={saveEdit} className={styles.formCol} noValidate>
+          <form id="edit-user-form" onSubmit={saveEdit} className={styles.formCol} noValidate>
             <div className={styles.fg3}>
               <FormField label="Full Name" required error={editFieldErrors.name}>
                 <Input className={`${styles.inp} ${editFieldErrors.name ? styles.inpError : ""}`} value={editForm.name} onChange={e => { setEditForm(p => ({ ...p, name: e.target.value })); setEditFieldErrors(prev => ({ ...prev, name: undefined })); }} />
@@ -714,10 +737,6 @@ export default function AdminPage() {
               </div>
             </div>
             {editMsg && <Msg m={editMsg} />}
-            <div className={styles.formActions}>
-              <Button type="button" variant="secondary" size="sm" onClick={() => { setEditUser(null); setEditMsg(null); setEditFieldErrors({}); }}>Cancel</Button>
-              <Button type="submit" variant="primary" size="sm" disabled={editSaving || !editFormDirty.isDirty || !editForm.name.trim() || !editForm.email.trim()}>Save Changes</Button>
-            </div>
           </form>
         </Modal>
 
@@ -845,7 +864,7 @@ export default function AdminPage() {
             <colgroup>
               <col className={styles.colUser} />
               <col className={styles.colAction} />
-              <col />
+              <col className={styles.colDetails} />
               <col className={styles.colTime} />
               <col className={styles.colLogActions} />
             </colgroup>
@@ -890,7 +909,9 @@ export default function AdminPage() {
                     </div>
                   </td>
                   <td data-label="Action"><ActionBadge action={log.action} /></td>
-                  <td data-mobile-full data-label="Details" className={styles.logDetails}>{log.details}</td>
+                  <td data-mobile-full data-label="Details" className={styles.logDetails} title={log.details}>
+                    <span className={styles.logDetailsText}>{log.details}</span>
+                  </td>
                   <td data-label="Time" className={styles.logTime}>{fmtTime(log.createdAt)}</td>
                   <td data-label="Actions">
                     <Button variant="dangerOutline" size="sm" onClick={() => setLogDeleteConfirm(log)}>
@@ -914,7 +935,11 @@ export default function AdminPage() {
                 variant="secondary" size="sm"
                 disabled={logsLoading || logsPage <= 1}
                 loading={logsLoading && logsNavDirection === "prev"}
-                onClick={() => { setLogsNavDirection("prev"); loadLogs(logsPage - 1, logsFilter, logsSearch.trim()); }}
+                onClick={() => {
+                  setLogsNavDirection("prev");
+                  loadLogs(logsPage - 1, logsFilter, logsSearch.trim());
+                  document.getElementById("activity-log")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
                 Prev
@@ -923,7 +948,11 @@ export default function AdminPage() {
                 variant="secondary" size="sm"
                 disabled={logsLoading || logsPage >= logsTotalPages}
                 loading={logsLoading && logsNavDirection === "next"}
-                onClick={() => { setLogsNavDirection("next"); loadLogs(logsPage + 1, logsFilter, logsSearch.trim()); }}
+                onClick={() => {
+                  setLogsNavDirection("next");
+                  loadLogs(logsPage + 1, logsFilter, logsSearch.trim());
+                  document.getElementById("activity-log")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
               >
                 Next
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>

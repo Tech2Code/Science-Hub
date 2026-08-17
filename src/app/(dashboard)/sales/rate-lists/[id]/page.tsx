@@ -250,7 +250,7 @@ export default function RateListDetailPage() {
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
         await invalidateCachedPdf("rate-list", rateList.id);
-        toast({ type: "success", title: "Deleted", message: `"${rateList.title}" was deleted.` });
+        toast({ type: "success", title: "Moved to bin", message: `"${rateList.title}" moved to bin. You can restore it within 30 days.` });
         router.push("/sales/rate-lists");
       } else {
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete rate list." });
@@ -301,17 +301,28 @@ export default function RateListDetailPage() {
 
     <ConfirmDialog
       open={confirmDelete}
-      title="Delete Rate List"
-      message={`Delete "${rateList.title}"? This cannot be undone.`}
-      confirmLabel="Delete"
+      title="Move to Bin"
+      message={`Move "${rateList.title}" to bin? You can restore it within 30 days.`}
+      confirmLabel="Move to Bin"
       variant="danger"
       loading={deleting}
       onConfirm={handleDelete}
       onCancel={() => { if (!deleting) setConfirmDelete(false); }}
     />
 
-    <Modal open={emailModalOpen} title="Email Rate List" onClose={() => { if (!sendingEmail) setEmailModalOpen(false); }}>
-      <form onSubmit={handleSendEmail} noValidate>
+    <Modal
+      open={emailModalOpen}
+      title="Email Rate List"
+      onClose={() => { if (!sendingEmail) setEmailModalOpen(false); }}
+      variant="fullscreen"
+      footer={
+        <>
+          <Button type="button" variant="secondary" disabled={sendingEmail} onClick={() => setEmailModalOpen(false)}>Cancel</Button>
+          <Button type="submit" form="rate-list-email-form" variant="primary" loading={sendingEmail} disabled={sendingEmail}>Send</Button>
+        </>
+      }
+    >
+      <form id="rate-list-email-form" onSubmit={handleSendEmail} noValidate>
         <FormField label="Recipient Email" required error={emailToError}>
           <Input
             type="email"
@@ -322,10 +333,6 @@ export default function RateListDetailPage() {
             disabled={sendingEmail}
           />
         </FormField>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
-          <Button type="button" variant="secondary" disabled={sendingEmail} onClick={() => setEmailModalOpen(false)}>Cancel</Button>
-          <Button type="submit" variant="primary" loading={sendingEmail} disabled={sendingEmail}>Send</Button>
-        </div>
       </form>
     </Modal>
 

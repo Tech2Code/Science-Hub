@@ -23,7 +23,7 @@
 
 /* Match Input.module.css's breakpoint — keep the date trigger at its
    original, more compact size on phone-sized screens. */
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .trigger {
     padding: 0.5rem 0.75rem;
     font-size: 0.875rem;

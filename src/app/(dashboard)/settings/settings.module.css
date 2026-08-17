@@ -236,30 +236,21 @@
   margin-bottom: 1rem;
 }
 
-.emailFormActions {
+.clearGroupBody {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.clearGroup {
-  display: flex;
-  align-items: center;
+  justify-content: flex-end;
   gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--c-border);
 }
 
 .clearConfirmText {
   font-size: 0.8rem;
   color: var(--c-danger, #dc2626);
   font-weight: 500;
-}
-
-.saveCancelGroup {
-  display: flex;
-  gap: 0.5rem;
-  margin-left: auto;
 }
 
 .formGrid {
@@ -285,11 +276,4 @@
   font-size: 0.8125rem;
   line-height: 1.6;
   color: var(--c-text-2);
-}
-
-.formActionsRow {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 1rem;
 }

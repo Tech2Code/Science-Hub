@@ -36,6 +36,17 @@ export function OverlayLoader({ text }: { text: string }) {
   );
 }
 
+/* ── Bare spinner fixed to the viewport center, no backdrop/card — for a
+   background refetch where the content itself (e.g. a dimmed table) already
+   signals "loading", so a full dark OverlayLoader would be too heavy ── */
+export function FloatingSpinner() {
+  return (
+    <div className={styles.floatingSpinner}>
+      <Spinner size="lg" />
+    </div>
+  );
+}
+
 /* ── Centered full-area loading state used by every page ────────── */
 export function PageLoader() {
   return (

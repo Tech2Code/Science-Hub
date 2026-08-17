@@ -32,23 +32,32 @@ async function getPurchaseSummary() {
   return result;
 }
 
-async function getPurchaseOutstanding(startDate?: string, endDate?: string) {
+async function getPurchaseOutstanding(startDate: string | undefined, endDate: string | undefined, skip: number, take: number) {
   const now = new Date();
   const dateFilter: { gte?: Date; lte?: Date } = {};
   if (startDate) dateFilter.gte = new Date(startDate);
   if (endDate) dateFilter.lte = new Date(endDate);
 
-  const bills = await prisma.purchaseBill.findMany({
-    where: {
-      deletedAt: null,
-      status: { in: ["unpaid", "partial"] },
-      ...(Object.keys(dateFilter).length > 0 && { billDate: dateFilter }),
-    },
-    orderBy: { billDate: "asc" },
-    include: { vendor: { select: { id: true, name: true } } },
-  });
+  const where = {
+    deletedAt: null,
+    status: { in: ["unpaid", "partial"] },
+    ...(Object.keys(dateFilter).length > 0 && { billDate: dateFilter }),
+  };
 
-  return bills.map((b) => {
+  const [bills, total, agg, overdueCount] = await Promise.all([
+    prisma.purchaseBill.findMany({
+      where,
+      orderBy: { billDate: "asc" as const },
+      skip,
+      take,
+      include: { vendor: { select: { id: true, name: true } } },
+    }),
+    prisma.purchaseBill.count({ where }),
+    prisma.purchaseBill.aggregate({ where, _sum: { total: true, paidAmount: true } }),
+    prisma.purchaseBill.count({ where: { ...where, dueDate: { lt: now } } }),
+  ]);
+
+  const data = bills.map((b) => {
     const balance = b.total - b.paidAmount;
     const daysOverdue = b.dueDate
       ? Math.floor((now.getTime() - new Date(b.dueDate).getTime()) / 86400000)
@@ -64,6 +73,8 @@ async function getPurchaseOutstanding(startDate?: string, endDate?: string) {
       vendor: b.vendor, total: b.total, paidAmount: b.paidAmount, balance, status: b.status, aging,
     };
   });
+
+  return { data, total, totalBalance: (agg._sum.total ?? 0) - (agg._sum.paidAmount ?? 0), overdueCount };
 }
 
 async function getPurchaseByCategory() {
@@ -160,7 +171,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (type === "summary")      return NextResponse.json(await getPurchaseSummary());
-    if (type === "outstanding")  return NextResponse.json(await getPurchaseOutstanding(startDate, endDate));
+    if (type === "outstanding") {
+      const { skip, take } = parsePageParams(searchParams, 2000);
+      return NextResponse.json(await getPurchaseOutstanding(startDate, endDate, skip, take));
+    }
     if (type === "category")     return NextResponse.json(await getPurchaseByCategory());
     if (type === "stock-ledger") {
       const search = searchParams.get("search") ?? undefined;

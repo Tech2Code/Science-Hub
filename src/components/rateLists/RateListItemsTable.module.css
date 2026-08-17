@@ -93,6 +93,7 @@
 }
 .thRight { composes: th; text-align: right; }
 .thCenter { composes: th; text-align: center; }
+.thRequired { color: var(--c-red); }
 
 .itemRow { border-bottom: 1px solid var(--c-border); }
 

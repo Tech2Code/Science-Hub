@@ -27,6 +27,9 @@ interface ButtonProps {
   fullScreen?: boolean;
   onClick?: (e: React.MouseEvent) => void;
   type?: "button" | "submit" | "reset";
+  // References a <form> by id when this button lives outside that form's DOM
+  // subtree (e.g. a modal footer pinned outside the scrollable form body).
+  form?: string;
   children: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;
@@ -44,6 +47,7 @@ export function Button({
   fullScreen = false,
   onClick,
   type = "button",
+  form,
   children,
   className,
   style,
@@ -89,6 +93,7 @@ export function Button({
       {overlay}
       <button
         type={type}
+        form={form}
         disabled={disabled || loading}
         onClick={onClick}
         className={cls}

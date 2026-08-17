@@ -268,7 +268,37 @@ export function BillDetailsCard({
         )}
       </FormField>
 
-      <Modal open={showVendorCreate} onClose={closeVendorCreate} title={ivEditId ? "Edit Vendor" : "Add New Vendor"} maxWidth="34rem">
+      <Modal
+        open={showVendorCreate}
+        onClose={closeVendorCreate}
+        title={ivEditId ? "Edit Vendor" : "Add New Vendor"}
+        variant="fullscreen"
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={closeVendorCreate}>Dismiss</Button>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={
+                ivSaving ||
+                (!!ivEditId && (
+                  !ivDirty.isDirty ||
+                  !ivForm.name.trim() || !ivForm.address.trim() ||
+                  !ivForm.city.trim() || !ivForm.state.trim() || !ivForm.pincode.trim()
+                ))
+              }
+              onClick={handleCreateInlineVendor}
+            >
+              {ivSaving ? "Saving…" : (
+                <span className={styles.inlineVendorSubmitLabel}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  {ivEditId ? "Save Changes" : ivDontSave ? "Use For This Bill Only" : "Save & Use This Vendor"}
+                </span>
+              )}
+            </Button>
+          </>
+        }
+      >
         <p className={styles.modalSub}>{ivEditId ? "Update this vendor's details" : "Not in your list — fill details and create"}</p>
 
         {ivError && <div className={styles.inlineVendorError}>{ivError}</div>}
@@ -326,28 +356,6 @@ export function BillDetailsCard({
             Just for this bill — don&apos;t save to my vendor list
           </label>
         )}
-
-        <div className={styles.modalActions}>
-          <Button type="button" variant="secondary" onClick={closeVendorCreate}>Dismiss</Button>
-          <Button
-            type="button"
-            variant="primary"
-            disabled={
-              ivSaving ||
-              (!!ivEditId && !ivDirty.isDirty) ||
-              !ivForm.name.trim() || !ivForm.address.trim() ||
-              !ivForm.city.trim() || !ivForm.state.trim() || !ivForm.pincode.trim()
-            }
-            onClick={handleCreateInlineVendor}
-          >
-            {ivSaving ? "Saving…" : (
-              <span className={styles.inlineVendorSubmitLabel}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                {ivEditId ? "Save Changes" : ivDontSave ? "Use For This Bill Only" : "Save & Use This Vendor"}
-              </span>
-            )}
-          </Button>
-        </div>
       </Modal>
 
       <div className="form-grid-3">

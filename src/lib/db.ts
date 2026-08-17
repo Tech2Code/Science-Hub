@@ -345,21 +345,30 @@ export async function getReportSummary() {
   };
 }
 
-export async function getReportOutstanding(startDate?: string, endDate?: string) {
+export async function getReportOutstanding(startDate: string | undefined, endDate: string | undefined, skip: number, take: number) {
   const dateFilter: { gte?: Date; lte?: Date } = {};
   if (startDate) dateFilter.gte = new Date(startDate);
   if (endDate) dateFilter.lte = new Date(endDate);
 
-  const invoices = await prisma.invoice.findMany({
-    where: {
-      deletedAt: null,
-      status: { in: ["unpaid", "partial"] },
-      ...(Object.keys(dateFilter).length > 0 && { date: dateFilter }),
-    },
-    orderBy: { date: "asc" },
-    include: { customer: { select: { id: true, name: true } } },
-  });
-  return invoices.map((inv) => ({
+  const where = {
+    deletedAt: null,
+    status: { in: ["unpaid", "partial"] },
+    ...(Object.keys(dateFilter).length > 0 && { date: dateFilter }),
+  };
+
+  const [invoices, total, agg] = await Promise.all([
+    prisma.invoice.findMany({
+      where,
+      orderBy: { date: "asc" as const },
+      skip,
+      take,
+      include: { customer: { select: { id: true, name: true } } },
+    }),
+    prisma.invoice.count({ where }),
+    prisma.invoice.aggregate({ where, _sum: { total: true, paidAmount: true } }),
+  ]);
+
+  const data = invoices.map((inv) => ({
     id: inv.id,
     invoiceNumber: inv.invoiceNumber,
     date: inv.date,
@@ -371,6 +380,8 @@ export async function getReportOutstanding(startDate?: string, endDate?: string)
     paidAmount: inv.paidAmount,
     balance: inv.total - inv.paidAmount,
   }));
+
+  return { data, total, totalBalance: (agg._sum.total ?? 0) - (agg._sum.paidAmount ?? 0) };
 }
 
 export async function getReportStock() {

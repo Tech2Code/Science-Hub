@@ -15,7 +15,7 @@ import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenera
 import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { Cell, type Column } from "@/components/ui/Table";
-import { OverlayLoader } from "@/components/ui/Spinner";
+import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
 import { formatDate } from "@/lib/formatDate";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
@@ -215,6 +215,8 @@ export default function InvoicesPage() {
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
   const invoices = data?.data ?? [];
   const total = data?.total ?? 0;
+  const showSkeleton = loading && !data;
+  const isRefetching = loading && !!data;
 
   const totalInvoiced = stats?.totalInvoiced ?? 0;
   const totalPaid     = stats?.totalPaid ?? 0;
@@ -258,6 +260,7 @@ export default function InvoicesPage() {
     />
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
     {openingEditId && <OverlayLoader text="Opening editor…" />}
+    {isRefetching && <FloatingSpinner />}
 
     <PdfCopyDialog
       open={!!pdfDialogInvoice}
@@ -281,7 +284,7 @@ export default function InvoicesPage() {
         <div>
           <h1 className="page-title">Invoices</h1>
           <p className="page-sub">
-            {loading ? "Loading…" : `${total} invoice${total === 1 ? "" : "s"}`}
+            {showSkeleton ? "Loading…" : `${total} invoice${total === 1 ? "" : "s"}`}
           </p>
         </div>
         {canWrite && (<Button variant="primary" href="/sales/invoices/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>)}
@@ -334,19 +337,19 @@ export default function InvoicesPage() {
               onYearChange={(v) => { setYear(v); setPage(1); }}
             />
           </div>
-          {!loading && (
+          {data && (
             <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
-          <table className="table-base">
+          <table className="table-base" style={isRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
             <thead>
               <tr>
                 {COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
               ) : invoices.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
@@ -425,13 +428,14 @@ export default function InvoicesPage() {
             </tbody>
           </table>
         </div>
-        {!loading && total > 0 && (
+        {data && total > 0 && (
           <Pagination
             total={total}
             page={page}
             showAll={showAll}
             onPage={setPage}
             label="invoices"
+            loading={isRefetching}
           />
         )}
       </div>

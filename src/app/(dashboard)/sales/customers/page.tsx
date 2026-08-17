@@ -13,7 +13,7 @@ import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
-import { OverlayLoader } from "@/components/ui/Spinner";
+import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import styles from "./customersList.module.css";
@@ -79,6 +79,8 @@ export default function CustomersPage() {
   const { data, loading, mutate } = useFetch<CustomerListResponse>(apiUrl);
   const customers = data?.data ?? [];
   const total = data?.total ?? 0;
+  const showSkeleton = loading && !data;
+  const isRefetching = loading && !!data;
 
   function handleDelete(id: string, name: string) {
     setConfirmState({
@@ -105,6 +107,7 @@ export default function CustomersPage() {
   return (
     <div className="page-stack">
       {openingEditId && <OverlayLoader text="Opening editor…" />}
+      {isRefetching && <FloatingSpinner />}
       <ConfirmDialog
         open={!!confirmState}
         title={confirmState?.title ?? ""}
@@ -139,19 +142,19 @@ export default function CustomersPage() {
             />
             <SortSelect ariaLabel="Sort customers" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
-          {!loading && (
+          {data && (
             <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
-          <table className="table-base">
+          <table className="table-base" style={isRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
             <thead>
               <tr>
                 {COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
               ) : customers.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
@@ -181,13 +184,14 @@ export default function CustomersPage() {
             </tbody>
           </table>
         </div>
-        {!loading && total > 0 && (
+        {data && total > 0 && (
           <Pagination
             total={total}
             page={page}
             showAll={showAll}
             onPage={setPage}
             label="customers"
+            loading={isRefetching}
           />
         )}
       </div>

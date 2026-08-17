@@ -90,13 +90,14 @@ export const NUMBER_FORMATS: Record<NumberFormatId, NumberFormatDef> = {
   },
 };
 
-// Default (when nothing's configured yet) is "seq_fy" — "18/2026-27", no
-// prefix, no zero-padding — since that's the numbering scheme this
-// business already used before adopting this app's own "SH-2026-27-0001"
-// layout, and new businesses onboarding cold are just as likely to expect
-// the plain "number/year" style already common outside this app.
+// Default (when nothing's configured yet) is "prefix_fy_seq" —
+// "SH-2026-27-0001" — this app's own layout, auto-prefixed from the
+// business's name (see deriveDefaultPrefix). A business can switch to
+// "seq_fy"/"prefix_seq_fy" any time from Settings -> Document Numbering;
+// once a format is explicitly chosen there, that choice is what's stored
+// in BusinessSettings and this fallback never overrides it.
 export function resolveNumberFormat(id: string | null | undefined): NumberFormatDef {
-  return NUMBER_FORMATS[id as NumberFormatId] ?? NUMBER_FORMATS.seq_fy;
+  return NUMBER_FORMATS[id as NumberFormatId] ?? NUMBER_FORMATS.prefix_fy_seq;
 }
 
 // Prisma `StringFilter`-shaped — pass straight into `where: { field: ... }`.

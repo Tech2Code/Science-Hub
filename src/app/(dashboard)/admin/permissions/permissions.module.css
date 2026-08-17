@@ -34,21 +34,33 @@
 }
 
 .searchInput {
-  flex: 1 1 12rem;
+  flex: 1 1 8rem;
   min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--c-border);
   border-radius: var(--c-radius-sm);
   background: var(--c-bg-card);
   color: var(--c-text);
   font-size: 0.875rem;
+  line-height: 1.4;
   outline: none;
   transition: border-color 0.2s;
+}
+
+.searchInput::-webkit-search-decoration,
+.searchInput::-webkit-search-cancel-button,
+.searchInput::-webkit-search-results-button,
+.searchInput::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 @media (max-width: 480px) {
   .toolbar { flex-direction: column; align-items: stretch; }
   .toolbar .roleWrap { max-width: none; }
+  .toolbar .searchInput { flex: 0 0 auto; }
 }
 
 .searchInput:focus {

@@ -191,7 +191,7 @@ export function validateUserInput(
 // (e.g. a NEXTAUTH_SECRET mismatch) rather than because it's actually blank.
 export function validateSettingsInput(input: {
   pan?: string; termsAndConditions?: string; phone?: string; address?: string; city?: string; state?: string; pincode?: string; gstin?: string;
-  bankName?: string; bankAccountNumber?: string; bankIfsc?: string; bankBranch?: string;
+  bankName?: string; bankAccountName?: string; bankAccountNumber?: string; bankIfsc?: string; bankBranch?: string;
 }, isBankSectionUpdate: boolean, isAddressSectionUpdate = false): string | null {
   return (
     validate(input.pan ?? "", rules.maxLength(10), rules.pan()) ||
@@ -205,6 +205,7 @@ export function validateSettingsInput(input: {
     validate(input.gstin ?? "", rules.maxLength(15), rules.gstin()) ||
     (isBankSectionUpdate
       ? validate(input.bankName ?? "", rules.required("Bank name is required.")) ||
+        validate(input.bankAccountName ?? "", rules.required("Account holder name is required.")) ||
         validate(input.bankBranch ?? "", rules.required("Branch is required.")) ||
         validate(input.bankAccountNumber ?? "", rules.required("Account number is required."), rules.accountNumber()) ||
         validate(input.bankIfsc ?? "", rules.required("IFSC code is required."), rules.ifsc())

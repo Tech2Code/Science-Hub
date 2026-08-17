@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import { FloatingSpinner } from "@/components/ui/Spinner";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { Input } from "@/components/ui/Input";
@@ -99,16 +100,19 @@ export default function PurchasePaymentsPage() {
   const payments = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPaid = stats?.totalPaid ?? 0;
+  const showSkeleton = loading && !data;
+  const isRefetching = loading && !!data;
 
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
 
   return (
     <div className="page-stack">
+      {isRefetching && <FloatingSpinner />}
       <div className="page-header">
         <div>
           <h1 className="page-title">Payments Made</h1>
           <p className="page-sub">
-            {loading ? "Loading…" : `${total} payments · Total paid ₹${totalPaid.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            {showSkeleton ? "Loading…" : `${total} payments · Total paid ₹${totalPaid.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </p>
         </div>
       </div>
@@ -126,17 +130,17 @@ export default function PurchasePaymentsPage() {
             />
             <SortSelect ariaLabel="Sort purchase payments" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
-          {!loading && (
+          {data && (
             <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
-          <table className="table-base">
+          <table className="table-base" style={isRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
             <thead>
               <tr>{COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr>
             </thead>
             <tbody>
-              {loading ? (
+              {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
               ) : payments.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
@@ -172,8 +176,8 @@ export default function PurchasePaymentsPage() {
             </tbody>
           </table>
         </div>
-        {!loading && total > 0 && (
-          <Pagination total={total} page={page} showAll={showAll} onPage={setPage} label="payments" />
+        {data && total > 0 && (
+          <Pagination total={total} page={page} showAll={showAll} onPage={setPage} label="payments" loading={isRefetching} />
         )}
       </div>
     </div>

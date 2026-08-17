@@ -9,7 +9,7 @@ import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenera
 import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { Input } from "@/components/ui/Input";
-import { OverlayLoader } from "@/components/ui/Spinner";
+import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -180,6 +180,8 @@ export default function PurchasesPage() {
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
   const bills = data?.data ?? [];
   const total = data?.total ?? 0;
+  const showSkeleton = loading && !data;
+  const isRefetching = loading && !!data;
 
   const totalPurchase = stats?.totalPurchase ?? 0;
   const totalPaid      = stats?.totalPaid ?? 0;
@@ -223,6 +225,7 @@ export default function PurchasesPage() {
     />
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
     {openingEdit && <OverlayLoader text="Opening editor…" />}
+    {isRefetching && <FloatingSpinner />}
 
     {pdfPreviewUrl && pdfPreviewBill && (
       <PdfPreviewModal
@@ -295,17 +298,17 @@ export default function PurchasesPage() {
               onYearChange={(v) => { setYear(v); setPage(1); }}
             />
           </div>
-          {!loading && (
+          {data && (
             <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />
           )}
         </div>
         <div className="table-wrap">
-          <table className="table-base">
+          <table className="table-base" style={isRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
             <thead>
               <tr>{COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr>
             </thead>
             <tbody>
-              {loading ? (
+              {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
               ) : bills.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
@@ -397,8 +400,8 @@ export default function PurchasesPage() {
             </tbody>
           </table>
         </div>
-        {!loading && total > 0 && (
-          <Pagination total={total} page={page} showAll={showAll} onPage={setPage} label="bills" />
+        {data && total > 0 && (
+          <Pagination total={total} page={page} showAll={showAll} onPage={setPage} label="bills" loading={isRefetching} />
         )}
       </div>
     </div>
