@@ -172,22 +172,11 @@ function ThemeToggle() {
 
 const ACCENT_PRESETS = ["#2563eb", "#059669", "#7c3aed", "#dc2626", "#0d9488", "#d97706"];
 
-function AccentPicker() {
+function useAccentPickerState() {
   const { setAccent } = useTheme();
-  const [open, setOpen] = useState(false);
   const [value, setValue] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("accentColor") || "#2563eb" : "#2563eb"
   );
-  const popRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (popRef.current && !popRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
 
   function pick(hex: string) {
     setValue(hex);
@@ -198,6 +187,58 @@ function AccentPicker() {
     setValue("#2563eb");
     setAccent(null);
   }
+
+  return { value, pick, reset };
+}
+
+function AccentColorPanel({ value, pick, reset }: { value: string; pick: (hex: string) => void; reset: () => void }) {
+  return (
+    <>
+      <div className={styles.accentPopoverLabel}>Presets</div>
+      <div className={styles.accentPresetRow}>
+        {ACCENT_PRESETS.map((hex) => (
+          <button
+            key={hex}
+            onClick={() => pick(hex)}
+            aria-label={hex}
+            title={hex}
+            className={value.toLowerCase() === hex ? styles.accentPresetBtnActive : styles.accentPresetBtn}
+            style={{ "--accent-preset-color": hex } as React.CSSProperties}
+          />
+        ))}
+      </div>
+      <div className={styles.accentPopoverLabel}>Or pick your own</div>
+      <div className={styles.accentCustomRow}>
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => pick(e.target.value)}
+          title="Pick a custom color"
+          aria-label="Pick a custom color"
+          className={styles.accentCustomInput}
+        />
+        <span className={styles.accentCustomLabel}>Custom</span>
+        <button onClick={reset} className={styles.accentResetBtn}>
+          Reset to default
+        </button>
+      </div>
+    </>
+  );
+}
+
+function AccentPicker() {
+  const { value, pick, reset } = useAccentPickerState();
+  const [open, setOpen] = useState(false);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
 
   return (
     <div className={styles.accentPickerWrap} ref={popRef}>
@@ -212,34 +253,55 @@ function AccentPicker() {
       {open && (
         <div className={styles.accentPopover}>
           <div className={styles.accentPopoverTitle}>Accent Color</div>
-          <div className={styles.accentPopoverLabel}>Presets</div>
-          <div className={styles.accentPresetRow}>
-            {ACCENT_PRESETS.map((hex) => (
-              <button
-                key={hex}
-                onClick={() => pick(hex)}
-                aria-label={hex}
-                title={hex}
-                className={value.toLowerCase() === hex ? styles.accentPresetBtnActive : styles.accentPresetBtn}
-                style={{ "--accent-preset-color": hex } as React.CSSProperties}
-              />
-            ))}
+          <AccentColorPanel value={value} pick={pick} reset={reset} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MoreMenu() {
+  const { value, pick, reset } = useAccentPickerState();
+  const [open, setOpen] = useState(false);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  return (
+    <div className={styles.accentPickerWrap} ref={popRef}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Appearance settings (theme & accent color)"
+        title="Appearance settings"
+        className={styles.moreMenuBtn}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 22a9.94 9.94 0 01-7.07-2.93A9.94 9.94 0 012 12 10 10 0 1112 22z" />
+          <circle cx="7.5" cy="10.5" r="1.15" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="7.2" r="1.15" fill="currentColor" stroke="none" />
+          <circle cx="16.5" cy="10.5" r="1.15" fill="currentColor" stroke="none" />
+          <circle cx="14.3" cy="15.5" r="1.15" fill="currentColor" stroke="none" />
+        </svg>
+        <svg className={styles.moreMenuChevron} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <div className={styles.accentPopover}>
+          <div className={styles.accentPopoverTitle}>Theme</div>
+          <div className={styles.moreMenuThemeRow}>
+            <ThemeToggle />
           </div>
-          <div className={styles.accentPopoverLabel}>Or pick your own</div>
-          <div className={styles.accentCustomRow}>
-            <input
-              type="color"
-              value={value}
-              onChange={(e) => pick(e.target.value)}
-              title="Pick a custom color"
-              aria-label="Pick a custom color"
-              className={styles.accentCustomInput}
-            />
-            <span className={styles.accentCustomLabel}>Custom</span>
-            <button onClick={reset} className={styles.accentResetBtn}>
-              Reset to default
-            </button>
-          </div>
+          <div className={styles.moreMenuDivider} />
+          <div className={styles.accentPopoverTitle}>Accent Color</div>
+          <AccentColorPanel value={value} pick={pick} reset={reset} />
         </div>
       )}
     </div>
@@ -257,6 +319,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const navRef = useRef<HTMLElement>(null);
+  // Below this, AccentPicker + ThemeToggle collapse into the single
+  // MoreMenu button — same fixed-viewport-breakpoint convention the topbar
+  // already uses elsewhere (e.g. signOutBtn goes icon-only at this width too).
+  const [condensed, setCondensed] = useState(false);
 
   useEffect(() => {
     const check = () => {
@@ -264,6 +330,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       setMobile(mob);
       if (!mob) setSidebarOpen(true);
       else setSidebarOpen(false);
+      setCondensed(window.innerWidth <= 480);
     };
     check();
     window.addEventListener("resize", check);
@@ -469,8 +536,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <GlobalSearch mobile={mobile} />
 
           <div className={styles.topbarRight}>
-            <AccentPicker />
-            <ThemeToggle />
+            {condensed ? <MoreMenu /> : <><AccentPicker /><ThemeToggle /></>}
             <Link href="/admin" className={styles.plainLink}>
               <div className={[styles.userChip, styles.userChipLink].join(" ")}>
                 <div className={styles.avatarWrap}>

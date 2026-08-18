@@ -39,6 +39,29 @@ function SkeletonRow() {
   );
 }
 
+function SkeletonCard() {
+  return (
+    <div className={styles.mobileCard}>
+      <div className={styles.mobileCardHeader}>
+        <div className={styles.skeletonName} />
+        <div className={styles.skeletonEmail} />
+      </div>
+      <div className={styles.mobileCardBody}>
+        {PROTECTED_SECTIONS.map((s) => (
+          <div key={s} className={styles.mobileRow}>
+            <div className={styles.skeletonLabel} />
+            <div className={styles.skeletonToggle} />
+          </div>
+        ))}
+        <div className={styles.mobileRow}>
+          <div className={styles.skeletonLabel} />
+          <div className={styles.skeletonToggle} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PermissionManager() {
   const [users, setUsers] = useState<GrantableUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,22 +166,27 @@ export function PermissionManager() {
       {error ? (
         <div className={styles.error}>{error}</div>
       ) : loading ? (
-        <div className={styles.tableWrapper}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th className={styles.thUser}>User</th>
-                {PROTECTED_SECTIONS.map((s) => (
-                  <th key={s} className={styles.thSection}>{SECTION_LABELS[s]}</th>
-                ))}
-                <th className={styles.thSection}>GST Reports</th>
-              </tr>
-            </thead>
-            <tbody>
-              <SkeletonRow /><SkeletonRow /><SkeletonRow /><SkeletonRow />
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className={styles.tableWrapper}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th className={styles.thUser}>User</th>
+                  {PROTECTED_SECTIONS.map((s) => (
+                    <th key={s} className={styles.thSection}>{SECTION_LABELS[s]}</th>
+                  ))}
+                  <th className={styles.thSection}>GST Reports</th>
+                </tr>
+              </thead>
+              <tbody>
+                <SkeletonRow /><SkeletonRow /><SkeletonRow /><SkeletonRow />
+              </tbody>
+            </table>
+          </div>
+          <div className={styles.mobileCards}>
+            <SkeletonCard /><SkeletonCard /><SkeletonCard />
+          </div>
+        </>
       ) : users.length === 0 ? (
         <div className={styles.emptyState}>
           No users found. Create users with &quot;staff&quot; or &quot;manager&quot; role to manage their permissions here.

@@ -628,6 +628,10 @@ select::-moz-focus-inner {
   .stat-banner { padding: 1rem; }
   .stat-banner-value { font-size: 1.25rem; }
 }
+@media (max-width: 480px) {
+  .stat-banner { padding: 0.75rem; }
+  .stat-banner-value { font-size: 1.1rem; }
+}
 
 /* ── Table action button group ─────────────── */
 .table-actions {

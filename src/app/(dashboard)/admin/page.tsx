@@ -506,9 +506,10 @@ export default function AdminPage() {
           <h1 className="page-title">Admin Panel</h1>
           <p className="page-sub">Profile, user management &amp; activity log</p>
         </div>
-        <Button variant="secondary" size="sm" href="/admin/permissions">
+        <Button variant="secondary" href="/admin/permissions">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           Section Permissions
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
         </Button>
       </div>
 
@@ -523,7 +524,7 @@ export default function AdminPage() {
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>My Profile</h2>
           {!profileLoading && (
-            <Button variant="secondary" size="sm" onClick={() => { profileDirty.markClean(profileForm); setEditingProfile(true); setProfileMsg(null); setProfileFieldErrors({}); }}>
+            <Button variant="secondary" onClick={() => { profileDirty.markClean(profileForm); setEditingProfile(true); setProfileMsg(null); setProfileFieldErrors({}); }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               Edit Profile
             </Button>
@@ -579,7 +580,7 @@ export default function AdminPage() {
               <div className={styles.footerTitle}>Password</div>
               <div className={styles.footerSub}>Change your login password</div>
             </div>
-            <Button variant="secondary" size="sm" onClick={() => { setChangingPw(true); setPwMsg(null); setPwFieldErrors({}); }}>
+            <Button variant="secondary" onClick={() => { setChangingPw(true); setPwMsg(null); setPwFieldErrors({}); }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
               Change Password
             </Button>
@@ -594,8 +595,8 @@ export default function AdminPage() {
         onClose={() => { if (profileSaving) return; setEditingProfile(false); setProfileForm({ name: profile!.name, email: profile!.email }); setProfileFieldErrors({}); setProfileMsg(null); }}
         footer={
           <>
-            <Button type="button" variant="secondary" size="sm" onClick={() => { setEditingProfile(false); setProfileForm({ name: profile!.name, email: profile!.email }); setProfileFieldErrors({}); setProfileMsg(null); }}>Cancel</Button>
-            <Button type="submit" form="edit-profile-form" variant="primary" size="sm" disabled={profileSaving || !profileDirty.isDirty || !profileForm.name.trim() || !profileForm.email.trim()}>Save Changes</Button>
+            <Button type="button" variant="secondary" onClick={() => { setEditingProfile(false); setProfileForm({ name: profile!.name, email: profile!.email }); setProfileFieldErrors({}); setProfileMsg(null); }}>Cancel</Button>
+            <Button type="submit" form="edit-profile-form" variant="primary" disabled={profileSaving || !profileDirty.isDirty || !profileForm.name.trim() || !profileForm.email.trim()}>Save Changes</Button>
           </>
         }
       >
@@ -619,8 +620,8 @@ export default function AdminPage() {
         onClose={() => { if (pwSaving) return; setChangingPw(false); setPwForm({ current: "", next: "", confirm: "" }); setPwMsg(null); setPwFieldErrors({}); }}
         footer={
           <>
-            <Button type="button" variant="secondary" size="sm" onClick={() => { setChangingPw(false); setPwForm({ current: "", next: "", confirm: "" }); setPwMsg(null); setPwFieldErrors({}); }}>Cancel</Button>
-            <Button type="submit" form="change-password-form" variant="primary" size="sm" disabled={pwSaving}>Update Password</Button>
+            <Button type="button" variant="secondary" onClick={() => { setChangingPw(false); setPwForm({ current: "", next: "", confirm: "" }); setPwMsg(null); setPwFieldErrors({}); }}>Cancel</Button>
+            <Button type="submit" form="change-password-form" variant="primary" disabled={pwSaving}>Update Password</Button>
           </>
         }
       >
@@ -647,7 +648,7 @@ export default function AdminPage() {
             <h2 className={styles.sectionTitle}>User Management</h2>
             <p className={styles.sectionSub}>{users.length} user{users.length !== 1 ? "s" : ""} in the system</p>
           </div>
-          <Button variant="primary" size="sm" onClick={() => { setAddOpen(true); setEditUser(null); setAddMsg(null); setAddFieldErrors({}); }}>
+          <Button variant="primary" onClick={() => { setAddOpen(true); setEditUser(null); setAddMsg(null); setAddFieldErrors({}); }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add User
           </Button>
@@ -660,8 +661,8 @@ export default function AdminPage() {
           onClose={() => { if (addSaving) return; setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}
           footer={
             <>
-              <Button type="button" variant="secondary" size="sm" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}>Cancel</Button>
-              <Button type="submit" form="add-user-form" variant="primary" size="sm" disabled={addSaving || !!addFieldErrors.name || !!addFieldErrors.email || !!addFieldErrors.password || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
+              <Button type="button" variant="secondary" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}>Cancel</Button>
+              <Button type="submit" form="add-user-form" variant="primary" disabled={addSaving || !!addFieldErrors.name || !!addFieldErrors.email || !!addFieldErrors.password || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
             </>
           }
         >
@@ -707,8 +708,8 @@ export default function AdminPage() {
           onClose={() => { if (editSaving) return; setEditUser(null); setEditMsg(null); setEditFieldErrors({}); }}
           footer={
             <>
-              <Button type="button" variant="secondary" size="sm" onClick={() => { setEditUser(null); setEditMsg(null); setEditFieldErrors({}); }}>Cancel</Button>
-              <Button type="submit" form="edit-user-form" variant="primary" size="sm" disabled={editSaving || !editFormDirty.isDirty || !editForm.name.trim() || !editForm.email.trim()}>Save Changes</Button>
+              <Button type="button" variant="secondary" onClick={() => { setEditUser(null); setEditMsg(null); setEditFieldErrors({}); }}>Cancel</Button>
+              <Button type="submit" form="edit-user-form" variant="primary" disabled={editSaving || !editFormDirty.isDirty || !editForm.name.trim() || !editForm.email.trim()}>Save Changes</Button>
             </>
           }
         >
