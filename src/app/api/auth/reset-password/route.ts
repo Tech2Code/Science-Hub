@@ -13,6 +13,9 @@ export async function POST(req: NextRequest) {
     if (password.length < 8) {
       return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
     }
+    if (password.length > 72) {
+      return NextResponse.json({ error: "Password must be at most 72 characters." }, { status: 400 });
+    }
 
     const limit = rateLimit(`reset-password:${getClientIp(req)}`, 10, 15 * 60 * 1000);
     if (!limit.allowed) {

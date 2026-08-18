@@ -11,10 +11,19 @@ import { validateProductForm, hasProductFieldErrors, type ProductFormData, type 
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
+import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { InfoBanner } from "@/components/ui/InfoBanner";
 import styles from "./productNew.module.css";
 
 interface Brand { id: string; name: string; }
 interface Category { id: string; name: string; }
+
+const BLANK_FORM: ProductFormData = {
+  name: "", sku: "", hsn: "", description: "", unit: "Nos",
+  price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: "5",
+  brandId: "", categoryId: "",
+};
+const DRAFT_KEY = "product:new";
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -25,18 +34,40 @@ export default function NewProductPage() {
   }, [session, router]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [form, setForm] = useState<ProductFormData>({
-    name: "", sku: "", hsn: "", description: "", unit: "Nos",
-    price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: "5",
-    brandId: "", categoryId: "",
-  });
+  const [form, setForm] = useState<ProductFormData>(BLANK_FORM);
   const [fieldErrors, setFieldErrors] = useState<ProductFieldErrors>({});
   const [saving, setSaving] = useState(false);
+
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
 
   useEffect(() => {
     fetch("/api/brands?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setBrands(d.data ?? [])).catch(() => {});
     fetch("/api/categories?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setCategories(d.data ?? [])).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const draft = loadFormDraft<ProductFormData>(DRAFT_KEY);
+    const v = draft?.values;
+    const hasContent = !!v && Object.entries(v).some(([k, val]) => k !== "unit" && k !== "gstRate" && k !== "stock" && k !== "minStock" && String(val ?? "").trim());
+    if (hasContent) setShowDraftBanner(true);
+    else setDraftReady(true);
+  }, []);
+
+  function restoreDraft() {
+    const draft = loadFormDraft<ProductFormData>(DRAFT_KEY);
+    if (draft?.values) setForm(draft.values);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  function dismissDraft() {
+    clearFormDraft(DRAFT_KEY);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  useFormDraft(DRAFT_KEY, form, !draftReady || saving);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = e.target;
@@ -65,6 +96,7 @@ export default function NewProductPage() {
     });
     if (res.ok) {
       const created = await res.json();
+      clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/products");
       bustCache("/api/reports?type=summary");
       bustCache("/api/reports?type=stock");
@@ -87,6 +119,14 @@ export default function NewProductPage() {
         <h1 className="page-title">Add Product</h1>
         <p className="page-sub">Add a product or item to your catalog</p>
       </div>
+      {showDraftBanner && (
+        <InfoBanner
+          message="You have an unsaved product draft from earlier — want to resume it?"
+          actionLabel="Resume draft"
+          onAction={restoreDraft}
+          onDismiss={dismissDraft}
+        />
+      )}
       <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
         <ProductFormFields form={form} onChange={handleChange} onUnitChange={(v) => { setForm((prev) => ({ ...prev, unit: v })); setFieldErrors((prev) => ({ ...prev, unit: undefined })); }} fieldErrors={fieldErrors} brands={brands} categories={categories} />
 

@@ -24,13 +24,13 @@ export default function FindEmailPage() {
   const [nameError, setNameError] = useState("");
 
   function handleNameBlur() {
-    const err = validate(name, rules.required("Please enter your name."), rules.minLength(2, "Name must be at least 2 characters."));
+    const err = validate(name, rules.required("Please enter your name."), rules.minLength(2, "Name must be at least 2 characters."), rules.maxLength(200));
     setNameError(err ?? "");
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const nameErr = validate(name, rules.required("Please enter your name."), rules.minLength(2, "Name must be at least 2 characters."));
+    const nameErr = validate(name, rules.required("Please enter your name."), rules.minLength(2, "Name must be at least 2 characters."), rules.maxLength(200));
     if (nameErr) { setNameError(nameErr); return; }
     setError("");
     setNameError("");
@@ -89,6 +89,7 @@ export default function FindEmailPage() {
                 onChange={(e) => { setName(e.target.value); setResults(null); if (nameError) setNameError(""); }}
                 onBlur={handleNameBlur}
                 placeholder="e.g. Enter Your Name"
+                maxLength={200}
               />
             </FormField>
             <button type="submit" className={styles.submitBtn} disabled={loading}>

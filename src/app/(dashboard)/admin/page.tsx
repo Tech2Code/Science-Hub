@@ -232,8 +232,8 @@ export default function AdminPage() {
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
-    const nameErr  = validate(profileForm.name,  rules.required("Name is required."));
-    const emailErr = validate(profileForm.email, rules.required("Email is required."), rules.email());
+    const nameErr  = validate(profileForm.name,  rules.required("Name is required."), rules.minLength(2), rules.maxLength(200));
+    const emailErr = validate(profileForm.email, rules.required("Email is required."), rules.maxLength(254), rules.email());
     if (nameErr || emailErr) { setProfileFieldErrors({ name: nameErr ?? undefined, email: emailErr ?? undefined }); return; }
     setProfileFieldErrors({});
     setProfileSaving(true); setProfileMsg(null);
@@ -313,9 +313,9 @@ export default function AdminPage() {
 
   async function addUser(e: React.FormEvent) {
     e.preventDefault();
-    const nameErr  = validate(addForm.name,            rules.required("Name is required."));
-    const emailErr = validate(addForm.email,           rules.required("Email is required."), rules.email());
-    const pwErr    = validate(addForm.password,        rules.required("Password is required."), rules.minLength(8, "Password must be at least 8 characters."));
+    const nameErr  = validate(addForm.name,            rules.required("Name is required."), rules.minLength(2), rules.maxLength(200));
+    const emailErr = validate(addForm.email,           rules.required("Email is required."), rules.maxLength(254), rules.email());
+    const pwErr    = validate(addForm.password,        rules.required("Password is required."), rules.minLength(8, "Password must be at least 8 characters."), rules.maxLength(72, "Password must be at most 72 characters."));
     const confErr  = validate(addForm.confirmPassword, rules.required("Please confirm the password."), rules.passwordMatch(addForm.password));
     if (nameErr || emailErr || pwErr || confErr) {
       setAddFieldErrors(prev => ({ ...prev, name: nameErr ?? undefined, email: emailErr ?? undefined, password: pwErr ?? undefined, confirmPassword: confErr ?? undefined }));
@@ -338,9 +338,9 @@ export default function AdminPage() {
   async function saveEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!editUser) return;
-    const nameErr  = validate(editForm.name,        rules.required("Name is required."));
-    const emailErr = validate(editForm.email,       rules.required("Email is required."), rules.email());
-    const pwErr    = editForm.newPassword ? validate(editForm.newPassword, rules.minLength(8, "New password must be at least 8 characters.")) : null;
+    const nameErr  = validate(editForm.name,        rules.required("Name is required."), rules.minLength(2), rules.maxLength(200));
+    const emailErr = validate(editForm.email,       rules.required("Email is required."), rules.maxLength(254), rules.email());
+    const pwErr    = editForm.newPassword ? validate(editForm.newPassword, rules.minLength(8, "New password must be at least 8 characters."), rules.maxLength(72, "New password must be at most 72 characters.")) : null;
     if (nameErr || emailErr || pwErr) { setEditFieldErrors({ name: nameErr ?? undefined, email: emailErr ?? undefined, newPassword: pwErr ?? undefined }); return; }
     setEditFieldErrors({});
     setEditSaving(true); setEditMsg(null);
@@ -602,10 +602,10 @@ export default function AdminPage() {
         <form id="edit-profile-form" onSubmit={saveProfile} className={styles.formCol} noValidate>
           <div className={styles.fg2}>
             <FormField label="Full Name" required error={profileFieldErrors.name}>
-              <Input className={`${styles.inp} ${profileFieldErrors.name ? styles.inpError : ""}`} value={profileForm.name} onChange={e => { setProfileForm(p => ({ ...p, name: e.target.value })); setProfileFieldErrors(prev => ({ ...prev, name: undefined })); }} />
+              <Input className={`${styles.inp} ${profileFieldErrors.name ? styles.inpError : ""}`} value={profileForm.name} onChange={e => { setProfileForm(p => ({ ...p, name: e.target.value })); setProfileFieldErrors(prev => ({ ...prev, name: undefined })); }} maxLength={200} />
             </FormField>
             <FormField label="Login Email — used to sign in to this app" required error={profileFieldErrors.email}>
-              <Input className={`${styles.inp} ${profileFieldErrors.email ? styles.inpError : ""}`} type="email" value={profileForm.email} onChange={e => { setProfileForm(p => ({ ...p, email: e.target.value })); setProfileFieldErrors(prev => ({ ...prev, email: undefined })); }} />
+              <Input className={`${styles.inp} ${profileFieldErrors.email ? styles.inpError : ""}`} type="email" value={profileForm.email} onChange={e => { setProfileForm(p => ({ ...p, email: e.target.value })); setProfileFieldErrors(prev => ({ ...prev, email: undefined })); }} maxLength={254} />
             </FormField>
           </div>
           {profileMsg && <Msg m={profileMsg} />}
@@ -627,13 +627,13 @@ export default function AdminPage() {
         <form id="change-password-form" onSubmit={savePassword} className={styles.formCol} noValidate>
           <div className={styles.fg2}>
             <FormField label="Current Password" required error={pwFieldErrors.current}>
-              <Input className={`${styles.inp} ${pwFieldErrors.current ? styles.inpError : ""}`} type="password" value={pwForm.current} onChange={e => { setPwForm(p => ({ ...p, current: e.target.value })); setPwFieldErrors(prev => ({ ...prev, current: undefined })); }} placeholder="••••••••" autoComplete="current-password" />
+              <Input className={`${styles.inp} ${pwFieldErrors.current ? styles.inpError : ""}`} type="password" value={pwForm.current} onChange={e => { setPwForm(p => ({ ...p, current: e.target.value })); setPwFieldErrors(prev => ({ ...prev, current: undefined })); }} placeholder="••••••••" autoComplete="current-password" maxLength={72} />
             </FormField>
             <FormField label="New Password" required error={pwFieldErrors.next}>
-              <Input className={`${styles.inp} ${pwFieldErrors.next ? styles.inpError : ""}`} type="password" value={pwForm.next} onChange={e => { setPwForm(p => ({ ...p, next: e.target.value })); setPwFieldErrors(prev => ({ ...prev, next: undefined })); }} placeholder="min. 8 characters" autoComplete="new-password" />
+              <Input className={`${styles.inp} ${pwFieldErrors.next ? styles.inpError : ""}`} type="password" value={pwForm.next} onChange={e => { setPwForm(p => ({ ...p, next: e.target.value })); setPwFieldErrors(prev => ({ ...prev, next: undefined })); }} placeholder="min. 8 characters" autoComplete="new-password" maxLength={72} />
             </FormField>
             <FormField label="Confirm Password" required error={pwFieldErrors.confirm}>
-              <Input className={`${styles.inp} ${pwFieldErrors.confirm ? styles.inpError : ""}`} type="password" value={pwForm.confirm} onChange={e => { setPwForm(p => ({ ...p, confirm: e.target.value })); setPwFieldErrors(prev => ({ ...prev, confirm: undefined })); }} placeholder="repeat new password" autoComplete="new-password" />
+              <Input className={`${styles.inp} ${pwFieldErrors.confirm ? styles.inpError : ""}`} type="password" value={pwForm.confirm} onChange={e => { setPwForm(p => ({ ...p, confirm: e.target.value })); setPwFieldErrors(prev => ({ ...prev, confirm: undefined })); }} placeholder="repeat new password" autoComplete="new-password" maxLength={72} />
             </FormField>
           </div>
           {pwMsg && <Msg m={pwMsg} />}
@@ -668,16 +668,16 @@ export default function AdminPage() {
           <form id="add-user-form" onSubmit={addUser} className={styles.formColTight} noValidate>
             <div className={styles.fg2}>
               <FormField label="Full Name" required error={addFieldErrors.name}>
-                <Input className={`${styles.inp} ${addFieldErrors.name ? styles.inpError : ""}`} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} placeholder="Jane Smith" />
+                <Input className={`${styles.inp} ${addFieldErrors.name ? styles.inpError : ""}`} value={addForm.name} onChange={e => handleAddFormChange("name", e.target.value)} placeholder="Jane Smith" maxLength={200} />
               </FormField>
               <FormField label="Email" required error={addFieldErrors.email}>
                 <div className={styles.emailWrap}>
-                  <Input className={`${styles.inp} ${addFieldErrors.email ? styles.inpError : ""}`} type="email" value={addForm.email} onChange={e => handleAddFormChange("email", e.target.value)} placeholder="jane@example.com" />
+                  <Input className={`${styles.inp} ${addFieldErrors.email ? styles.inpError : ""}`} type="email" value={addForm.email} onChange={e => handleAddFormChange("email", e.target.value)} placeholder="jane@example.com" maxLength={254} />
                   {emailCheckLoading && <span className={styles.emailChecking}>checking…</span>}
                 </div>
               </FormField>
               <FormField label="Password" required error={addFieldErrors.password}>
-                <PasswordInput className={styles.inp} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} placeholder="min. 8 characters" autoComplete="new-password" />
+                <PasswordInput className={styles.inp} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} placeholder="min. 8 characters" autoComplete="new-password" maxLength={72} />
               </FormField>
               <FormField
                 label="Re-enter Password"
@@ -686,7 +686,7 @@ export default function AdminPage() {
                 hint={!addFieldErrors.confirmPassword && addForm.confirmPassword && addForm.password === addForm.confirmPassword ? "✓ Passwords match" : undefined}
                 hintSuccess
               >
-                <PasswordInput className={styles.inp} value={addForm.confirmPassword} onChange={e => handleAddFormChange("confirmPassword", e.target.value)} placeholder="repeat password" autoComplete="new-password" />
+                <PasswordInput className={styles.inp} value={addForm.confirmPassword} onChange={e => handleAddFormChange("confirmPassword", e.target.value)} placeholder="repeat password" autoComplete="new-password" maxLength={72} />
               </FormField>
               <FormField label="Role">
                 <Select className={`${styles.inp} ${styles.inpCursor}`} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>
@@ -715,10 +715,10 @@ export default function AdminPage() {
           <form id="edit-user-form" onSubmit={saveEdit} className={styles.formCol} noValidate>
             <div className={styles.fg3}>
               <FormField label="Full Name" required error={editFieldErrors.name}>
-                <Input className={`${styles.inp} ${editFieldErrors.name ? styles.inpError : ""}`} value={editForm.name} onChange={e => { setEditForm(p => ({ ...p, name: e.target.value })); setEditFieldErrors(prev => ({ ...prev, name: undefined })); }} />
+                <Input className={`${styles.inp} ${editFieldErrors.name ? styles.inpError : ""}`} value={editForm.name} onChange={e => { setEditForm(p => ({ ...p, name: e.target.value })); setEditFieldErrors(prev => ({ ...prev, name: undefined })); }} maxLength={200} />
               </FormField>
               <FormField label="Email" required error={editFieldErrors.email}>
-                <Input className={`${styles.inp} ${editFieldErrors.email ? styles.inpError : ""}`} type="email" value={editForm.email} onChange={e => { setEditForm(p => ({ ...p, email: e.target.value })); setEditFieldErrors(prev => ({ ...prev, email: undefined })); }} />
+                <Input className={`${styles.inp} ${editFieldErrors.email ? styles.inpError : ""}`} type="email" value={editForm.email} onChange={e => { setEditForm(p => ({ ...p, email: e.target.value })); setEditFieldErrors(prev => ({ ...prev, email: undefined })); }} maxLength={254} />
               </FormField>
               <FormField label="Role">
                 <Select className={`${styles.inp} ${styles.inpCursor}`} value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value as Role }))}>
@@ -732,7 +732,7 @@ export default function AdminPage() {
               <div className={styles.pwSectionHint}>New password — leave blank to keep current</div>
               <div className={styles.maxW20}>
                 <FormField label="New Password" error={editFieldErrors.newPassword}>
-                  <Input className={`${styles.inp} ${editFieldErrors.newPassword ? styles.inpError : ""}`} type="password" value={editForm.newPassword} onChange={e => { setEditForm(p => ({ ...p, newPassword: e.target.value })); setEditFieldErrors(prev => ({ ...prev, newPassword: undefined })); }} placeholder="min. 8 characters" autoComplete="new-password" />
+                  <Input className={`${styles.inp} ${editFieldErrors.newPassword ? styles.inpError : ""}`} type="password" value={editForm.newPassword} onChange={e => { setEditForm(p => ({ ...p, newPassword: e.target.value })); setEditFieldErrors(prev => ({ ...prev, newPassword: undefined })); }} placeholder="min. 8 characters" autoComplete="new-password" maxLength={72} />
                 </FormField>
               </div>
             </div>

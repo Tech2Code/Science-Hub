@@ -14,6 +14,8 @@ import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
+import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { InfoBanner } from "@/components/ui/InfoBanner";
 import styles from "./customerEdit.module.css";
 
 export default function EditCustomerPage() {
@@ -32,6 +34,23 @@ export default function EditCustomerPage() {
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  const DRAFT_KEY = `customer:edit:${id}`;
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+
+  function restoreDraft() {
+    const draft = loadFormDraft<CustomerFormData>(DRAFT_KEY);
+    if (draft?.values) setForm(draft.values);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  function dismissDraft() {
+    clearFormDraft(DRAFT_KEY);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
   useEffect(() => {
     fetch(`/api/customers/${id}`, { headers: { "x-no-loader": "1" } })
       .then((r) => r.json())
@@ -43,8 +62,11 @@ export default function EditCustomerPage() {
         setInitialForm(loaded);
         setLoadedUpdatedAt(d.updatedAt ?? null);
         setLoading(false);
+        if (loadFormDraft(DRAFT_KEY)) setShowDraftBanner(true);
+        else setDraftReady(true);
       })
       .catch(() => { setLoading(false); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- DRAFT_KEY is derived from id, already a dependency
   }, [id]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
@@ -62,6 +84,7 @@ export default function EditCustomerPage() {
     });
     setSaving(false);
     if (res.ok) {
+      clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/customers");
       bustCache(`/api/customers/${id}`);
       bustCachePrefix("/api/invoices");
@@ -85,6 +108,8 @@ export default function EditCustomerPage() {
 
   const noChanges = initialForm !== null && JSON.stringify(form) === JSON.stringify(initialForm);
   const disabled = loading || saving;
+
+  useFormDraft(DRAFT_KEY, form, !draftReady || saving || noChanges);
 
   return (
     <>
@@ -113,6 +138,15 @@ export default function EditCustomerPage() {
           </code>
         </div>
       </div>
+
+      {showDraftBanner && (
+        <InfoBanner
+          message="You have unsaved edits to this customer from earlier — want to resume them?"
+          actionLabel="Resume draft"
+          onAction={restoreDraft}
+          onDismiss={dismissDraft}
+        />
+      )}
 
       {loading ? (
         <div className="form-card">

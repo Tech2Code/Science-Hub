@@ -12,6 +12,10 @@ import { invalidateCachedPdf } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
 import { RateListFormBody } from "@/components/rateLists/RateListFormBody";
 import { toNum, calcRateListItem, makeRateListLineItemKey, type RateListLineItem } from "@/lib/rateListForm";
+import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { InfoBanner } from "@/components/ui/InfoBanner";
+
+type RateListEditDraft = { title: string; note: string; items: RateListLineItem[] };
 
 interface RateListApiItem {
   name: string; brand: string | null; unit: string; isNetRate: boolean; discountPercent: number; listRate: number;
@@ -41,6 +45,27 @@ export default function EditRateListPage() {
   const [initialNote, setInitialNote] = useState("");
   const [initialItems, setInitialItems] = useState<RateListLineItem[]>([]);
 
+  const DRAFT_KEY = `rate-list:edit:${id}`;
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+
+  function restoreDraft() {
+    const draft = loadFormDraft<RateListEditDraft>(DRAFT_KEY);
+    if (draft?.values) {
+      setTitle(draft.values.title ?? "");
+      setNote(draft.values.note ?? "");
+      setItems(draft.values.items ?? []);
+    }
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  function dismissDraft() {
+    clearFormDraft(DRAFT_KEY);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
   useEffect(() => {
     fetch(`/api/rate-lists/${id}`)
       .then((r) => r.json())
@@ -63,6 +88,8 @@ export default function EditRateListPage() {
         setInitialNote(d.note ?? "");
         setInitialItems(loadedItems);
         setLoading(false);
+        if (loadFormDraft(DRAFT_KEY)) setShowDraftBanner(true);
+        else setDraftReady(true);
       })
       .catch(() => { setLoadError("Failed to load rate list."); setLoading(false); });
   }, [id]);
@@ -83,9 +110,11 @@ export default function EditRateListPage() {
     return false;
   })();
 
+  useFormDraft(DRAFT_KEY, { title, note, items }, !draftReady || saving || !isDirty);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const titleErr = validate(title, rules.required("Title is required."));
+    const titleErr = validate(title, rules.required("Title is required."), rules.minLength(2), rules.maxLength(200));
     setTitleError(titleErr ?? undefined);
     if (titleErr) return;
 
@@ -120,6 +149,7 @@ export default function EditRateListPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        clearFormDraft(DRAFT_KEY);
         bustCachePrefix("/api/rate-lists");
         await invalidateCachedPdf("rate-list", String(id));
         toast({ type: "success", title: "Rate list updated", message: `"${data.title}" saved.` });
@@ -162,6 +192,15 @@ export default function EditRateListPage() {
         <h1 className="page-title">Edit Rate List</h1>
         <p className="page-sub">Update pricing, items, or details</p>
       </div>
+
+      {showDraftBanner && (
+        <InfoBanner
+          message="You have unsaved edits to this rate list from earlier — want to resume them?"
+          actionLabel="Resume draft"
+          onAction={restoreDraft}
+          onDismiss={dismissDraft}
+        />
+      )}
 
       <form onSubmit={handleSubmit} noValidate>
         <RateListFormBody

@@ -28,6 +28,18 @@ export async function POST(request: NextRequest) {
     if (adminPassword.length < 8) {
       return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
     }
+    if (adminPassword.length > 72) {
+      return NextResponse.json({ error: "Password must be at most 72 characters." }, { status: 400 });
+    }
+    if (adminEmail.length > 254) {
+      return NextResponse.json({ error: "Email is too long (max 254 characters)." }, { status: 400 });
+    }
+    if (adminName.length < 2) {
+      return NextResponse.json({ error: "Name must be at least 2 characters." }, { status: 400 });
+    }
+    if (adminName.length > 200) {
+      return NextResponse.json({ error: "Name is too long (max 200 characters)." }, { status: 400 });
+    }
 
     const hashedPassword = await bcrypt.hash(adminPassword, 12);
     const admin = await prisma.user.create({

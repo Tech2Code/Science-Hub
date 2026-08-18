@@ -68,9 +68,9 @@ export async function PUT(
     }
 
     const data: Record<string, unknown> = {};
+    const fieldLengthErr = validateProductInput({ name, sku, hsn, description });
+    if (fieldLengthErr) return NextResponse.json({ error: fieldLengthErr }, { status: 400 });
     if (name !== undefined) {
-      const coreErr = validateProductInput({ name });
-      if (coreErr) return NextResponse.json({ error: coreErr }, { status: 400 });
       const trimmedName = (name as string).trim();
       const duplicate = await prisma.product.findFirst({
         where: { name: { equals: trimmedName, mode: "insensitive" }, deletedAt: null, NOT: { id } },

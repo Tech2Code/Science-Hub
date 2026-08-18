@@ -24,6 +24,9 @@ export async function PUT(
     if (!amount || parseFloat(amount) <= 0) {
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
     }
+    if (typeof reference === "string" && reference.length > 500) {
+      return NextResponse.json({ error: "Reference is too long (max 500 characters)." }, { status: 400 });
+    }
 
     // Pre-checks outside the transaction — cheap, and let us return a clean
     // 404 before paying the cost of a Serializable transaction attempt.

@@ -12,7 +12,11 @@ import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
+import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { InfoBanner } from "@/components/ui/InfoBanner";
 import styles from "./customerNew.module.css";
+
+const DRAFT_KEY = "customer:new";
 
 export default function NewCustomerPage() {
   const router = useRouter();
@@ -24,6 +28,31 @@ export default function NewCustomerPage() {
   const [form, setForm] = useState<CustomerFormData>(BLANK_CUSTOMER_FORM);
   const [errors, setErrors] = useState<FormErrors<CustomerFormData>>({});
   const [saving, setSaving] = useState(false);
+
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+
+  useEffect(() => {
+    const draft = loadFormDraft<CustomerFormData>(DRAFT_KEY);
+    const hasContent = !!draft?.values && Object.values(draft.values).some((v) => String(v ?? "").trim());
+    if (hasContent) setShowDraftBanner(true);
+    else setDraftReady(true);
+  }, []);
+
+  function restoreDraft() {
+    const draft = loadFormDraft<CustomerFormData>(DRAFT_KEY);
+    if (draft?.values) setForm(draft.values);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  function dismissDraft() {
+    clearFormDraft(DRAFT_KEY);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  useFormDraft(DRAFT_KEY, form, !draftReady || saving);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = e.target;
@@ -44,6 +73,7 @@ export default function NewCustomerPage() {
     });
     if (res.ok) {
       const created = await res.json();
+      clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/customers");
       toast({ type: "success", title: "Customer created", message: `"${created.name}" added.` });
       // Deliberately not resetting `saving` here — it must stay locked until
@@ -68,6 +98,15 @@ export default function NewCustomerPage() {
         <h1 className="page-title">New Customer</h1>
         <p className="page-sub">Add a new customer to your directory</p>
       </div>
+
+      {showDraftBanner && (
+        <InfoBanner
+          message="You have an unsaved customer draft from earlier — want to resume it?"
+          actionLabel="Resume draft"
+          onAction={restoreDraft}
+          onDismiss={dismissDraft}
+        />
+      )}
 
       <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
         <CustomerFormFields form={form} onChange={handleChange} errors={errors} addressRequired cityRequired stateRequired pincodeRequired autoFocusName />

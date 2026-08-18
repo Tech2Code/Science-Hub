@@ -50,7 +50,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const body = await req.json();
     const { name, company, gstin, phone, email, address, city, state, pincode, notes, isActive, expectedUpdatedAt } = body;
-    const validationError = validateVendorInput({ name, phone, email, gstin, address, city, state, pincode }, true);
+    const validationError = validateVendorInput({ name, company, phone, email, gstin, address, city, state, pincode, notes }, true);
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
     const existing = await prisma.vendor.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });

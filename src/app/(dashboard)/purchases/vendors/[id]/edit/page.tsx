@@ -14,6 +14,8 @@ import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
+import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { InfoBanner } from "@/components/ui/InfoBanner";
 import styles from "./vendorEdit.module.css";
 
 export default function EditVendorPage() {
@@ -32,6 +34,23 @@ export default function EditVendorPage() {
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  const DRAFT_KEY = `vendor:edit:${id}`;
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+
+  function restoreDraft() {
+    const draft = loadFormDraft<VendorFormData>(DRAFT_KEY);
+    if (draft?.values) setForm(draft.values);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  function dismissDraft() {
+    clearFormDraft(DRAFT_KEY);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
   useEffect(() => {
     fetch(`/api/vendors/${id}`, { headers: { "x-no-loader": "1" } })
       .then(r => r.json())
@@ -46,8 +65,11 @@ export default function EditVendorPage() {
         setInitialForm(loaded);
         setLoadedUpdatedAt(d.updatedAt ?? null);
         setLoading(false);
+        if (loadFormDraft(DRAFT_KEY)) setShowDraftBanner(true);
+        else setDraftReady(true);
       })
       .catch(() => { setLoading(false); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- DRAFT_KEY is derived from id, already a dependency
   }, [id]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
@@ -67,6 +89,7 @@ export default function EditVendorPage() {
     });
     setSaving(false);
     if (res.ok) {
+      clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/vendors");
       toast({ type: "success", title: "Vendor updated", message: "Changes saved." });
       router.push(`/purchases/vendors/${id}`);
@@ -91,6 +114,8 @@ export default function EditVendorPage() {
   const hasChanges = initialForm !== null && JSON.stringify(form) !== JSON.stringify(initialForm);
   const disabled = loading || saving;
 
+  useFormDraft(DRAFT_KEY, form, !draftReady || saving || !hasChanges);
+
   return (
     <>
     {!loading && saving && <OverlayLoader text="Saving…" />}
@@ -106,6 +131,15 @@ export default function EditVendorPage() {
       />
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "Edit Vendor" }]} />
       <h1 className="page-title">Edit Vendor</h1>
+
+      {showDraftBanner && (
+        <InfoBanner
+          message="You have unsaved edits to this vendor from earlier — want to resume them?"
+          actionLabel="Resume draft"
+          onAction={restoreDraft}
+          onDismiss={dismissDraft}
+        />
+      )}
 
       {loading ? (
         <div className="form-card">

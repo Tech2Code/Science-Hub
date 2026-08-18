@@ -45,7 +45,8 @@ export default function LoginPage() {
     } else {
       // Credentials matched — only now is a real login happening.
       setStage("verified");
-      router.push("/dashboard");
+      // Brief pause so the success checkmark is actually visible before navigating away.
+      setTimeout(() => router.push("/dashboard"), 500);
     }
   }
 
@@ -75,6 +76,7 @@ export default function LoginPage() {
                 onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError(""); }}
                 onBlur={handleEmailBlur}
                 placeholder="you@sciencehub.in"
+                maxLength={254}
               />
             </FormField>
             <FormField label="Password" error={passwordError}>
@@ -92,7 +94,8 @@ export default function LoginPage() {
               variant="primary"
               size="full"
               loading={loading}
-              loadingText={stage === "verified" ? "Logging in…" : "Verifying…"}
+              loadingText={stage === "verified" ? "Login successful" : "Verifying…"}
+              success={stage === "verified"}
               fullScreen
               disabled={loading}
             >

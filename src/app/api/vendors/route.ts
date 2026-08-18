@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { name, company, gstin, phone, email, address, city, state, pincode, notes, isActive, oneOff } = body;
-    const validationError = validateVendorInput({ name, phone, email, gstin, address, city, state, pincode }, true);
+    const validationError = validateVendorInput({ name, company, phone, email, gstin, address, city, state, pincode, notes }, true);
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
     // "Just for this bill" vendors still need a real Vendor row

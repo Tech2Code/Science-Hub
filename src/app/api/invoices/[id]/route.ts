@@ -54,6 +54,10 @@ export async function PUT(
       return NextResponse.json({ error: "This invoice was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
     }
 
+    if (typeof notes === "string" && notes.length > 2000) {
+      return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
+    }
+
     // Simple status/notes-only update (from payment flow)
     if (!items) {
       const data: Record<string, unknown> = {};
@@ -152,9 +156,21 @@ export async function PUT(
         seenProductIds.add(item.productId);
       }
     }
-    for (const item of items as { productId?: string; name?: string }[]) {
+    for (const item of items as { productId?: string; name?: string; hsn?: string; unit?: string }[]) {
       if (!item.productId && !String(item.name ?? "").trim()) {
         return NextResponse.json({ error: "Custom items must have a name" }, { status: 400 });
+      }
+      if (!item.productId && String(item.name ?? "").trim().length < 2) {
+        return NextResponse.json({ error: "Item name must be at least 2 characters." }, { status: 400 });
+      }
+      if (String(item.name ?? "").length > 200) {
+        return NextResponse.json({ error: "Item name is too long (max 200 characters)." }, { status: 400 });
+      }
+      if (String(item.hsn ?? "").length > 50) {
+        return NextResponse.json({ error: "Item HSN/SAC is too long (max 50 characters)." }, { status: 400 });
+      }
+      if (String(item.unit ?? "").length > 100) {
+        return NextResponse.json({ error: "Item unit is too long (max 100 characters)." }, { status: 400 });
       }
     }
 

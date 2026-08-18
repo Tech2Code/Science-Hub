@@ -23,6 +23,7 @@ interface ButtonProps {
   href?: string;
   loading?: boolean;
   loadingText?: string;
+  success?: boolean;
   disabled?: boolean;
   fullScreen?: boolean;
   onClick?: (e: React.MouseEvent) => void;
@@ -43,6 +44,7 @@ export function Button({
   href,
   loading = false,
   loadingText = "Please wait…",
+  success = false,
   disabled = false,
   fullScreen = false,
   onClick,
@@ -68,11 +70,29 @@ export function Button({
       ? createPortal(
           <div className={styles.overlay}>
             <div className={styles.overlayBox}>
-              <div className={styles.overlayDots}>
-                <div className={styles.overlayDot} />
-                <div className={styles.overlayDot} />
-                <div className={styles.overlayDot} />
-              </div>
+              {success ? (
+                <svg
+                  className={styles.overlayCheck}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="11" stroke="var(--c-green)" strokeWidth="2" />
+                  <path
+                    d="M7 12.5L10.5 16L17 8.5"
+                    stroke="var(--c-green)"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              ) : (
+                <div className={styles.overlayDots}>
+                  <div className={styles.overlayDot} />
+                  <div className={styles.overlayDot} />
+                  <div className={styles.overlayDot} />
+                </div>
+              )}
               <span className={styles.overlayText}>{loadingText}</span>
             </div>
           </div>,

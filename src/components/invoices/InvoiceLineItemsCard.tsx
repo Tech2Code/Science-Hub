@@ -62,7 +62,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
 
   async function handleQuickAddProduct() {
     const errs: Partial<Record<"name" | "price" | "unit" | "gstRate", string>> = {
-      name: validate(quickAddProduct.name, rules.required("Item name is required.")) ?? undefined,
+      name: validate(quickAddProduct.name, rules.required("Item name is required."), rules.minLength(2), rules.maxLength(200)) ?? undefined,
       price: validate(quickAddProduct.price, rules.required("Price is required."), rules.nonNegativeNumber()) ?? undefined,
       unit: validate(quickAddProduct.unit, rules.required("Unit is required.")) ?? undefined,
       gstRate: validate(quickAddProduct.gstRate, rules.required("GST rate is required."), rules.nonNegativeNumber()) ?? undefined,
@@ -221,6 +221,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
               autoFocus
               value={quickAddProduct.name}
               onChange={(e) => { setQuickAddProduct((p) => ({ ...p, name: e.target.value })); setQuickAddErrors((p) => ({ ...p, name: undefined })); }}
+              maxLength={200}
             />
           </FormField>
           <div className={styles.grid2}>

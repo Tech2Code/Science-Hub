@@ -676,6 +676,7 @@ export default function PurchaseBillDetailPage() {
                   onChange={e => setPayRef(e.target.value)}
                   placeholder="Optional"
                   sz="sm"
+                  maxLength={500}
                   className={styles.paymentReferenceInput}
                 />
               </FormField>

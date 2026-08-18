@@ -219,6 +219,7 @@ export default function ProductViewPage() {
                 value={adjustNotes}
                 onChange={(e) => { setAdjustNotes(e.target.value); setAdjustNotesError(undefined); }}
                 disabled={adjustSaving}
+                maxLength={500}
               />
             </FormField>
           </div>

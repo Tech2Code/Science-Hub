@@ -45,11 +45,11 @@ export function CustomerFormFields({ form, onChange, errors, disabled, phoneRequ
   return (
     <>
       <FormField label="Customer Name" required error={errors.name}>
-        <Input name="name" value={form.name} onChange={onChange} placeholder="e.g. ABC Enterprises" autoFocus={autoFocusName} disabled={disabled} />
+        <Input name="name" value={form.name} onChange={onChange} placeholder="e.g. ABC Enterprises" autoFocus={autoFocusName} disabled={disabled} maxLength={200} />
       </FormField>
 
       <FormField label="Address" required={addressRequired} error={errors.address}>
-        <Input name="address" value={form.address} onChange={onChange} placeholder="Street address, building, floor…" disabled={disabled} />
+        <Input name="address" value={form.address} onChange={onChange} placeholder="Street address, building, floor…" disabled={disabled} maxLength={500} />
       </FormField>
 
       <div className="form-grid-2">
@@ -72,7 +72,7 @@ export function CustomerFormFields({ form, onChange, errors, disabled, phoneRequ
 
       <div className="form-grid-2">
         <FormField label="City" required={cityRequired} error={errors.city}>
-          <Input name="city" value={form.city} onChange={onChange} placeholder="City" disabled={disabled} />
+          <Input name="city" value={form.city} onChange={onChange} placeholder="City" disabled={disabled} maxLength={100} />
         </FormField>
         <FormField label="GSTIN" hint="Leave blank if customer is unregistered." error={errors.gstin}>
           <Input name="gstin" value={form.gstin} onChange={onChange} placeholder="15-character GST number" maxLength={15} mono disabled={disabled} />
@@ -84,7 +84,7 @@ export function CustomerFormFields({ form, onChange, errors, disabled, phoneRequ
           <PhoneInput name="phone" value={form.phone} onChange={onChange} placeholder="10-digit mobile" disabled={disabled} />
         </FormField>
         <FormField label="Email" error={errors.email}>
-          <Input name="email" type="email" value={form.email} onChange={onChange} placeholder="billing@customer.com" disabled={disabled} />
+          <Input name="email" type="email" value={form.email} onChange={onChange} placeholder="billing@customer.com" disabled={disabled} maxLength={254} />
         </FormField>
       </div>
     </>

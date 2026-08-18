@@ -306,8 +306,9 @@ export default function SettingsPage() {
   async function handleSaveIdentity(e: React.FormEvent) {
     e.preventDefault();
     const errors: Partial<Record<keyof IdentityForm, string>> = {
-      name:  validate(identityForm.name,  rules.required("Business name cannot be empty.")) ?? undefined,
-      email: validate(identityForm.email, rules.email()) ?? undefined,
+      name:  validate(identityForm.name,  rules.required("Business name cannot be empty."), rules.minLength(2), rules.maxLength(200)) ?? undefined,
+      tagline: validate(identityForm.tagline, rules.maxLength(100)) ?? undefined,
+      email: validate(identityForm.email, rules.maxLength(254), rules.email()) ?? undefined,
       phone: validate(identityForm.phone, rules.phone10()) ?? undefined,
       gstin: validate(identityForm.gstin, rules.maxLength(15), rules.gstin()) ?? undefined,
       pan:   validate(identityForm.pan, rules.maxLength(10), rules.pan()) ?? undefined,
@@ -356,9 +357,9 @@ export default function SettingsPage() {
 
   async function handleSaveAddress(e: React.FormEvent) {
     e.preventDefault();
-    const addressErr = validate(addressForm.address, rules.required("Street address is required."));
+    const addressErr = validate(addressForm.address, rules.required("Street address is required."), rules.minLength(5), rules.maxLength(500));
     if (addressErr) { setAddressErrors({ address: addressErr }); return; }
-    const cityErr = validate(addressForm.city, rules.required("City is required."));
+    const cityErr = validate(addressForm.city, rules.required("City is required."), rules.minLength(2), rules.maxLength(100));
     if (cityErr) { setAddressErrors({ city: cityErr }); return; }
     const stateErr = validate(addressForm.state, rules.required("State is required."));
     if (stateErr) { setAddressErrors({ state: stateErr }); return; }
@@ -449,11 +450,11 @@ export default function SettingsPage() {
   async function handleSaveBank(e: React.FormEvent) {
     e.preventDefault();
     const errors: Partial<Record<keyof BankForm, string>> = {
-      bankName: validate(bankForm.bankName, rules.required("Bank name is required.")) ?? undefined,
-      bankAccountName: validate(bankForm.bankAccountName, rules.required("Account holder name is required.")) ?? undefined,
+      bankName: validate(bankForm.bankName, rules.required("Bank name is required."), rules.minLength(2), rules.maxLength(200)) ?? undefined,
+      bankAccountName: validate(bankForm.bankAccountName, rules.required("Account holder name is required."), rules.minLength(2), rules.maxLength(200)) ?? undefined,
       bankAccountNumber: validate(bankForm.bankAccountNumber, rules.required("Account number is required."), rules.accountNumber()) ?? undefined,
       bankIfsc: validate(bankForm.bankIfsc, rules.required("IFSC code is required."), rules.ifsc()) ?? undefined,
-      bankBranch: validate(bankForm.bankBranch, rules.required("Branch is required.")) ?? undefined,
+      bankBranch: validate(bankForm.bankBranch, rules.required("Branch is required."), rules.minLength(2), rules.maxLength(100)) ?? undefined,
     };
     setBankErrors(errors);
     if (Object.values(errors).some(Boolean)) return;
@@ -697,7 +698,7 @@ export default function SettingsPage() {
 
   async function handleSaveEmail(e: React.FormEvent) {
     e.preventDefault();
-    const gmailErr = validate(emailForm.gmailUser, rules.required("Enter a Gmail address."), rules.email("Enter a valid Gmail address."));
+    const gmailErr = validate(emailForm.gmailUser, rules.required("Enter a Gmail address."), rules.maxLength(254), rules.email("Enter a valid Gmail address."));
     const pwErr = !saved.gmailAppPasswordSet && !emailForm.gmailAppPassword ? "No existing password — enter one to enable email." : undefined;
     if (gmailErr || pwErr) { setEmailErrors({ gmailUser: gmailErr ?? undefined, gmailAppPassword: pwErr }); return; }
     setEmailErrors({});
@@ -854,13 +855,13 @@ export default function SettingsPage() {
             <form id="identity-form" onSubmit={handleSaveIdentity} noValidate>
               <div className={styles.formGrid}>
                 <FormField label="Business Name" required error={identityErrors.name}>
-                  <Input value={identityForm.name} onChange={(e) => { setIdentityForm((f) => ({ ...f, name: e.target.value })); setIdentityErrors((p) => ({ ...p, name: undefined })); }} placeholder="e.g. Science Hub" />
+                  <Input value={identityForm.name} onChange={(e) => { setIdentityForm((f) => ({ ...f, name: e.target.value })); setIdentityErrors((p) => ({ ...p, name: undefined })); }} placeholder="e.g. Science Hub" maxLength={200} />
                 </FormField>
-                <FormField label="Tagline">
-                  <Input value={identityForm.tagline} onChange={(e) => setIdentityForm((f) => ({ ...f, tagline: e.target.value }))} placeholder="e.g. Industrial & Laboratory Solutions" />
+                <FormField label="Tagline" error={identityErrors.tagline}>
+                  <Input value={identityForm.tagline} onChange={(e) => { setIdentityForm((f) => ({ ...f, tagline: e.target.value })); setIdentityErrors((p) => ({ ...p, tagline: undefined })); }} placeholder="e.g. Industrial & Laboratory Solutions" maxLength={100} />
                 </FormField>
                 <FormField label="Business Email (on invoices)" error={identityErrors.email}>
-                  <Input type="email" value={identityForm.email} onChange={(e) => { setIdentityForm((f) => ({ ...f, email: e.target.value })); setIdentityErrors((p) => ({ ...p, email: undefined })); }} placeholder="e.g. info@sciencehub.com" />
+                  <Input type="email" value={identityForm.email} onChange={(e) => { setIdentityForm((f) => ({ ...f, email: e.target.value })); setIdentityErrors((p) => ({ ...p, email: undefined })); }} placeholder="e.g. info@sciencehub.com" maxLength={254} />
                 </FormField>
                 <FormField label="Phone" error={identityErrors.phone}>
                   <PhoneInput value={identityForm.phone} onChange={(e) => { setIdentityForm((f) => ({ ...f, phone: e.target.value })); setIdentityErrors((p) => ({ ...p, phone: undefined })); }} placeholder="10-digit mobile" />
@@ -910,7 +911,7 @@ export default function SettingsPage() {
               </p>
               <div className={styles.formGrid}>
                 <FormField label="Street Address" required error={addressErrors.address}>
-                  <Input value={addressForm.address} onChange={(e) => { setAddressForm((f) => ({ ...f, address: e.target.value })); setAddressErrors((er) => ({ ...er, address: undefined })); }} placeholder="e.g. Pooth Khurd" />
+                  <Input value={addressForm.address} onChange={(e) => { setAddressForm((f) => ({ ...f, address: e.target.value })); setAddressErrors((er) => ({ ...er, address: undefined })); }} placeholder="e.g. Pooth Khurd" maxLength={500} />
                 </FormField>
                 <FormField
                   label="Pincode"
@@ -922,7 +923,7 @@ export default function SettingsPage() {
                   <Input value={addressForm.pincode} onChange={handleAddressPincodeChange} placeholder="e.g. 110039" maxLength={6} />
                 </FormField>
                 <FormField label="City" required error={addressErrors.city}>
-                  <Input value={addressForm.city} onChange={(e) => { setAddressForm((f) => ({ ...f, city: e.target.value })); setAddressErrors((er) => ({ ...er, city: undefined })); }} placeholder="e.g. Delhi" />
+                  <Input value={addressForm.city} onChange={(e) => { setAddressForm((f) => ({ ...f, city: e.target.value })); setAddressErrors((er) => ({ ...er, city: undefined })); }} placeholder="e.g. Delhi" maxLength={100} />
                 </FormField>
                 <FormField label="State" required error={addressErrors.state}>
                   <Select value={addressForm.state} onChange={(e) => { setAddressForm((f) => ({ ...f, state: e.target.value })); setAddressErrors((er) => ({ ...er, state: undefined })); }}>
@@ -966,10 +967,10 @@ export default function SettingsPage() {
               </p>
               <div className={styles.formGrid}>
                 <FormField label="Bank Name" required error={bankErrors.bankName}>
-                  <Input value={bankForm.bankName} onChange={(e) => { setBankForm((f) => ({ ...f, bankName: toTitleCase(e.target.value) })); setBankErrors((p) => ({ ...p, bankName: undefined })); }} placeholder="e.g. HDFC Bank" />
+                  <Input value={bankForm.bankName} onChange={(e) => { setBankForm((f) => ({ ...f, bankName: toTitleCase(e.target.value) })); setBankErrors((p) => ({ ...p, bankName: undefined })); }} placeholder="e.g. HDFC Bank" maxLength={200} />
                 </FormField>
                 <FormField label="Account Holder Name" required error={bankErrors.bankAccountName}>
-                  <Input value={bankForm.bankAccountName} onChange={(e) => { setBankForm((f) => ({ ...f, bankAccountName: e.target.value })); setBankErrors((p) => ({ ...p, bankAccountName: undefined })); }} placeholder="e.g. Science Hub" />
+                  <Input value={bankForm.bankAccountName} onChange={(e) => { setBankForm((f) => ({ ...f, bankAccountName: e.target.value })); setBankErrors((p) => ({ ...p, bankAccountName: undefined })); }} placeholder="e.g. Science Hub" maxLength={200} />
                 </FormField>
                 <FormField label="Account Number" required error={bankErrors.bankAccountNumber}>
                   <Input value={bankForm.bankAccountNumber} onChange={(e) => { setBankForm((f) => ({ ...f, bankAccountNumber: e.target.value.replace(/\D/g, "").slice(0, 18) })); setBankErrors((p) => ({ ...p, bankAccountNumber: undefined })); }} placeholder="e.g. 123456789012" className={styles.gstinInput} maxLength={18} />
@@ -995,7 +996,7 @@ export default function SettingsPage() {
                   />
                 </FormField>
                 <FormField label="Branch" required error={bankErrors.bankBranch}>
-                  <Input value={bankForm.bankBranch} onChange={(e) => { setBankForm((f) => ({ ...f, bankBranch: toTitleCase(e.target.value) })); setBankErrors((p) => ({ ...p, bankBranch: undefined })); }} placeholder="e.g. Noida" />
+                  <Input value={bankForm.bankBranch} onChange={(e) => { setBankForm((f) => ({ ...f, bankBranch: toTitleCase(e.target.value) })); setBankErrors((p) => ({ ...p, bankBranch: undefined })); }} placeholder="e.g. Noida" maxLength={100} />
                 </FormField>
               </div>
             </form>
@@ -1034,6 +1035,7 @@ export default function SettingsPage() {
                   onChange={(e) => { setTermsForm(e.target.value); setTermsError(undefined); }}
                   rows={6}
                   placeholder={"e.g. Interest @ 24%p.a would be charged after 45 days of Invoice\nMaterial sold strictly for lab use only"}
+                  maxLength={2000}
                 />
               </FormField>
             </form>
@@ -1143,6 +1145,7 @@ export default function SettingsPage() {
                     value={emailForm.gmailUser}
                     onChange={(e) => { setEmailForm((f) => ({ ...f, gmailUser: e.target.value })); setEmailErrors((p) => ({ ...p, gmailUser: undefined })); }}
                     placeholder="yourbusiness@gmail.com"
+                    maxLength={254}
                   />
                 </FormField>
                 <FormField label={saved.gmailAppPasswordSet ? "New App Password (leave blank to keep current)" : "App Password"} error={emailErrors.gmailAppPassword}>

@@ -49,11 +49,12 @@ export function RateListFormBody({
                 type="text" placeholder="e.g. Chemical Rate List"
                 value={title}
                 onChange={(e) => onTitleChange(e.target.value)}
+                maxLength={200}
               />
             </FormField>
           </div>
           <FormField label="Note" hint='Optional — printed below the title, e.g. "GST Extra as Applicable"'>
-            <Textarea rows={2} value={note} onChange={(e) => onNoteChange(e.target.value)} placeholder="GST Extra as Applicable" />
+            <Textarea rows={2} value={note} onChange={(e) => onNoteChange(e.target.value)} placeholder="GST Extra as Applicable" maxLength={2000} />
           </FormField>
         </div>
 

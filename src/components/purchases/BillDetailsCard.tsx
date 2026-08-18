@@ -154,12 +154,13 @@ export function BillDetailsCard({
 
   async function handleCreateInlineVendor() {
     const newErrors = validateForm<InlineVendorForm>(ivForm, {
-      name:    [rules.required("Vendor name is required.")],
+      name:    [rules.required("Vendor name is required."), rules.minLength(2), rules.maxLength(200)],
+      company: [rules.maxLength(200)],
       phone:   [rules.phone10()],
-      email:   [rules.email()],
+      email:   [rules.maxLength(254), rules.email()],
       gstin:   [rules.maxLength(15), rules.gstin()],
-      address: [rules.required("Address is required.")],
-      city:    [rules.required("City is required.")],
+      address: [rules.required("Address is required."), rules.minLength(5), rules.maxLength(500)],
+      city:    [rules.required("City is required."), rules.minLength(2), rules.maxLength(100)],
       state:   [rules.required("State is required.")],
       pincode: [rules.required("Pincode is required."), rules.pincode()],
     });
@@ -306,14 +307,14 @@ export function BillDetailsCard({
         <div className={styles.inlineVendorGrid}>
           <div className="form-grid-2">
             <FormField label="Vendor Name" required error={ivFieldErrors.name}>
-              <Input value={ivForm.name} onChange={(e) => updateIvField("name", e.target.value)} placeholder="e.g. Sharma Chemicals" />
+              <Input value={ivForm.name} onChange={(e) => updateIvField("name", e.target.value)} placeholder="e.g. Sharma Chemicals" maxLength={200} />
             </FormField>
             <FormField label="Company / Trade Name">
-              <Input value={ivForm.company} onChange={(e) => updateIvField("company", e.target.value)} placeholder="Optional" />
+              <Input value={ivForm.company} onChange={(e) => updateIvField("company", e.target.value)} placeholder="Optional" maxLength={200} />
             </FormField>
           </div>
           <FormField label="Address" required error={ivFieldErrors.address}>
-            <Input value={ivForm.address} onChange={(e) => updateIvField("address", e.target.value)} placeholder="Street / locality" />
+            <Input value={ivForm.address} onChange={(e) => updateIvField("address", e.target.value)} placeholder="Street / locality" maxLength={500} />
           </FormField>
           <div className="form-grid-2">
             <FormField
@@ -334,7 +335,7 @@ export function BillDetailsCard({
           </div>
           <div className="form-grid-2">
             <FormField label="City" required error={ivFieldErrors.city}>
-              <Input value={ivForm.city} onChange={(e) => updateIvField("city", e.target.value)} placeholder="City" />
+              <Input value={ivForm.city} onChange={(e) => updateIvField("city", e.target.value)} placeholder="City" maxLength={100} />
             </FormField>
             <FormField label="GSTIN" error={ivFieldErrors.gstin}>
               <Input value={ivForm.gstin} onChange={(e) => updateIvField("gstin", e.target.value)} placeholder="22AAAAA0000A1Z5" maxLength={15} mono />
@@ -345,7 +346,7 @@ export function BillDetailsCard({
               <PhoneInput value={ivForm.phone} onChange={(e) => updateIvField("phone", e.target.value)} placeholder="10-digit mobile" />
             </FormField>
             <FormField label="Email" error={ivFieldErrors.email}>
-              <Input type="email" value={ivForm.email} onChange={(e) => updateIvField("email", e.target.value)} placeholder="vendor@example.com" />
+              <Input type="email" value={ivForm.email} onChange={(e) => updateIvField("email", e.target.value)} placeholder="vendor@example.com" maxLength={254} />
             </FormField>
           </div>
         </div>
@@ -402,7 +403,7 @@ export function BillDetailsCard({
       )}
 
       <FormField label="Notes">
-        <Textarea rows={2} value={notes} onChange={(e) => onNotesChange(e.target.value)} placeholder="Optional notes about this purchase…" />
+        <Textarea rows={2} value={notes} onChange={(e) => onNotesChange(e.target.value)} placeholder="Optional notes about this purchase…" maxLength={2000} />
       </FormField>
 
       <FormField label="Attachment (bill copy / receipt)">

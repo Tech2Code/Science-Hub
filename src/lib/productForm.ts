@@ -12,7 +12,7 @@ export interface ProductFormData {
 export type ProductFieldErrors = { name?: string; price?: string; purchasePrice?: string; unit?: string; gstRate?: string; stock?: string; minStock?: string };
 
 export function validateProductForm(form: ProductFormData): ProductFieldErrors {
-  const nameErr          = validate(form.name,  rules.required("Product name is required."));
+  const nameErr          = validate(form.name,  rules.required("Product name is required."), rules.minLength(2), rules.maxLength(200));
   const priceErr         = validate(form.price, rules.required("Price is required."), rules.positiveNumber("Price must be greater than 0."));
   const purchasePriceErr = form.purchasePrice.trim() ? validate(form.purchasePrice, rules.nonNegativeNumber("Purchase price cannot be negative.")) : null;
   const unitErr          = validate(form.unit, rules.required("Unit is required."));

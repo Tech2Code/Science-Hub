@@ -18,6 +18,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { amount, method, reference, date, notes } = body;
 
     if (!amount || amount <= 0) return NextResponse.json({ error: "Payment amount must be greater than 0." }, { status: 400 });
+    if (typeof reference === "string" && reference.length > 500) {
+      return NextResponse.json({ error: "Reference is too long (max 500 characters)." }, { status: 400 });
+    }
+    if (typeof notes === "string" && notes.length > 2000) {
+      return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
+    }
 
     const billCheck = await prisma.purchaseBill.findFirst({ where: { id, deletedAt: null } });
     if (!billCheck) return NextResponse.json({ error: "Bill not found" }, { status: 404 });

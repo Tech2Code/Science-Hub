@@ -166,6 +166,33 @@
   }
 }
 
+.overlayCheck {
+  width: 2.5rem;
+  height: 2.5rem;
+  animation: checkPop 0.3s ease-out;
+}
+.overlayCheck circle {
+  stroke-dasharray: 69;
+  stroke-dashoffset: 69;
+  animation: checkCircle 0.4s ease-out forwards;
+}
+.overlayCheck path {
+  stroke-dasharray: 16;
+  stroke-dashoffset: 16;
+  animation: checkTick 0.25s ease-out 0.3s forwards;
+}
+
+@keyframes checkPop {
+  0% { transform: scale(0.7); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes checkCircle {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes checkTick {
+  to { stroke-dashoffset: 0; }
+}
+
 .overlayText {
   font-size: 0.875rem;
   font-weight: 500;

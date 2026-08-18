@@ -23,6 +23,8 @@ import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard
 import { computeInvoiceTotals, makeInvoiceLineItemKey, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
 import { animateSection } from "@/lib/animateSection";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
+import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { InfoBanner } from "@/components/ui/InfoBanner";
 import styles from "./edit.module.css";
 
 type Product = InvoiceProduct;
@@ -88,6 +90,49 @@ export default function EditInvoicePage() {
   const [customerErrors, setCustomerErrors] = useState<FormErrors<CustomerForm>>({});
   const [customerSaving, setCustomerSaving] = useState(false);
   const { isDirty, markClean } = useDirty({ customerId, isInterState, placeOfSupply, reverseCharge, items, notes, dueDate, invoiceDate, transportChargeEnabled, transportCharge, transportChargeGstRate });
+
+  const DRAFT_KEY = `invoice:edit:${id}`;
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+
+  type InvoiceEditDraft = {
+    customerId: string; isInterState: boolean; placeOfSupply: string; reverseCharge: boolean;
+    items: LineItem[]; notes: string; dueDate: string; invoiceDate: string;
+    transportChargeEnabled: boolean; transportCharge: string; transportChargeGstRate: string;
+  };
+
+  function restoreDraft() {
+    const draft = loadFormDraft<InvoiceEditDraft>(DRAFT_KEY);
+    if (draft?.values) {
+      const v = draft.values;
+      setCustomerId(v.customerId);
+      setIsInterState(v.isInterState);
+      setPlaceOfSupply(v.placeOfSupply);
+      setReverseCharge(v.reverseCharge);
+      setItems(v.items ?? []);
+      setNotes(v.notes ?? "");
+      setDueDate(v.dueDate ?? "");
+      setInvoiceDate(v.invoiceDate ?? "");
+      setTransportChargeEnabled(v.transportChargeEnabled);
+      setTransportCharge(v.transportCharge ?? "");
+      setTransportChargeGstRate(v.transportChargeGstRate ?? "18");
+      const selected = customers.find((c) => c.id === v.customerId);
+      if (selected) setCustomerSearch(selected.name);
+    }
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  function dismissDraft() {
+    clearFormDraft(DRAFT_KEY);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  useFormDraft(DRAFT_KEY, {
+    customerId, isInterState, placeOfSupply, reverseCharge, items, notes, dueDate, invoiceDate,
+    transportChargeEnabled, transportCharge, transportChargeGstRate,
+  }, !draftReady || saving || !isDirty);
 
   const filteredCustomers = customers.filter((c) => c.name.toLowerCase().includes(customerSearch.toLowerCase()));
   const selectedCustomer = customers.find((c) => c.id === customerId);
@@ -161,11 +206,11 @@ export default function EditInvoicePage() {
 
   function validateCustomerForm(): boolean {
     const errs = validateForm<CustomerForm>(customerForm, {
-      name:    [rules.required("Customer name is required.")],
+      name:    [rules.required("Customer name is required."), rules.minLength(2), rules.maxLength(200)],
       phone:   [rules.phone10()],
-      email:   [rules.email()],
-      address: [rules.required("Address is required.")],
-      city:    [rules.required("City is required.")],
+      email:   [rules.maxLength(254), rules.email()],
+      address: [rules.required("Address is required."), rules.minLength(5), rules.maxLength(500)],
+      city:    [rules.required("City is required."), rules.minLength(2), rules.maxLength(100)],
       state:   [rules.required("State is required.")],
       pincode: [rules.required("Pincode is required."), rules.pincode()],
       gstin:   [rules.gstin()],
@@ -311,6 +356,8 @@ export default function EditInvoicePage() {
         transportChargeEnabled: transportEnabled, transportCharge: transportChargeVal, transportChargeGstRate: transportChargeGstRateVal,
       });
       setLoading(false);
+      if (loadFormDraft(`invoice:edit:${id}`)) setShowDraftBanner(true);
+      else setDraftReady(true);
     }).catch(() => { setError("Failed to load invoice."); setLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- markClean is a fresh function each render (not memoized); only `id` should retrigger this fetch
   }, [id]);
@@ -396,6 +443,7 @@ export default function EditInvoicePage() {
     });
     if (res.ok) {
       const d = await res.json();
+      clearFormDraft(DRAFT_KEY);
       bustCache(`/api/invoices/${id}`);
       bustCachePrefix("/api/products");
       invalidateCachedPdf("invoice", id);
@@ -523,6 +571,14 @@ export default function EditInvoicePage() {
         <h1 className="page-title">Edit Invoice — {invoice.invoiceNumber}</h1>
         <p className="page-sub">Editing is allowed only while the invoice is unpaid or partially paid.</p>
       </div>
+      {showDraftBanner && (
+        <InfoBanner
+          message="You have unsaved edits to this invoice from earlier — want to resume them?"
+          actionLabel="Resume draft"
+          onAction={restoreDraft}
+          onDismiss={dismissDraft}
+        />
+      )}
       <form onSubmit={handleSubmit} noValidate>
         <div className={styles.layout}>
           {/* Left column */}
@@ -611,10 +667,10 @@ export default function EditInvoicePage() {
               <p className={styles.customModalSub}>{customerEditId ? "Update this customer's details" : "Not in your list — fill details and create"}</p>
               <div className={styles.customForm}>
                 <FormField label="Customer Name" required error={customerErrors.name}>
-                  <Input autoFocus value={customerForm.name} onChange={(e) => updateCustomerField("name", e.target.value)} placeholder="e.g. Acme Traders" />
+                  <Input autoFocus value={customerForm.name} onChange={(e) => updateCustomerField("name", e.target.value)} placeholder="e.g. Acme Traders" maxLength={200} />
                 </FormField>
                 <FormField label="Address" required error={customerErrors.address}>
-                  <Input value={customerForm.address} onChange={(e) => updateCustomerField("address", e.target.value)} placeholder="Street / locality" />
+                  <Input value={customerForm.address} onChange={(e) => updateCustomerField("address", e.target.value)} placeholder="Street / locality" maxLength={500} />
                 </FormField>
                 <div className="form-grid-2">
                   <FormField
@@ -635,7 +691,7 @@ export default function EditInvoicePage() {
                 </div>
                 <div className="form-grid-2">
                   <FormField label="City" required error={customerErrors.city}>
-                    <Input value={customerForm.city} onChange={(e) => updateCustomerField("city", e.target.value)} placeholder="City" />
+                    <Input value={customerForm.city} onChange={(e) => updateCustomerField("city", e.target.value)} placeholder="City" maxLength={100} />
                   </FormField>
                   <FormField label="GSTIN" error={customerErrors.gstin}>
                     <Input value={customerForm.gstin} onChange={(e) => updateCustomerField("gstin", e.target.value)} placeholder="22AAAAA0000A1Z5" maxLength={15} mono />
@@ -646,7 +702,7 @@ export default function EditInvoicePage() {
                     <PhoneInput value={customerForm.phone} onChange={(e) => updateCustomerField("phone", e.target.value)} placeholder="10-digit mobile" />
                   </FormField>
                   <FormField label="Email" error={customerErrors.email}>
-                    <Input type="email" value={customerForm.email} onChange={(e) => updateCustomerField("email", e.target.value)} placeholder="customer@example.com" />
+                    <Input type="email" value={customerForm.email} onChange={(e) => updateCustomerField("email", e.target.value)} placeholder="customer@example.com" maxLength={254} />
                   </FormField>
                 </div>
                 {!customerEditId && (
@@ -706,6 +762,7 @@ export default function EditInvoicePage() {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Payment terms, delivery instructions…"
+                  maxLength={2000}
                 />
               </FormField>
             </div>

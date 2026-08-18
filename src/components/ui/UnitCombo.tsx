@@ -37,6 +37,7 @@ export function UnitCombo({ id, value, onChange, suggestions, placeholder = "e.g
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur(); }}
         className={className}
+        maxLength={100}
       />
       {open && filtered.length > 0 && (
         <div className={styles.unitDropdown} onMouseDown={(e) => e.preventDefault()}>

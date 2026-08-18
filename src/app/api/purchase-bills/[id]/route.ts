@@ -43,6 +43,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (attachmentUrl && !isPurchaseBillBlobUrl(attachmentUrl)) {
       return NextResponse.json({ error: "Invalid attachment URL" }, { status: 400 });
     }
+    if (typeof notes === "string" && notes.length > 2000) {
+      return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
+    }
 
     const existing = await prisma.purchaseBill.findFirst({ where: { id, deletedAt: null } });
     if (!existing) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
@@ -105,7 +108,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       if (!Array.isArray(items) || items.length === 0) {
         return NextResponse.json({ error: "At least one item is required." }, { status: 400 });
       }
-      for (const item of items as { quantity: number; purchasePrice: number; discountPercent?: number }[]) {
+      for (const item of items as { productId?: string; quantity: number; purchasePrice: number; discountPercent?: number; name?: string; hsn?: string; unit?: string }[]) {
         const quantity = parseFloat(String(item.quantity));
         const purchasePrice = parseFloat(String(item.purchasePrice));
         const discountPercent = parseFloat(String(item.discountPercent ?? 0));
@@ -113,6 +116,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         if (!(purchasePrice >= 0)) return NextResponse.json({ error: "Item price cannot be negative" }, { status: 400 });
         if (Number.isNaN(discountPercent) || discountPercent < 0 || discountPercent > 100) {
           return NextResponse.json({ error: "Item discount must be between 0 and 100%" }, { status: 400 });
+        }
+        if (!item.productId && String(item.name ?? "").trim().length < 2) {
+          return NextResponse.json({ error: "Item name must be at least 2 characters." }, { status: 400 });
+        }
+        if (String(item.name ?? "").length > 200) {
+          return NextResponse.json({ error: "Item name is too long (max 200 characters)." }, { status: 400 });
+        }
+        if (String(item.hsn ?? "").length > 50) {
+          return NextResponse.json({ error: "Item HSN/SAC is too long (max 50 characters)." }, { status: 400 });
+        }
+        if (String(item.unit ?? "").length > 100) {
+          return NextResponse.json({ error: "Item unit is too long (max 100 characters)." }, { status: 400 });
         }
       }
       // Discount is applied to the line's gross amount before GST, same as

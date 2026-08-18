@@ -47,6 +47,12 @@ export async function POST(request: NextRequest) {
     if (!trimmedName) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
+    if (trimmedName.length < 2) {
+      return NextResponse.json({ error: "Name must be at least 2 characters." }, { status: 400 });
+    }
+    if (trimmedName.length > 200) {
+      return NextResponse.json({ error: "Name is too long (max 200 characters)." }, { status: 400 });
+    }
 
     const category = await prisma.category.create({ data: { name: trimmedName } });
 

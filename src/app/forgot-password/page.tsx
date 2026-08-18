@@ -98,6 +98,7 @@ export default function ForgotPasswordPage() {
                     onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError(""); }}
                     onBlur={handleEmailBlur}
                     placeholder="you@sciencehub.in"
+                    maxLength={254}
                   />
                 </FormField>
                 <button type="submit" className={styles.submitBtn} disabled={loading}>

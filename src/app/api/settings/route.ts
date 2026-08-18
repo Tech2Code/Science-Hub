@@ -63,7 +63,7 @@ export async function PUT(request: NextRequest) {
     const isAddressSectionUpdate = ADDRESS_KEYS.some((k) => k in body);
 
     const validationError = validateSettingsInput(
-      { pan, termsAndConditions, phone, address, city, state, pincode, gstin, bankName, bankAccountName, bankAccountNumber, bankIfsc, bankBranch },
+      { name, tagline, email, gmailUser, pan, termsAndConditions, phone, address, city, state, pincode, gstin, bankName, bankAccountName, bankAccountNumber, bankIfsc, bankBranch },
       isBankSectionUpdate,
       isAddressSectionUpdate,
     );

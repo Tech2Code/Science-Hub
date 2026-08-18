@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     if (typeof name !== "string") {
       return NextResponse.json({ error: "Enter your name." }, { status: 400 });
     }
-    const nameErr = validate(name, rules.required("Please enter your name."), rules.minLength(2, "Name must be at least 2 characters."));
+    const nameErr = validate(name, rules.required("Please enter your name."), rules.minLength(2, "Name must be at least 2 characters."), rules.maxLength(200));
     if (nameErr) {
       return NextResponse.json({ error: nameErr }, { status: 400 });
     }

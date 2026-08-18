@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { name, description, sku, hsn, unit, price, purchasePrice, gstRate, stock, minStock, categoryId, brandId } = body;
-    const coreErr = validateProductInput({ name, price }, true);
+    const coreErr = validateProductInput({ name, price, sku, hsn, description }, true);
     if (coreErr) return NextResponse.json({ error: coreErr }, { status: 400 });
     const trimmedName = (name as string).trim();
 

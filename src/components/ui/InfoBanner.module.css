@@ -33,6 +33,11 @@
   font-weight: 600;
   color: var(--c-blue-h);
   white-space: nowrap;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
 }
 .actionLink:hover { text-decoration: underline; }
 
@@ -47,3 +52,22 @@
   border-radius: var(--c-radius-xs);
 }
 .dismissBtn:hover { background: var(--c-blue-border); }
+
+@media (max-width: 768px) {
+  .banner {
+    gap: 0.5rem;
+    padding: 0.625rem 0.75rem;
+  }
+
+  .message {
+    font-size: 0.8125rem;
+  }
+
+  .actions {
+    gap: 0.5rem;
+  }
+
+  .actionLink {
+    font-size: 0.75rem;
+  }
+}

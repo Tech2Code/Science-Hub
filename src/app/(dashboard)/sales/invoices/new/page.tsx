@@ -23,6 +23,7 @@ import { rules, validate, validateForm, hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { useDirty } from "@/lib/useDirty";
 import { InfoBanner } from "@/components/ui/InfoBanner";
+import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { deriveDefaultPrefix, getIndianFinancialYear, formatFinancialYearLabel, resolveNumberFormat } from "@/lib/documentNumbering";
 
 // Shown once, only before this business's very first invoice, if numbering
@@ -77,6 +78,58 @@ export default function NewInvoicePage() {
   const [stockOutItems, setStockOutItems] = useState<{ name: string; available: number; requested: number }[]>([]);
   const [showFirstInvoiceNudge, setShowFirstInvoiceNudge] = useState(false);
   const [firstInvoicePreviewNumber, setFirstInvoicePreviewNumber] = useState("");
+
+  const DRAFT_KEY = "invoice:new";
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+
+  useEffect(() => {
+    const draft = loadFormDraft<{
+      customerId: string; customerSearch: string; isInterState: boolean; placeOfSupply: string;
+      reverseCharge: boolean; items: LineItem[]; notes: string; dueDate: string;
+      transportChargeEnabled: boolean; transportCharge: string; transportChargeGstRate: string;
+    }>(DRAFT_KEY);
+    const v = draft?.values;
+    const hasContent = !!v && (!!v.customerId || !!v.customerSearch?.trim() || v.items?.length > 0 || !!v.notes?.trim());
+    if (hasContent) setShowDraftBanner(true);
+    else setDraftReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount check
+  }, []);
+
+  function restoreDraft() {
+    const draft = loadFormDraft<{
+      customerId: string; customerSearch: string; isInterState: boolean; placeOfSupply: string;
+      reverseCharge: boolean; items: LineItem[]; notes: string; dueDate: string;
+      transportChargeEnabled: boolean; transportCharge: string; transportChargeGstRate: string;
+    }>(DRAFT_KEY);
+    if (draft?.values) {
+      const v = draft.values;
+      setCustomerId(v.customerId ?? "");
+      setCustomerSearch(v.customerSearch ?? "");
+      setIsInterState(!!v.isInterState);
+      setPlaceOfSupply(v.placeOfSupply ?? "");
+      setReverseCharge(!!v.reverseCharge);
+      setItems(v.items ?? []);
+      setNotes(v.notes ?? "");
+      setDueDate(v.dueDate ?? "");
+      setTransportChargeEnabled(v.transportChargeEnabled ?? true);
+      setTransportCharge(v.transportCharge ?? "");
+      setTransportChargeGstRate(v.transportChargeGstRate ?? "18");
+    }
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  function dismissDraft() {
+    clearFormDraft(DRAFT_KEY);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  useFormDraft(DRAFT_KEY, {
+    customerId, customerSearch, isInterState, placeOfSupply, reverseCharge,
+    items, notes, dueDate, transportChargeEnabled, transportCharge, transportChargeGstRate,
+  }, !draftReady || saving);
 
   useEffect(() => {
     fetch("/api/customers?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { data: Customer[] }) => {
@@ -264,11 +317,11 @@ export default function NewInvoicePage() {
 
   function validateCustomCustomer(): boolean {
     const errs = validateForm(customCustomer, {
-      name:    [rules.required("Customer name is required.")],
+      name:    [rules.required("Customer name is required."), rules.minLength(2), rules.maxLength(200)],
       phone:   [rules.phone10()],
-      email:   [rules.email()],
-      address: [rules.required("Address is required.")],
-      city:    [rules.required("City is required.")],
+      email:   [rules.maxLength(254), rules.email()],
+      address: [rules.required("Address is required."), rules.minLength(5), rules.maxLength(500)],
+      city:    [rules.required("City is required."), rules.minLength(2), rules.maxLength(100)],
       state:   [rules.required("State is required.")],
       pincode: [rules.required("Pincode is required."), rules.pincode()],
       gstin:   [rules.gstin()],
@@ -334,6 +387,7 @@ export default function NewInvoicePage() {
     });
     if (res.ok) {
       const d = await res.json();
+      clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/invoices");
       bustCachePrefix("/api/reports");
       bustCachePrefix("/api/products");
@@ -364,6 +418,14 @@ export default function NewInvoicePage() {
         <h1 className="page-title">Create Invoice</h1>
         <p className="page-sub">Generate a GST-compliant invoice</p>
       </div>
+      {showDraftBanner && (
+        <InfoBanner
+          message="You have an unsaved invoice draft from earlier — want to resume it?"
+          actionLabel="Resume draft"
+          onAction={restoreDraft}
+          onDismiss={dismissDraft}
+        />
+      )}
       {showFirstInvoiceNudge && (
         <InfoBanner
           message={`This is your first invoice — it will be numbered "${firstInvoicePreviewNumber}" by default. Want a different prefix or starting number?`}
@@ -379,7 +441,7 @@ export default function NewInvoicePage() {
         confirmLabel="Discard & Leave"
         variant="danger"
         loading={false}
-        onConfirm={() => router.push("/sales/invoices")}
+        onConfirm={() => { clearFormDraft(DRAFT_KEY); router.push("/sales/invoices"); }}
         onCancel={() => setShowCancelConfirm(false)}
       />
 
@@ -562,11 +624,12 @@ export default function NewInvoicePage() {
                     autoFocus
                     value={customCustomer.name}
                     onChange={(e) => { setCustomCustomer((p) => ({ ...p, name: e.target.value })); clearErr("name"); }}
+                    maxLength={200}
                   />
                 </FormField>
                 <FormField label="Address" required error={customErrors.address}>
                   <Input type="text" placeholder="Street / locality" value={customCustomer.address}
-                    onChange={(e) => { setCustomCustomer((p) => ({ ...p, address: e.target.value })); clearErr("address"); }} />
+                    onChange={(e) => { setCustomCustomer((p) => ({ ...p, address: e.target.value })); clearErr("address"); }} maxLength={500} />
                 </FormField>
                 <div className="form-grid-2">
                   <FormField
@@ -576,7 +639,7 @@ export default function NewInvoicePage() {
                     hint={customPincodeLookup.status.status === "loading" ? "Looking up city/state…" : customPincodeLookup.status.label}
                     hintSuccess={customPincodeLookup.status.status === "found"}
                   >
-                    <Input type="text" placeholder="6-digit" value={customCustomer.pincode} onChange={handleCustomPincodeChange} />
+                    <Input type="text" placeholder="6-digit" value={customCustomer.pincode} onChange={handleCustomPincodeChange} maxLength={6} />
                   </FormField>
                   <FormField label="State" required error={customErrors.state}>
                     <Select value={customCustomer.state}
@@ -595,7 +658,7 @@ export default function NewInvoicePage() {
                 <div className="form-grid-2">
                   <FormField label="City" required error={customErrors.city}>
                     <Input type="text" placeholder="City" value={customCustomer.city}
-                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, city: e.target.value })); clearErr("city"); }} />
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, city: e.target.value })); clearErr("city"); }} maxLength={100} />
                   </FormField>
                   <FormField label="GSTIN" error={customErrors.gstin}>
                     <Input type="text" placeholder="22AAAAA0000A1Z5" value={customCustomer.gstin} maxLength={15} mono
@@ -609,7 +672,7 @@ export default function NewInvoicePage() {
                   </FormField>
                   <FormField label="Email" error={customErrors.email}>
                     <Input type="email" placeholder="customer@example.com" value={customCustomer.email}
-                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, email: e.target.value })); clearErr("email"); }} />
+                      onChange={(e) => { setCustomCustomer((p) => ({ ...p, email: e.target.value })); clearErr("email"); }} maxLength={254} />
                   </FormField>
                 </div>
                 {!customerEditId && (
@@ -663,6 +726,7 @@ export default function NewInvoicePage() {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Payment terms, delivery instructions, or any other notes…"
+                  maxLength={2000}
                 />
               </FormField>
             </div>

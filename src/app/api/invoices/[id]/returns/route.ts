@@ -51,6 +51,9 @@ export async function POST(
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "At least one item is required" }, { status: 400 });
     }
+    if (typeof notes === "string" && notes.length > 2000) {
+      return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
+    }
     for (const item of items) {
       if (!item.quantity || item.quantity <= 0) {
         return NextResponse.json({ error: `Invalid quantity for ${item.name}` }, { status: 400 });

@@ -17,12 +17,12 @@ type VendorStrFields = { name: string; company: string; gstin: string; phone: st
 export function validateVendorForm(form: VendorFormData, opts: { requirePhone: boolean; requireAddress: boolean; requireCity: boolean; requireState: boolean; requirePincode: boolean }): FormErrors<VendorStrFields> {
   const strForm: VendorStrFields = { name: form.name, company: form.company, gstin: form.gstin, phone: form.phone, email: form.email, address: form.address, city: form.city, state: form.state, pincode: form.pincode };
   return validateForm(strForm, {
-    name:    [rules.required("Vendor name is required.")],
+    name:    [rules.required("Vendor name is required."), rules.minLength(2), rules.maxLength(200)],
     phone:   opts.requirePhone ? [rules.required("Phone number is required."), rules.phone10()] : [rules.phone10()],
-    email:   [rules.email()],
+    email:   [rules.maxLength(254), rules.email()],
     gstin:   [rules.maxLength(15), rules.gstin()],
-    address: opts.requireAddress ? [rules.required("Address is required.")] : [],
-    city:    opts.requireCity ? [rules.required("City is required.")] : [],
+    address: (opts.requireAddress ? [rules.required("Address is required.")] : []).concat([rules.minLength(5), rules.maxLength(500)]),
+    city:    (opts.requireCity ? [rules.required("City is required.")] : []).concat([rules.minLength(2), rules.maxLength(100)]),
     state:   opts.requireState ? [rules.required("State is required.")] : [],
     pincode: opts.requirePincode ? [rules.required("Pincode is required."), rules.pincode()] : [rules.pincode()],
   });

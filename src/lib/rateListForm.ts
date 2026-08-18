@@ -68,15 +68,20 @@ export function validateAndBuildRateListItems(items: unknown): { error: string }
   const built: BuiltRateListItem[] = [];
   for (const [idx, raw] of (items as RateListItemInput[]).entries()) {
     const name = (raw.name ?? "").trim();
+    const brand = (raw.brand ?? "").trim();
     const unit = (raw.unit ?? "").trim();
     const listRate = parseFloat(String(raw.listRate));
     if (!name) return { error: "Every item must have a name" };
+    if (name.length < 2) return { error: "Item name must be at least 2 characters" };
+    if (name.length > 200) return { error: "Item name is too long (max 200 characters)" };
     if (!unit) return { error: "Every item must have a unit" };
+    if (unit.length > 50) return { error: "Item unit is too long (max 50 characters)" };
+    if (brand.length > 100) return { error: "Item brand is too long (max 100 characters)" };
     if (!(listRate >= 0)) return { error: "Every item's list rate must be 0 or more" };
     const isNetRate = Boolean(raw.isNetRate);
     const discountPercent = isNetRate ? 0 : Math.min(100, Math.max(0, parseFloat(String(raw.discountPercent ?? 0)) || 0));
     const amount = isNetRate ? listRate : Math.round((listRate - (listRate * discountPercent) / 100) * 100) / 100;
-    built.push({ serialNo: idx + 1, name, brand: (raw.brand ?? "").trim() || null, unit, isNetRate, discountPercent, listRate, amount });
+    built.push({ serialNo: idx + 1, name, brand: brand || null, unit, isNetRate, discountPercent, listRate, amount });
   }
   return { items: built };
 }

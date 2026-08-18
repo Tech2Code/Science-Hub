@@ -12,6 +12,7 @@ interface PasswordInputProps {
   placeholder?: string;
   required?: boolean;
   minLength?: number;
+  maxLength?: number;
   autoComplete?: string;
   className?: string;
   style?: React.CSSProperties;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { rules, validate } from "@/lib/validation";
@@ -10,7 +10,14 @@ import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { RateListFormBody } from "@/components/rateLists/RateListFormBody";
 import { toNum, calcRateListItem, makeRateListLineItemKey, type RateListLineItem } from "@/lib/rateListForm";
+import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { InfoBanner } from "@/components/ui/InfoBanner";
 import styles from "./rateListNew.module.css";
+
+const BLANK_ITEMS: RateListLineItem[] = [{ key: makeRateListLineItemKey(), name: "", brand: "", unit: "Nos", isNetRate: false, discountPercent: "0", listRate: "" }];
+const DRAFT_KEY = "rate-list:new";
+
+type RateListNewDraft = { title: string; note: string; items: RateListLineItem[] };
 
 export default function NewRateListPage() {
   const router = useRouter();
@@ -19,10 +26,40 @@ export default function NewRateListPage() {
   const [title, setTitle] = useState("");
   const [titleError, setTitleError] = useState<string | undefined>(undefined);
   const [note, setNote] = useState("");
-  const [items, setItems] = useState<RateListLineItem[]>([{ key: makeRateListLineItemKey(), name: "", brand: "", unit: "Nos", isNetRate: false, discountPercent: "0", listRate: "" }]);
+  const [items, setItems] = useState<RateListLineItem[]>(BLANK_ITEMS);
   const [itemsError, setItemsError] = useState<string | undefined>(undefined);
   const [itemsErrorFor, setItemsErrorFor] = useState<RateListLineItem[] | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+
+  useEffect(() => {
+    const draft = loadFormDraft<RateListNewDraft>(DRAFT_KEY);
+    const v = draft?.values;
+    const hasContent = !!v && (!!v.title?.trim() || !!v.note?.trim() || v.items?.some((i) => i.name.trim() || toNum(i.listRate) > 0));
+    if (hasContent) setShowDraftBanner(true);
+    else setDraftReady(true);
+  }, []);
+
+  function restoreDraft() {
+    const draft = loadFormDraft<RateListNewDraft>(DRAFT_KEY);
+    if (draft?.values) {
+      setTitle(draft.values.title ?? "");
+      setNote(draft.values.note ?? "");
+      setItems(draft.values.items?.length ? draft.values.items : BLANK_ITEMS);
+    }
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  function dismissDraft() {
+    clearFormDraft(DRAFT_KEY);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  useFormDraft(DRAFT_KEY, { title, note, items }, !draftReady || saving);
 
   const visibleItemsError = itemsError && itemsErrorFor === items ? itemsError : undefined;
   const missingTitle = !title.trim();
@@ -32,7 +69,7 @@ export default function NewRateListPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const titleErr = validate(title, rules.required("Title is required."));
+    const titleErr = validate(title, rules.required("Title is required."), rules.minLength(2), rules.maxLength(200));
     setTitleError(titleErr ?? undefined);
     if (titleErr) return;
 
@@ -67,6 +104,7 @@ export default function NewRateListPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        clearFormDraft(DRAFT_KEY);
         bustCachePrefix("/api/rate-lists");
         toast({ type: "success", title: "Rate list created", message: `"${data.title}" saved.` });
         router.push(`/sales/rate-lists/${data.id}`);
@@ -88,6 +126,15 @@ export default function NewRateListPage() {
         <h1 className="page-title">Create Rate List</h1>
         <p className="page-sub">Build a downloadable price sheet to share with customers</p>
       </div>
+
+      {showDraftBanner && (
+        <InfoBanner
+          message="You have an unsaved rate list draft from earlier — want to resume it?"
+          actionLabel="Resume draft"
+          onAction={restoreDraft}
+          onDismiss={dismissDraft}
+        />
+      )}
 
       <form onSubmit={handleSubmit} noValidate>
         <RateListFormBody

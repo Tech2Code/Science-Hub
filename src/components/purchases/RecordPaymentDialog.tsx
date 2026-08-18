@@ -133,7 +133,7 @@ export function RecordPaymentDialog({ open, billDate, grandTotal, initial, onCan
                 </Select>
               </FormField>
               <FormField label="Reference / UTR">
-                <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. cheque no., UTR…" />
+                <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. cheque no., UTR…" maxLength={500} />
               </FormField>
             </div>
           </div>

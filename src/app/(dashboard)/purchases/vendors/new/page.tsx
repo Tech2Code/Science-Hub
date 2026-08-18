@@ -12,7 +12,11 @@ import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
+import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { InfoBanner } from "@/components/ui/InfoBanner";
 import styles from "./vendorNew.module.css";
+
+const DRAFT_KEY = "vendor:new";
 
 export default function NewVendorPage() {
   const router = useRouter();
@@ -24,6 +28,31 @@ export default function NewVendorPage() {
   const [form, setForm] = useState<VendorFormData>(BLANK_VENDOR_FORM);
   const [errors, setErrors] = useState<ReturnType<typeof validateVendorForm>>({});
   const [saving, setSaving] = useState(false);
+
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+
+  useEffect(() => {
+    const draft = loadFormDraft<VendorFormData>(DRAFT_KEY);
+    const hasContent = !!draft?.values && Object.entries(draft.values).some(([k, v]) => k !== "isActive" && String(v ?? "").trim());
+    if (hasContent) setShowDraftBanner(true);
+    else setDraftReady(true);
+  }, []);
+
+  function restoreDraft() {
+    const draft = loadFormDraft<VendorFormData>(DRAFT_KEY);
+    if (draft?.values) setForm(draft.values);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  function dismissDraft() {
+    clearFormDraft(DRAFT_KEY);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  useFormDraft(DRAFT_KEY, form, !draftReady || saving);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
     const { name, value, type } = e.target;
@@ -45,6 +74,7 @@ export default function NewVendorPage() {
     });
     if (res.ok) {
       const created = await res.json();
+      clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/vendors");
       toast({ type: "success", title: "Vendor created", message: `"${form.name}" added.` });
       // Deliberately not resetting `saving` here — it must stay locked until
@@ -64,6 +94,15 @@ export default function NewVendorPage() {
     <div className={`page-stack ${styles.pageStack}`}>
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "New Vendor" }]} />
       <h1 className="page-title">New Vendor</h1>
+
+      {showDraftBanner && (
+        <InfoBanner
+          message="You have an unsaved vendor draft from earlier — want to resume it?"
+          actionLabel="Resume draft"
+          onAction={restoreDraft}
+          onDismiss={dismissDraft}
+        />
+      )}
 
       <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
         <VendorFormFields form={form} onChange={handleChange} errors={errors} addressRequired cityRequired stateRequired pincodeRequired autoFocusName />

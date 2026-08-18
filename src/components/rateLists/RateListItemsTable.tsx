@@ -194,10 +194,10 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
                   <tr key={item.key} className={styles.itemRow}>
                     <td className={styles.tdIndex}>{idx + 1}</td>
                     <td className={styles.tdName}>
-                      <Input sz="sm" value={item.name} onChange={(e) => updateItem(idx, "name", e.target.value)} placeholder="e.g. Sodium Nitrate" />
+                      <Input sz="sm" value={item.name} onChange={(e) => updateItem(idx, "name", e.target.value)} placeholder="e.g. Sodium Nitrate" maxLength={200} />
                     </td>
                     <td className={styles.tdBrand}>
-                      <Input sz="sm" value={item.brand} onChange={(e) => updateItem(idx, "brand", e.target.value)} placeholder="e.g. QUALIGENS" />
+                      <Input sz="sm" value={item.brand} onChange={(e) => updateItem(idx, "brand", e.target.value)} placeholder="e.g. QUALIGENS" maxLength={100} />
                     </td>
                     <td className={styles.tdUnit}>
                       {/* Plain input, not UnitCombo — this table sits inside
@@ -206,7 +206,7 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
                           below the fold. UnitCombo is still correct for the
                           invoice/purchase-bill quick-add modals, which aren't
                           inside a scrolling container. */}
-                      <Input sz="sm" value={item.unit} onChange={(e) => updateItem(idx, "unit", e.target.value)} placeholder="e.g. 500 GM" className={styles.numInputCenter} />
+                      <Input sz="sm" value={item.unit} onChange={(e) => updateItem(idx, "unit", e.target.value)} placeholder="e.g. 500 GM" className={styles.numInputCenter} maxLength={50} />
                     </td>
                     <td className={styles.tdDiscount}>
                       <div className={styles.discountStack}>

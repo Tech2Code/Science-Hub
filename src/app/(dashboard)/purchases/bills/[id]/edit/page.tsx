@@ -21,6 +21,8 @@ import {
   type PurchaseBillLineItem, type PurchaseBillProduct, type PurchaseBillVendor,
 } from "@/lib/purchaseBillForm";
 import { computeRoundOff } from "@/lib/roundOff";
+import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { InfoBanner } from "@/components/ui/InfoBanner";
 import styles from "./edit.module.css";
 
 interface BillItem {
@@ -123,6 +125,48 @@ export default function EditPurchaseBillPage() {
     transportCharge, transportChargeGstRate,
   });
 
+  const DRAFT_KEY = `bill:edit:${id}`;
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+
+  type BillEditDraft = {
+    vendorId: string; billDate: string; dueDate: string; category: string; notes: string; discount: string;
+    items: PurchaseBillLineItem[]; attachmentUrl: string | null; attachmentName: string | null;
+    transportChargeEnabled: boolean; transportCharge: string; transportChargeGstRate: string;
+  };
+
+  function restoreDraft() {
+    const draft = loadFormDraft<BillEditDraft>(DRAFT_KEY);
+    if (draft?.values) {
+      const v = draft.values;
+      setVendorId(v.vendorId);
+      setBillDate(v.billDate);
+      setDueDate(v.dueDate ?? "");
+      setCategory(v.category ?? "");
+      setNotes(v.notes ?? "");
+      setDiscount(v.discount ?? "0");
+      setItems(v.items ?? []);
+      setAttachmentUrl(v.attachmentUrl ?? null);
+      setAttachmentName(v.attachmentName ?? null);
+      setTransportChargeEnabled(v.transportChargeEnabled);
+      setTransportCharge(v.transportCharge ?? "");
+      setTransportChargeGstRate(v.transportChargeGstRate ?? "18");
+    }
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  function dismissDraft() {
+    clearFormDraft(DRAFT_KEY);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  useFormDraft(DRAFT_KEY, {
+    vendorId, billDate, dueDate, category, notes, discount, items, attachmentUrl, attachmentName,
+    transportChargeEnabled, transportCharge, transportChargeGstRate,
+  }, !draftReady || saving || !isDirty);
+
   useEffect(() => {
     Promise.all([
       fetch(`/api/purchase-bills/${id}`, { headers: { "x-no-loader": "1" } }).then(r => r.json()),
@@ -172,6 +216,8 @@ export default function EditPurchaseBillPage() {
         transportChargeGstRate: transportChargeGstRateVal,
       });
       setLoading(false);
+      if (loadFormDraft(`bill:edit:${id}`)) setShowDraftBanner(true);
+      else setDraftReady(true);
     }).catch(() => { setLoadErr("Failed to load bill."); setLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- markClean is stable-enough for this one-time load
   }, [id]);
@@ -310,6 +356,7 @@ export default function EditPurchaseBillPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        clearFormDraft(DRAFT_KEY);
         bustCachePrefix("/api/purchase-bills");
         bustCache(`/api/purchase-bills/${id}`);
         bustCachePrefix("/api/products");
@@ -400,6 +447,15 @@ export default function EditPurchaseBillPage() {
         </div>
         {bill && <StatusBadge status={bill.status} />}
       </div>
+
+      {showDraftBanner && (
+        <InfoBanner
+          message="You have unsaved edits to this bill from earlier — want to resume them?"
+          actionLabel="Resume draft"
+          onAction={restoreDraft}
+          onDismiss={dismissDraft}
+        />
+      )}
 
       {/* Summary stats */}
       {bill && (

@@ -25,10 +25,10 @@ export function ProductFormFields({ form, onChange, onUnitChange, fieldErrors, b
     <>
       <div className="form-grid-3">
         <FormField label="Product Name" required error={fieldErrors.name}>
-          <Input name="name" value={form.name} onChange={onChange} placeholder="e.g. Beaker 250ml Borosilicate" disabled={disabled} />
+          <Input name="name" value={form.name} onChange={onChange} placeholder="e.g. Beaker 250ml Borosilicate" maxLength={200} disabled={disabled} />
         </FormField>
         <FormField label="SKU / Item Code">
-          <Input name="sku" value={form.sku} onChange={onChange} placeholder="e.g. BKR-250-BOR" mono disabled={disabled} />
+          <Input name="sku" value={form.sku} onChange={onChange} placeholder="e.g. BKR-250-BOR" mono maxLength={50} disabled={disabled} />
         </FormField>
         <FormField label="HSN/SAC" hint="Used on invoices & purchase bills.">
           <Input
@@ -39,7 +39,7 @@ export function ProductFormFields({ form, onChange, onUnitChange, fieldErrors, b
       </div>
 
       <FormField label="Description">
-        <Textarea name="description" rows={2} value={form.description} onChange={onChange} placeholder="Brief product description…" disabled={disabled} />
+        <Textarea name="description" rows={2} value={form.description} onChange={onChange} placeholder="Brief product description…" maxLength={2000} disabled={disabled} />
       </FormField>
 
       <div className="form-grid-3">

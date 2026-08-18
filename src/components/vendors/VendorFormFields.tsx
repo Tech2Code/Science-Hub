@@ -47,15 +47,15 @@ export function VendorFormFields({ form, onChange, errors, disabled, phoneRequir
     <>
       <div className="form-grid-2">
         <FormField label="Vendor Name" required error={errors.name}>
-          <Input name="name" value={form.name} onChange={onChange} placeholder="e.g. Lab Supplies Co." autoFocus={autoFocusName} disabled={disabled} />
+          <Input name="name" value={form.name} onChange={onChange} placeholder="e.g. Lab Supplies Co." autoFocus={autoFocusName} disabled={disabled} maxLength={200} />
         </FormField>
         <FormField label="Company / Trade Name">
-          <Input name="company" value={form.company} onChange={onChange} placeholder="e.g. Lab Supplies Pvt. Ltd." disabled={disabled} />
+          <Input name="company" value={form.company} onChange={onChange} placeholder="e.g. Lab Supplies Pvt. Ltd." disabled={disabled} maxLength={200} />
         </FormField>
       </div>
 
       <FormField label="Address" required={addressRequired} error={errors.address}>
-        <Input name="address" value={form.address} onChange={onChange} placeholder="Street, city…" disabled={disabled} />
+        <Input name="address" value={form.address} onChange={onChange} placeholder="Street, city…" disabled={disabled} maxLength={500} />
       </FormField>
 
       <div className="form-grid-2">
@@ -78,7 +78,7 @@ export function VendorFormFields({ form, onChange, errors, disabled, phoneRequir
 
       <div className="form-grid-2">
         <FormField label="City" required={cityRequired} error={errors.city}>
-          <Input name="city" value={form.city} onChange={onChange} placeholder="City" disabled={disabled} />
+          <Input name="city" value={form.city} onChange={onChange} placeholder="City" disabled={disabled} maxLength={100} />
         </FormField>
         <FormField label="GSTIN" hint="Leave blank if vendor is unregistered." error={errors.gstin}>
           <Input name="gstin" value={form.gstin} onChange={onChange} placeholder="15-character GST number" maxLength={15} mono disabled={disabled} />
@@ -90,12 +90,12 @@ export function VendorFormFields({ form, onChange, errors, disabled, phoneRequir
           <PhoneInput name="phone" value={form.phone} onChange={onChange} placeholder="10-digit mobile" disabled={disabled} />
         </FormField>
         <FormField label="Email" error={errors.email}>
-          <Input name="email" type="email" value={form.email} onChange={onChange} placeholder="vendor@example.com" disabled={disabled} />
+          <Input name="email" type="email" value={form.email} onChange={onChange} placeholder="vendor@example.com" disabled={disabled} maxLength={254} />
         </FormField>
       </div>
 
       <FormField label="Notes">
-        <Textarea name="notes" rows={2} value={form.notes} onChange={onChange} placeholder="Any additional notes about this vendor…" disabled={disabled} />
+        <Textarea name="notes" rows={2} value={form.notes} onChange={onChange} placeholder="Any additional notes about this vendor…" disabled={disabled} maxLength={2000} />
       </FormField>
 
       <label className={styles.checkboxLabel}>

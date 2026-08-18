@@ -24,6 +24,12 @@ export async function POST(
     if (!/^\d+(\.\d+)?$/.test(amountStr) || parseFloat(amountStr) <= 0) {
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
     }
+    if (typeof reference === "string" && reference.length > 500) {
+      return NextResponse.json({ error: "Reference is too long (max 500 characters)." }, { status: 400 });
+    }
+    if (typeof notes === "string" && notes.length > 2000) {
+      return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
+    }
 
     const invoiceCheck = await prisma.invoice.findUnique({
       where: { id },

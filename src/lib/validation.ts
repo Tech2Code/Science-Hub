@@ -105,6 +105,7 @@ export function validateCustomerInput(input: {
 }, requireContactDetails = false): string | null {
   const name = (input.name ?? "").trim();
   if (!name) return "Name is required.";
+  if (name.length < 2) return "Name must be at least 2 characters.";
   if (name.length > 200) return "Name is too long (max 200 characters).";
   if (requireContactDetails) {
     if (!(input.address ?? "").trim()) return "Address is required.";
@@ -114,7 +115,9 @@ export function validateCustomerInput(input: {
   }
   return (
     validate(input.phone ?? "", rules.phone10()) ||
-    validate(input.email ?? "", rules.email()) ||
+    validate(input.email ?? "", rules.maxLength(254), rules.email()) ||
+    validate(input.address ?? "", rules.minLength(5), rules.maxLength(500)) ||
+    validate(input.city ?? "", rules.minLength(2), rules.maxLength(100)) ||
     validate(input.pincode ?? "", rules.pincode()) ||
     validate(input.gstin ?? "", rules.gstin()) ||
     null
@@ -143,7 +146,7 @@ export function validateNumericField(
 // with `validateNumericField` since routes parse them differently
 // (create applies defaults, update validates only supplied fields).
 export function validateProductInput(
-  input: { name?: string; price?: unknown },
+  input: { name?: string; price?: unknown; sku?: string; hsn?: string; description?: string },
   requireCore = false
 ): string | null {
   const name = typeof input.name === "string" ? input.name.trim() : "";
@@ -152,7 +155,14 @@ export function validateProductInput(
   } else if (input.name !== undefined && !name) {
     return "Name cannot be blank";
   }
-  return null;
+  if (name && name.length < 2) return "Name must be at least 2 characters.";
+  if (name.length > 200) return "Name is too long (max 200 characters).";
+  return (
+    validate(input.sku ?? "", rules.maxLength(50)) ||
+    validate(input.hsn ?? "", rules.maxLength(50)) ||
+    validate(input.description ?? "", rules.maxLength(2000)) ||
+    null
+  );
 }
 
 // Server-side counterpart to the admin user form's client-side validation —
@@ -166,12 +176,15 @@ export function validateUserInput(
   if (requireAll && (!input.name || !input.email || !input.password || !input.role)) {
     return "name, email, password, and role are required";
   }
-  if (input.name !== undefined && (input.name.trim().length === 0 || input.name.length > 200)) {
-    return "Name must be between 1 and 200 characters";
+  if (input.name !== undefined && (input.name.trim().length < 2 || input.name.length > 200)) {
+    return "Name must be between 2 and 200 characters";
   }
   if (input.email !== undefined) {
-    const err = validate(input.email, rules.required("Email is required."), rules.email());
+    const err = validate(input.email, rules.required("Email is required."), rules.maxLength(254), rules.email());
     if (err) return err;
+  }
+  if (input.password !== undefined && input.password.length > 72) {
+    return `${passwordLabel} must be at most 72 characters`;
   }
   if (input.password !== undefined && input.password.length < 8) {
     return `${passwordLabel} must be at least 8 characters`;
@@ -190,10 +203,15 @@ export function validateUserInput(
 // fail if the account number couldn't be decrypted for an unrelated reason
 // (e.g. a NEXTAUTH_SECRET mismatch) rather than because it's actually blank.
 export function validateSettingsInput(input: {
+  name?: string; tagline?: string; email?: string; gmailUser?: string;
   pan?: string; termsAndConditions?: string; phone?: string; address?: string; city?: string; state?: string; pincode?: string; gstin?: string;
   bankName?: string; bankAccountName?: string; bankAccountNumber?: string; bankIfsc?: string; bankBranch?: string;
 }, isBankSectionUpdate: boolean, isAddressSectionUpdate = false): string | null {
   return (
+    validate(input.name ?? "", rules.minLength(2), rules.maxLength(200)) ||
+    validate(input.tagline ?? "", rules.maxLength(100)) ||
+    validate(input.email ?? "", rules.maxLength(254), rules.email()) ||
+    validate(input.gmailUser ?? "", rules.maxLength(254), rules.email()) ||
     validate(input.pan ?? "", rules.maxLength(10), rules.pan()) ||
     validate(input.termsAndConditions ?? "", rules.maxLength(2000)) ||
     validate(input.phone ?? "", rules.phone10()) ||
@@ -201,12 +219,14 @@ export function validateSettingsInput(input: {
     (isAddressSectionUpdate ? validate(input.city ?? "", rules.required("City is required.")) : null) ||
     (isAddressSectionUpdate ? validate(input.state ?? "", rules.required("State is required.")) : null) ||
     (isAddressSectionUpdate ? validate(input.pincode ?? "", rules.required("Pincode is required.")) : null) ||
+    validate(input.address ?? "", rules.minLength(5), rules.maxLength(500)) ||
+    validate(input.city ?? "", rules.minLength(2), rules.maxLength(100)) ||
     validate(input.pincode ?? "", rules.pincode()) ||
     validate(input.gstin ?? "", rules.maxLength(15), rules.gstin()) ||
     (isBankSectionUpdate
-      ? validate(input.bankName ?? "", rules.required("Bank name is required.")) ||
-        validate(input.bankAccountName ?? "", rules.required("Account holder name is required.")) ||
-        validate(input.bankBranch ?? "", rules.required("Branch is required.")) ||
+      ? validate(input.bankName ?? "", rules.required("Bank name is required."), rules.minLength(2), rules.maxLength(200)) ||
+        validate(input.bankAccountName ?? "", rules.required("Account holder name is required."), rules.minLength(2), rules.maxLength(200)) ||
+        validate(input.bankBranch ?? "", rules.required("Branch is required."), rules.minLength(2), rules.maxLength(100)) ||
         validate(input.bankAccountNumber ?? "", rules.required("Account number is required."), rules.accountNumber()) ||
         validate(input.bankIfsc ?? "", rules.required("IFSC code is required."), rules.ifsc())
       : null) ||
@@ -215,10 +235,12 @@ export function validateSettingsInput(input: {
 }
 
 // Server-side counterpart to the rate-list form's client-side validation.
-export function validateRateListInput(input: { title?: string }): string | null {
+export function validateRateListInput(input: { title?: string; note?: string }): string | null {
   const title = (input.title ?? "").trim();
   if (!title) return "Title is required.";
+  if (title.length < 2) return "Title must be at least 2 characters.";
   if (title.length > 200) return "Title is too long (max 200 characters).";
+  if ((input.note ?? "").length > 2000) return "Note is too long (max 2000 characters).";
   return null;
 }
 
@@ -230,10 +252,11 @@ export function validateRateListInput(input: { title?: string }): string | null 
 // chance to backfill the missing contact/address details rather than
 // letting them persist indefinitely.
 export function validateVendorInput(input: {
-  name?: string; phone?: string; email?: string; gstin?: string; address?: string; city?: string; state?: string; pincode?: string;
+  name?: string; company?: string; phone?: string; email?: string; gstin?: string; address?: string; city?: string; state?: string; pincode?: string; notes?: string;
 }, requireContactDetails = false): string | null {
   const name = (input.name ?? "").trim();
   if (!name) return "Vendor name is required.";
+  if (name.length < 2) return "Name must be at least 2 characters.";
   if (name.length > 200) return "Name is too long (max 200 characters).";
   if (requireContactDetails) {
     if (!(input.address ?? "").trim()) return "Address is required.";
@@ -242,10 +265,14 @@ export function validateVendorInput(input: {
     if (!(input.pincode ?? "").trim()) return "Pincode is required.";
   }
   return (
+    validate(input.company ?? "", rules.maxLength(200)) ||
     validate(input.phone ?? "", rules.phone10()) ||
-    validate(input.email ?? "", rules.email()) ||
+    validate(input.email ?? "", rules.maxLength(254), rules.email()) ||
     validate(input.gstin ?? "", rules.maxLength(15), rules.gstin()) ||
+    validate(input.address ?? "", rules.minLength(5), rules.maxLength(500)) ||
+    validate(input.city ?? "", rules.minLength(2), rules.maxLength(100)) ||
     validate(input.pincode ?? "", rules.pincode()) ||
+    validate(input.notes ?? "", rules.maxLength(2000)) ||
     null
   );
 }

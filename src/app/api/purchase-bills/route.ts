@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    for (const item of items as { quantity: number; purchasePrice: number; discountPercent?: number }[]) {
+    for (const item of items as { productId?: string; quantity: number; purchasePrice: number; discountPercent?: number; name?: string; hsn?: string; unit?: string }[]) {
       const quantity = parseFloat(String(item.quantity));
       const purchasePrice = parseFloat(String(item.purchasePrice));
       const discountPercent = parseFloat(String(item.discountPercent ?? 0));
@@ -126,6 +126,21 @@ export async function POST(req: NextRequest) {
       if (Number.isNaN(discountPercent) || discountPercent < 0 || discountPercent > 100) {
         return NextResponse.json({ error: "Item discount must be between 0 and 100%" }, { status: 400 });
       }
+      if (!item.productId && String(item.name ?? "").trim().length < 2) {
+        return NextResponse.json({ error: "Item name must be at least 2 characters." }, { status: 400 });
+      }
+      if (String(item.name ?? "").length > 200) {
+        return NextResponse.json({ error: "Item name is too long (max 200 characters)." }, { status: 400 });
+      }
+      if (String(item.hsn ?? "").length > 50) {
+        return NextResponse.json({ error: "Item HSN/SAC is too long (max 50 characters)." }, { status: 400 });
+      }
+      if (String(item.unit ?? "").length > 100) {
+        return NextResponse.json({ error: "Item unit is too long (max 100 characters)." }, { status: 400 });
+      }
+    }
+    if (typeof notes === "string" && notes.length > 2000) {
+      return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
     }
 
     // Recompute every item's GST/total server-side from quantity × price × rate —

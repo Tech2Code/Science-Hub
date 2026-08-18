@@ -17,6 +17,7 @@ import {
 } from "@/lib/purchaseBillForm";
 import { InfoBanner } from "@/components/ui/InfoBanner";
 import { getIndianFinancialYear, formatFinancialYearLabel, resolveNumberFormat } from "@/lib/documentNumbering";
+import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import styles from "./billNew.module.css";
 
 // Shown once, only before this business's very first purchase bill, if
@@ -109,6 +110,64 @@ export default function NewPurchaseBillPage() {
     localStorage.setItem(FIRST_BILL_NUDGE_DISMISSED_KEY, "1");
     setShowFirstBillNudge(false);
   }
+
+  const DRAFT_KEY = "bill:new";
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+
+  type BillNewDraft = {
+    vendorId: string; billDate: string; dueDate: string; category: string; discount: string; notes: string;
+    items: PurchaseBillLineItem[]; attachmentUrl: string | null; attachmentName: string | null;
+    transportChargeEnabled: boolean; transportCharge: string; transportChargeGstRate: string;
+    addPayment: boolean; payAmount: string; payMethod: string; payReference: string; payDate: string;
+  };
+
+  useEffect(() => {
+    const draft = loadFormDraft<BillNewDraft>(DRAFT_KEY);
+    const v = draft?.values;
+    const hasContent = !!v && (!!v.vendorId || v.items?.length > 0 || !!v.notes?.trim());
+    if (hasContent) setShowDraftBanner(true);
+    else setDraftReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount check
+  }, []);
+
+  function restoreDraft() {
+    const draft = loadFormDraft<BillNewDraft>(DRAFT_KEY);
+    if (draft?.values) {
+      const v = draft.values;
+      setVendorId(v.vendorId ?? "");
+      setBillDate(v.billDate ?? new Date().toISOString().slice(0, 10));
+      setDueDate(v.dueDate ?? "");
+      setCategory(v.category ?? "");
+      setDiscount(v.discount ?? "0");
+      setNotes(v.notes ?? "");
+      setItems(v.items ?? []);
+      setAttachmentUrl(v.attachmentUrl ?? null);
+      setAttachmentName(v.attachmentName ?? null);
+      setTransportChargeEnabled(v.transportChargeEnabled ?? true);
+      setTransportCharge(v.transportCharge ?? "");
+      setTransportChargeGstRate(v.transportChargeGstRate ?? "18");
+      setAddPayment(v.addPayment ?? false);
+      setPayAmount(v.payAmount ?? "");
+      setPayMethod(v.payMethod ?? "Cash");
+      setPayReference(v.payReference ?? "");
+      setPayDate(v.payDate ?? new Date().toISOString().slice(0, 10));
+    }
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  function dismissDraft() {
+    clearFormDraft(DRAFT_KEY);
+    setShowDraftBanner(false);
+    setDraftReady(true);
+  }
+
+  useFormDraft(DRAFT_KEY, {
+    vendorId, billDate, dueDate, category, discount, notes, items, attachmentUrl, attachmentName,
+    transportChargeEnabled, transportCharge, transportChargeGstRate,
+    addPayment, payAmount, payMethod, payReference, payDate,
+  }, !draftReady || saving);
 
   // The itemsError message auto-hides once the items array it was raised
   // against has since changed (add/remove/edit a line) — see itemsErrorFor.
@@ -238,6 +297,7 @@ export default function NewPurchaseBillPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        clearFormDraft(DRAFT_KEY);
         bustCachePrefix("/api/purchase-bills");
         bustCachePrefix("/api/products");
         toast({ type: "success", title: "Bill created", message: `${data.billNumber} saved.` });
@@ -281,6 +341,14 @@ export default function NewPurchaseBillPage() {
         <h1 className="page-title">Create Purchase Bill</h1>
         <p className="page-sub">Record a GST-compliant purchase bill</p>
       </div>
+      {showDraftBanner && (
+        <InfoBanner
+          message="You have an unsaved purchase bill draft from earlier — want to resume it?"
+          actionLabel="Resume draft"
+          onAction={restoreDraft}
+          onDismiss={dismissDraft}
+        />
+      )}
       {showFirstBillNudge && (
         <InfoBanner
           message={`This is your first purchase bill — it will be numbered "${firstBillPreviewNumber}" by default. Want a different prefix or starting number?`}

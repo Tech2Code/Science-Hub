@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     if (!pdf || !to || !title) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
-    if (!EMAIL_RE.test(to.trim())) {
+    if (to.trim().length > 254 || !EMAIL_RE.test(to.trim())) {
       return NextResponse.json({ error: "Recipient email address is invalid." }, { status: 400 });
     }
     if (pdf.size > MAX_PDF_BYTES) {

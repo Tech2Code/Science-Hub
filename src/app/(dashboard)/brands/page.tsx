@@ -93,7 +93,7 @@ export default function BrandsPage() {
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     const name = newName.trim();
-    const err = validate(name, rules.required("Brand name is required."));
+    const err = validate(name, rules.required("Brand name is required."), rules.minLength(2), rules.maxLength(200));
     if (err) { setAddNameError(err); return; }
     setAddNameError(undefined);
     setSaving(true);
@@ -127,7 +127,7 @@ export default function BrandsPage() {
     const id = editingId;
     const name = editingName.trim();
     if (!id) return;
-    const err = validate(name, rules.required("Brand name is required."));
+    const err = validate(name, rules.required("Brand name is required."), rules.minLength(2), rules.maxLength(200));
     if (err) { setRenameNameError(err); return; }
     setRenameNameError(undefined);
     setRenaming(true);
@@ -226,6 +226,7 @@ export default function BrandsPage() {
                 value={newName}
                 onChange={(e) => { setNewName(e.target.value); setAddNameError(undefined); }}
                 className={`${styles.addInput}`}
+                maxLength={200}
               />
             </FormField>
           </form>
@@ -254,6 +255,7 @@ export default function BrandsPage() {
                 value={editingName}
                 onChange={(e) => { setEditingName(e.target.value); setRenameNameError(undefined); }}
                 className={`${styles.addInput}`}
+                maxLength={200}
               />
             </FormField>
           </form>

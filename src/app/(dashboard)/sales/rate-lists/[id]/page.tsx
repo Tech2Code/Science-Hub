@@ -329,6 +329,7 @@ export default function RateListDetailPage() {
             value={emailTo}
             onChange={(e) => { setEmailTo(e.target.value); setEmailToError(undefined); }}
             placeholder="customer@example.com"
+            maxLength={254}
             autoFocus
             disabled={sendingEmail}
           />

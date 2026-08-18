@@ -979,6 +979,7 @@ export default function InvoiceDetailPage() {
                     onChange={(e) => setPaymentForm((p) => ({ ...p, reference: e.target.value }))}
                     placeholder="Optional"
                     sz="sm"
+                    maxLength={500}
                     className={styles.paymentReferenceInput}
                   />
                 </FormField>
@@ -1027,7 +1028,7 @@ export default function InvoiceDetailPage() {
                   </div>
                   <div className={styles.returnNotesField}>
                     <FormField label="Notes">
-                      <Input type="text" sz="sm" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Optional reason" className={styles.returnNotesInput} />
+                      <Input type="text" sz="sm" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Optional reason" className={styles.returnNotesInput} maxLength={2000} />
                     </FormField>
                   </div>
                 </div>

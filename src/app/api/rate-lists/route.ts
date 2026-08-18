@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { title, note, items } = body;
 
-    const validationError = validateRateListInput({ title });
+    const validationError = validateRateListInput({ title, note });
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
     const itemsResult = validateAndBuildRateListItems(items);

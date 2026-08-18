@@ -28,7 +28,7 @@ function ResetPasswordForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    const pwErr   = validate(password, rules.required("Password is required."), rules.minLength(8, "Password must be at least 8 characters."));
+    const pwErr   = validate(password, rules.required("Password is required."), rules.minLength(8, "Password must be at least 8 characters."), rules.maxLength(72, "Password must be at most 72 characters."));
     const confErr = validate(confirm,  rules.required("Please confirm your password."), rules.passwordMatch(password));
     if (pwErr || confErr) { setFieldErrors({ password: pwErr ?? undefined, confirm: confErr ?? undefined }); return; }
     setFieldErrors({});
@@ -81,6 +81,7 @@ function ResetPasswordForm() {
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setFieldErrors(prev => ({ ...prev, password: undefined })); }}
                   placeholder="min. 8 characters"
+                  maxLength={72}
                 />
               </FormField>
               <FormField label="Confirm new password" error={fieldErrors.confirm}>
@@ -90,6 +91,7 @@ function ResetPasswordForm() {
                   value={confirm}
                   onChange={(e) => { setConfirm(e.target.value); setFieldErrors(prev => ({ ...prev, confirm: undefined })); }}
                   placeholder="repeat your new password"
+                  maxLength={72}
                 />
               </FormField>
               <button type="submit" className={styles.submitBtn} disabled={loading || !token}>
