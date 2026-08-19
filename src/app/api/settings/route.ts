@@ -6,6 +6,7 @@ import { encrypt, safeDecrypt } from "@/lib/crypto";
 import { validateSettingsInput } from "@/lib/validation";
 import { deriveDefaultPrefix, getIndianFinancialYear, formatFinancialYearLabel, NUMBER_FORMATS, numberFormatDbFilter, findMaxSequence, resolveNumberFormat } from "@/lib/documentNumbering";
 import { logActivity } from "@/lib/activity";
+import { isLogoBlobUrl, deleteAttachmentBlob } from "@/lib/blobStorage";
 
 export async function GET() {
   try {
@@ -72,7 +73,7 @@ export async function PUT(request: NextRequest) {
     const existing = await prisma.businessSettings.findUnique({
       where: { id: "singleton" },
       select: {
-        updatedAt: true, name: true,
+        updatedAt: true, name: true, logoUrl: true,
         invoiceNumberPrefix: true, purchaseBillNumberPrefix: true, creditNoteNumberPrefix: true,
         invoiceNumberFormat: true, purchaseBillNumberFormat: true, creditNoteNumberFormat: true,
       },
@@ -86,7 +87,17 @@ export async function PUT(request: NextRequest) {
       if (key in body) updateData[key] = fieldValues[key] ?? "";
     }
     if ("pan" in body) updateData.pan = (pan ?? "").toUpperCase();
-    if (logoUrl !== undefined) updateData.logoUrl = logoUrl ?? "";
+    // Only a real upload from /api/settings/logo (Vercel Blob, magic-byte
+    // validated) or clearing it back to "" is accepted — an arbitrary URL
+    // here would become the authoritative logo shown app-wide (sidebar,
+    // login page, every printed invoice/PDF) and would also be fetched
+    // directly by the browser generating each PDF (generateInvoicePdf.ts).
+    if (logoUrl !== undefined) {
+      if (logoUrl && !isLogoBlobUrl(logoUrl)) {
+        return NextResponse.json({ error: "Invalid logo URL." }, { status: 400 });
+      }
+      updateData.logoUrl = logoUrl || "";
+    }
     if (showLogoOnInvoices !== undefined) updateData.showLogoOnInvoices = Boolean(showLogoOnInvoices);
     if ("gmailUser" in body) {
       updateData.gmailUser = gmailUser ?? "";
@@ -278,6 +289,14 @@ export async function PUT(request: NextRequest) {
     });
     if (numberingActivityDetails.length > 0) {
       await logActivity(auth.session.user.id, "update_numbering_settings", `Updated document numbering: ${numberingActivityDetails.join(", ")}`);
+    }
+    // Clean up the replaced/removed logo's old blob server-side, in this same
+    // request — mirrors how purchase-bill attachment replacement already
+    // deletes the old blob synchronously, rather than relying on a client-
+    // fired, unawaited DELETE that a closed tab or dropped request could
+    // silently skip and leave the old blob orphaned in storage indefinitely.
+    if (logoUrl !== undefined && existing?.logoUrl && existing.logoUrl !== (logoUrl || "")) {
+      await deleteAttachmentBlob(existing.logoUrl);
     }
     const decryptedAccountNumber = storedAccountNumber ? safeDecrypt(storedAccountNumber) : { value: "", failed: false };
     return NextResponse.json({

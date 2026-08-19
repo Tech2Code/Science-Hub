@@ -123,7 +123,7 @@
 .paymentMethodField { width: 8.5rem; flex-shrink: 0; }
 .paymentDateField { width: 9rem; flex-shrink: 0; }
 .paymentFormBtnRow { display: flex; gap: 0.5rem; }
-.paymentBalanceHint { margin-top: 0.375rem; font-size: 0.7rem; color: var(--c-text-4); }
+.paymentBalanceHint { margin-top: 0.875rem; font-size: 0.7rem; color: var(--c-text-4); }
 
 @media (max-width: 640px) {
   .paymentFormRow { flex-direction: column; align-items: stretch; }

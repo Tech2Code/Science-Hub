@@ -13,6 +13,16 @@ const DB_NAME = "science-hub-pdf-cache";
 const STORE = "pdfs";
 const DB_VERSION = 1;
 
+// Bump this whenever a change to the PDF rendering pipeline itself
+// (generateInvoicePdf.ts, or any print-area markup it reads) would make an
+// already-cached blob look wrong or stale — every previously-cached invoice/
+// bill/etc. would otherwise keep showing the old, buggy render forever, since
+// nothing about the entity's own data changes on a pure rendering-code fix.
+// Bumping this namespaces every cache key by version, so old entries are
+// simply never looked up again (and age out via each browser's own IndexedDB
+// storage limits) rather than needing every user to manually hit "Regenerate".
+const RENDER_VERSION = 1;
+
 export type PdfEntity = "invoice" | "purchase-bill" | "return" | "rate-list";
 
 interface CacheRecord {
@@ -21,7 +31,7 @@ interface CacheRecord {
 }
 
 function recordId(entity: PdfEntity, entityId: string): string {
-  return `${entity}:${entityId}`;
+  return `${entity}:${entityId}:r${RENDER_VERSION}`;
 }
 
 /** Stable key for a given combination of copy labels / extra render flags. */

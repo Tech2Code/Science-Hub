@@ -56,8 +56,11 @@ export default function NewPurchaseBillPage() {
   const [attachmentUrl,  setAttachmentUrl]  = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
-  // Default ON, mirrors the invoice side — see InvoiceOptionsRow's note.
-  const [transportChargeEnabled, setTransportChargeEnabled] = useState(true);
+  // Defaults off — mirrors the invoice-side fix; real usage data (2026-08-18)
+  // showed only ~2% of existing purchase bills actually carry a transport
+  // charge, so defaulting it on forced an unnecessary "toggle off" step on
+  // nearly every new bill.
+  const [transportChargeEnabled, setTransportChargeEnabled] = useState(false);
   const [transportCharge, setTransportCharge] = useState("");
   const [transportChargeGstRate, setTransportChargeGstRate] = useState("18");
   const [transportChargeError, setTransportChargeError] = useState<string | undefined>(undefined);

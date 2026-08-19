@@ -648,6 +648,7 @@ export default function EditInvoicePage() {
               open={customerModalOpen}
               onClose={closeCustomerModal}
               title={customerEditId ? "Edit Customer" : "Add New Customer"}
+              subtitle={customerEditId ? "Update this customer's details" : "Not in your list — fill details and create"}
               variant="fullscreen"
               footer={
                 <>
@@ -664,7 +665,6 @@ export default function EditInvoicePage() {
                 </>
               }
             >
-              <p className={styles.customModalSub}>{customerEditId ? "Update this customer's details" : "Not in your list — fill details and create"}</p>
               <div className={styles.customForm}>
                 <FormField label="Customer Name" required error={customerErrors.name}>
                   <Input autoFocus value={customerForm.name} onChange={(e) => updateCustomerField("name", e.target.value)} placeholder="e.g. Acme Traders" maxLength={200} />

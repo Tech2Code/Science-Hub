@@ -32,6 +32,13 @@ export async function POST(req: Request) {
     if (to.trim().length > 254 || !EMAIL_RE.test(to.trim())) {
       return NextResponse.json({ error: "Recipient email address is invalid." }, { status: 400 });
     }
+    // invoiceNumber is client-supplied form data, not re-verified against the
+    // DB here — reject any embedded CR/LF before it can reach the `subject`
+    // header, or an authenticated caller could inject extra SMTP headers
+    // (e.g. Bcc) into a message sent from the business's own Gmail account.
+    if (/[\r\n]/.test(invoiceNumber) || invoiceNumber.length > 100) {
+      return NextResponse.json({ error: "Invalid invoice number." }, { status: 400 });
+    }
     if (pdf.size > MAX_PDF_BYTES) {
       return NextResponse.json({ error: "PDF attachment is too large (max 10MB)." }, { status: 413 });
     }

@@ -273,6 +273,7 @@ export function BillDetailsCard({
         open={showVendorCreate}
         onClose={closeVendorCreate}
         title={ivEditId ? "Edit Vendor" : "Add New Vendor"}
+        subtitle={ivEditId ? "Update this vendor's details" : "Not in your list — fill details and create"}
         variant="fullscreen"
         footer={
           <>
@@ -300,8 +301,6 @@ export function BillDetailsCard({
           </>
         }
       >
-        <p className={styles.modalSub}>{ivEditId ? "Update this vendor's details" : "Not in your list — fill details and create"}</p>
-
         {ivError && <div className={styles.inlineVendorError}>{ivError}</div>}
 
         <div className={styles.inlineVendorGrid}>

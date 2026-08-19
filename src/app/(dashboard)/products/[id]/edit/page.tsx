@@ -100,7 +100,7 @@ export default function EditProductPage() {
         name: form.name, sku: form.sku, hsn: form.hsn, description: form.description, unit: form.unit,
         price: parseFloat(form.price), purchasePrice: form.purchasePrice.trim() ? parseFloat(form.purchasePrice) : null,
         gstRate: parseInt(form.gstRate),
-        stock: parseInt(form.stock), minStock: parseInt(form.minStock),
+        minStock: parseInt(form.minStock),
         brandId: form.brandId || null, categoryId: form.categoryId || null,
         expectedUpdatedAt: loadedUpdatedAt,
       }),
@@ -198,7 +198,7 @@ export default function EditProductPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
-          <ProductFormFields form={form} onChange={handleChange} onUnitChange={(v) => { setForm((prev) => ({ ...prev, unit: v })); setFieldErrors((prev) => ({ ...prev, unit: undefined })); }} fieldErrors={fieldErrors} brands={brands} categories={categories} disabled={disabled} stockLabel="Current Stock" />
+          <ProductFormFields form={form} onChange={handleChange} onUnitChange={(v) => { setForm((prev) => ({ ...prev, unit: v })); setFieldErrors((prev) => ({ ...prev, unit: undefined })); }} fieldErrors={fieldErrors} brands={brands} categories={categories} disabled={disabled} stockLabel="Current Stock" stockReadOnly />
 
           <div className="form-actions-wrap">
             <div className="form-actions">

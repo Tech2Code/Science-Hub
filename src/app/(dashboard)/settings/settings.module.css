@@ -243,8 +243,6 @@
   gap: 0.5rem;
   flex-wrap: wrap;
   margin-bottom: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--c-border);
 }
 
 .clearConfirmText {
@@ -276,4 +274,22 @@
   font-size: 0.8125rem;
   line-height: 1.6;
   color: var(--c-text-2);
+}
+
+.termsLivePreview {
+  margin-top: 1rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px dashed var(--c-border);
+  border-radius: var(--c-radius);
+  background: var(--c-bg-sub);
+}
+
+.termsLivePreviewLabel {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--c-text-4);
+  margin-bottom: 0.5rem;
 }

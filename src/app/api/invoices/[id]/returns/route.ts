@@ -5,7 +5,7 @@ import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
-import { isFutureIstDate } from "@/lib/validation";
+import { isFutureIstDate, toIstDateStr } from "@/lib/validation";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { computeRoundOff } from "@/lib/roundOff";
 import { getBusinessSettings } from "@/lib/db";
@@ -85,7 +85,7 @@ export async function POST(
       if (isNaN(returnDate.getTime())) {
         return NextResponse.json({ error: "Invalid return date" }, { status: 400 });
       }
-      if (returnDate < invoice.date) {
+      if (date < toIstDateStr(invoice.date)) {
         return NextResponse.json({ error: "Return date cannot be before the invoice date" }, { status: 400 });
       }
       if (isFutureIstDate(date)) {

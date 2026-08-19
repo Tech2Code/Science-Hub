@@ -618,14 +618,13 @@ export default function SettingsPage() {
         toast({ type: "error", title: "Upload failed", message: data.error ?? "Could not upload logo." });
         return;
       }
-      const oldUrl = saved.logoUrl;
+      // The old logo's blob is cleaned up server-side by the settings PUT
+      // route itself (in the same request, once it sees logoUrl changing) —
+      // no separate client-fired DELETE needed for that case any more.
       const result = await putSettings({ logoUrl: data.url });
       if (result.ok) {
         applyLoaded(result.data);
         toast({ type: "success", title: "Logo updated", message: "Your business logo has been updated." });
-        if (oldUrl) {
-          fetch("/api/settings/logo", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: oldUrl }) }).catch(() => {});
-        }
       } else {
         // Save failed — remove the blob we just uploaded so it doesn't orphan.
         fetch("/api/settings/logo", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: data.url }) }).catch(() => {});
@@ -643,14 +642,13 @@ export default function SettingsPage() {
   }
 
   async function handleRemoveLogo() {
-    const oldUrl = saved.logoUrl;
-    if (!oldUrl) return;
+    if (!saved.logoUrl) return;
     setLogoUploading(true);
+    // Old blob cleanup happens server-side in the PUT route itself now.
     const result = await putSettings({ logoUrl: "" });
     if (result.ok) {
       applyLoaded(result.data);
       toast({ type: "success", title: "Logo removed", message: "Reverted to the default logo." });
-      fetch("/api/settings/logo", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: oldUrl }) }).catch(() => {});
     } else if (result.conflict) {
       toast({ type: "error", title: "Update conflict", message: result.error ?? "Business settings were changed by someone else. Please reload and try again." });
     } else {
@@ -952,6 +950,7 @@ export default function SettingsPage() {
           <Modal
             open={editingBank}
             title="Edit Bank Details"
+            subtitle="Printed on every invoice so customers can pay by bank transfer. Only admins can edit these."
             onClose={handleCancelBank}
             variant="fullscreen"
             footer={
@@ -962,9 +961,6 @@ export default function SettingsPage() {
             }
           >
             <form id="bank-form" onSubmit={handleSaveBank} noValidate>
-              <p className={styles.stateHint}>
-                Printed on every invoice so customers can pay by bank transfer. Only admins can edit these.
-              </p>
               <div className={styles.formGrid}>
                 <FormField label="Bank Name" required error={bankErrors.bankName}>
                   <Input value={bankForm.bankName} onChange={(e) => { setBankForm((f) => ({ ...f, bankName: toTitleCase(e.target.value) })); setBankErrors((p) => ({ ...p, bankName: undefined })); }} placeholder="e.g. HDFC Bank" maxLength={200} />
@@ -1018,6 +1014,7 @@ export default function SettingsPage() {
           <Modal
             open={editingTerms}
             title="Edit Terms & Conditions"
+            subtitle="One point per line — each line becomes a numbered item on the invoice."
             onClose={handleCancelTerms}
             variant="fullscreen"
             footer={
@@ -1028,7 +1025,6 @@ export default function SettingsPage() {
             }
           >
             <form id="terms-form" onSubmit={handleSaveTerms} noValidate>
-              <p className={styles.stateHint}>One point per line — each line becomes a numbered item on the invoice.</p>
               <FormField label="Terms & Conditions" error={termsError}>
                 <Textarea
                   value={termsForm}
@@ -1038,6 +1034,14 @@ export default function SettingsPage() {
                   maxLength={2000}
                 />
               </FormField>
+              {termsForm.trim() && (
+                <div className={styles.termsLivePreview}>
+                  <span className={styles.termsLivePreviewLabel}>Preview — this is how it will print on the invoice</span>
+                  <ol className={styles.termsPreviewList}>
+                    {termsForm.split("\n").map((line, i) => line.trim() && <li key={i}>{line.trim()}</li>)}
+                  </ol>
+                </div>
+              )}
             </form>
           </Modal>
 
@@ -1108,6 +1112,7 @@ export default function SettingsPage() {
                   </>
                 ) : (
                   <Button type="button" variant="dangerOutline" size="sm" disabled={savingEmail} onClick={handleClearEmail}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
                     Clear Credentials
                   </Button>
                 )}
@@ -1213,6 +1218,7 @@ export default function SettingsPage() {
           <Modal
             open={editingNumbering}
             title="Edit Document Numbering"
+            subtitle={'Leave a prefix/number field blank to keep the default. A "next number" only applies once, then clears itself.'}
             onClose={handleCancelNumbering}
             variant="fullscreen"
             footer={
@@ -1223,9 +1229,6 @@ export default function SettingsPage() {
             }
           >
             <form id="numbering-form" onSubmit={handleSubmitNumbering} noValidate>
-              <p className={styles.stateHint}>
-                Leave a prefix/number field blank to keep the default. A &ldquo;next number&rdquo; only applies once, then clears itself.
-              </p>
               <div className={styles.formGrid}>
                 <FormField label="Invoice Number Format" hint={`Preview: ${NUMBER_FORMATS[numberingForm.invoiceNumberFormat].example(numberingForm.invoiceNumberPrefix.trim().toUpperCase() || deriveDefaultPrefix(saved.name))}`}>
                   <Select

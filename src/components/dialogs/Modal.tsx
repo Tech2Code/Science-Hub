@@ -10,6 +10,7 @@ const FOCUSABLE_SELECTOR =
 interface Props {
   open: boolean;
   title: string;
+  subtitle?: string;
   onClose: () => void;
   maxWidth?: string;
   children: React.ReactNode;
@@ -28,7 +29,7 @@ interface Props {
 // it's mounted (nesting it under an element with a CSS animation applied,
 // e.g. animateSection's "animate-card", would otherwise trap it inside that
 // ancestor's own stacking context and let later sections paint over it).
-export function Modal({ open, title, onClose, maxWidth, children, variant = "center", footer }: Props) {
+export function Modal({ open, title, subtitle, onClose, maxWidth, children, variant = "center", footer }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
 
@@ -85,7 +86,10 @@ export function Modal({ open, title, onClose, maxWidth, children, variant = "cen
           tabIndex={-1}
         >
           <div className={styles.header}>
-            <h2 className={styles.title}>{title}</h2>
+            <div className={styles.titleWrap}>
+              <h2 className={styles.title}>{title}</h2>
+              {subtitle && <p className={styles.subtitle}>{subtitle}</p>}
+            </div>
             <button type="button" onClick={onClose} className={styles.closeBtn} aria-label="Close">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>

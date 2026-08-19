@@ -43,7 +43,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, status, expectedUpdatedAt, date, transportCharge, transportChargeGstRate, customerId } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, expectedUpdatedAt, date, transportCharge, transportChargeGstRate, customerId } = body;
 
     const existingBase = await prisma.invoice.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existingBase) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -58,10 +58,14 @@ export async function PUT(
       return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
     }
 
-    // Simple status/notes-only update (from payment flow)
+    // Notes-only update. `status` is never accepted from the client here —
+    // it must always be derived from paidAmount vs. total (see the payment
+    // routes and the full-items branch below), never set directly, or a
+    // caller could decouple the displayed status from the real balance and
+    // make an invoice vanish from Outstanding/Overdue reports without ever
+    // recording a payment.
     if (!items) {
       const data: Record<string, unknown> = {};
-      if (status !== undefined) data.status = status;
       if (notes !== undefined) data.notes = notes;
       const invoice = await prisma.invoice.update({ where: { id }, data });
       revalidateTag("invoices", { expire: 0 });

@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { logActivity } from "@/lib/activity";
 import { validateUserInput } from "@/lib/validation";
-import { requireAdmin } from "@/lib/apiAuth";
+import { requireAdmin, requireSession } from "@/lib/apiAuth";
 
 const USER_SELECT = {
   id: true,
@@ -47,10 +45,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireSession();
+    if (!auth.ok) return auth.response;
+    const { session } = auth;
 
     const { id } = await params;
     const isAdmin = session.user.role === "admin";

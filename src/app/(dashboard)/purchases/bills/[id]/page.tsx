@@ -457,7 +457,18 @@ export default function PurchaseBillDetailPage() {
             return (
               <tr key={item.id}>
                 {td(idx + 1, "left")}
-                {td(item.name)}
+                {td(
+                  // Fixed single-line height with ellipsis truncation instead of
+                  // free wrapping — a row whose height depended on how many
+                  // lines the name actually wrapped to let html2canvas's own
+                  // text-wrap approximation disagree with the live DOM
+                  // measurement taken before capture (see ROW_SAFETY_MARGIN_PX
+                  // in generateInvoicePdf.ts), throwing off the page-split math
+                  // for that row — same fix as the invoice detail page.
+                  <div style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", lineHeight: "14px", height: "14px" }} title={item.name}>
+                    {item.name}
+                  </div>
+                )}
                 {td(item.hsn || "—")}
                 {td(item.quantity, "right")}
                 {td(item.unit)}
@@ -504,7 +515,7 @@ export default function PurchaseBillDetailPage() {
             const notesColSpan = (bill.isInterState ? 10 : 11) - 2;
             return (
               <>
-                <tr>
+                <tr data-invoice-summary-start="true">
                   <td colSpan={notesColSpan} rowSpan={bpTotalsRows} style={{ border: `1px solid var(--bp-bd)`, padding: "10px 12px", verticalAlign: "top", fontSize: 10.5, color: "var(--bp-tx3)" }}>
                     <div style={{ fontStyle: "italic" }}><strong>Amount in Words:</strong> {amountInWordsINR(bill.total)}</div>
                     {bill.notes && <div style={{ marginTop: 6 }}><strong>Note:</strong> {bill.notes}</div>}
@@ -620,7 +631,6 @@ export default function PurchaseBillDetailPage() {
           </Button>
           <Button variant="secondary" size="sm" title="Discard the cached PDF and download a freshly generated copy" onClick={() => handleDownloadPdf(true)} disabled={pdfDownloading}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-            Regenerate
           </Button>
           {canWrite && bill.status !== "cancelled" && (
             <Button variant="dangerOutline" size="sm" onClick={() => setConfirmCancel(true)}>

@@ -216,7 +216,6 @@ export default function InvoiceDetailPage() {
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [pdfPrinting, setPdfPrinting] = useState(false);
   const [pdfViewing, setPdfViewing] = useState(false);
-  const [pdfRegenerating, setPdfRegenerating] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
   const [showReturnForm, setShowReturnForm] = useState(false);
@@ -476,11 +475,9 @@ export default function InvoiceDetailPage() {
   // mirroring the list page's "Regenerate" action.
   async function handleRegeneratePdf() {
     if (!invoice) return;
-    setPdfRegenerating(true);
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     await document.fonts.ready;
-    const blob = await generatePdfBlob(undefined, true);
-    setPdfRegenerating(false);
+    const blob = await generatePdfBlob(["ORIGINAL COPY"], true);
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
     setPdfPreviewUrl(URL.createObjectURL(blob));
     toast({ type: "success", title: "Regenerated", message: "Latest PDF generated and cached." });
@@ -496,7 +493,7 @@ export default function InvoiceDetailPage() {
     setPdfViewing(true);
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     await document.fonts.ready;
-    const blob = await generatePdfBlob();
+    const blob = await generatePdfBlob(["ORIGINAL COPY"]);
     setPdfViewing(false);
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
     setPdfPreviewUrl(URL.createObjectURL(blob));
@@ -539,7 +536,7 @@ export default function InvoiceDetailPage() {
     // since it's strictly safer than rAF with no downside.
     await new Promise(r => (isMobile ? setTimeout(r, 30) : requestAnimationFrame(() => requestAnimationFrame(r))));
     await document.fonts.ready;
-    const blob = await generatePdfBlob(["ORIGINAL COPY", "DUPLICATE COPY"]);
+    const blob = await generatePdfBlob(["ORIGINAL COPY", "DUPLICATE COPY"], true);
     setPdfPrinting(false);
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
 
@@ -843,9 +840,8 @@ export default function InvoiceDetailPage() {
               </Button>
             </span>
             )}
-            <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" loading={pdfRegenerating} onClick={handleRegeneratePdf}>
+            <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" onClick={handleRegeneratePdf}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>
-              Regenerate
             </Button>
             <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
@@ -853,7 +849,7 @@ export default function InvoiceDetailPage() {
             </Button>
             <Button variant="secondary" size="sm" onClick={handleDownloadClick}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-              Download PDF
+              PDF
             </Button>
             <Button variant="secondary" size="sm" onClick={handlePrint}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
@@ -1395,9 +1391,20 @@ export default function InvoiceDetailPage() {
                     <tr key={item.id} data-invoice-item-row="true">
                       {c(idx + 1)}
                       <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 6px", background: rowBg, fontWeight: 600, color: "var(--inv-tx)" }}>
+                        {/* Fixed single-line height with ellipsis truncation
+                            instead of wrapping to 2 lines — a row whose height
+                            depended on whether the name actually wrapped (1
+                            line vs 2) let html2canvas's own text-wrap
+                            approximation disagree with the live DOM
+                            measurement taken before capture (see
+                            ROW_SAFETY_MARGIN_PX in generateInvoicePdf.ts),
+                            throwing off the page-split math for that row. A
+                            fixed one-line box removes the wrap variance
+                            entirely. */}
                         <div style={{
-                          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word",
-                        }}>{item.name}</div>
+                          overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+                          lineHeight: "14px", height: "14px",
+                        }} title={item.name}>{item.name}</div>
                       </td>
                       {c(item.hsn || "—")}
                       {c(item.quantity)}{c(item.unit)}
@@ -1452,7 +1459,7 @@ export default function InvoiceDetailPage() {
                     here desyncs the table the moment Round Off is nonzero —
                     the rows past the rowSpan's end silently lose their left
                     offset and collapse against the table's left edge. */}
-                <tr>
+                <tr data-invoice-summary-start="true">
                   <td colSpan={8} rowSpan={5 + (invoice.isInterState ? 1 : 2) + (invoice.roundOff !== 0 ? 1 : 0)}
                     style={{ border: "1px solid var(--inv-bd)", padding: "14px 16px", verticalAlign: "top", color: "var(--inv-tx3)" }}>
                     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 120 }}>
@@ -1498,9 +1505,12 @@ export default function InvoiceDetailPage() {
                             <div style={{ fontSize: 9, color: "var(--inv-tx3)" }}>Authorised Signatory</div>
                           </div>
                           {/* Shown only on the Duplicate Copy pass — toggled in
-                              generateInvoicePdf.ts's onclone, same mechanism as
-                              #invoice-copy-badge. Original/no-label copies never show it. */}
-                          <div id="invoice-receiver-signature" data-role="receiver-signature" style={{ display: "none", textAlign: "right" }}>
+                              generateInvoicePdf.ts's onclone via visibility (not
+                              display), same mechanism as #invoice-copy-badge, so
+                              this row's layout space is always reserved and every
+                              copy's canvas height matches the pre-loop measurement.
+                              Original/no-label copies keep it invisible. */}
+                          <div id="invoice-receiver-signature" data-role="receiver-signature" style={{ visibility: "hidden", textAlign: "right" }}>
                             <div style={{ fontSize: 10, fontWeight: 600, color: "var(--inv-tx2)", marginBottom: 20 }}>&nbsp;</div>
                             <div style={{ fontSize: 9, color: "var(--inv-tx3)" }}>Receiver Signature</div>
                           </div>
@@ -1699,15 +1709,12 @@ export default function InvoiceDetailPage() {
                 </tr>
               </tfoot>
             </table>
-            {/* Outside/below the table's box, where the table ends — no border.
-                Baked into the captured page image once, then overwritten per
-                page with the real page number — see stampPageMarker() in
-                generateInvoicePdf.ts. Measured together with the tfoot above
-                as one combined block, so it moves with the footer whether
-                appended after content or pinned to the page bottom. */}
-            <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 14px 0", fontSize: 9, color: "var(--inv-tx3)" }}>
-              <span id="invoice-page-marker" data-role="page-marker">Page No. 1 of 1</span>
-            </div>
+            {/* No page-marker element here on purpose — "Page No. X of Y" is
+                drawn directly onto the generated PDF's canvas in a reserved
+                band below the tfoot (see generateInvoicePdf.ts), computed
+                from the table's own measured edges rather than a live DOM
+                node, so the on-screen detail page never shows any such text
+                and there's nothing here that could go stale/desync. */}
           </div>
 
         </div>

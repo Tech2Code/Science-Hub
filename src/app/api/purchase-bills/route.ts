@@ -139,6 +139,19 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Item unit is too long (max 100 characters)." }, { status: 400 });
       }
     }
+    {
+      // Mirrors the same guard on /api/invoices — without it, batchAdjustStock
+      // silently merges duplicate-product lines into one combined ledger
+      // entry, losing per-line audit granularity.
+      const seenProductIds = new Set<string>();
+      for (const item of items as { productId?: string }[]) {
+        if (!item.productId) continue; // unlinked custom items (e.g. "Delivery Charges") can repeat freely
+        if (seenProductIds.has(item.productId)) {
+          return NextResponse.json({ error: "Each product can only appear once per purchase bill — combine duplicate lines into a single quantity instead." }, { status: 400 });
+        }
+        seenProductIds.add(item.productId);
+      }
+    }
     if (typeof notes === "string" && notes.length > 2000) {
       return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
     }

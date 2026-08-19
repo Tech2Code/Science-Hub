@@ -1,10 +1,16 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  // Enables GIN trigram indexes below — global search's `contains`/ILIKE
+  // queries can't use a plain btree index (only exact-prefix matches can),
+  // so without pg_trgm every search does a full table scan. Fine at small
+  // scale; degrades linearly as invoices/customers/products/etc. grow.
+  extensions = [pg_trgm]
 }
 
 model User {
@@ -66,6 +72,13 @@ model Customer {
   invoices  Invoice[]
 
   @@index([deletedAt])
+  // Global search matches Customer.name/phone/email/gstin with a `contains`
+  // (ILIKE '%q%') query — a trigram index is what makes that fast instead of
+  // a full table scan as the table grows.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([gstin(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model Category {
@@ -77,6 +90,7 @@ model Category {
   products  Product[]
 
   @@index([deletedAt])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model Brand {
@@ -88,6 +102,7 @@ model Brand {
   products  Product[]
 
   @@index([deletedAt])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model Product {
@@ -127,6 +142,8 @@ model Product {
   @@index([deletedAt])
   @@index([categoryId])
   @@index([brandId])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([sku(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model Invoice {
@@ -174,6 +191,7 @@ model Invoice {
   @@index([status])
   @@index([customerId])
   @@index([date])
+  @@index([invoiceNumber(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model InvoiceItem {
@@ -309,6 +327,15 @@ model Vendor {
   updatedAt     DateTime        @updatedAt
   deletedAt     DateTime?
   purchaseBills PurchaseBill[]
+
+  // Every list/stats query (vendorQuery.ts) filters `deletedAt: null` first —
+  // missing this index (unlike every other soft-deletable model) meant a
+  // full table scan on every vendor list/bin/dashboard query as the table grows.
+  @@index([deletedAt])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([company(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 // ── Purchase Bills ────────────────────────────────────────────────────────────
@@ -353,9 +380,11 @@ model PurchaseBill {
   payments        PurchasePayment[]
   stockMovements  StockMovement[]
 
+  @@index([deletedAt])
   @@index([vendorId])
   @@index([status])
   @@index([billDate])
+  @@index([billNumber(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model PurchaseBillItem {

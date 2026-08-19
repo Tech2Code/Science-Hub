@@ -130,6 +130,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           return NextResponse.json({ error: "Item unit is too long (max 100 characters)." }, { status: 400 });
         }
       }
+      {
+        // Mirrors the same guard on /api/invoices/[id] and the POST route
+        // above — without it, batchAdjustStock silently merges duplicate-
+        // product lines into one combined ledger entry.
+        const seenProductIds = new Set<string>();
+        for (const item of items as { productId?: string }[]) {
+          if (!item.productId) continue;
+          if (seenProductIds.has(item.productId)) {
+            return NextResponse.json({ error: "Each product can only appear once per purchase bill — combine duplicate lines into a single quantity instead." }, { status: 400 });
+          }
+          seenProductIds.add(item.productId);
+        }
+      }
       // Discount is applied to the line's gross amount before GST, same as
       // sales invoices and the POST route above.
       computedItems = (items as {
@@ -202,13 +215,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // paidAmount vs total, the same way invoices work, so editing anything
     // that changes total (items or the bill-level discount) can never leave
     // a stale status behind. The one status a user DOES set directly is
-    // "cancelled", via the dedicated Cancel Bill action, which calls this
-    // route with only `{ status }` and no `items`/`discount` — that explicit
-    // value passes through untouched here.
+    // literally the string "cancelled", via the dedicated Cancel Bill action,
+    // which calls this route with only `{ status: "cancelled" }` and no
+    // `items`/`discount`. Any other explicit `status` value sent by a caller
+    // (e.g. "paid", or an un-cancel that isn't actually "cancelled") is never
+    // trusted verbatim — it's recomputed from paidAmount instead, exactly
+    // like the totalChanged branch, so a client can't decouple the stored
+    // status from the real balance (see AUDIT_REPORT.md API-003; mirrors the
+    // fix already applied to invoices, API-001).
     const totalChanged = items !== undefined || parsedDiscount !== undefined;
+    const recomputedStatus = existing.paidAmount + 0.01 >= total ? "paid" : existing.paidAmount > 0 ? "partial" : "unpaid";
     const effectiveStatus = totalChanged
-      ? (existing.paidAmount + 0.01 >= total ? "paid" : existing.paidAmount > 0 ? "partial" : "unpaid")
-      : status;
+      ? recomputedStatus
+      : status === "cancelled"
+        ? "cancelled"
+        : status !== undefined
+          ? recomputedStatus
+          : undefined;
 
     if (effectiveStatus === "paid" && existing.paidAmount + 0.01 < total) {
       return NextResponse.json(

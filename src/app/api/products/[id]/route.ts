@@ -56,7 +56,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { name, description, sku, hsn, unit, price, purchasePrice, gstRate, stock, minStock, categoryId, brandId, expectedUpdatedAt } = body;
+    const { name, description, sku, hsn, unit, price, purchasePrice, gstRate, minStock, categoryId, brandId, expectedUpdatedAt } = body;
 
     const existing = await prisma.product.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existing) return NextResponse.json({ error: "Product not found" }, { status: 404 });
@@ -95,10 +95,14 @@ export async function PUT(
         data.purchasePrice = parsed;
       }
     }
+    // `stock` is deliberately not accepted here — every stock change must go
+    // through POST /api/products/[id]/adjust-stock instead, which requires a
+    // reason and writes an audited StockMovement row via batchAdjustStock().
+    // Accepting it in this generic edit route would let stock drift out of
+    // sync with the ledger with no record of why (see AUDIT_REPORT.md API-002).
     const numericFields: [string, unknown, number, number, boolean][] = [
       ["price", price, 0, Infinity, false],
       ["gstRate", gstRate, 0, 100, false],
-      ["stock", stock, 0, Infinity, true],
       ["minStock", minStock, 0, Infinity, true],
     ];
     for (const [key, value, min, max, mustBeInteger] of numericFields) {

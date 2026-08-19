@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireWriteAccess } from "@/lib/apiAuth";
-import { isFutureIstDate } from "@/lib/validation";
+import { isFutureIstDate, toIstDateStr } from "@/lib/validation";
 
 class PaymentExceedsBalanceError extends Error {}
 class PaymentConflictError extends Error {}
@@ -46,7 +46,7 @@ export async function PUT(
       if (isNaN(paymentDate.getTime())) {
         return NextResponse.json({ error: "Invalid payment date" }, { status: 400 });
       }
-      if (paymentDate < invoiceCheck.date) {
+      if (date < toIstDateStr(invoiceCheck.date)) {
         return NextResponse.json({ error: "Payment date cannot be before the invoice date" }, { status: 400 });
       }
       if (isFutureIstDate(date)) {

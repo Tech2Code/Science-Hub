@@ -99,9 +99,6 @@
   cursor: pointer;
 }
 
-/* ── Vendor create modal ───────────────────────── */
-.modalSub { font-size: 0.8125rem; color: var(--c-text-3); margin-bottom: 1.125rem; margin-top: -0.5rem; }
-
 .inlineVendorCheckbox {
   display: flex;
   align-items: center;

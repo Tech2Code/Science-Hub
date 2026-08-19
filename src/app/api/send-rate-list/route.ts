@@ -32,6 +32,13 @@ export async function POST(req: Request) {
     if (to.trim().length > 254 || !EMAIL_RE.test(to.trim())) {
       return NextResponse.json({ error: "Recipient email address is invalid." }, { status: 400 });
     }
+    // title is client-supplied form data — reject any embedded CR/LF before
+    // it can reach the `subject` header, or an authenticated caller could
+    // inject extra SMTP headers (e.g. Bcc) into a message sent from the
+    // business's own Gmail account (mirrors the same fix in /api/send-invoice).
+    if (/[\r\n]/.test(title) || title.length > 200) {
+      return NextResponse.json({ error: "Invalid rate list title." }, { status: 400 });
+    }
     if (pdf.size > MAX_PDF_BYTES) {
       return NextResponse.json({ error: "PDF attachment is too large (max 10MB)." }, { status: 413 });
     }

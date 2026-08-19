@@ -16,6 +16,19 @@ export function isFutureIstDate(dateStr: string): boolean {
   return dateStr > todayIst;
 }
 
+// Same reasoning as isFutureIstDate, applied to "is this date before the
+// parent document's date" checks (payment/return date vs. invoice/bill
+// date). The parent's `date`/`billDate` column is a full timestamp (e.g.
+// created 14:00 IST), while the submitted value is a bare calendar-date
+// string with no time component — comparing them as raw Date objects makes
+// any same-day payment/return look like it's "before" the invoice/bill for
+// the whole day, since midnight UTC of that calendar date is always earlier
+// than a later-in-the-day timestamp. Converting the parent date to its own
+// IST calendar-date string first makes this a plain, correct string compare.
+export function toIstDateStr(date: Date): string {
+  return new Date(date.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
 export const rules = {
   required: (msg = "This field is required."): Validator =>
     (v) => v.trim() ? null : msg,

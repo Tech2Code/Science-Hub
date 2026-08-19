@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./GlobalSearch.module.css";
 
@@ -32,10 +32,12 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -57,15 +59,31 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
           headers: { "x-no-loader": "1" },
         });
         const data = await res.json();
+        // A superseded request (one that lost the abort race, or never got
+        // aborted in time but a newer one has since started) must not touch
+        // state — otherwise its late-arriving response overwrites the
+        // newer, still-in-flight search's results with stale ones.
+        if (controller !== abortRef.current) return;
         setGroups(res.ok ? data.groups ?? [] : []);
       } catch (err) {
         if ((err as Error)?.name !== "AbortError") setGroups([]);
       } finally {
-        setLoading(false);
+        // Only the most recent request is allowed to clear `loading` — an
+        // aborted older request's finally block used to fire first and flip
+        // loading to false while the real (newer) request was still
+        // pending, which briefly rendered a false "No results" state.
+        if (controller === abortRef.current) setLoading(false);
       }
     }, 250);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
+
+  // Aborts a still-in-flight request if the whole search widget unmounts
+  // (e.g. navigating away mid-search) rather than letting it resolve into a
+  // component that's no longer there.
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -118,7 +136,40 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
 
   const trimmed = query.trim();
   const showPanel = open && trimmed.length >= 2;
-  const totalResults = groups.reduce((n, g) => n + g.items.length, 0);
+  const flatItems = groups.flatMap((g) => g.items);
+  const totalResults = flatItems.length;
+
+  // A fresh result set invalidates whatever position the keyboard cursor was
+  // sitting at. Adjusted during render (React's documented pattern for
+  // resetting state in response to a prop/derived-value change) rather than
+  // in a useEffect, which would cost an extra commit-then-rerun-effect pass.
+  const [prevGroups, setPrevGroups] = useState(groups);
+  if (groups !== prevGroups) {
+    setPrevGroups(groups);
+    setActiveIndex(-1);
+  }
+
+  function handleInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!showPanel || flatItems.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((i) => {
+        const next = (i + 1) % flatItems.length;
+        itemRefs.current[next]?.scrollIntoView({ block: "nearest" });
+        return next;
+      });
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => {
+        const next = (i - 1 + flatItems.length) % flatItems.length;
+        itemRefs.current[next]?.scrollIntoView({ block: "nearest" });
+        return next;
+      });
+    } else if (e.key === "Enter" && activeIndex >= 0) {
+      e.preventDefault();
+      goTo(flatItems[activeIndex].href);
+    }
+  }
 
   // Collapsed mobile state: just the icon, no input/panel in the DOM at all.
   if (mobile && !mobileExpanded) {
@@ -161,11 +212,29 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
           <input
             ref={inputRef}
             type="search"
+            role="combobox"
             aria-label="Search everything"
+            aria-expanded={showPanel}
+            aria-controls="global-search-listbox"
+            aria-autocomplete="list"
+            aria-activedescendant={activeIndex >= 0 ? `global-search-option-${activeIndex}` : undefined}
             placeholder="Search invoices, customers, products, settings…"
             value={query}
-            onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+            maxLength={100}
+            onChange={(e) => {
+              const val = e.target.value;
+              setQuery(val);
+              setOpen(true);
+              // Set in the same batch as the query change so the very next
+              // render already reflects "searching" — otherwise the effect
+              // below (which only runs after that render) is what flips
+              // `loading` true, leaving one stale frame where groups=[] and
+              // loading=false render as a false "No results" flash before
+              // the real search even starts.
+              setLoading(val.trim().length >= 2);
+            }}
             onFocus={() => setOpen(true)}
+            onKeyDown={handleInputKeyDown}
             className={styles.input}
           />
           {loading && <span className={styles.spinner} />}
@@ -173,28 +242,40 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
       </div>
 
       {showPanel && (
-        <div className={styles.panel}>
+        <div className={styles.panel} id="global-search-listbox" role="listbox">
           {loading && totalResults === 0 ? (
             <div className={styles.empty}>Searching…</div>
           ) : totalResults === 0 ? (
             <div className={styles.empty}>No results for &ldquo;{trimmed}&rdquo;</div>
           ) : (
-            groups.map((group) => (
-              <div key={group.type} className={styles.group}>
-                <div className={styles.groupLabel}>{group.label}</div>
-                {group.items.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={styles.item}
-                    onClick={() => goTo(item.href)}
-                  >
-                    <span className={styles.itemTitle} title={item.title}>{item.title}</span>
-                    {item.subtitle && <span className={styles.itemSubtitle} title={item.subtitle}>{item.subtitle}</span>}
-                  </button>
-                ))}
-              </div>
-            ))
+            (() => {
+              let flatIndex = -1;
+              return groups.map((group) => (
+                <div key={group.type} className={styles.group}>
+                  <div className={styles.groupLabel}>{group.label}</div>
+                  {group.items.map((item) => {
+                    flatIndex++;
+                    const i = flatIndex;
+                    return (
+                      <button
+                        key={item.id}
+                        ref={(el) => { itemRefs.current[i] = el; }}
+                        id={`global-search-option-${i}`}
+                        type="button"
+                        role="option"
+                        aria-selected={activeIndex === i}
+                        className={[styles.item, activeIndex === i ? styles.itemActive : ""].join(" ")}
+                        onMouseEnter={() => setActiveIndex(i)}
+                        onClick={() => goTo(item.href)}
+                      >
+                        <span className={styles.itemTitle} title={item.title}>{item.title}</span>
+                        {item.subtitle && <span className={styles.itemSubtitle} title={item.subtitle}>{item.subtitle}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              ));
+            })()
           )}
         </div>
       )}

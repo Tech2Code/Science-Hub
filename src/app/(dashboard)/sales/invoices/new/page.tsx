@@ -64,10 +64,11 @@ export default function NewInvoicePage() {
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
-  // Default ON per product decision — most invoices in this business carry a
-  // transport/freight charge, so showing the section already open avoids an
-  // extra click on the common path; toggling off drops the amount to 0.
-  const [transportChargeEnabled, setTransportChargeEnabled] = useState(true);
+  // Defaults off — checked against real usage data (2026-08-18): only ~5% of
+  // existing invoices actually carry a transport charge, so defaulting it on
+  // forced an extra "toggle off" step on the overwhelming majority of new
+  // invoices instead of saving a click as originally intended.
+  const [transportChargeEnabled, setTransportChargeEnabled] = useState(false);
   const [transportCharge, setTransportCharge] = useState("");
   const [transportChargeGstRate, setTransportChargeGstRate] = useState("18");
   const [transportChargeError, setTransportChargeError] = useState<string | undefined>(undefined);
@@ -574,6 +575,7 @@ export default function NewInvoicePage() {
                 customPincodeLookup.reset();
               }}
               title={customerEditId ? "Edit Customer" : "Add New Customer"}
+              subtitle={customerEditId ? "Update this customer's details" : "Not in your list — fill details and create"}
               variant="fullscreen"
               footer={
                 <>
@@ -616,7 +618,6 @@ export default function NewInvoicePage() {
                 </>
               }
             >
-              <p className={styles.customModalSub}>{customerEditId ? "Update this customer's details" : "Not in your list — fill details and create"}</p>
               <div className={styles.customForm}>
                 <FormField label="Customer Name" required error={customErrors.name}>
                   <Input
