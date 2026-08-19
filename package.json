@@ -20,7 +20,13 @@
     "seed": "npx tsx prisma/seed.ts"
   },
   "overrides": {
-    "@auth/core": "0.41.3"
+    "@auth/core": {
+      ".": "0.41.3",
+      "nodemailer": "$nodemailer"
+    },
+    "next-auth": {
+      "nodemailer": "$nodemailer"
+    }
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
