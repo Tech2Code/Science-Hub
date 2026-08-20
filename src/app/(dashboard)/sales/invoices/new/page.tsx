@@ -23,6 +23,7 @@ import { rules, validate, validateForm, hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { useDirty } from "@/lib/useDirty";
 import { InfoBanner } from "@/components/ui/InfoBanner";
+import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { deriveDefaultPrefix, getIndianFinancialYear, formatFinancialYearLabel, resolveNumberFormat } from "@/lib/documentNumbering";
 
@@ -64,11 +65,12 @@ export default function NewInvoicePage() {
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
-  // Defaults off — checked against real usage data (2026-08-18): only ~5% of
-  // existing invoices actually carry a transport charge, so defaulting it on
-  // forced an extra "toggle off" step on the overwhelming majority of new
-  // invoices instead of saving a click as originally intended.
-  const [transportChargeEnabled, setTransportChargeEnabled] = useState(false);
+  // Reverted back to default-on (2026-08-20, explicit business request) —
+  // the previous default-off change (2026-08-18) traded a "toggle off" step
+  // for a "toggle on" step on the ~5% of invoices that don't carry a
+  // transport charge; the business wants every invoice to carry one by
+  // default regardless of that split.
+  const [transportChargeEnabled, setTransportChargeEnabled] = useState(true);
   const [transportCharge, setTransportCharge] = useState("");
   const [transportChargeGstRate, setTransportChargeGstRate] = useState("18");
   const [transportChargeError, setTransportChargeError] = useState<string | undefined>(undefined);
@@ -83,6 +85,7 @@ export default function NewInvoicePage() {
   const DRAFT_KEY = "invoice:new";
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [confirmDiscardDraftOpen, setConfirmDiscardDraftOpen] = useState(false);
 
   useEffect(() => {
     const draft = loadFormDraft<{
@@ -122,9 +125,14 @@ export default function NewInvoicePage() {
   }
 
   function dismissDraft() {
+    setConfirmDiscardDraftOpen(true);
+  }
+
+  function discardDraft() {
     clearFormDraft(DRAFT_KEY);
     setShowDraftBanner(false);
     setDraftReady(true);
+    setConfirmDiscardDraftOpen(false);
   }
 
   useFormDraft(DRAFT_KEY, {
@@ -419,6 +427,7 @@ export default function NewInvoicePage() {
         <h1 className="page-title">Create Invoice</h1>
         <p className="page-sub">Generate a GST-compliant invoice</p>
       </div>
+      <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
       {showDraftBanner && (
         <InfoBanner
           message="You have an unsaved invoice draft from earlier — want to resume it?"

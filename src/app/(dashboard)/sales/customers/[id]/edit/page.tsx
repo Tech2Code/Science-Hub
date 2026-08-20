@@ -16,6 +16,7 @@ import { hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { InfoBanner } from "@/components/ui/InfoBanner";
+import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import styles from "./customerEdit.module.css";
 
 export default function EditCustomerPage() {
@@ -37,6 +38,7 @@ export default function EditCustomerPage() {
   const DRAFT_KEY = `customer:edit:${id}`;
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [confirmDiscardDraftOpen, setConfirmDiscardDraftOpen] = useState(false);
 
   function restoreDraft() {
     const draft = loadFormDraft<CustomerFormData>(DRAFT_KEY);
@@ -46,9 +48,14 @@ export default function EditCustomerPage() {
   }
 
   function dismissDraft() {
+    setConfirmDiscardDraftOpen(true);
+  }
+
+  function discardDraft() {
     clearFormDraft(DRAFT_KEY);
     setShowDraftBanner(false);
     setDraftReady(true);
+    setConfirmDiscardDraftOpen(false);
   }
 
   useEffect(() => {
@@ -139,6 +146,7 @@ export default function EditCustomerPage() {
         </div>
       </div>
 
+      <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
       {showDraftBanner && (
         <InfoBanner
           message="You have unsaved edits to this customer from earlier — want to resume them?"

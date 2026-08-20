@@ -7,6 +7,7 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { Pagination } from "@/components/ui/Pagination";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
@@ -182,7 +183,6 @@ export default function AdminPage() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [logsTotal, setLogsTotal] = useState(0);
   const [logsLoading, setLogsLoading] = useState(false);
-  const [logsNavDirection, setLogsNavDirection] = useState<"prev" | "next" | null>(null);
   const [logsLoadedOnce, setLogsLoadedOnce] = useState(false);
   const [logsPage, setLogsPage] = useState(1);
   const [logsFilter, setLogsFilter] = useState(""); // filter by userId
@@ -204,7 +204,6 @@ export default function AdminPage() {
     const res = await fetch(`/api/admin/activity?${qs}`, { headers: { "x-no-loader": "1" } });
     const data = await res.json();
     setLogsLoading(false);
-    setLogsNavDirection(null);
     setLogsLoadedOnce(true);
     if (res.ok) {
       setLogs(data.logs);
@@ -429,8 +428,6 @@ export default function AdminPage() {
   }
 
   const selfId = session?.user?.id;
-
-  const logsTotalPages = Math.max(1, Math.ceil(logsTotal / LOGS_LIMIT));
 
   const visibleLogs = logs;
 
@@ -925,42 +922,15 @@ export default function AdminPage() {
           </table>
         </div>
 
-        {/* Pagination */}
-        {logsTotal > LOGS_LIMIT && (
-          <div className={styles.pagination}>
-            <span className={styles.paginationInfo}>
-              {logsTotal} total · page {logsPage} of {logsTotalPages}
-            </span>
-            <div className={styles.paginationBtns}>
-              <Button
-                variant="secondary" size="sm"
-                disabled={logsLoading || logsPage <= 1}
-                loading={logsLoading && logsNavDirection === "prev"}
-                onClick={() => {
-                  setLogsNavDirection("prev");
-                  loadLogs(logsPage - 1, logsFilter, logsSearch.trim());
-                  document.getElementById("activity-log")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-                Prev
-              </Button>
-              <Button
-                variant="secondary" size="sm"
-                disabled={logsLoading || logsPage >= logsTotalPages}
-                loading={logsLoading && logsNavDirection === "next"}
-                onClick={() => {
-                  setLogsNavDirection("next");
-                  loadLogs(logsPage + 1, logsFilter, logsSearch.trim());
-                  document.getElementById("activity-log")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-              >
-                Next
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-              </Button>
-            </div>
-          </div>
-        )}
+        {/* Pagination — shared component, same as every other list in the app */}
+        <Pagination
+          total={logsTotal}
+          page={logsPage}
+          showAll={false}
+          loading={logsLoading}
+          label="log entries"
+          onPage={(p) => loadLogs(p, logsFilter, logsSearch.trim())}
+        />
       </div>
 
       </div>{/* end main content column */}

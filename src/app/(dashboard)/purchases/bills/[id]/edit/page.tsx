@@ -23,6 +23,7 @@ import {
 import { computeRoundOff } from "@/lib/roundOff";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { InfoBanner } from "@/components/ui/InfoBanner";
+import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import styles from "./edit.module.css";
 
 interface BillItem {
@@ -128,6 +129,7 @@ export default function EditPurchaseBillPage() {
   const DRAFT_KEY = `bill:edit:${id}`;
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [confirmDiscardDraftOpen, setConfirmDiscardDraftOpen] = useState(false);
 
   type BillEditDraft = {
     vendorId: string; billDate: string; dueDate: string; category: string; notes: string; discount: string;
@@ -157,9 +159,14 @@ export default function EditPurchaseBillPage() {
   }
 
   function dismissDraft() {
+    setConfirmDiscardDraftOpen(true);
+  }
+
+  function discardDraft() {
     clearFormDraft(DRAFT_KEY);
     setShowDraftBanner(false);
     setDraftReady(true);
+    setConfirmDiscardDraftOpen(false);
   }
 
   useFormDraft(DRAFT_KEY, {
@@ -448,6 +455,7 @@ export default function EditPurchaseBillPage() {
         {bill && <StatusBadge status={bill.status} />}
       </div>
 
+      <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
       {showDraftBanner && (
         <InfoBanner
           message="You have unsaved edits to this bill from earlier — want to resume them?"

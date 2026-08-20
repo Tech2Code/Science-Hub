@@ -289,7 +289,7 @@ export default function ProductViewPage() {
       {/* Stats */}
       <div {...animateSection(1, styles.statsGrid)}>
         {[
-          { label: "Selling Price", value: product ? fmt(product.price) : "" },
+          { label: "List Price", value: product ? fmt(product.price) : "" },
           { label: "Purchase Price", value: product?.purchasePrice != null ? fmt(product.purchasePrice) : "—" },
           {
             label: "Margin",

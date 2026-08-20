@@ -12,6 +12,7 @@ import { RateListFormBody } from "@/components/rateLists/RateListFormBody";
 import { toNum, calcRateListItem, makeRateListLineItemKey, type RateListLineItem } from "@/lib/rateListForm";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { InfoBanner } from "@/components/ui/InfoBanner";
+import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import styles from "./rateListNew.module.css";
 
 const BLANK_ITEMS: RateListLineItem[] = [{ key: makeRateListLineItemKey(), name: "", brand: "", unit: "Nos", isNetRate: false, discountPercent: "0", listRate: "" }];
@@ -33,6 +34,7 @@ export default function NewRateListPage() {
 
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [confirmDiscardDraftOpen, setConfirmDiscardDraftOpen] = useState(false);
 
   useEffect(() => {
     const draft = loadFormDraft<RateListNewDraft>(DRAFT_KEY);
@@ -54,9 +56,14 @@ export default function NewRateListPage() {
   }
 
   function dismissDraft() {
+    setConfirmDiscardDraftOpen(true);
+  }
+
+  function discardDraft() {
     clearFormDraft(DRAFT_KEY);
     setShowDraftBanner(false);
     setDraftReady(true);
+    setConfirmDiscardDraftOpen(false);
   }
 
   useFormDraft(DRAFT_KEY, { title, note, items }, !draftReady || saving);
@@ -127,6 +134,7 @@ export default function NewRateListPage() {
         <p className="page-sub">Build a downloadable price sheet to share with customers</p>
       </div>
 
+      <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
       {showDraftBanner && (
         <InfoBanner
           message="You have an unsaved rate list draft from earlier — want to resume it?"

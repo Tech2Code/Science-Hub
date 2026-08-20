@@ -16,6 +16,7 @@ import {
   type PurchaseBillLineItem, type PurchaseBillProduct, type PurchaseBillVendor,
 } from "@/lib/purchaseBillForm";
 import { InfoBanner } from "@/components/ui/InfoBanner";
+import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import { getIndianFinancialYear, formatFinancialYearLabel, resolveNumberFormat } from "@/lib/documentNumbering";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import styles from "./billNew.module.css";
@@ -117,6 +118,7 @@ export default function NewPurchaseBillPage() {
   const DRAFT_KEY = "bill:new";
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [confirmDiscardDraftOpen, setConfirmDiscardDraftOpen] = useState(false);
 
   type BillNewDraft = {
     vendorId: string; billDate: string; dueDate: string; category: string; discount: string; notes: string;
@@ -161,9 +163,14 @@ export default function NewPurchaseBillPage() {
   }
 
   function dismissDraft() {
+    setConfirmDiscardDraftOpen(true);
+  }
+
+  function discardDraft() {
     clearFormDraft(DRAFT_KEY);
     setShowDraftBanner(false);
     setDraftReady(true);
+    setConfirmDiscardDraftOpen(false);
   }
 
   useFormDraft(DRAFT_KEY, {
@@ -344,6 +351,7 @@ export default function NewPurchaseBillPage() {
         <h1 className="page-title">Create Purchase Bill</h1>
         <p className="page-sub">Record a GST-compliant purchase bill</p>
       </div>
+      <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
       {showDraftBanner && (
         <InfoBanner
           message="You have an unsaved purchase bill draft from earlier — want to resume it?"

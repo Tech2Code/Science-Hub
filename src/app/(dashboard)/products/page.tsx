@@ -17,6 +17,7 @@ import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { isOutOfStock, isLowStock } from "@/lib/stockStatus";
+import { ProductBulkImportModal } from "@/components/products/ProductBulkImportModal";
 import styles from "./productsList.module.css";
 
 type StockFilter = "all" | "low" | "out";
@@ -24,8 +25,8 @@ type SortOption = "name_az" | "name_za" | "price_high" | "price_low" | "stock_hi
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "name_az",    label: "Name (A–Z)" },
   { value: "name_za",    label: "Name (Z–A)" },
-  { value: "price_high", label: "Price (High–Low)" },
-  { value: "price_low",  label: "Price (Low–High)" },
+  { value: "price_high", label: "List Price (High–Low)" },
+  { value: "price_low",  label: "List Price (Low–High)" },
   { value: "stock_high", label: "Stock (High–Low)" },
   { value: "stock_low",  label: "Stock (Low–High)" },
   { value: "newest",     label: "Newest first" },
@@ -53,7 +54,7 @@ const COLUMNS: Column[] = [
   { label: "Brand",      mobile: "label" },
   { label: "Category",   mobile: "label" },
   { label: "Unit",       mobile: "label" },
-  { label: "Price",      cls: "table-th-right", mobile: "label" },
+  { label: "List Price", cls: "table-th-right", mobile: "label" },
   { label: "GST %",      cls: "table-th-right", mobile: "full+label" },
   { label: "Stock",      cls: "table-th-right", mobile: "full+label" },
   { label: "Invoices",   cls: "table-th-right", mobile: "full+label" },
@@ -88,6 +89,7 @@ export default function ProductsPage() {
   const [openingEdit, setOpeningEdit] = useState(false);
   const [openingView, setOpeningView] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const toast = useToast();
   const router = useRouter();
 
@@ -145,6 +147,11 @@ export default function ProductsPage() {
       {openingEdit && <OverlayLoader text="Opening editor…" />}
       {openingView && <OverlayLoader text="Opening…" />}
       {isRefetching && <FloatingSpinner />}
+      <ProductBulkImportModal
+        open={bulkImportOpen}
+        onClose={() => setBulkImportOpen(false)}
+        onImported={() => { mutate(); mutateStats(); }}
+      />
       <ConfirmDialog
         open={!!confirmState}
         title={confirmState?.title ?? ""}
@@ -161,7 +168,12 @@ export default function ProductsPage() {
           <h1 className="page-title">Products</h1>
           <p className="page-sub">{loading ? "Loading…" : `${total} products in catalog`}</p>
         </div>
-        {canWrite && (<Button variant="primary" href="/products/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Product</Button>)}
+        {canWrite && (
+          <div className={styles.headerActions}>
+            <Button variant="secondary" onClick={() => setBulkImportOpen(true)}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 8 12 3 17 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Bulk Import</Button>
+            <Button variant="primary" href="/products/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Product</Button>
+          </div>
+        )}
       </div>
 
       <div {...animateSection(0, "card")}>

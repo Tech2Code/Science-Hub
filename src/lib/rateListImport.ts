@@ -47,6 +47,38 @@ function parseDiscountCell(raw: string): { isNetRate: boolean; discountPercent: 
   return { isNetRate: false, discountPercent: isNaN(num) ? "0" : String(Math.min(100, Math.max(0, num))) };
 }
 
+/**
+ * Splits one CSV line into fields, respecting double-quoted fields so a
+ * quoted thousands-separator comma (e.g. a rate exported as `"1,902.00"`)
+ * isn't mistaken for a column delimiter — a plain `line.split(",")` breaks
+ * on every comma regardless of quoting and silently truncates such values
+ * to the digits before the first comma.
+ */
+export function parseCsvLine(line: string): string[] {
+  const fields: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; } else { inQuotes = false; }
+      } else {
+        cur += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      fields.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  fields.push(cur);
+  return fields;
+}
+
 const cellAt = (row: string[], idx: number | undefined): string => (idx !== undefined ? (row[idx] ?? "").trim() : "");
 
 /**
@@ -97,6 +129,6 @@ export function parseRateListRows(rows: string[][]): { items: ParsedRateListRow[
 /** Excel copy places a tab between columns — falls back to comma-split for a plain CSV snippet pasted instead of a spreadsheet range. */
 export function parsePastedRateListText(text: string): { items: ParsedRateListRow[]; skipped: number } {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  const rows = lines.map((line) => (line.includes("\t") ? line.split("\t") : line.split(",")));
+  const rows = lines.map((line) => (line.includes("\t") ? line.split("\t") : parseCsvLine(line)));
   return parseRateListRows(rows);
 }

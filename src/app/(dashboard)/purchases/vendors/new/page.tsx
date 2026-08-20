@@ -14,6 +14,7 @@ import { hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { InfoBanner } from "@/components/ui/InfoBanner";
+import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import styles from "./vendorNew.module.css";
 
 const DRAFT_KEY = "vendor:new";
@@ -31,6 +32,7 @@ export default function NewVendorPage() {
 
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [confirmDiscardDraftOpen, setConfirmDiscardDraftOpen] = useState(false);
 
   useEffect(() => {
     const draft = loadFormDraft<VendorFormData>(DRAFT_KEY);
@@ -47,9 +49,14 @@ export default function NewVendorPage() {
   }
 
   function dismissDraft() {
+    setConfirmDiscardDraftOpen(true);
+  }
+
+  function discardDraft() {
     clearFormDraft(DRAFT_KEY);
     setShowDraftBanner(false);
     setDraftReady(true);
+    setConfirmDiscardDraftOpen(false);
   }
 
   useFormDraft(DRAFT_KEY, form, !draftReady || saving);
@@ -95,6 +102,7 @@ export default function NewVendorPage() {
       <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "New Vendor" }]} />
       <h1 className="page-title">New Vendor</h1>
 
+      <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
       {showDraftBanner && (
         <InfoBanner
           message="You have an unsaved vendor draft from earlier — want to resume it?"

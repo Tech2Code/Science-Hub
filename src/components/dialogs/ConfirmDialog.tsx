@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "../ui/Button";
 import styles from "./ConfirmDialog.module.css";
 
@@ -88,7 +89,13 @@ export function ConfirmDialog({
 
   if (!open) return null;
 
-  return (
+  // Portaled to document.body, same as Modal — otherwise, with an equal
+  // z-index, a ConfirmDialog rendered inline (nested wherever its owning
+  // component sits in the tree) loses the stacking order to any Modal that
+  // was portaled to document.body earlier, since fixed-position elements at
+  // the same z-index paint in DOM order and the portaled node always lands
+  // later as a direct child of body.
+  return createPortal(
     <div className={styles.overlay} role="dialog" aria-modal="true">
       <div className={styles.backdrop} onClick={() => { if (!loading) onCancel(); }} />
       <div className={styles.center}>
@@ -113,6 +120,7 @@ export function ConfirmDialog({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

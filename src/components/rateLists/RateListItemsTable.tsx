@@ -1,6 +1,6 @@
 "use client";
 
-import { type Dispatch, type SetStateAction, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/dialogs/Modal";
@@ -98,6 +98,64 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
   }
 
+  // Press-and-hold row reordering — off by default until "Reorder Items" is
+  // clicked. Same approach as InvoiceLineItemsCard/PurchaseBillItemsTable:
+  // window-level pointermove/pointerup only while a drag is active, drop
+  // target found via elementFromPoint + data-item-key (not a numeric index,
+  // which goes stale the moment the array reorders). serialNo is derived
+  // from array position at save time (calcRateListItems in rateListForm.ts),
+  // so reordering this array is all that's needed.
+  const [reorderMode, setReorderMode] = useState(false);
+  const [draggedKey, setDraggedKey] = useState<string | null>(null);
+
+  function handleGripPointerDown(e: React.PointerEvent<HTMLButtonElement>, key: string) {
+    e.preventDefault();
+    setDraggedKey(key);
+  }
+
+  useEffect(() => {
+    if (!draggedKey) return;
+
+    function rowKeyAt(clientX: number, clientY: number) {
+      const el = document.elementFromPoint(clientX, clientY);
+      return el?.closest<HTMLTableRowElement>("[data-item-key]")?.dataset.itemKey ?? null;
+    }
+
+    function onMove(e: PointerEvent) {
+      const overKey = rowKeyAt(e.clientX, e.clientY);
+      if (!overKey || overKey === draggedKey) return;
+      setItems((prev) => {
+        const fromIdx = prev.findIndex((i) => i.key === draggedKey);
+        const toIdx = prev.findIndex((i) => i.key === overKey);
+        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev;
+        const next = [...prev];
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+        return next;
+      });
+    }
+
+    function onUp() {
+      setDraggedKey(null);
+    }
+
+    const prevCursor = document.body.style.cursor;
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevUserSelect;
+    };
+  }, [draggedKey, setItems]);
+
   function handleDiscountPercentChange(idx: number, key: string, raw: string) {
     const cleaned = raw.replace(/%/g, "");
     if (!/^(100(\.\d{0,2})?|\d{0,2}(\.\d{0,2})?)$/.test(cleaned)) return;
@@ -166,6 +224,19 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
       </Modal>
 
       {items.length > 0 ? (
+        <>
+        {items.length > 1 && (
+          <div className={styles.reorderToggleRow}>
+            <Button type="button" size="sm" variant="primary" onClick={() => setReorderMode((v) => !v)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M8 7l4-4 4 4" />
+                <path d="M8 17l4 4 4-4" />
+                <line x1="12" y1="3" x2="12" y2="21" />
+              </svg>
+              {reorderMode ? "Done Reordering" : "Reorder Items"}
+            </Button>
+          </div>
+        )}
         <div className={styles.itemsTableWrap}>
           <table className={styles.itemsTable}>
             <colgroup>
@@ -191,7 +262,11 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
               {items.map((item, idx) => {
                 const { amount } = calcRateListItem(item);
                 return (
-                  <tr key={item.key} className={styles.itemRow}>
+                  <tr
+                    key={item.key}
+                    data-item-key={item.key}
+                    className={`${styles.itemRow} ${reorderMode && draggedKey === item.key ? styles.draggingRow : ""}`}
+                  >
                     <td className={styles.tdIndex}>{idx + 1}</td>
                     <td className={styles.tdName}>
                       <Input sz="sm" value={item.name} onChange={(e) => updateItem(idx, "name", e.target.value)} placeholder="e.g. Sodium Nitrate" maxLength={200} />
@@ -237,7 +312,19 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
                     </td>
                     <td className={styles.tdAmount}>₹{fmtCurrency(amount)}</td>
                     <td className={styles.tdAction}>
-                      <button type="button" onClick={() => removeItem(idx)} aria-label="Remove" className={styles.removeItemBtn}>×</button>
+                      <div className={styles.actionCellStack}>
+                        {reorderMode && (
+                          <button
+                            type="button"
+                            aria-label="Drag to reorder"
+                            className={styles.gripBtn}
+                            onPointerDown={(e) => handleGripPointerDown(e, item.key)}
+                          >
+                            ⠿
+                          </button>
+                        )}
+                        <button type="button" onClick={() => removeItem(idx)} aria-label="Remove" className={styles.removeItemBtn}>×</button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -245,6 +332,7 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
             </tbody>
           </table>
         </div>
+        </>
       ) : (
         <div className={styles.emptyItems}>No items yet. Add your first row below, or paste/upload from Excel above.</div>
       )}

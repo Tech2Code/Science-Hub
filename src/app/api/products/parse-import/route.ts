@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { requireWriteAccess } from "@/lib/apiAuth";
-import { parseRateListRows, parseCsvLine } from "@/lib/rateListImport";
+import { parseProductRows, parseCsvLine } from "@/lib/productImport";
 
-const MAX_BYTES = 5 * 1024 * 1024; // 5MB — a rate list sheet is a few hundred rows at most
+const MAX_BYTES = 5 * 1024 * 1024; // 5MB — a product catalog sheet is a few hundred rows at most
 
-// Bulk-import for the Rate List item table — lets an admin drop in a
-// supplier's existing .xlsx/.csv price list instead of retyping 60+ rows by
-// hand. Parsing only (no DB write here); the client merges the returned rows
-// into the items table so the user can still review/edit before saving,
-// same as manually-typed rows.
+// Bulk-import for the Products list — lets a user drop in a supplier's
+// existing .xlsx/.csv product sheet instead of adding items one by one.
+// Parsing only (no DB write here); the client reviews/edits the returned
+// rows before submitting each one through the normal POST /api/products
+// flow, so every validation rule a manually-added product goes through
+// still applies to an imported one.
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireWriteAccess();
@@ -43,14 +44,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Could not read the file — make sure it's a valid .xlsx or .csv file." }, { status: 400 });
     }
 
-    const { items, skipped } = parseRateListRows(rows);
+    const { items, skipped } = parseProductRows(rows);
     if (items.length === 0) {
-      return NextResponse.json({ error: "No usable rows found. Each row needs at least a name and a list rate." }, { status: 400 });
+      return NextResponse.json({ error: "No usable rows found. Each row needs at least a name and a price." }, { status: 400 });
     }
 
     return NextResponse.json({ items, skipped });
   } catch (error) {
-    console.error("POST /api/rate-lists/parse-import error:", error);
+    console.error("POST /api/products/parse-import error:", error);
     return NextResponse.json({ error: "Failed to parse file" }, { status: 500 });
   }
 }

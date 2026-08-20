@@ -243,12 +243,7 @@
 }
 
 .itemsTable {
-  min-width: 620px;
   table-layout: fixed;
-}
-
-.paymentsTable {
-  min-width: 400px;
 }
 
 /* Explicit widths on <col>, shared by the header and every body row, so a

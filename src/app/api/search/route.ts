@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       prisma.customer.findMany({
         where: {
           deletedAt: null,
-          OR: [{ name: ci }, { phone: ci }, { email: ci }, { gstin: ci }],
+          OR: [{ name: ci }, { phone: ci }, { email: ci }, { gstin: ci }, { address: ci }, { city: ci }],
         },
         select: { id: true, name: true, phone: true, email: true },
         orderBy: { name: "asc" },
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
       prisma.vendor.findMany({
         where: {
           deletedAt: null,
-          OR: [{ name: ci }, { company: ci }, { phone: ci }, { email: ci }],
+          OR: [{ name: ci }, { company: ci }, { phone: ci }, { email: ci }, { address: ci }, { city: ci }],
         },
         select: { id: true, name: true, company: true },
         orderBy: { name: "asc" },

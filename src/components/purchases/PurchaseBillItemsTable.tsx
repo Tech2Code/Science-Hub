@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/dialogs/Modal";
 import { OverlayLoader } from "@/components/ui/Spinner";
@@ -128,6 +128,63 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
   function updateItem(idx: number, field: keyof PurchaseBillLineItem, value: string) {
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
   }
+
+  // Press-and-hold row reordering — off by default (identical table to
+  // before) until "Reorder Items" is clicked. Same approach as the sales
+  // invoice's InvoiceLineItemsCard: window-level pointermove/pointerup
+  // listeners only while a drag is active, and the row currently under the
+  // pointer is looked up via elementFromPoint + data-item-key rather than a
+  // numeric index, since the index goes stale the moment the array reorders.
+  const [reorderMode, setReorderMode] = useState(false);
+  const [draggedKey, setDraggedKey] = useState<string | null>(null);
+
+  function handleGripPointerDown(e: React.PointerEvent<HTMLButtonElement>, key: string) {
+    e.preventDefault();
+    setDraggedKey(key);
+  }
+
+  useEffect(() => {
+    if (!draggedKey) return;
+
+    function rowKeyAt(clientX: number, clientY: number) {
+      const el = document.elementFromPoint(clientX, clientY);
+      return el?.closest<HTMLTableRowElement>("[data-item-key]")?.dataset.itemKey ?? null;
+    }
+
+    function onMove(e: PointerEvent) {
+      const overKey = rowKeyAt(e.clientX, e.clientY);
+      if (!overKey || overKey === draggedKey) return;
+      setItems((prev) => {
+        const fromIdx = prev.findIndex((i) => i.key === draggedKey);
+        const toIdx = prev.findIndex((i) => i.key === overKey);
+        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev;
+        const next = [...prev];
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+        return next;
+      });
+    }
+
+    function onUp() {
+      setDraggedKey(null);
+    }
+
+    const prevCursor = document.body.style.cursor;
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevUserSelect;
+    };
+  }, [draggedKey, setItems]);
 
   // Holds exactly what's been typed (e.g. "10." or "10%") per line item, so a
   // trailing decimal point or "%" isn't stripped out from under the user's
@@ -287,6 +344,19 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
       </Modal>
 
       {items.length > 0 ? (
+        <>
+        {items.length > 1 && (
+          <div className={styles.reorderToggleRow}>
+            <Button type="button" size="sm" variant="primary" onClick={() => setReorderMode((v) => !v)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M8 7l4-4 4 4" />
+                <path d="M8 17l4 4 4-4" />
+                <line x1="12" y1="3" x2="12" y2="21" />
+              </svg>
+              {reorderMode ? "Done Reordering" : "Reorder Items"}
+            </Button>
+          </div>
+        )}
         <div className={styles.itemsTableWrap}>
           <table className={styles.itemsTable}>
             <colgroup>
@@ -322,7 +392,11 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
               {items.map((item, idx) => {
                 const { total } = calcPurchaseBillItem(item);
                 return (
-                  <tr key={item.key} className={styles.itemRow}>
+                  <tr
+                    key={item.key}
+                    data-item-key={item.key}
+                    className={`${styles.itemRow} ${reorderMode && draggedKey === item.key ? styles.draggingRow : ""}`}
+                  >
                     <td className={styles.tdIndex}>{idx + 1}</td>
                     <td className={styles.tdName}>
                       <div className={styles.tdNameInner} title={item.name}>{item.name}</div>
@@ -367,9 +441,21 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
                     </td>
                     <td className={styles.tdAmount}>₹{fmtCurrency(total)}</td>
                     <td className={styles.tdAction}>
-                      <button type="button" onClick={() => removeItem(idx)} aria-label="Remove" className={styles.removeItemBtn}>
-                        ×
-                      </button>
+                      <div className={styles.actionCellStack}>
+                        {reorderMode && (
+                          <button
+                            type="button"
+                            aria-label="Drag to reorder"
+                            className={styles.gripBtn}
+                            onPointerDown={(e) => handleGripPointerDown(e, item.key)}
+                          >
+                            ⠿
+                          </button>
+                        )}
+                        <button type="button" onClick={() => removeItem(idx)} aria-label="Remove" className={styles.removeItemBtn}>
+                          ×
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -377,6 +463,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
             </tbody>
           </table>
         </div>
+        </>
       ) : (
         <div className={styles.emptyItems}>
           Search for a product above to add items

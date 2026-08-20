@@ -19,7 +19,7 @@ import styles from "./TaxonomyDetailPage.module.css";
 const PRODUCT_COLUMNS: Column[] = [
   { label: "Name",  mobile: "full+label" },
   { label: "SKU",   mobile: "label" },
-  { label: "Price", cls: "table-th-right", mobile: "label" },
+  { label: "List Price", cls: "table-th-right", mobile: "label" },
   { label: "Stock", cls: "table-th-right", mobile: "label" },
 ];
 
@@ -219,7 +219,7 @@ export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }
               <tr>
                 <th>Name</th>
                 <th>SKU</th>
-                <th className="table-th-right">Price</th>
+                <th className="table-th-right">List Price</th>
                 <th className="table-th-right">Stock</th>
               </tr>
             </thead>
@@ -234,7 +234,7 @@ export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }
                     <Link href={`/products/${p.id}`} className={styles.productLink}>{p.name}</Link>
                   </td>
                   <td data-label="SKU" className={styles.mutedCell}>{p.sku || "—"}</td>
-                  <td data-label="Price" className="table-td-right">₹{p.price.toLocaleString("en-IN")}</td>
+                  <td data-label="List Price" className="table-td-right">₹{p.price.toLocaleString("en-IN")}</td>
                   <td data-label="Stock" className={`table-td-right ${isLowStock(p.stock, p.minStock) ? styles.stockLow : ""}`}>{p.stock}</td>
                 </tr>
               ))}

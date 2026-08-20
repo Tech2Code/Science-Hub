@@ -25,6 +25,7 @@ import { animateSection } from "@/lib/animateSection";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { InfoBanner } from "@/components/ui/InfoBanner";
+import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import styles from "./edit.module.css";
 
 type Product = InvoiceProduct;
@@ -94,6 +95,7 @@ export default function EditInvoicePage() {
   const DRAFT_KEY = `invoice:edit:${id}`;
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [confirmDiscardDraftOpen, setConfirmDiscardDraftOpen] = useState(false);
 
   type InvoiceEditDraft = {
     customerId: string; isInterState: boolean; placeOfSupply: string; reverseCharge: boolean;
@@ -124,9 +126,14 @@ export default function EditInvoicePage() {
   }
 
   function dismissDraft() {
+    setConfirmDiscardDraftOpen(true);
+  }
+
+  function discardDraft() {
     clearFormDraft(DRAFT_KEY);
     setShowDraftBanner(false);
     setDraftReady(true);
+    setConfirmDiscardDraftOpen(false);
   }
 
   useFormDraft(DRAFT_KEY, {
@@ -571,6 +578,7 @@ export default function EditInvoicePage() {
         <h1 className="page-title">Edit Invoice — {invoice.invoiceNumber}</h1>
         <p className="page-sub">Editing is allowed only while the invoice is unpaid or partially paid.</p>
       </div>
+      <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
       {showDraftBanner && (
         <InfoBanner
           message="You have unsaved edits to this invoice from earlier — want to resume them?"

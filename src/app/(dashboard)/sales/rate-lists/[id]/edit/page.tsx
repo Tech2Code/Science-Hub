@@ -14,6 +14,7 @@ import { RateListFormBody } from "@/components/rateLists/RateListFormBody";
 import { toNum, calcRateListItem, makeRateListLineItemKey, type RateListLineItem } from "@/lib/rateListForm";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { InfoBanner } from "@/components/ui/InfoBanner";
+import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 
 type RateListEditDraft = { title: string; note: string; items: RateListLineItem[] };
 
@@ -48,6 +49,7 @@ export default function EditRateListPage() {
   const DRAFT_KEY = `rate-list:edit:${id}`;
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [confirmDiscardDraftOpen, setConfirmDiscardDraftOpen] = useState(false);
 
   function restoreDraft() {
     const draft = loadFormDraft<RateListEditDraft>(DRAFT_KEY);
@@ -61,9 +63,14 @@ export default function EditRateListPage() {
   }
 
   function dismissDraft() {
+    setConfirmDiscardDraftOpen(true);
+  }
+
+  function discardDraft() {
     clearFormDraft(DRAFT_KEY);
     setShowDraftBanner(false);
     setDraftReady(true);
+    setConfirmDiscardDraftOpen(false);
   }
 
   useEffect(() => {
@@ -193,6 +200,7 @@ export default function EditRateListPage() {
         <p className="page-sub">Update pricing, items, or details</p>
       </div>
 
+      <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
       {showDraftBanner && (
         <InfoBanner
           message="You have unsaved edits to this rate list from earlier — want to resume them?"

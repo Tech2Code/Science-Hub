@@ -429,7 +429,7 @@ export default function PurchaseBillDetailPage() {
             return (
               <tr style={{ background: "var(--bp-bg3)" }}>
                 {th("S.N.", "left", 28)}
-                {th("Description of Goods")}
+                {th("Description of Goods", "left", 170)}
                 {th("HSN/SAC Code")}
                 {th("Qty.", "right")}
                 {th("Unit")}
@@ -451,8 +451,8 @@ export default function PurchaseBillDetailPage() {
             const rowBg = idx % 2 === 1 ? "var(--bp-bg2)" : "var(--bp-bg)";
             const halfRate = item.gstRate / 2;
             const halfGst = item.gstAmount / 2;
-            const td = (content: React.ReactNode, align: "left" | "right" = "left") => (
-              <td style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", textAlign: align, background: rowBg }}>{content}</td>
+            const td = (content: React.ReactNode, align: "left" | "right" = "left", width?: number) => (
+              <td style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", textAlign: align, width, background: rowBg }}>{content}</td>
             );
             return (
               <tr key={item.id}>
@@ -464,10 +464,19 @@ export default function PurchaseBillDetailPage() {
                   // text-wrap approximation disagree with the live DOM
                   // measurement taken before capture (see ROW_SAFETY_MARGIN_PX
                   // in generateInvoicePdf.ts), throwing off the page-split math
-                  // for that row — same fix as the invoice detail page.
-                  <div style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", lineHeight: "14px", height: "14px" }} title={item.name}>
+                  // for that row — same fix as the invoice detail page. The
+                  // div needs its own definite (px) width, not just the td's —
+                  // in table auto-layout, an unwrapped nowrap div with no
+                  // width of its own reports its full text length as the
+                  // column's required min-content, which wins over the td's
+                  // specified width and stretches the whole table. A definite
+                  // width here caps that measurement so overflow:hidden
+                  // actually clips instead of being ignored.
+                  <div style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", lineHeight: "14px", height: "14px", width: 145, maxWidth: "100%" }} title={item.name}>
                     {item.name}
-                  </div>
+                  </div>,
+                  "left",
+                  170
                 )}
                 {td(item.hsn || "—")}
                 {td(item.quantity, "right")}

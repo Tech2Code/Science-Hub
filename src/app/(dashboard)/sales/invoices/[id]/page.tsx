@@ -1243,7 +1243,7 @@ export default function InvoiceDetailPage() {
                         {invoice.customer.name}
                       </div>
                       {invoice.customer.address && (
-                        <div style={{ color: "var(--inv-tx2)" }}>{invoice.customer.address}</div>
+                        <div style={{ color: "var(--inv-tx2)", width: 340 }}>{invoice.customer.address}</div>
                       )}
                       {(invoice.customer.city || invoice.customer.state) && (
                         <div style={{ color: "var(--inv-tx2)" }}>
@@ -1293,7 +1293,7 @@ export default function InvoiceDetailPage() {
                         {invoice.customer.name}
                       </div>
                       {invoice.customer.address && (
-                        <div style={{ color: "var(--inv-tx2)" }}>{invoice.customer.address}</div>
+                        <div style={{ color: "var(--inv-tx2)", width: 340 }}>{invoice.customer.address}</div>
                       )}
                       {(invoice.customer.city || invoice.customer.state) && (
                         <div style={{ color: "var(--inv-tx2)" }}>
@@ -1346,7 +1346,7 @@ export default function InvoiceDetailPage() {
                   return (
                     <tr id="invoice-col-header" style={{ background: "var(--inv-bg3)", fontWeight: 700, fontSize: 8, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--inv-tx2)" }}>
                       {[
-                        ["#", "center", "3%"], ["Description", "left", "15%"], ["HSN/SAC", "center", "8%"],
+                        ["#", "center", "3%"], ["Description", "left", "14%"], ["HSN/SAC", "center", "8%"],
                         ["Qty", "center", "5%"], ["Unit", "center", "5%"],
                       ].map(([label, align, width]) => (
                         <td key={label} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align as "left" | "right" | "center", width, whiteSpace: "nowrap", verticalAlign: "middle" }}>{label}</td>
@@ -1354,18 +1354,20 @@ export default function InvoiceDetailPage() {
                       <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "9%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                         <div>List</div><div>Price(₹)</div>
                       </td>
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "8%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "9%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                         <div>Total</div><div>Value (₹)</div>
                       </td>
                       <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "2%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                         <div>Discount</div><div>%</div>
                       </td>
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "6%", whiteSpace: "nowrap", verticalAlign: "middle" }}>Taxable (₹)</td>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "7%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                        <div>Taxable (₹)</div>
+                      </td>
                       {invoice.isInterState
                         ? taxGroup("IGST", "9%")
                         : <>{taxGroup("CGST", "8%")}{taxGroup("SGST", "8%")}</>
                       }
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "9%", whiteSpace: "nowrap", verticalAlign: "middle" }}>Amount (₹)</td>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "8%", whiteSpace: "nowrap", verticalAlign: "middle" }}>Amount (₹)</td>
                     </tr>
                   );
                 })()}
@@ -1389,8 +1391,8 @@ export default function InvoiceDetailPage() {
                   );
                   return (
                     <tr key={item.id} data-invoice-item-row="true">
-                      {c(idx + 1)}
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 6px", background: rowBg, fontWeight: 600, color: "var(--inv-tx)" }}>
+                      {c(idx + 1, "center", false, "3%", true)}
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 6px", width: "15%", background: rowBg, fontWeight: 600, color: "var(--inv-tx)" }}>
                         {/* Fixed single-line height with ellipsis truncation
                             instead of wrapping to 2 lines — a row whose height
                             depended on whether the name actually wrapped (1
@@ -1400,18 +1402,26 @@ export default function InvoiceDetailPage() {
                             ROW_SAFETY_MARGIN_PX in generateInvoicePdf.ts),
                             throwing off the page-split math for that row. A
                             fixed one-line box removes the wrap variance
-                            entirely. */}
+                            entirely. The div ALSO needs its own definite
+                            (px) width, not just the td's percentage width —
+                            in table auto-layout, an unwrapped nowrap div with
+                            no width of its own reports its full text length
+                            as the column's required min-content, which wins
+                            over the td's specified width/percentage and
+                            stretches the whole table. A definite width here
+                            caps that measurement so overflow:hidden actually
+                            clips instead of just being ignored. */}
                         <div style={{
                           overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
-                          lineHeight: "14px", height: "14px",
+                          lineHeight: "14px", height: "14px", width: 145, maxWidth: "100%",
                         }} title={item.name}>{item.name}</div>
                       </td>
                       {c(item.hsn || "—")}
                       {c(item.quantity)}{c(item.unit)}
-                      {c(fmt(item.price), "center", false, undefined, true)}
-                      {c(fmt(grossValue), "center", false, undefined, true)}
+                      {c(fmt(item.price), "right", false, undefined, true)}
+                      {c(fmt(grossValue), "right", false, undefined, true)}
                       {c(`${(item.discountPercent ?? 0).toFixed(2)}%`, "center", false, undefined, true)}
-                      {c(fmt(taxable), "right")}
+                      {c(fmt(taxable), "right", false, undefined, true)}
                       {invoice.isInterState
                         ? <>{c(`${item.gstRate}%`, "center", false, "4.5%", true)}{c(fmt(item.gstAmount), "right", false, undefined, true)}</>
                         : <>{c(`${halfRate}%`, "center", false, "4.5%", true)}{c(fmt(halfGst), "right", false, undefined, true)}{c(`${halfRate}%`, "center", false, "4.5%", true)}{c(fmt(halfGst), "right", false, undefined, true)}</>}

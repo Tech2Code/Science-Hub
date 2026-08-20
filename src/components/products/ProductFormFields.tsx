@@ -52,7 +52,7 @@ export function ProductFormFields({ form, onChange, onUnitChange, fieldErrors, b
             placeholder="e.g. Nos, Kg, Box"
           />
         </FormField>
-        <FormField label="Selling Price (₹)" required error={fieldErrors.price}>
+        <FormField label="List Price (₹)" required error={fieldErrors.price}>
           <Input name="price" type="number" min="0" step="0.01" value={form.price} onChange={onChange} placeholder="0.00" disabled={disabled} />
         </FormField>
         <FormField label="GST Rate" required error={fieldErrors.gstRate}>

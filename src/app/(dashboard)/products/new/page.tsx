@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { InfoBanner } from "@/components/ui/InfoBanner";
+import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import styles from "./productNew.module.css";
 
 interface Brand { id: string; name: string; }
@@ -40,6 +41,7 @@ export default function NewProductPage() {
 
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [confirmDiscardDraftOpen, setConfirmDiscardDraftOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/brands?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setBrands(d.data ?? [])).catch(() => {});
@@ -62,9 +64,14 @@ export default function NewProductPage() {
   }
 
   function dismissDraft() {
+    setConfirmDiscardDraftOpen(true);
+  }
+
+  function discardDraft() {
     clearFormDraft(DRAFT_KEY);
     setShowDraftBanner(false);
     setDraftReady(true);
+    setConfirmDiscardDraftOpen(false);
   }
 
   useFormDraft(DRAFT_KEY, form, !draftReady || saving);
@@ -113,6 +120,7 @@ export default function NewProductPage() {
   return (
     <>
     {saving && <OverlayLoader text="Saving…" />}
+    <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
     <div className={`page-stack ${styles.pageStack}`}>
       <Breadcrumb items={[{ label: "Products", href: "/products" }, { label: "New Product" }]} />
       <div>

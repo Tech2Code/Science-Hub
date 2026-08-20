@@ -14,6 +14,7 @@ import { hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { InfoBanner } from "@/components/ui/InfoBanner";
+import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import styles from "./customerNew.module.css";
 
 const DRAFT_KEY = "customer:new";
@@ -31,6 +32,7 @@ export default function NewCustomerPage() {
 
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [confirmDiscardDraftOpen, setConfirmDiscardDraftOpen] = useState(false);
 
   useEffect(() => {
     const draft = loadFormDraft<CustomerFormData>(DRAFT_KEY);
@@ -47,9 +49,14 @@ export default function NewCustomerPage() {
   }
 
   function dismissDraft() {
+    setConfirmDiscardDraftOpen(true);
+  }
+
+  function discardDraft() {
     clearFormDraft(DRAFT_KEY);
     setShowDraftBanner(false);
     setDraftReady(true);
+    setConfirmDiscardDraftOpen(false);
   }
 
   useFormDraft(DRAFT_KEY, form, !draftReady || saving);
@@ -99,6 +106,7 @@ export default function NewCustomerPage() {
         <p className="page-sub">Add a new customer to your directory</p>
       </div>
 
+      <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
       {showDraftBanner && (
         <InfoBanner
           message="You have an unsaved customer draft from earlier — want to resume it?"

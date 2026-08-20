@@ -68,7 +68,7 @@
 .colDiscount { width: 16%; }
 .colRate     { width: 12%; }
 .colAmount   { width: 14%; }
-.colAction   { width: 1.25rem; }
+.colAction   { width: 2.75rem; }
 
 .itemsTable {
   width: 100%;
@@ -104,7 +104,49 @@
 .tdDiscount { padding: 0.32rem 0.4rem; text-align: center; }
 .tdRate { padding: 0.32rem 0.4rem; text-align: right; }
 .tdAmount { padding: 0.32rem 0.4rem; text-align: right; font-weight: 500; white-space: nowrap; }
-.tdAction { padding: 0.32rem 0.2rem; width: 1.25rem; }
+.tdAction { padding: 0.32rem 0.2rem; width: 2.75rem; }
+
+/* ── Reorder mode ──────────────────────────────── */
+.reorderToggleRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.actionCellStack {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.gripBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 0.375rem;
+  background: none;
+  border: 1px solid var(--c-border);
+  cursor: grab;
+  color: var(--c-text-4);
+  font-size: 0.85rem;
+  line-height: 1;
+  touch-action: none;
+  user-select: none;
+  transition: all 0.15s;
+}
+.gripBtn:hover { background: var(--c-blue-bg); border-color: var(--c-blue-border); color: var(--c-blue-text); }
+.gripBtn:active { cursor: grabbing; }
+
+.draggingRow {
+  position: relative;
+  background: var(--c-blue-bg) !important;
+  outline: 2px dashed var(--c-blue);
+  outline-offset: -1px;
+  opacity: 0.7;
+}
 
 .numInputRight { text-align: right; }
 .numInputCenter { text-align: center; }

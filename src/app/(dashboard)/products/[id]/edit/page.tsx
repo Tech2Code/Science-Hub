@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ProductFormFields } from "@/components/products/ProductFormFields";
 import { Sk, SkeletonSwap } from "@/components/ui/Skeleton";
@@ -45,6 +46,7 @@ export default function EditProductPage() {
   const DRAFT_KEY = `product:edit:${id}`;
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [confirmDiscardDraftOpen, setConfirmDiscardDraftOpen] = useState(false);
 
   function restoreDraft() {
     const draft = loadFormDraft<ProductFormData>(DRAFT_KEY);
@@ -54,9 +56,14 @@ export default function EditProductPage() {
   }
 
   function dismissDraft() {
+    setConfirmDiscardDraftOpen(true);
+  }
+
+  function discardDraft() {
     clearFormDraft(DRAFT_KEY);
     setShowDraftBanner(false);
     setDraftReady(true);
+    setConfirmDiscardDraftOpen(false);
   }
 
   useEffect(() => {
@@ -147,6 +154,7 @@ export default function EditProductPage() {
         onConfirm={doSave}
         onCancel={() => setConfirmOpen(false)}
       />
+      <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
       <Breadcrumb items={[{ label: "Products", href: "/products" }, { label: "Edit Product" }]} />
 
       <div className={styles.headerRow}>

@@ -119,7 +119,7 @@ export async function generateInvoicePdfBlob(
     // height, or the text clips against the next page's content.
     const MARKER_ROW_H = 14 * SCALE;
     const MARKER_RIGHT_PAD_PX = 6 * SCALE; // inset from the table's own right border
-    const tfootH = (tfootOwnBottom - tfootTop) + MARKER_ROW_H;
+    const tfootH = tfootRowEl ? (tfootOwnBottom - tfootTop) + MARKER_ROW_H : 0;
     const pmRightPx     = tableRightPx;
     const pmOffsetTopPx = tfootOwnBottom - tfootTop; // band starts right after the tfoot's real content
     const pmWidthPx     = tableRightPx - tableLeftPx;
