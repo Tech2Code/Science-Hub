@@ -20,17 +20,14 @@ export function PdfCopyDialog({ open, loading = false, onConfirm, onCancel }: Pr
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
 
-  // Reset the checkboxes whenever the dialog transitions to open. Adjusted
-  // during render (React's recommended pattern for "reset state when a prop
-  // changes") rather than in an effect, which would cause an extra render pass.
+  // Reset checkboxes on open, during render (avoids an extra render pass vs. doing it in an effect).
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
     setPrevOpen(open);
     if (open) { setOriginal(true); setDuplicate(true); }
   }
 
-  // Capture the trigger element and move focus into the dialog when it
-  // opens; restore focus to the trigger once it closes.
+  // Capture the trigger element, focus into the dialog on open, restore focus to it on close.
   useEffect(() => {
     if (!open) return;
     triggerRef.current = document.activeElement;

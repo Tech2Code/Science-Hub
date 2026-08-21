@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { FloatingSpinner } from "@/components/ui/Spinner";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
@@ -231,7 +230,6 @@ export default function PurchaseReportsPage() {
 
   return (
     <div className="page-stack">
-      {(isLedgerRefetching || isOutRefetching) && <FloatingSpinner />}
       <div className="page-header">
         <div>
           <h1 className="page-title">Purchase Reports</h1>

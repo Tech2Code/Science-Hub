@@ -14,10 +14,7 @@ interface PhoneInputProps {
   className?: string;
 }
 
-// Every mobile-number field in the app should use this — a fixed "+91"
-// prefix (this app is India-only) plus a hard 10-digit cap enforced at
-// the input level, not just on submit, so a pasted or fast-typed string
-// can't exceed a real mobile number's length before validation ever runs.
+// Fixed "+91" prefix + hard 10-digit cap enforced at input level (not just on submit).
 export function PhoneInput({ className, value, onChange, disabled, ...props }: PhoneInputProps) {
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);

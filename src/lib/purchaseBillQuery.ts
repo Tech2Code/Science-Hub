@@ -11,9 +11,7 @@ export interface PurchaseBillListFilters {
   dateRange?: { gte: Date; lt: Date };
 }
 
-// Search matches the same fields the purchase-bills list page used to
-// filter client-side: bill number, vendor name/company, category, the
-// staff member who created it, and item/product/brand/category.
+// Matches bill number, vendor name/company, category, creator, and item/product/brand/category.
 export function buildBillWhere(filters: PurchaseBillListFilters): Prisma.PurchaseBillWhereInput {
   const { status, vendorId, search, dateRange } = filters;
   const where: Prisma.PurchaseBillWhereInput = { deletedAt: null };

@@ -10,11 +10,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const auth = await requireSession();
     if (!auth.ok) return auth.response;
     const { id } = await params;
-    // A "one-off" vendor (created via the purchase bill's "just for this
-    // bill — don't save" option) is soft-deleted from the moment it's
-    // created, but can still be reached from an active bill's detail page —
-    // let it load as long as it's still actually in use, same as it would
-    // if it weren't soft-deleted at all.
+    // A "one-off" vendor is soft-deleted at creation but must still load if referenced by an active bill.
     const vendor = await prisma.vendor.findFirst({
       where: { id, OR: [{ deletedAt: null }, { purchaseBills: { some: { deletedAt: null } } }] },
       include: {
@@ -56,11 +52,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const existing = await prisma.vendor.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existing) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
     if (existing.deletedAt) {
-      // A "one-off" vendor (created via a purchase bill's "just for this
-      // bill — don't save" option) is soft-deleted from the moment it's
-      // created and never gets an explicit delete_vendor log entry — that
-      // distinguishes it from one actually sent to the bin, which must stay
-      // blocked from editing until restored.
+      // One-off vendors are soft-deleted at creation but never get a delete_vendor log — that's how we distinguish them from a real bin deletion.
       const wasExplicitlyDeleted = await prisma.activityLog.findFirst({ where: { entityId: id, entityType: "vendor", action: "delete_vendor" } });
       if (wasExplicitlyDeleted) {
         return NextResponse.json({ error: "This vendor is in the bin — restore it before editing" }, { status: 400 });

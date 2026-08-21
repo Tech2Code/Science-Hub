@@ -66,10 +66,7 @@ export default function EditInvoicePage() {
   const [dueDate, setDueDate] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
-  // Always shown open on Edit too (matches New Invoice's default-ON toggle) —
-  // an existing invoice's saved amount/rate (if any) is loaded into it below.
-  // Note: the useEffect that loads the invoice will set this to false if the
-  // saved transportCharge was 0 or absent (i.e. user previously disabled it).
+  // Default true; the load effect below sets it false if the saved transportCharge was 0/absent.
   const [transportChargeEnabled, setTransportChargeEnabled] = useState(true);
   const [transportCharge, setTransportCharge] = useState("");
   const [transportChargeGstRate, setTransportChargeGstRate] = useState("18");
@@ -315,8 +312,7 @@ export default function EditInvoicePage() {
       const invoice = inv as InvoiceData;
       const products = (prods as { data: Product[] }).data ?? [];
       const customerList = (custs as { data: Customer[] }).data ?? [];
-      // The invoice's own customer may be a one-off (soft-deleted) row that
-      // /api/customers doesn't return — keep it selectable/visible either way.
+      // The invoice's own customer may be a one-off (soft-deleted) row not returned by /api/customers — keep it visible either way.
       const mergedCustomers = customerList.some((c) => c.id === invoice.customer.id)
         ? customerList
         : [...customerList, invoice.customer];
@@ -373,9 +369,7 @@ export default function EditInvoicePage() {
   const effectiveTransportGstRate = transportChargeEnabled ? (parseFloat(transportChargeGstRate) || 0) : 0;
   const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal, transportChargeGstAmount } =
     computeInvoiceTotals(items, effectiveTransportCharge, effectiveTransportGstRate);
-  // Once the transport charge toggle is on, both the amount and the GST rate
-  // are mandatory — leaving the amount blank must not silently save a
-  // zero-value transport charge.
+  // Once enabled, amount and GST rate are both mandatory — a blank amount must not silently save as zero.
   const missingTransportAmount = transportChargeEnabled && (!transportCharge.trim() || effectiveTransportCharge <= 0);
   const missingTransportGstRate = transportChargeEnabled && !transportChargeGstRate.trim();
   const missingTransportCharge = missingTransportAmount || missingTransportGstRate;
@@ -408,8 +402,7 @@ export default function EditInvoicePage() {
       if (qtyErr || priceErr) { toast({ type: "error", title: "Check form", message: qtyErr ?? priceErr ?? "" }); return; }
     }
 
-    // Check stock: current product.stock already has this invoice's old qty deducted,
-    // so effective available = product.stock + original qty for that product.
+    // product.stock already has this invoice's old qty deducted, so effective available = stock + original qty.
     const outOfStock = items.flatMap(item => {
       const product = products.find(p => p.id === item.productId);
       if (!product) return [];
@@ -458,11 +451,7 @@ export default function EditInvoicePage() {
       if (d.stockWarnings?.length > 0) {
         toast({ type: "warning", title: "Stock went negative", message: d.stockWarnings.join(", ") });
       }
-      // Deliberately not resetting `saving` here — the overlay/disabled Save
-      // button must stay up until navigation actually completes, otherwise
-      // the form re-enables for the moment between this awaited json() call
-      // and router.push() taking effect, letting the user submit again or
-      // edit fields on a page that's already about to be replaced.
+      // saving stays true until navigation completes, so the form can't re-enable and be submitted again mid-transition.
       router.push(`/sales/invoices/${id}`);
       return;
     }
@@ -511,9 +500,7 @@ export default function EditInvoicePage() {
   if (error && !invoice) return <div className={`loading-center ${styles.errorCenter}`}>{error}</div>;
   if (!invoice) return null;
 
-  // A fully paid invoice has nothing left to edit — reachable directly by URL
-  // even though the detail/list pages' Edit buttons are disabled for these,
-  // so guard here too rather than showing a form that has nowhere useful to go.
+  // A fully paid invoice is reachable directly by URL even though list/detail Edit buttons are disabled — guard here too.
   if (invoice.status === "paid") {
     return (
       <div className="page-stack">

@@ -24,11 +24,7 @@ function fireChange(onChange: CustomerFormFieldsProps["onChange"], name: string,
   onChange({ target: { name, value } } as React.ChangeEvent<HTMLInputElement>);
 }
 
-// Name/address/pincode/state/city/GSTIN/phone/email fields — shared by the
-// New Customer and Edit Customer pages so the two forms can't drift apart.
-// Field order mirrors the "Add New Customer" quick-add popup in invoice
-// creation (src/app/(dashboard)/sales/invoices/new/page.tsx) so both flows
-// feel identical.
+// Shared by New/Edit Customer pages and the invoice "Add New Customer" quick-add popup — keep field order in sync across all three.
 export function CustomerFormFields({ form, onChange, errors, disabled, phoneRequired, addressRequired, cityRequired, stateRequired, pincodeRequired, autoFocusName }: CustomerFormFieldsProps) {
   const pincodeLookup = usePincodeAutofill((city, state) => {
     if (city) fireChange(onChange, "city", city);

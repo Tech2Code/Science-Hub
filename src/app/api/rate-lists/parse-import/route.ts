@@ -5,11 +5,7 @@ import { parseRateListRows, parseCsvLine } from "@/lib/rateListImport";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5MB — a rate list sheet is a few hundred rows at most
 
-// Bulk-import for the Rate List item table — lets an admin drop in a
-// supplier's existing .xlsx/.csv price list instead of retyping 60+ rows by
-// hand. Parsing only (no DB write here); the client merges the returned rows
-// into the items table so the user can still review/edit before saving,
-// same as manually-typed rows.
+// Parsing only, no DB write — the client merges returned rows into the items table so the user can still review/edit before saving.
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireWriteAccess();

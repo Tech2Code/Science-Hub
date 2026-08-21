@@ -20,9 +20,7 @@ function threeDigits(n: number): string {
   return parts.join(" ");
 }
 
-// Indian numbering system (Crore/Lakh/Thousand), not the Western
-// million/billion grouping — matches how amounts are read out on GST
-// invoices and cheques in India.
+// Indian numbering system (Crore/Lakh/Thousand), not Western million/billion grouping.
 export function numberToIndianWords(num: number): string {
   if (num === 0) return "Zero";
   let n = Math.floor(num);

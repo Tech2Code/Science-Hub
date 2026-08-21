@@ -286,6 +286,7 @@ export default function RateListDetailPage() {
   return (
     <>
     {(pdfDownloading || pdfViewing) && <OverlayLoader text={pdfDownloading ? "Generating PDF…" : "Opening preview…"} />}
+    {pdfRegenerating && <OverlayLoader text="Regenerating PDF…" />}
     {shareLoading && <OverlayLoader text="Preparing PDF…" />}
     {sendingEmail && <OverlayLoader text="Sending email…" />}
     {exportingExcel && <OverlayLoader text="Generating Excel file…" />}
@@ -354,9 +355,8 @@ export default function RateListDetailPage() {
               Edit
             </Button>
           )}
-          <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" loading={pdfRegenerating} onClick={handleRegeneratePdf}>
+          <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" onClick={handleRegeneratePdf}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-            Regenerate
           </Button>
           <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>

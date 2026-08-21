@@ -10,10 +10,8 @@ interface GeneratePdfViaIframeOptions {
   includeLogo?: boolean;
 }
 
-// Loads a detail page into a hidden iframe (to render its full print area,
-// which the calling list page doesn't have the data for) and generates a PDF
-// blob from it — shared by the Invoices and Purchase Bills list pages so the
-// iframe-polling/cleanup/timeout dance can't drift apart between them.
+// Loads a detail page into a hidden iframe to render its full print area (which the list page lacks data for) and generates a PDF blob from it.
+// Shared by Invoices/Purchase Bills list pages so iframe-polling/cleanup/timeout logic can't drift apart.
 export function generatePdfViaIframe({ route, printAreaId, copyLabels, includeLogo }: GeneratePdfViaIframeOptions): Promise<Blob | null> {
   return new Promise((resolve) => {
     const iframe = document.createElement("iframe");
@@ -33,9 +31,7 @@ export function generatePdfViaIframe({ route, printAreaId, copyLabels, includeLo
       });
       if (!el) { clearTimeout(safetyTimer); cleanup(); resolve(null); return; }
       await new Promise(r => setTimeout(r, 400));
-      // Read the logo's already-resolved src straight from the iframe's DOM
-      // (either the business's uploaded logo or the default fallback) so the
-      // synthetic continuation-page header stamps match what page 1 shows.
+      // Read the logo's already-resolved src from the iframe's DOM so continuation-page stamps match page 1.
       const logoUrl = includeLogo ? el.querySelector<HTMLImageElement>('img[alt="Logo"]')?.src || undefined : undefined;
       let blob: Blob | null = null;
       try {

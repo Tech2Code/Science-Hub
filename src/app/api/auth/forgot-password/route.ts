@@ -6,11 +6,8 @@ import crypto from "crypto";
 import { rateLimit, getClientIp } from "@/lib/rateLimit";
 import { escapeHtml } from "@/lib/html";
 
-// Always resolves to the same generic response, whether or not the email is
-// registered — the caller must not be able to distinguish the two cases.
-// Must be a fresh NextResponse per call — a Response body can only be
-// serialized once, so a shared singleton instance returns an empty body on
-// every request after the first.
+// Always the same response regardless of whether the email is registered (anti-enumeration).
+// Must be a fresh NextResponse per call — a Response body can only be serialized once.
 function genericOk() {
   return NextResponse.json({ ok: true });
 }
@@ -65,10 +62,8 @@ export async function POST(req: NextRequest) {
       auth: { user: gmailUser, pass: gmailPass },
     });
 
-    // Send after the response is returned, not before — otherwise a
-    // registered vs. unregistered email is distinguishable purely from how
-    // long the request takes (this branch awaits an SMTP round-trip, the
-    // "unregistered" branch above returns immediately).
+    // Sent after the response returns, not before — otherwise timing (SMTP round-trip vs.
+    // immediate return) would reveal whether the email is registered.
     const safeBizName = escapeHtml(biz.name);
     const safeUserName = escapeHtml(user.name);
 

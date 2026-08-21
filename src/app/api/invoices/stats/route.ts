@@ -3,9 +3,7 @@ import { getInvoiceStats } from "@/lib/db";
 import { requireSession } from "@/lib/apiAuth";
 import { monthYearToDateRange } from "@/lib/listQuery";
 
-// Summary totals for the Invoices list page's stat cards — kept separate
-// from the paginated list route since a single page of rows can no longer
-// produce a correct total once the list is server-paginated.
+// Kept separate from the paginated list route, since a single page of rows can't produce a correct total.
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireSession();

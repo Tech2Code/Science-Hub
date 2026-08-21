@@ -25,11 +25,7 @@ function fireChange(onChange: VendorFormFieldsProps["onChange"], name: string, v
   onChange({ target: { name, value } } as React.ChangeEvent<HTMLInputElement>);
 }
 
-// Name/company/address/pincode/state/city/GSTIN/phone/email/notes/active
-// fields — shared by the New Vendor and Edit Vendor pages so the two forms
-// can't drift apart. Field order mirrors the "Add New Vendor" quick-add
-// popup in purchase bill creation (BillDetailsCard.tsx) so both flows feel
-// identical.
+// Shared by New/Edit Vendor pages and BillDetailsCard's "Add New Vendor" quick-add — keep field order in sync across both.
 export function VendorFormFields({ form, onChange, errors, disabled, phoneRequired, addressRequired, cityRequired, stateRequired, pincodeRequired, autoFocusName }: VendorFormFieldsProps) {
   const pincodeLookup = usePincodeAutofill((city, state) => {
     if (city) fireChange(onChange, "city", city);

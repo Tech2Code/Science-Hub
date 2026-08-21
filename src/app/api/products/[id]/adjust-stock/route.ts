@@ -5,12 +5,8 @@ import { logActivity } from "@/lib/activity";
 import { requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 
-// A dedicated, audited path for correcting stock after a physical stock
-// take — the ledger already reserved a "manual" movement type for exactly
-// this, but no screen previously used it, so fixing a discrepancy had no
-// recorded, traceable route (someone would otherwise have to edit the
-// Product row directly, leaving no ledger entry explaining why the number
-// changed).
+// Dedicated, audited path for correcting stock after a physical count — writes a "manual"
+// ledger row so the change is traceable instead of editing the Product row directly.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

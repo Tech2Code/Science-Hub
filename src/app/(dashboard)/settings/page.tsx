@@ -129,9 +129,7 @@ function SectionHeader({ title, editing, onEdit }: { title: string; editing: boo
 type IdentityForm = Pick<BusinessSettings, "name" | "tagline" | "email" | "phone" | "gstin" | "pan">;
 type AddressForm = Pick<BusinessSettings, "address" | "city" | "state" | "pincode">;
 type BankForm = Pick<BusinessSettings, "bankName" | "bankAccountName" | "bankAccountNumber" | "bankIfsc" | "bankBranch">;
-// Kept as plain strings (not string | null / number | null) since these are
-// bound directly to text inputs — converted to the API's null/number shape
-// only when submitting.
+// Plain strings since bound directly to text inputs; converted to the API's null/number shape on submit.
 interface NumberingForm {
   invoiceNumberPrefix: string;
   nextInvoiceNumberOverride: string;
@@ -203,16 +201,9 @@ export default function SettingsPage() {
   const [savingBranding, setSavingBranding] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
-  // Branding actions (logo upload/replace/remove, and the "show on invoices"
-  // toggle) all save instantly with no form/edit step to absorb the wait, so
-  // a full-page overlay (not just a spinner on the affected control) makes it
-  // clear the whole page is briefly blocked mid-save. Uses the same shared
-  // OverlayLoader as every other async action in the app (e.g. Admin → create user).
+  // Branding saves instantly with no edit step, so a full-page overlay signals the brief block.
   const brandingBusy = savingBranding || logoUploading;
-  // Every other section's own Save/Clear action shows this same full-page
-  // overlay too, not just Branding — every section here mutates the one
-  // singleton BusinessSettings row, so a save in progress should read as
-  // "the whole page is busy," not just the one card being edited.
+  // Every section mutates the same singleton BusinessSettings row, so any save shows this same full-page overlay.
   const savingBusyText =
     savingIdentity ? "Saving business identity…" :
     savingAddress ? "Saving address…" :
@@ -263,12 +254,8 @@ export default function SettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- applyLoaded is a fresh function each render (not memoized); this must run once on mount only
   }, []);
 
-  // Sends only the fields the caller is actually editing — never the full
-  // `saved` snapshot. Each section (identity/address/bank/email/terms/...)
-  // saves independently on the server too (see the settings API route), so
-  // a stale or broken value in a section nobody touched (e.g. a bank account
-  // number that fails to decrypt because of a NEXTAUTH_SECRET mismatch)
-  // can never block or silently overwrite an unrelated save.
+  // Sends only the fields being edited, never the full `saved` snapshot — so a broken/stale value in an
+  // untouched section (e.g. a bank number that fails to decrypt) can never block or overwrite another save.
   async function putSettings(overrides: Partial<BusinessSettings> & { gmailAppPassword?: string }) {
     const body = { ...overrides, expectedUpdatedAt: saved.updatedAt || undefined };
     const res = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -280,8 +267,7 @@ export default function SettingsPage() {
     }
     const d = await res.json().catch(() => ({}));
     if (res.status === 409) {
-      // Refresh local state so the conflicting fields aren't shown stale, and
-      // so the next save attempt compares against the current updatedAt.
+      // Refresh so conflicting fields aren't stale and the next save compares against the current updatedAt.
       fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then(applyLoaded).catch(() => {});
       return { ok: false as const, error: d.error as string | undefined, conflict: true as const };
     }
@@ -291,10 +277,7 @@ export default function SettingsPage() {
   // ── Business Identity ───────────────────────────────────────────────────
 
   function handleEditIdentity() {
-    // Older saved values may include formatting (dashes/spaces/a country
-    // code) from before this field was capped to a plain 10-digit mobile
-    // number — keep only the last 10 digits so it displays cleanly in the
-    // now-fixed-width PhoneInput instead of showing raw punctuation.
+    // Older saved values may include stray formatting (dashes/country code) — keep only the last 10 digits.
     const initial = { name: saved.name, tagline: saved.tagline, email: saved.email, phone: saved.phone.replace(/\D/g, "").slice(-10), gstin: saved.gstin, pan: saved.pan };
     setIdentityForm(initial);
     identityDirty.markClean(initial);
@@ -411,11 +394,8 @@ export default function SettingsPage() {
     if (/^[A-Z]{4}0[A-Z0-9]{6}$/.test(value)) runIfscLookup(value);
   }
 
-  // Looks up the bank/branch for a valid IFSC via the server-side proxy and
-  // autofills Bank Name/Branch — the user typed 11 chars, we tell them whose
-  // account this actually is so a typo'd digit doesn't silently misroute payments.
-  // ifscRequestRef guards against a stale response landing after the user has
-  // already changed the code again (e.g. pasted, then edited a character).
+  // Autofills Bank Name/Branch from IFSC via the server proxy; ifscRequestRef discards a stale response
+  // if the user edits the code again before it resolves.
   async function runIfscLookup(value: string) {
     ifscRequestRef.current = value;
     setBankErrors((e) => ({ ...e, bankIfsc: undefined }));
@@ -503,10 +483,7 @@ export default function SettingsPage() {
   }
 
   // ── Document Numbering ──────────────────────────────────────────────────
-  // Always editable (no one-time lock) — a changed prefix/number only ever
-  // affects the *next* document created, never renumbers existing ones, so
-  // repeat edits are safe. The confirm dialog + activity log (server-side)
-  // exist purely to stop an accidental change, not to gate a legitimate one.
+  // Always editable — a changed prefix/number only affects the next document, never renumbers existing ones.
 
   function handleEditNumbering() {
     const initial: NumberingForm = {
@@ -572,13 +549,11 @@ export default function SettingsPage() {
 
   // ── Logo ─────────────────────────────────────────────────────────────────
 
-  // The logo is rendered at ~40x36px in the sidebar/topbar on every dashboard
-  // page navigation — uploading it at full camera/screenshot resolution (up
-  // to the 2MB cap) means every page load decodes and downscales a full-size
-  // image in the browser. Downscale to a small max dimension client-side
-  // before upload so what's stored (and re-fetched on every nav) is already
-  // sidebar-sized, with some headroom for retina displays.
+  // Logo renders at ~40x36px sitewide; downscale client-side before upload so what's stored/refetched stays small.
   const LOGO_MAX_DIMENSION = 256;
+  // Mirrors MAX_SIZE in src/app/api/settings/logo/route.ts — catches small-dimension-but-large-filesize files
+  // that downscaleImage leaves untouched, so they get an instant error instead of a 413 after a full upload.
+  const LOGO_MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
   function downscaleImage(file: File, maxDim: number): Promise<File> {
     return new Promise((resolve) => {
       const img = new Image();
@@ -610,6 +585,10 @@ export default function SettingsPage() {
     setLogoUploading(true);
     try {
       const file = await downscaleImage(rawFile, LOGO_MAX_DIMENSION);
+      if (file.size > LOGO_MAX_UPLOAD_BYTES) {
+        toast({ type: "error", title: "File too large", message: "Logo must be under 2MB." });
+        return;
+      }
       const form = new FormData();
       form.append("file", file);
       const res = await fetch("/api/settings/logo", { method: "POST", body: form });
@@ -618,9 +597,7 @@ export default function SettingsPage() {
         toast({ type: "error", title: "Upload failed", message: data.error ?? "Could not upload logo." });
         return;
       }
-      // The old logo's blob is cleaned up server-side by the settings PUT
-      // route itself (in the same request, once it sees logoUrl changing) —
-      // no separate client-fired DELETE needed for that case any more.
+      // Old logo blob is cleaned up server-side by the settings PUT route itself; no client DELETE needed here.
       const result = await putSettings({ logoUrl: data.url });
       if (result.ok) {
         applyLoaded(result.data);

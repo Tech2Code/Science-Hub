@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "prebuild": "node -e \"require('fs').rmSync('.next/dev', { recursive: true, force: true })\"",
-    "build": "prisma migrate deploy && next build",
+    "build": "node scripts/migrate-deploy-retry.js && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",

@@ -25,9 +25,7 @@ interface InvoiceLineItemsCardProps {
   setItems: Dispatch<SetStateAction<InvoiceLineItem[]>>;
 }
 
-// Product search + line-items table, shared by the New Invoice and Edit
-// Invoice pages (including the "quick add product" flow) so the two forms
-// can't drift apart.
+// Product search + line-items table, shared by New/Edit Invoice pages so the two forms can't drift apart.
 export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, items, setItems }: InvoiceLineItemsCardProps) {
   const toast = useToast();
   const productSearchWrapRef = useRef<HTMLDivElement>(null);
@@ -113,11 +111,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
 
   function removeItem(idx: number) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
 
-  // Reordering is off by default (the table behaves exactly as it did
-  // before) and only turns on once the user explicitly clicks "Reorder
-  // Items" — items can then be dragged into place and the change is part
-  // of the normal unsaved-draft state, saved along with everything else
-  // when the form is submitted.
+  // Reordering is off by default, only enabled via the explicit "Reorder Items" toggle.
   const [reorderMode, setReorderMode] = useState(false);
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
 
@@ -172,17 +166,10 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
   }
 
-  // Holds exactly what's been typed (e.g. "10." or "10%") per line item, so a
-  // trailing decimal point or "%" isn't stripped out from under the user's
-  // cursor by reformatting item.discountPercent back into the input on every
-  // keystroke — cleared on blur so the field then shows the committed number.
+  // Holds exactly what's been typed per line item so a trailing "." or "%" isn't stripped mid-keystroke; cleared on blur.
   const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
 
-  // Accepts a plain number or one typed with a trailing "%" (e.g. "10%") —
-  // capped at 2 decimal places (matching how every ₹ amount in this app is
-  // displayed) and at 100 overall, since a discount can never exceed the
-  // line's own value. A keystroke that would push past either limit is
-  // rejected outright rather than silently truncated later.
+  // Accepts a trailing "%"; capped at 2 decimals and 100 overall — an out-of-range keystroke is rejected outright, not truncated later.
   function handleDiscountPercentChange(idx: number, key: string, raw: string) {
     const cleaned = raw.replace(/%/g, "");
     if (!/^(100(\.\d{0,2})?|\d{0,2}(\.\d{0,2})?)$/.test(cleaned)) return;

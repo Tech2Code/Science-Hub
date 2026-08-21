@@ -1,12 +1,7 @@
-// Shared by /api/invoices and /api/purchase-bills so both document types
-// derive/apply a custom prefix and one-time "next number" override the same
-// way. Pure functions — no Prisma import — so they're usable from a client
-// component (Settings page, to preview the effective prefix) as well as
-// route handlers.
+// Shared by /api/invoices and /api/purchase-bills. Pure functions (no Prisma import) so they're
+// usable from client components (Settings page preview) as well as route handlers.
 
-// Falls back to the business name's initials when no explicit invoice
-// prefix has been configured (e.g. "Science Hub" -> "SH", matching what
-// this app always hardcoded before the prefix became configurable).
+// Falls back to the business name's initials when no prefix is configured (e.g. "Science Hub" -> "SH").
 export function deriveDefaultPrefix(businessName: string): string {
   const words = businessName.trim().split(/\s+/).filter(Boolean);
   const raw = words.length > 1 ? words.slice(0, 4).map((w) => w[0]).join("") : businessName.slice(0, 3);
@@ -14,22 +9,15 @@ export function deriveDefaultPrefix(businessName: string): string {
   return cleaned || "INV";
 }
 
-// Indian businesses invoice against a financial year (1 April - 31 March),
-// not the calendar year — GST filing periods, "FY 2026-27" labeling, etc.
-// all follow this. Invoice/purchase-bill numbering resets on this boundary
-// too: a bill dated 15 January 2027 belongs to FY "2026" (the year the FY
-// started), same as one dated 15 April 2026, and both share one numbering
-// sequence distinct from FY "2027" (starting 1 April 2027).
+// Indian financial year runs 1 April - 31 March, not the calendar year — GST filing periods and
+// document numbering both reset on this boundary (a 15 Jan 2027 bill belongs to FY "2026").
 export function getIndianFinancialYear(date: Date): number {
   const year = date.getFullYear();
   const month = date.getMonth(); // 0 = January ... 3 = April
   return month >= 3 ? year : year - 1;
 }
 
-// Renders a financial-year start year as the "2026-27" label printed on
-// documents — so the number itself shows which FY it belongs to, not just
-// a bare calendar-ish year. Two-digit end year matches common Indian FY
-// shorthand (GSTR filings, "FY26-27", etc).
+// Renders a start year as "2026-27" — matches common Indian FY shorthand (GSTR filings, etc).
 export function formatFinancialYearLabel(startYear: number): string {
   const endYearShort = String((startYear + 1) % 100).padStart(2, "0");
   return `${startYear}-${endYearShort}`;
@@ -51,15 +39,12 @@ interface NumberFormatDef {
   // Matches a *fully rendered* number for this exact prefix+FY, capturing
   // the sequence — used to find the highest sequence already in use.
   matcher: (prefix: string, yearLabel: string) => RegExp;
-  // Best-effort Prisma string filter to narrow candidate rows before the
-  // regex scan above runs in JS (a plain `startsWith` isn't always possible
-  // once the sequence isn't the number's last segment).
+  // Best-effort Prisma filter to narrow candidates before the regex scan runs in JS
+  // (plain `startsWith` isn't always possible once the sequence isn't the last segment).
   dbFilter: (prefix: string, yearLabel: string) => { startsWith?: string; endsWith?: string };
 }
 
-// Three layouts covering both this app's own convention and the common
-// "sequence/financial-year" style many Indian businesses already used
-// before switching to this app (no zero-padding, sequence before the year).
+// Three layouts: this app's own convention plus the common "sequence/FY" style (no zero-padding) many businesses already used.
 export const NUMBER_FORMATS: Record<NumberFormatId, NumberFormatDef> = {
   prefix_fy_seq: {
     id: "prefix_fy_seq",
@@ -90,12 +75,8 @@ export const NUMBER_FORMATS: Record<NumberFormatId, NumberFormatDef> = {
   },
 };
 
-// Default (when nothing's configured yet) is "prefix_fy_seq" —
-// "SH-2026-27-0001" — this app's own layout, auto-prefixed from the
-// business's name (see deriveDefaultPrefix). A business can switch to
-// "seq_fy"/"prefix_seq_fy" any time from Settings -> Document Numbering;
-// once a format is explicitly chosen there, that choice is what's stored
-// in BusinessSettings and this fallback never overrides it.
+// Default when unconfigured is "prefix_fy_seq" ("SH-2026-27-0001"); once a format is explicitly
+// chosen in Settings, that choice is stored in BusinessSettings and this fallback never overrides it.
 export function resolveNumberFormat(id: string | null | undefined): NumberFormatDef {
   return NUMBER_FORMATS[id as NumberFormatId] ?? NUMBER_FORMATS.prefix_fy_seq;
 }
@@ -105,12 +86,8 @@ export function numberFormatDbFilter(formatId: string | null | undefined, prefix
   return resolveNumberFormat(formatId).dbFilter(prefix, yearLabel);
 }
 
-// A plain `startsWith`/`orderBy desc` string-sort trick (the original
-// approach) only finds the true highest sequence when the sequence is the
-// number's fixed-width, right-most segment. "seq_fy" and "prefix_seq_fy"
-// deliberately don't zero-pad (to match pre-existing manual numbering), so
-// "9/2026-27" must be recognized as less than "10/2026-27" numerically even
-// though it isn't lexicographically — hence scanning candidates in JS.
+// A string-sort trick only works when the sequence is a fixed-width right-most segment; "seq_fy"/
+// "prefix_seq_fy" don't zero-pad, so "9/..." isn't lexicographically less than "10/..." — hence scanning in JS.
 export function findMaxSequence(existingNumbers: string[], matcher: RegExp): number {
   let max = 0;
   for (const num of existingNumbers) {
@@ -122,13 +99,8 @@ export function findMaxSequence(existingNumbers: string[], matcher: RegExp): num
   return max;
 }
 
-// `existingNumbers` should already be narrowed via `dbFilter()` for this
-// prefix+FY (see NUMBER_FORMATS above) — passing the whole table defeats
-// the point of the DB filter but still produces a correct result.
-// `override` (if set and higher than what auto-increment would produce)
-// wins for exactly one call — the caller must clear it in the same
-// transaction once `overrideUsed` comes back true, so it never re-applies
-// to a later document.
+// `existingNumbers` should already be narrowed via `dbFilter()` for this prefix+FY. `override`
+// wins for exactly one call — caller must clear it once `overrideUsed` is true so it never re-applies.
 export function computeNextNumber(
   existingNumbers: string[],
   formatId: string | null | undefined,

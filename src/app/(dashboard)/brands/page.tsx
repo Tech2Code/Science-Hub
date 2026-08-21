@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
-import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -176,7 +176,6 @@ export default function BrandsPage() {
     <>
     {(saving || renaming) && <OverlayLoader text={renaming ? "Renaming…" : "Adding…"} />}
     {openingView && <OverlayLoader text="Opening…" />}
-    {isRefetching && <FloatingSpinner />}
     <div className="page-stack">
       <ConfirmDialog
         open={!!confirmState}

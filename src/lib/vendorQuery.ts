@@ -22,10 +22,8 @@ export function buildVendorWhere(search?: string | null): Prisma.VendorWhereInpu
 export function buildVendorOrderBy(sort?: VendorSort): Prisma.VendorOrderByWithRelationInput[] {
   switch (sort) {
     case "name_za":    return [{ name: "desc" }, { id: "asc" }];
-    // Counts every purchase bill (Prisma can't filter a relation count used
-    // in orderBy), while the displayed count excludes soft-deleted bills —
-    // only diverges when a vendor actually has deleted bills, an edge case
-    // not worth raw SQL for.
+    // Counts every purchase bill (Prisma can't filter a relation-count orderBy); displayed
+    // count excludes soft-deleted bills, so they can diverge for vendors with deleted bills.
     case "bills_high": return [{ purchaseBills: { _count: "desc" } }, { id: "asc" }];
     case "bills_low":  return [{ purchaseBills: { _count: "asc" } }, { id: "asc" }];
     case "oldest":     return [{ createdAt: "asc" }, { id: "asc" }];

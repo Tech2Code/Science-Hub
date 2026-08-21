@@ -10,10 +10,8 @@ export const BLANK_VENDOR_FORM: VendorFormData = {
 
 type VendorStrFields = { name: string; company: string; gstin: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; [key: string]: string; };
 
-// Phone/address/city/state/pincode are required on both create and edit.
-// State specifically drives CGST+SGST-vs-IGST on every purchase bill from
-// this vendor (see deriveIsInterState in /api/purchase-bills), so a vendor
-// without it would silently get the wrong GST split.
+// State drives CGST+SGST-vs-IGST on every purchase bill from this vendor (deriveIsInterState) —
+// without it a vendor would silently get the wrong GST split.
 export function validateVendorForm(form: VendorFormData, opts: { requirePhone: boolean; requireAddress: boolean; requireCity: boolean; requireState: boolean; requirePincode: boolean }): FormErrors<VendorStrFields> {
   const strForm: VendorStrFields = { name: form.name, company: form.company, gstin: form.gstin, phone: form.phone, email: form.email, address: form.address, city: form.city, state: form.state, pincode: form.pincode };
   return validateForm(strForm, {

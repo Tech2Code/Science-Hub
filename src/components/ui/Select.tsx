@@ -10,11 +10,8 @@ interface OptionData {
   disabled?: boolean;
 }
 
-// <option> children are often composed of several sibling expressions
-// (e.g. `{v.name}{v.company ? \` — ${v.company}\` : ""}`), which React
-// represents as an array of children rather than a single string — so the
-// label has to be assembled from every string/number leaf, not just read
-// off a single-child shortcut.
+// <option> children can be several sibling expressions (React gives an array, not one string), so
+// the label must be assembled from every string/number leaf rather than a single-child shortcut.
 function labelOf(children: React.ReactNode): string {
   return React.Children.toArray(children)
     .map((c) => (typeof c === "string" || typeof c === "number" ? String(c) : ""))
@@ -37,15 +34,8 @@ export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElemen
   wrapClassName?: string;
 }
 
-/**
- * Custom-styled dropdown that mirrors a native <select>'s API (same
- * value/onChange/name/children-as-<option> contract every call site
- * already uses) while rendering its own trigger + listbox so every option
- * row can actually be styled. A visually-hidden native <select> underneath
- * stays the real controlled element — commit() drives it through React's
- * native value setter so existing onChange handlers keep receiving a
- * genuine ChangeEvent<HTMLSelectElement>, unchanged.
- */
+// Custom-styled dropdown mirroring native <select>'s API; a visually-hidden native <select> stays the
+// real controlled element — commit() drives it via React's native setter so onChange keeps firing normally.
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function Select(
   { sz, className, wrapClassName, children, value, onChange, name, id, disabled, required, "aria-label": ariaLabel, ...rest },
   forwardedRef
@@ -121,10 +111,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
       }
     }
     function onScrollOrResize(e: Event) {
-      // Scrolling inside the open listbox itself (to reach more options)
-      // fires a capture-phase "scroll" on the window too — only treat
-      // scrolling of the page/an ancestor behind the dropdown as a reason
-      // to close it.
+      // Scrolling inside the open listbox also fires a capture-phase window "scroll" — ignore that, only close on page/ancestor scroll.
       if (listRef.current && e.target instanceof Node && listRef.current.contains(e.target)) return;
       setOpen(false);
     }

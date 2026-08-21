@@ -1,15 +1,5 @@
-/**
- * Column definition drives both the <th> header and every <td> in that column:
- *   cls     → className on <th> (e.g. "table-th-right")
- *   mobile  → responsive behaviour on ≤640px screens
- *     "hide"       → hidden on mobile
- *     "full"       → spans both grid columns (primary / action cells)
- *     "label"      → shows col.label as a small caption above the value
- *     "full+label" → full-width AND captioned (e.g. Stock badge)
- *
- * Adding a column: add one entry here → headers + skeleton + empty-state colSpan
- * all update automatically. Mobile behaviour is declared once per column.
- */
+// `mobile` drives ≤640px card layout: "hide" hides the cell, "full" spans both
+// grid columns, "label" captions the value with col.label, "full+label" both.
 export type Column = {
   label: string;
   cls?: string;

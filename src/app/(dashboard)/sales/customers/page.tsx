@@ -13,7 +13,7 @@ import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
-import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import styles from "./customersList.module.css";
@@ -107,7 +107,6 @@ export default function CustomersPage() {
   return (
     <div className="page-stack">
       {openingEditId && <OverlayLoader text="Opening editor…" />}
-      {isRefetching && <FloatingSpinner />}
       <ConfirmDialog
         open={!!confirmState}
         title={confirmState?.title ?? ""}

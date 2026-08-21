@@ -1,8 +1,5 @@
-// Shared bulk-import parsing for Rate List items — one brain used by both
-// the client-side "Paste from Excel" flow (a tab-separated clipboard paste
-// needs no server round-trip) and the server-side /api/rate-lists/parse-import
-// route (an uploaded .xlsx/.csv file, where ExcelJS has already reduced the
-// sheet to plain string rows before calling into this same parser).
+// Shared bulk-import parsing for Rate List items — used by both the client-side paste flow and the
+// server-side /api/rate-lists/parse-import route (ExcelJS-reduced .xlsx/.csv rows).
 
 export interface ParsedRateListRow {
   name: string;
@@ -15,9 +12,7 @@ export interface ParsedRateListRow {
 
 type ColumnKey = "serial" | "name" | "brand" | "unit" | "discount" | "listRate" | "amount";
 
-// Order matters — checked top to bottom, first match wins per column, so
-// "List Rate" is tried before the looser "amount"/"rate" catch-alls would
-// otherwise also match it.
+// Order matters — first match wins, so "List Rate" is tried before the looser "amount"/"rate" catch-alls.
 const COLUMN_PATTERNS: { key: ColumnKey; pattern: RegExp }[] = [
   { key: "serial", pattern: /^(s\.?\s*no\.?|sr\.?\s*no\.?|#)$/i },
   { key: "listRate", pattern: /list\s*rate|^rate$|^price$/i },
@@ -47,13 +42,7 @@ function parseDiscountCell(raw: string): { isNetRate: boolean; discountPercent: 
   return { isNetRate: false, discountPercent: isNaN(num) ? "0" : String(Math.min(100, Math.max(0, num))) };
 }
 
-/**
- * Splits one CSV line into fields, respecting double-quoted fields so a
- * quoted thousands-separator comma (e.g. a rate exported as `"1,902.00"`)
- * isn't mistaken for a column delimiter — a plain `line.split(",")` breaks
- * on every comma regardless of quoting and silently truncates such values
- * to the digits before the first comma.
- */
+/** Splits a CSV line respecting quoted fields, so a quoted thousands-separator comma (e.g. `"1,902.00"`) isn't mistaken for a delimiter. */
 export function parseCsvLine(line: string): string[] {
   const fields: string[] = [];
   let cur = "";
@@ -81,15 +70,8 @@ export function parseCsvLine(line: string): string[] {
 
 const cellAt = (row: string[], idx: number | undefined): string => (idx !== undefined ? (row[idx] ?? "").trim() : "");
 
-/**
- * Parses a rectangular grid of string cells (already split into rows/columns
- * by the caller) into Rate List items. Recognizes a header row by column-name
- * matching (Name/Brand/Unit/Discount/List Rate, in any order, any casing);
- * falls back to a positional guess by column count when no header is
- * detected — matching either the app's own item order (Name, Brand, Unit,
- * Discount, List Rate) or the common "S.No, Chemical, Brand, Unit, Discount,
- * List Rate, Amount" shape (e.g. a supplier's printed rate list table).
- */
+/** Parses a rows/columns grid into Rate List items, detecting a header by column-name matching or
+ *  falling back to a positional guess (either this app's item order or a supplier's printed-table shape). */
 export function parseRateListRows(rows: string[][]): { items: ParsedRateListRow[]; skipped: number } {
   if (rows.length === 0) return { items: [], skipped: 0 };
 

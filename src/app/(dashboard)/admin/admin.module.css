@@ -66,7 +66,7 @@ button.inp {
   box-sizing: border-box;
 }
 input.inp:focus,
-button.inp:focus { border-color: var(--c-blue) !important; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+button.inp:focus { border-color: var(--c-blue) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-blue) 15%, transparent); }
 
 input.inpError,
 button.inpError { border-color: var(--c-red) !important; }

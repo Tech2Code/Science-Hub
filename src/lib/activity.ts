@@ -11,7 +11,8 @@ export async function logActivity(
     await prisma.activityLog.create({
       data: { userId, action, details, entityId: entityId ?? null, entityType: entityType ?? null },
     });
-  } catch {
-    // Never let logging failure break the main operation
+  } catch (err) {
+    // Never let logging failure break the main operation, but still trace it so it doesn't go unnoticed.
+    console.error("logActivity failed:", err);
   }
 }

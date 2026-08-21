@@ -55,11 +55,8 @@ export async function PUT(
     const existing = await prisma.customer.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existing) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
     if (existing.deletedAt) {
-      // A "one-off" customer (created via an invoice's "just for this
-      // invoice — don't save" option) is soft-deleted from the moment it's
-      // created and never gets an explicit delete_customer log entry — that
-      // distinguishes it from one actually sent to the bin, which must stay
-      // blocked from editing until restored.
+      // A one-off customer is soft-deleted from creation with no delete_customer log entry —
+      // that's what distinguishes it from one actually sent to the bin, which must stay blocked.
       const wasExplicitlyDeleted = await prisma.activityLog.findFirst({ where: { entityId: id, entityType: "customer", action: "delete_customer" } });
       if (wasExplicitlyDeleted) {
         return NextResponse.json({ error: "This customer is in the bin — restore it before editing" }, { status: 400 });

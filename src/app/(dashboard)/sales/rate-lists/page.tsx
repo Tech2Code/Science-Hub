@@ -13,7 +13,7 @@ import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
-import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
@@ -182,7 +182,6 @@ export default function RateListsPage() {
     {openingEditId && <OverlayLoader text="Opening editor…" />}
     {previewLoadingId && <OverlayLoader text="Generating preview…" />}
     {exportingId && <OverlayLoader text="Generating Excel file…" />}
-    {isRefetching && <FloatingSpinner />}
     {previewTarget && <RateListPrintArea rateList={previewTarget} settings={settings ?? null} />}
     {pdfPreviewUrl && (
       <PdfPreviewModal

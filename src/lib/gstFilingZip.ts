@@ -1,7 +1,4 @@
-// Packages the GST filing workbook + a separate validation report CSV into
-// the downloadable ZIP — the "Download GST Package" a business owner sends
-// to their CA. Validation stays its own file (not a sheet in the workbook)
-// so it can be reviewed without opening Excel.
+// Packages the GST filing workbook + a validation report CSV into the downloadable ZIP; validation is a separate file so it's reviewable without opening Excel.
 import JSZip from "jszip";
 import { buildGstFilingWorkbook } from "@/lib/gstFilingWorkbook";
 import type { GstFilingReport } from "@/lib/gstFiling";

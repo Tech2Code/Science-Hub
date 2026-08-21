@@ -12,10 +12,8 @@ interface PincodeApiResult {
   PostOffice: PostOffice[] | null;
 }
 
-// Proxies the public India Post pincode directory (api.postalpincode.in) so
-// the browser doesn't need to call a third-party host directly — mirrors the
-// pattern in /api/settings/ifsc-lookup, but open to any authenticated user
-// (not admin-only) since every customer/vendor/settings-address form needs it.
+// Proxies India Post's pincode directory server-side (mirrors /api/settings/ifsc-lookup) but
+// open to any authenticated user, not admin-only, since every address form needs it.
 export async function GET(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;

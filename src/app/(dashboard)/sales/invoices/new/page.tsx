@@ -27,9 +27,7 @@ import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { deriveDefaultPrefix, getIndianFinancialYear, formatFinancialYearLabel, resolveNumberFormat } from "@/lib/documentNumbering";
 
-// Shown once, only before this business's very first invoice, if numbering
-// hasn't been customized yet in Settings — see handling in the mount effect
-// below. Dismissing (or simply creating the invoice) hides it for good.
+// Shown once before this business's first invoice, only if numbering hasn't been customized in Settings yet.
 const FIRST_INVOICE_NUDGE_DISMISSED_KEY = "sciencehub_first_invoice_nudge_dismissed";
 
 interface Customer {
@@ -65,11 +63,7 @@ export default function NewInvoicePage() {
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
-  // Reverted back to default-on (2026-08-20, explicit business request) —
-  // the previous default-off change (2026-08-18) traded a "toggle off" step
-  // for a "toggle on" step on the ~5% of invoices that don't carry a
-  // transport charge; the business wants every invoice to carry one by
-  // default regardless of that split.
+  // Default-on per business request — most invoices carry a transport charge.
   const [transportChargeEnabled, setTransportChargeEnabled] = useState(true);
   const [transportCharge, setTransportCharge] = useState("");
   const [transportChargeGstRate, setTransportChargeGstRate] = useState("18");
@@ -317,9 +311,7 @@ export default function NewInvoicePage() {
   const effectiveTransportGstRate = transportChargeEnabled ? (parseFloat(transportChargeGstRate) || 0) : 0;
   const { grossTotal, discountTotal, taxBreakdown, roundOff, grandTotal, transportChargeGstAmount } =
     computeInvoiceTotals(items, effectiveTransportCharge, effectiveTransportGstRate);
-  // Once the transport charge toggle is on, both the amount and the GST rate
-  // are mandatory — leaving the amount blank must not silently save a
-  // zero-value transport charge.
+  // Once enabled, amount and GST rate are both mandatory — a blank amount must not silently save as zero.
   const missingTransportAmount = transportChargeEnabled && (!transportCharge.trim() || effectiveTransportCharge <= 0);
   const missingTransportGstRate = transportChargeEnabled && !transportChargeGstRate.trim();
   const missingTransportCharge = missingTransportAmount || missingTransportGstRate;
@@ -404,8 +396,7 @@ export default function NewInvoicePage() {
       if (d.stockWarnings?.length > 0) {
         toast({ type: "warning", title: "Stock went negative", message: d.stockWarnings.join(", ") });
       }
-      // Deliberately not resetting `saving` here — see the edit page for why:
-      // it must stay locked until navigation actually replaces this page.
+      // saving stays true until navigation replaces this page.
       router.push(`/sales/invoices/${d.id}`);
       return;
     }
@@ -593,11 +584,7 @@ export default function NewInvoicePage() {
                     variant="secondary"
                     disabled={customerSaving}
                     onClick={() => {
-                      // The State field's onChange live-updates placeOfSupply
-                      // as a preview even while editing — if the user abandons
-                      // the draft, put placeOfSupply back to where it actually
-                      // belongs: blank for an unsaved "add new customer" draft,
-                      // or the still-selected customer's real state when editing.
+                      // Undo the live placeOfSupply preview from the State field's onChange if the draft is abandoned.
                       applyPlaceOfSupply(customerEditId ? (selectedCustomer?.state ?? "") : "");
                       setCustomerEditId(null);
                       setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });

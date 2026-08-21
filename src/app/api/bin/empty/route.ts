@@ -5,10 +5,7 @@ import { logActivity } from "@/lib/activity";
 import { deleteAttachmentBlob } from "@/lib/blobStorage";
 import { requireAdmin } from "@/lib/apiAuth";
 
-// Permanently deletes every soft-deleted item currently in the bin.
-// Mirrors the per-type rules in /api/bin/[type]/[id] DELETE, but runs in an
-// order (invoices/purchase bills first) that lets customers/vendors/products
-// that were only blocked by now-purged bin items clear too.
+// Mirrors /api/bin/[type]/[id] DELETE's per-type rules, but runs invoices/purchase bills first so dependent customers/vendors/products can clear too.
 export async function DELETE() {
   try {
     const auth = await requireAdmin();
@@ -41,50 +38,66 @@ export async function DELETE() {
       deleted += purchaseBills.length;
     }
 
-    // Customers — skip any that still have invoices on record (the bulk
-    // purge above already cleared out any binned ones)
-    for (const c of customers) {
-      const invoiceCount = await prisma.invoice.count({ where: { customerId: c.id } });
-      if (invoiceCount > 0) { skipped++; continue; }
-      await prisma.customer.delete({ where: { id: c.id } });
-      deleted++;
+    // Customers — skip any still referenced by invoices; batched groupBy instead of a per-row count to avoid N+1 (this route processes every binned item regardless of age).
+    if (customers.length > 0) {
+      const customerIds = customers.map((c) => c.id);
+      const referencedByInvoices = await prisma.invoice.groupBy({ by: ["customerId"], where: { customerId: { in: customerIds } } });
+      const blockedCustomerIds = new Set(referencedByInvoices.map((r) => r.customerId));
+      const deletableCustomerIds = customerIds.filter((id) => !blockedCustomerIds.has(id));
+      if (deletableCustomerIds.length > 0) {
+        const r = await prisma.customer.deleteMany({ where: { id: { in: deletableCustomerIds } } });
+        deleted += r.count;
+      }
+      skipped += blockedCustomerIds.size;
     }
 
-    // Products — skip any still referenced by invoice items or purchase
-    // items. Stock movements are not checked — the product relation on
-    // StockMovement is nullable with onDelete: SetNull, so those ledger
-    // rows survive (with a productName snapshot) instead of blocking this.
-    for (const p of products) {
-      const [itemCount, purchaseItemCount] = await Promise.all([
-        prisma.invoiceItem.count({ where: { productId: p.id } }),
-        prisma.purchaseBillItem.count({ where: { productId: p.id } }),
+    // Products — skip any still referenced by invoice/purchase items. Stock movements aren't checked since their productId is nullable (SetNull).
+    if (products.length > 0) {
+      const productIds = products.map((p) => p.id);
+      const [referencedByInvoiceItems, referencedByPurchaseItems] = await Promise.all([
+        prisma.invoiceItem.groupBy({ by: ["productId"], where: { productId: { in: productIds } } }),
+        prisma.purchaseBillItem.groupBy({ by: ["productId"], where: { productId: { in: productIds } } }),
       ]);
-      if (itemCount > 0 || purchaseItemCount > 0) { skipped++; continue; }
-      await prisma.product.delete({ where: { id: p.id } });
-      deleted++;
+      const blockedProductIds = new Set([
+        ...referencedByInvoiceItems.map((r) => r.productId),
+        ...referencedByPurchaseItems.map((r) => r.productId).filter((id): id is string => id !== null),
+      ]);
+      const deletableProductIds = productIds.filter((id) => !blockedProductIds.has(id));
+      if (deletableProductIds.length > 0) {
+        const r = await prisma.product.deleteMany({ where: { id: { in: deletableProductIds } } });
+        deleted += r.count;
+      }
+      skipped += blockedProductIds.size;
     }
 
-    // Brands — unassign any remaining products, then delete
-    for (const b of brands) {
-      await prisma.product.updateMany({ where: { brandId: b.id }, data: { brandId: null } });
-      await prisma.brand.delete({ where: { id: b.id } });
-      deleted++;
+    // Brands — nothing blocks a purge (unlike customers/products/vendors), so this is a plain unassign + delete, not a filter.
+    if (brands.length > 0) {
+      const brandIds = brands.map((b) => b.id);
+      await prisma.product.updateMany({ where: { brandId: { in: brandIds } }, data: { brandId: null } });
+      const r = await prisma.brand.deleteMany({ where: { id: { in: brandIds } } });
+      deleted += r.count;
     }
 
     // Categories — unassign any remaining products, then delete
-    for (const cat of categories) {
-      await prisma.product.updateMany({ where: { categoryId: cat.id }, data: { categoryId: null } });
-      await prisma.category.delete({ where: { id: cat.id } });
-      deleted++;
+    if (categories.length > 0) {
+      const categoryIds = categories.map((c) => c.id);
+      await prisma.product.updateMany({ where: { categoryId: { in: categoryIds } }, data: { categoryId: null } });
+      const r = await prisma.category.deleteMany({ where: { id: { in: categoryIds } } });
+      deleted += r.count;
     }
 
     // Vendors — skip any still referenced by purchase bills (the bulk purge
     // above already cleared out any binned ones)
-    for (const v of vendors) {
-      const billCount = await prisma.purchaseBill.count({ where: { vendorId: v.id } });
-      if (billCount > 0) { skipped++; continue; }
-      await prisma.vendor.delete({ where: { id: v.id } });
-      deleted++;
+    if (vendors.length > 0) {
+      const vendorIds = vendors.map((v) => v.id);
+      const referencedByBills = await prisma.purchaseBill.groupBy({ by: ["vendorId"], where: { vendorId: { in: vendorIds } } });
+      const blockedVendorIds = new Set(referencedByBills.map((r) => r.vendorId));
+      const deletableVendorIds = vendorIds.filter((id) => !blockedVendorIds.has(id));
+      if (deletableVendorIds.length > 0) {
+        const r = await prisma.vendor.deleteMany({ where: { id: { in: deletableVendorIds } } });
+        deleted += r.count;
+      }
+      skipped += blockedVendorIds.size;
     }
 
     // Credit notes — nothing else references them, always safe to purge

@@ -21,10 +21,11 @@ import { getIndianFinancialYear, formatFinancialYearLabel, resolveNumberFormat }
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import styles from "./billNew.module.css";
 
-// Shown once, only before this business's very first purchase bill, if
-// numbering hasn't been customized yet in Settings — mirrors the invoice
-// page's nudge (see FIRST_INVOICE_NUDGE_DISMISSED_KEY there).
+// Shown once before the business's first purchase bill, if numbering is still default.
 const FIRST_BILL_NUDGE_DISMISSED_KEY = "sciencehub_first_purchase_bill_nudge_dismissed";
+
+// Mirrors MAX_SIZE in src/app/api/purchase-bills/upload/route.ts — client-side reject before upload.
+const MAX_ATTACHMENT_FILE_BYTES = 10 * 1024 * 1024;
 
 export default function NewPurchaseBillPage() {
   const router = useRouter();
@@ -45,9 +46,7 @@ export default function NewPurchaseBillPage() {
   const [dueDate,   setDueDate]   = useState("");
   const [dueDateError, setDueDateError] = useState<string | undefined>(undefined);
   const [itemsError, setItemsError] = useState<string | undefined>(undefined);
-  // Snapshot of the items array the current itemsError was raised against —
-  // lets the error auto-hide the moment the items list itself changes (add/
-  // remove/edit a line) without setting state from inside an effect.
+  // Snapshot items array at error-time so the error auto-hides once items change, without an effect.
   const [itemsErrorFor, setItemsErrorFor] = useState<PurchaseBillLineItem[] | null>(null);
   const [paymentDateError, setPaymentDateError] = useState<string | undefined>(undefined);
   const [category,  setCategory]  = useState("");
@@ -57,10 +56,7 @@ export default function NewPurchaseBillPage() {
   const [attachmentUrl,  setAttachmentUrl]  = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
-  // Defaults off — mirrors the invoice-side fix; real usage data (2026-08-18)
-  // showed only ~2% of existing purchase bills actually carry a transport
-  // charge, so defaulting it on forced an unnecessary "toggle off" step on
-  // nearly every new bill.
+  // Defaults off — most bills don't carry a transport charge.
   const [transportChargeEnabled, setTransportChargeEnabled] = useState(false);
   const [transportCharge, setTransportCharge] = useState("");
   const [transportChargeGstRate, setTransportChargeGstRate] = useState("18");
@@ -193,6 +189,11 @@ export default function NewPurchaseBillPage() {
   async function handleAttachmentChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_ATTACHMENT_FILE_BYTES) {
+      toast({ type: "error", title: "File too large", message: "File must be under 10 MB." });
+      e.target.value = "";
+      return;
+    }
     setAttachmentUploading(true);
     try {
       const form = new FormData();
@@ -323,12 +324,7 @@ export default function NewPurchaseBillPage() {
 
   const missingVendor = !vendorId;
   const noItems = items.length === 0;
-  // Amount is the trigger — a blank/zero amount is a valid "no transport
-  // charge" default, so only require the GST rate once a real amount has
-  // actually been entered.
-  // Once the transport charge toggle is on, both the amount and the GST rate
-  // are mandatory — leaving the amount blank must not silently save a
-  // zero-value transport charge.
+  // Once the toggle is on, both amount and GST rate are mandatory — a blank amount must not silently save as zero.
   const missingTransportAmount = transportChargeEnabled && (!transportCharge.trim() || effectiveTransportCharge <= 0);
   const missingTransportGstRate = transportChargeEnabled && !transportChargeGstRate.trim();
   const missingTransportCharge = missingTransportAmount || missingTransportGstRate;

@@ -5,26 +5,15 @@ export type Validator = (value: string) => string | null;
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
-// Payment/return date fields arrive as a plain "YYYY-MM-DD" string with no
-// timezone info, representing "today" in the business's own calendar (this
-// app is India-only). Comparing the UTC-midnight-parsed Date against the
-// exact server clock (Date.now()) falsely flags "today" as a future date
-// for the first ~5.5 hours of every IST day, since that day's UTC midnight
-// hasn't arrived yet. Comparing calendar-date strings in IST avoids that.
+// Comparing a bare "YYYY-MM-DD" date against server Date.now() falsely flags "today" as future for
+// the first ~5.5 IST hours of the day (UTC midnight hasn't arrived) — compare IST calendar strings instead.
 export function isFutureIstDate(dateStr: string): boolean {
   const todayIst = new Date(Date.now() + IST_OFFSET_MS).toISOString().slice(0, 10);
   return dateStr > todayIst;
 }
 
-// Same reasoning as isFutureIstDate, applied to "is this date before the
-// parent document's date" checks (payment/return date vs. invoice/bill
-// date). The parent's `date`/`billDate` column is a full timestamp (e.g.
-// created 14:00 IST), while the submitted value is a bare calendar-date
-// string with no time component — comparing them as raw Date objects makes
-// any same-day payment/return look like it's "before" the invoice/bill for
-// the whole day, since midnight UTC of that calendar date is always earlier
-// than a later-in-the-day timestamp. Converting the parent date to its own
-// IST calendar-date string first makes this a plain, correct string compare.
+// Same IST reasoning as isFutureIstDate — the parent doc's `date`/`billDate` is a full timestamp, so
+// comparing it raw against a bare calendar-date string falsely flags same-day payments as "before" it.
 export function toIstDateStr(date: Date): string {
   return new Date(date.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
 }
@@ -107,12 +96,8 @@ export function hasErrors<T>(errors: FormErrors<T>): boolean {
   return Object.values(errors).some(Boolean);
 }
 
-// Server-side counterpart to the customer form's client-side validation —
-// API route handlers must not rely solely on the browser to enforce this.
-// `requireContactDetails` is set on create, edit, and the invoice page's
-// inline "custom customer" flow alike. State is required alongside pincode
-// since it's what pincode auto-fill resolves, mirroring the same
-// requirement on vendors.
+// Server-side counterpart to the customer form's client validation. State is required alongside
+// pincode since it's what pincode auto-fill resolves (mirrors the vendor requirement).
 export function validateCustomerInput(input: {
   name?: string; phone?: string; email?: string; address?: string; city?: string; state?: string; pincode?: string; gstin?: string;
 }, requireContactDetails = false): string | null {
@@ -137,9 +122,7 @@ export function validateCustomerInput(input: {
   );
 }
 
-// Generic numeric field check shared by product create/update routes —
-// mirrors the shape of a single `rules.*` validator but works on an
-// already-parsed number instead of a raw string.
+// Generic numeric field check shared by product create/update routes — like a `rules.*` validator but for an already-parsed number.
 export function validateNumericField(
   key: string,
   value: number,
@@ -154,10 +137,8 @@ export function validateNumericField(
   return null;
 }
 
-// Server-side counterpart to the product form's client-side validation —
-// only covers the non-numeric "core" fields; numeric fields are checked
-// with `validateNumericField` since routes parse them differently
-// (create applies defaults, update validates only supplied fields).
+// Server-side counterpart to the product form; covers non-numeric fields only — numeric fields
+// use `validateNumericField` since create/update parse them differently.
 export function validateProductInput(
   input: { name?: string; price?: unknown; sku?: string; hsn?: string; description?: string },
   requireCore = false
@@ -178,9 +159,7 @@ export function validateProductInput(
   );
 }
 
-// Server-side counterpart to the admin user form's client-side validation —
-// each field is checked only when present in `input`, so the same function
-// covers both full create and partial update.
+// Server-side counterpart to the admin user form; each field checked only when present, covering both create and partial update.
 export function validateUserInput(
   input: { name?: string; email?: string; password?: string; role?: string },
   opts: { requireAll?: boolean; passwordLabel?: string } = {}
@@ -208,13 +187,8 @@ export function validateUserInput(
   return null;
 }
 
-// Server-side counterpart to the settings form's client-side validation.
-// `isBankSectionUpdate` must be true only when the request actually intends
-// to write the bank details section (i.e. the incoming body contains at
-// least one bank key) — otherwise a save of an unrelated section (identity,
-// address, terms, ...) would re-validate bank fields it never touched, and
-// fail if the account number couldn't be decrypted for an unrelated reason
-// (e.g. a NEXTAUTH_SECRET mismatch) rather than because it's actually blank.
+// `isBankSectionUpdate` must be true only when the request actually writes bank fields — otherwise
+// saving an unrelated section re-validates untouched bank fields and can fail on decrypt errors.
 export function validateSettingsInput(input: {
   name?: string; tagline?: string; email?: string; gmailUser?: string;
   pan?: string; termsAndConditions?: string; phone?: string; address?: string; city?: string; state?: string; pincode?: string; gstin?: string;
@@ -257,13 +231,8 @@ export function validateRateListInput(input: { title?: string; note?: string }):
   return null;
 }
 
-// Server-side counterpart to the vendor form's client-side validation —
-// API route handlers must not rely solely on the browser to enforce this.
-// `requireContactDetails` is set on both creation and edit — a vendor with
-// no state can't have its place-of-supply derived correctly on purchase
-// bills (see deriveIsInterState), so editing an existing vendor is also a
-// chance to backfill the missing contact/address details rather than
-// letting them persist indefinitely.
+// Server-side counterpart to the vendor form. `requireContactDetails` applies on both create and edit,
+// since a vendor with no state can't have its place-of-supply derived correctly (deriveIsInterState).
 export function validateVendorInput(input: {
   name?: string; company?: string; phone?: string; email?: string; gstin?: string; address?: string; city?: string; state?: string; pincode?: string; notes?: string;
 }, requireContactDetails = false): string | null {

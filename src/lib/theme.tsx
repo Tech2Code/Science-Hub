@@ -18,12 +18,9 @@ function applyTheme(next: "light" | "dark") {
     document.documentElement.style.colorScheme = next;
   };
 
-  // startViewTransition rejects with InvalidStateError when the document is
-  // hidden (e.g. the auto-theme interval firing on a backgrounded tab) — fall
-  // back to an instant apply rather than letting that reject unhandled.
+  // startViewTransition rejects when the document is hidden (e.g. backgrounded tab) — fall back to instant apply.
   if (document.startViewTransition && !document.hidden) {
-    // Suppress element-level CSS transitions for the duration of the View Transition
-    // so they don't create a second animation when the DOM is revealed.
+    // Suppress CSS transitions during the View Transition to avoid a duplicate animation.
     document.documentElement.setAttribute("data-vt", "");
     const vt = document.startViewTransition(apply);
     vt.finished.catch(() => {}).finally(() => document.documentElement.removeAttribute("data-vt"));

@@ -58,12 +58,7 @@ export async function PUT(
       return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
     }
 
-    // Notes-only update. `status` is never accepted from the client here —
-    // it must always be derived from paidAmount vs. total (see the payment
-    // routes and the full-items branch below), never set directly, or a
-    // caller could decouple the displayed status from the real balance and
-    // make an invoice vanish from Outstanding/Overdue reports without ever
-    // recording a payment.
+    // Notes-only update. `status` is never accepted from the client — it's always derived from paidAmount vs. total.
     if (!items) {
       const data: Record<string, unknown> = {};
       if (notes !== undefined) data.notes = notes;
@@ -86,15 +81,10 @@ export async function PUT(
       return NextResponse.json({ error: "A fully paid invoice cannot be edited" }, { status: 400 });
     }
 
-    // Allow re-billing an invoice to a different customer (e.g. it was
-    // created against the wrong one) — resolved and validated server-side
-    // rather than trusted, same as every other invoice field here.
+    // Allow re-billing to a different customer, validated server-side rather than trusted.
     let resolvedCustomerId = existing.customerId;
     if (customerId && customerId !== existing.customerId) {
-      // Not filtered on deletedAt — a customer created "just for this
-      // invoice" (one-off) is soft-deleted immediately on creation (see
-      // POST /api/customers' oneOff handling) yet must still be assignable
-      // here, exactly as POST /api/invoices already allows at create time.
+      // Not filtered on deletedAt — a one-off customer is soft-deleted at creation but must still be assignable.
       const customer = await prisma.customer.findUnique({ where: { id: String(customerId) }, select: { id: true } });
       if (!customer) {
         return NextResponse.json({ error: "Selected customer not found" }, { status: 400 });
@@ -102,11 +92,7 @@ export async function PUT(
       resolvedCustomerId = customer.id;
     }
 
-    // Invoice date is editable (e.g. correcting a same-week typo), but never
-    // across a financial-year boundary — the invoice number was generated
-    // for a specific FY (see src/lib/documentNumbering.ts) and moving the
-    // date into a different one would leave the printed number pointing at
-    // the wrong period with no way to reconcile it automatically.
+    // Invoice date is editable but never across an FY boundary — the number was already generated for a specific FY.
     let parsedInvoiceDate: Date | undefined;
     if (date) {
       parsedInvoiceDate = new Date(date);
@@ -214,10 +200,7 @@ export async function PUT(
       };
     });
 
-    // Independently verify inter-state vs. intra-state from the business's
-    // own configured state rather than trusting the client-supplied flag —
-    // mirrors the same check in POST /api/invoices. Falls back to the
-    // client's value only if the business state isn't configured yet.
+    // Never trust the client's isInterState flag; derive it server-side (mirrors POST /api/invoices).
     const biz = await getBusinessSettings();
     const derivedIsInterState = deriveIsInterState(String(placeOfSupply), biz.state);
     const inter = derivedIsInterState !== null ? derivedIsInterState : Boolean(clientIsInterState);
@@ -246,13 +229,7 @@ export async function PUT(
     else if (paidAmount > 0) newStatus = "partial";
 
     const { invoice, stockWarnings } = await prisma.$transaction(async (tx) => {
-      // Re-check the optimistic-lock condition atomically against the row,
-      // inside the transaction — the earlier check above ran as a separate
-      // query, leaving a race window where two concurrent edits could both
-      // pass it and the second would silently overwrite the first. This
-      // updateMany's WHERE re-evaluates under the row lock it takes, so a
-      // conflicting concurrent write is caught even without Serializable
-      // isolation.
+      // Re-check the optimistic-lock atomically under the row lock — the earlier check ran as a separate query, leaving a race window for concurrent edits.
       if (expectedUpdatedAt) {
         const guard = await tx.invoice.updateMany({
           where: { id, updatedAt: existingBase.updatedAt },
@@ -261,16 +238,10 @@ export async function PUT(
         if (guard.count === 0) throw new InvoiceConflictError();
       }
 
-      // Must run before any mutation: an edited quantity can never drop
-      // below what's already been returned against that product, otherwise
-      // stock/ledger/accounting would be reconciled against units that no
-      // longer exist on the invoice. Throwing here aborts the transaction
-      // untouched — nothing has been written yet.
+      // Must run before any mutation: a quantity can never drop below what's already been returned against that product.
       await assertInvoiceQuantitiesNotBelowReturned(tx, id, invoiceItems);
 
-      // Restore stock for old items before replacing them — one batched
-      // UPDATE for every line item instead of one round trip each, so large
-      // invoices don't blow past the transaction timeout.
+      // Restore stock for old items before replacing them — batched into one UPDATE to avoid a per-line round trip.
       const oldItems = await tx.invoiceItem.findMany({
         where: { invoiceId: id },
         select: { productId: true, quantity: true },
@@ -313,9 +284,7 @@ export async function PUT(
         include: { items: true, customer: true },
       });
 
-      // Deduct stock for new items — one batched UPDATE ... RETURNING gives
-      // back every product's post-update stock in a single round trip, which
-      // is also how we detect negative stock without a second query per item.
+      // Deduct stock for new items — batched UPDATE ... RETURNING also gives post-update stock for negative-stock detection in one pass.
       const updatedProducts = await batchAdjustStock(
         tx,
         (invoiceItems as { productId: string | null; quantity: number }[])
@@ -375,17 +344,8 @@ export async function DELETE(
 
     const { id } = await params;
 
-    // Guard against double-delete (double-click, retry, repeated API call):
-    // only restore stock if this call is the one that actually transitions
-    // the invoice from active to deleted — updateMany's count tells us that
-    // atomically, so a repeat call finds count 0 and skips re-crediting stock.
-    //
-    // Deliberately soft-delete only — an invoice number is part of the GST
-    // filing sequence, so this route never permanently removes the row.
-    // Permanent deletion (admin-only, from the Bin page) is a separate,
-    // explicit decision — see src/app/api/bin/[type]/[id]/route.ts and the
-    // "Recycle Bin" section of CLAUDE.md for why invoices/purchase bills/
-    // credit notes are also exempt from the Bin's 30-day auto-purge.
+    // Double-delete guard: updateMany's count tells us atomically whether this call actually transitioned the row, so a repeat call skips re-crediting stock.
+    // Soft-delete only — invoice numbers are part of the GST filing sequence; permanent deletion is admin-only, from the Bin page.
     const result = await prisma.$transaction(async (tx) => {
       const inv = await tx.invoice.findUnique({
         where: { id },

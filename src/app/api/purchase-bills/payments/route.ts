@@ -6,10 +6,7 @@ import { buildPurchasePaymentWhere, buildPurchasePaymentOrderBy, type PurchasePa
 
 export async function GET(request: NextRequest) {
   try {
-    // Aligned with the sibling Payments-Received route, which already gates
-    // on its matching section — this route previously only required a
-    // session, leaving it reachable by any signed-in user regardless of
-    // their "payments_made" grant.
+    // Gated on its section like the sibling Payments-Received route (previously any session sufficed).
     const auth = await requireSectionAccess("payments_made");
     if (!auth.ok) return auth.response;
 

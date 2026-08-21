@@ -2,10 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-// Delays reflecting a fast-changing value (e.g. a search input) until it's
-// stopped changing for `delayMs` — used to avoid firing a network request on
-// every keystroke once a filter drives a server-side query instead of an
-// in-memory array filter.
+// Delays reflecting a fast-changing value until it stops changing for `delayMs` — avoids firing a request per keystroke on server-driven filters.
 export function useDebouncedValue<T>(value: T, delayMs = 300): T {
   const [debounced, setDebounced] = useState(value);
 

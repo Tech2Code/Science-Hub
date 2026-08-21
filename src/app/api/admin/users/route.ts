@@ -51,9 +51,7 @@ export async function POST(request: NextRequest) {
     // `requireAll` above guarantees all four are non-empty strings.
     const validName = name as string, validRole = role as string;
 
-    // Normalize case the same way login does (auth.ts lowercases the
-    // submitted email before lookup) — otherwise "Foo@x.com" and "foo@x.com"
-    // are treated as distinct accounts here but collide at login.
+    // Match auth.ts's lowercasing, or "Foo@x.com"/"foo@x.com" would be distinct here but collide at login.
     const normalizedEmail = (email as string).trim().toLowerCase();
 
     const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });

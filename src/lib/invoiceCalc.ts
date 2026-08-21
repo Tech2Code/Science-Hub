@@ -7,9 +7,7 @@ export interface InvoiceLineItem {
   hsn: string; discountPercent: number;
 }
 
-// A stable per-row id, separate from array index, so removing a row can't
-// cause React to reuse another row's uncontrolled input/focus state after
-// the array shifts (mirrors the same pattern in purchaseBillForm.ts).
+// Stable per-row id (not array index) so removing a row can't make React reuse another row's focus/input state.
 let itemKeySeq = 0;
 export function makeInvoiceLineItemKey() {
   itemKeySeq += 1;
@@ -20,17 +18,13 @@ export interface InvoiceProduct {
   id: string; name: string; unit: string; price: number; gstRate: number; stock: number; hsn?: string | null;
 }
 
-// Subset of InvoiceLineItem actually needed for the GST math — lets API
-// route handlers (which work with plain request-body item shapes, not full
-// InvoiceLineItem objects) reuse this instead of reimplementing the formula.
+// Subset of InvoiceLineItem needed for GST math — lets route handlers (plain request-body shapes) reuse this.
 export interface LineCalcInput {
   qty: number; price: number; gstRate: number; discountPercent: number;
 }
 
-// Discount is applied to the line's gross amount (qty × rate) before GST —
-// taxable value = gross - discount, and GST is computed on that taxable value.
-// This is the single source of truth for this calc — used by both the sales
-// invoice client forms and the invoice create/edit API routes.
+// Discount applied before GST (taxable = gross - discount). Single source of truth,
+// used by both invoice client forms and the create/edit API routes.
 export function lineBreakdown(item: LineCalcInput) {
   const gross = item.qty * item.price;
   const discountAmount = (gross * item.discountPercent) / 100;
@@ -39,11 +33,8 @@ export function lineBreakdown(item: LineCalcInput) {
   return { gross, discountAmount, taxable, gstAmt, total: taxable + gstAmt };
 }
 
-// transportCharge/transportChargeGstRate are optional — a productless service
-// charge (freight, etc.) shown as its own line on the invoice, with its own
-// GST, kept out of the per-rate `taxBreakdown` (which stays item-only) and
-// out of the CGST/SGST/IGST split rather than folded into whichever rate
-// bucket happens to match; it just adds straight into the grand total.
+// transportCharge/transportChargeGstRate: optional freight line with its own GST, kept out of
+// the item-only taxBreakdown/CGST-SGST-IGST split, added straight into the grand total.
 export function computeInvoiceTotals(items: InvoiceLineItem[], transportCharge = 0, transportChargeGstRate = 0) {
   const grossTotal = items.reduce((sum, item) => sum + lineBreakdown(item).gross, 0);
   const discountTotal = items.reduce((sum, item) => sum + lineBreakdown(item).discountAmount, 0);

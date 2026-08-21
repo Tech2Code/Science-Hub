@@ -54,9 +54,7 @@ export async function PUT(
     const itemsResult = validateAndBuildRateListItems(items);
     if ("error" in itemsResult) return NextResponse.json({ error: itemsResult.error }, { status: 400 });
 
-    // Bulk-replace items — a rate list has no stock/ledger side effects to
-    // reverse/reapply (unlike invoices/purchase bills), so delete-and-recreate
-    // inside one transaction is simplest and race-free.
+    // No stock/ledger side effects to reverse, so delete-and-recreate items in one transaction is safe.
     const rateList = await prisma.$transaction(async (tx) => {
       await tx.rateListItem.deleteMany({ where: { rateListId: id } });
       return tx.rateList.update({

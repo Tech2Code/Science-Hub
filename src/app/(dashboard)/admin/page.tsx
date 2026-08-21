@@ -927,7 +927,7 @@ export default function AdminPage() {
           total={logsTotal}
           page={logsPage}
           showAll={false}
-          loading={logsLoading}
+          loading={logsLoading && logsLoadedOnce}
           label="log entries"
           onPage={(p) => loadLogs(p, logsFilter, logsSearch.trim())}
         />

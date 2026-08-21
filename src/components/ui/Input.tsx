@@ -13,18 +13,12 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   function Input({ mono, sz, className, type, onWheel, onClick, ...props }, ref) {
     if (type === "date") {
-      // Custom calendar dropdown — see DatePicker.tsx. onClick was only ever
-      // used to force the native picker open; irrelevant once there's no
-      // native picker to open.
+      // Custom calendar dropdown — see DatePicker.tsx. onClick (used to force the native picker open) is irrelevant here.
       return <DateInput ref={ref} sz={sz} className={className} {...props} />;
     }
     const cls = [styles.input, mono && styles.mono, sz === "sm" && styles.sm, className]
       .filter(Boolean).join(" ");
-    // Scrolling the page with the cursor over a focused number input silently
-    // increments/decrements its value in Chrome/Firefox — blurring on wheel
-    // (rather than preventDefault, which React's passive wheel listener
-    // ignores) is the standard workaround so mouse-wheel scroll never edits
-    // a number field by accident.
+    // Scrolling over a focused number input silently changes its value in Chrome/Firefox — blur on wheel (preventDefault is ignored by React's passive listener) to avoid it.
     const handleWheel = type === "number"
       ? (e: React.WheelEvent<HTMLInputElement>) => { onWheel?.(e); e.currentTarget.blur(); }
       : onWheel;
@@ -49,20 +43,18 @@ interface FieldProps {
   hintSuccess?: boolean;
   error?: string;
   children: React.ReactNode;
-  // When children isn't a single cloneable element (e.g. an input wrapped in
-  // a dropdown/combobox container, or multiple sibling nodes), auto-id
-  // injection below can't find a real control to attach to and the label's
-  // htmlFor would point at nothing. Pass the same id here and directly on
-  // the actual form control to keep the label properly associated.
+  // When children isn't a single cloneable element, auto-id injection can't find a control — pass the same id here and on the actual control instead.
   id?: string;
 }
 export function FormField({ label, required, hint, hintSuccess, error, children, id }: FieldProps) {
   const generatedId = useId();
   const child = !id && React.isValidElement(children)
-    ? (children as React.ReactElement<{ id?: string }>)
+    ? (children as React.ReactElement<{ id?: string; "aria-describedby"?: string }>)
     : null;
   const fieldId = id || child?.props.id || generatedId;
-  const content = child ? React.cloneElement(child, { id: fieldId }) : children;
+  // aria-describedby announces the error/hint on focus, not just at the moment it first appears (role="alert" only covers that one moment).
+  const describedById = error ? `${fieldId}-error` : hint ? `${fieldId}-hint` : undefined;
+  const content = child ? React.cloneElement(child, { id: fieldId, "aria-describedby": describedById }) : children;
 
   return (
     <div className={styles.field} {...(error ? { "data-error": "" } : {})}>
@@ -72,7 +64,7 @@ export function FormField({ label, required, hint, hintSuccess, error, children,
       </label>
       {content}
       {error && (
-        <p className={styles.errorMsg} role="alert">
+        <p id={`${fieldId}-error`} className={styles.errorMsg} role="alert">
           <svg className={styles.errorIcon} viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
             <path d="M8 4.75v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -81,7 +73,7 @@ export function FormField({ label, required, hint, hintSuccess, error, children,
           {error}
         </p>
       )}
-      {!error && hint && <p className={`${styles.hint} ${hintSuccess ? styles.hintSuccess : ""}`}>{hint}</p>}
+      {!error && hint && <p id={`${fieldId}-hint`} className={`${styles.hint} ${hintSuccess ? styles.hintSuccess : ""}`}>{hint}</p>}
     </div>
   );
 }

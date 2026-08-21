@@ -54,13 +54,7 @@ export async function POST(
       }
     }
 
-    // Re-read the invoice and re-validate the remaining balance inside a
-    // Serializable transaction so two concurrent/duplicate submissions can't
-    // both pass the balance check against the same stale paidAmount and
-    // overpay the invoice. Postgres aborts the losing side of a genuine
-    // conflict with a serialization failure (Prisma P2034) rather than
-    // silently letting it commit — retry a few times so a same-time
-    // double-click just costs the user a brief delay instead of a raw 500.
+    // Re-read and re-validate balance inside a Serializable transaction so concurrent/duplicate submissions can't both overpay the invoice; retry on conflict (P2034).
     async function attemptPayment() {
       return prisma.$transaction(async (tx) => {
         const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });

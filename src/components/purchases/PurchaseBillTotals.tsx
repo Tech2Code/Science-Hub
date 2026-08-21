@@ -20,11 +20,7 @@ interface PurchaseBillTotalsProps {
   footer?: React.ReactNode;
 }
 
-// Subtotal / item discount / GST / additional discount input / grand total —
-// shared by the New Purchase Bill and Edit Purchase Bill pages so the two
-// forms can't drift apart. `footer` lets a page (e.g. New Purchase Bill)
-// render its validation warnings + submit/cancel actions inside this same
-// card instead of a separate one.
+// Shared totals card for New/Edit Purchase Bill; `footer` lets a page render its own actions inside this card.
 export function PurchaseBillTotals({
   sectionIndex, grossTotal, itemDiscountTotal, taxTotal,
   transportCharge = 0, transportChargeGstRate = 0, transportChargeGstAmount = 0,

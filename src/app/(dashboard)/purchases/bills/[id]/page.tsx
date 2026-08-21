@@ -458,27 +458,28 @@ export default function PurchaseBillDetailPage() {
               <tr key={item.id}>
                 {td(idx + 1, "left")}
                 {td(
-                  // Fixed single-line height with ellipsis truncation instead of
-                  // free wrapping — a row whose height depended on how many
-                  // lines the name actually wrapped to let html2canvas's own
-                  // text-wrap approximation disagree with the live DOM
-                  // measurement taken before capture (see ROW_SAFETY_MARGIN_PX
-                  // in generateInvoicePdf.ts), throwing off the page-split math
-                  // for that row — same fix as the invoice detail page. The
-                  // div needs its own definite (px) width, not just the td's —
-                  // in table auto-layout, an unwrapped nowrap div with no
-                  // width of its own reports its full text length as the
-                  // column's required min-content, which wins over the td's
-                  // specified width and stretches the whole table. A definite
-                  // width here caps that measurement so overflow:hidden
-                  // actually clips instead of being ignored.
-                  <div style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", lineHeight: "14px", height: "14px", width: 145, maxWidth: "100%" }} title={item.name}>
+                  // 2-line clamp (see generateInvoicePdf.ts's ROW_SAFETY_MARGIN_PX); needs its own px width or an
+                  // unwrapped div's full text length wins as the column's min-content and stretches the table.
+                  <div style={{
+                    display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+                    overflow: "hidden", textOverflow: "ellipsis",
+                    width: 155, maxWidth: "100%",
+                  }} title={item.name}>
                     {item.name}
                   </div>,
                   "left",
                   170
                 )}
-                {td(item.hsn || "—")}
+                <td style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", textAlign: "left", background: rowBg }}>
+                  {/* Real HSN/SAC codes are numeric-only, max 8 digits — a
+                      fixed single-line ellipsis (not a 2-line clamp, unlike
+                      the item name) guards against a stray long/garbage
+                      value wrapping unpredictably. Same fix as the invoice
+                      detail page. */}
+                  <div style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", width: 55, maxWidth: "100%" }} title={item.hsn || "—"}>
+                    {item.hsn || "—"}
+                  </div>
+                </td>
                 {td(item.quantity, "right")}
                 {td(item.unit)}
                 {td(fmt(item.purchasePrice), "right")}

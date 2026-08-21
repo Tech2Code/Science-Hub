@@ -14,21 +14,13 @@ interface Props {
   onClose: () => void;
   maxWidth?: string;
   children: React.ReactNode;
-  // "fullscreen" covers the entire viewport on mobile (no small centered card
-  // to scroll a tall form inside of) and becomes a large centered panel on
-  // wider screens. Use for forms too long to comfortably fit a small dialog.
+  // "fullscreen" fills the viewport on mobile, becomes a large centered panel on wider screens — for forms too long for a small dialog.
   variant?: "center" | "fullscreen";
-  // Rendered outside the scrollable body, pinned to the bottom — for a
-  // form's Save/Cancel actions to stay reachable without scrolling to the
-  // end of a long fullscreen form.
+  // Rendered outside the scrollable body, pinned to the bottom, so Save/Cancel stay reachable on a long fullscreen form.
   footer?: React.ReactNode;
 }
 
-// Generic popup modal — centered dialog with a dark blurred backdrop, portaled
-// to document.body so it always covers the full viewport regardless of where
-// it's mounted (nesting it under an element with a CSS animation applied,
-// e.g. animateSection's "animate-card", would otherwise trap it inside that
-// ancestor's own stacking context and let later sections paint over it).
+// Portaled to document.body — nesting under an animated ancestor (e.g. animateSection's "animate-card") would trap it in that stacking context.
 export function Modal({ open, title, subtitle, onClose, maxWidth, children, variant = "center", footer }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);

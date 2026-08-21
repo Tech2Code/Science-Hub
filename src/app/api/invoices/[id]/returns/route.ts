@@ -68,10 +68,7 @@ export async function POST(
       include: { customer: true, items: true },
     });
     if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
-    // Narrowed local bindings — TS control-flow narrowing on `invoice`/`auth`
-    // (both nullable/union types above) doesn't carry into the nested
-    // `attemptCreate` function declaration below, the same reason the
-    // invoice/purchase-bill creation routes extract `user` up front.
+    // TS narrowing on `invoice`/`auth` doesn't carry into the nested attemptCreate function below, so bind locals up front.
     const inv = invoice;
     const userId = auth.session.user.id;
 
@@ -93,10 +90,7 @@ export async function POST(
       }
     }
 
-    // Each returned line's GST rate is inherited from the matching product on
-    // the original invoice — a credit note can't invent its own rate. Falls
-    // back to the invoice's blended effective rate only for the defensive
-    // case of a returned line whose product isn't on the invoice at all.
+    // GST rate is inherited from the matching invoice line — a credit note can't invent its own rate; falls back to the invoice's blended rate defensively.
     const rateByProduct = new Map(invoice.items.map((it) => [it.productId, it.gstRate]));
     const effectiveRate = invoice.subtotal > 0 ? ((invoice.cgst + invoice.sgst + invoice.igst) / invoice.subtotal) * 100 : 0;
 
@@ -113,12 +107,7 @@ export async function POST(
     const igst = invoice.isInterState ? totalGst : 0;
     const { roundOff, roundedTotal: creditNoteTotal } = computeRoundOff(subtotal + totalGst);
 
-    // Credit note numbering follows the same configurable, FY-based pattern
-    // as invoice/purchase-bill numbering (see src/lib/documentNumbering.ts):
-    // highest-existing-number-for-this-FY + 1 (or the admin's one-time
-    // override, if higher), generated inside the same Serializable
-    // transaction as the write, with a retry on the write-conflict Postgres
-    // reports (P2034) when two requests race.
+    // Credit note numbering follows the same configurable FY-based pattern as invoices/bills, generated in the same Serializable transaction with retry-on-conflict.
     const biz = await getBusinessSettings();
     const creditNotePrefix = biz.creditNoteNumberPrefix || "CN";
     const creditNoteYearLabel = formatFinancialYearLabel(getIndianFinancialYear(returnDate));
@@ -128,9 +117,7 @@ export async function POST(
           where: { invoiceId: id, deletedAt: null },
           include: { items: true },
         });
-        // GST-inclusive value, matching what the customer was actually paid/owed —
-        // capping against paidAmount on the ex-GST value alone would let more be
-        // refunded than the customer ever paid.
+        // GST-inclusive value — capping against paidAmount on the ex-GST value alone would let more be refunded than the customer ever paid.
         const existingReturnTotal = existingReturns.reduce((s, r) => s + r.total, 0);
         const newReturnTotal = creditNoteTotal;
         const availableForReturn = inv.paidAmount - existingReturnTotal;
@@ -141,9 +128,7 @@ export async function POST(
           );
         }
 
-        // Each returned item's quantity must not exceed what was actually
-        // invoiced for that product, net of quantity already returned —
-        // otherwise a return could fabricate stock that was never sold.
+        // Quantity must not exceed what was invoiced net of quantity already returned, or a return could fabricate stock that was never sold.
         const invoicedQtyByProduct = new Map<string, number>();
         for (const it of inv.items) {
           if (!it.productId) continue;

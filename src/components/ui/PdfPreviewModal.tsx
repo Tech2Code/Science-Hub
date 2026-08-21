@@ -28,10 +28,7 @@ export function PdfPreviewModal({ url, fileName, title, subtitle, onClose }: Pdf
     setIsMobile(mobile); // eslint-disable-line react-hooks/set-state-in-effect -- reads browser-only navigator/window APIs, unavailable during SSR
   }, []);
 
-  // This component is only ever mounted while "open" (call sites conditionally
-  // render it), so mount/unmount stand in for the open/close transition.
-  // Capture the trigger element and move focus into the dialog on mount;
-  // restore focus to the trigger on unmount.
+  // Only ever mounted while "open", so mount/unmount stand in for open/close — capture/restore focus accordingly.
   useEffect(() => {
     triggerRef.current = document.activeElement;
 
@@ -118,7 +115,7 @@ export function PdfPreviewModal({ url, fileName, title, subtitle, onClose }: Pdf
               </svg>
               Download
             </Button>
-            <button onClick={onClose} title="Close preview" className={styles.closeBtn}>
+            <button type="button" onClick={onClose} title="Close preview" aria-label="Close preview" className={styles.closeBtn}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                 <line x1="18" y1="6" x2="6" y2="18"/>
                 <line x1="6" y1="6" x2="18" y2="18"/>

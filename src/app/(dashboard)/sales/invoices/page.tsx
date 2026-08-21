@@ -15,7 +15,7 @@ import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenera
 import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { Cell, type Column } from "@/components/ui/Table";
-import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { formatDate } from "@/lib/formatDate";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
@@ -115,19 +115,13 @@ export default function InvoicesPage() {
     setPdfPreviewInvoice(null);
   }
 
-  // Revokes the previous blob URL whenever it's replaced (including by a
-  // second preview opened without closing the first) or on unmount —
-  // covering cases closePdfPreview()'s own revoke doesn't.
+  // Revokes the previous blob URL on replace/unmount, covering cases closePdfPreview()'s own revoke doesn't.
   useEffect(() => {
     return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
   }, [pdfPreviewUrl]);
 
-  // Loads the invoice detail page into a hidden iframe to render its full
-  // #invoice-print-area (which this list page doesn't have the data for) and
-  // generates a PDF blob from it — optionally stamped with copy labels.
-  // The iframe always renders the detail page in its default state (payment/
-  // return history toggles off), so the cached variant key can assume those
-  // flags are false without needing to inspect the loaded page.
+  // Renders the invoice detail page's #invoice-print-area in a hidden iframe to build the PDF blob; the iframe
+  // always loads in its default state (payment/return toggles off), so the variant key can assume those are false.
   async function generatePdfViaIframe(inv: Invoice, copyLabels?: string[], force = false): Promise<Blob | null> {
     const showLogoOnInvoices = settings?.showLogoOnInvoices !== false;
     const variantKey = buildPdfVariantKey(copyLabels, {
@@ -146,9 +140,7 @@ export default function InvoicesPage() {
     return blob;
   }
 
-  // Bypasses the cache and re-renders a fresh PDF for the "Regenerate" action
-  // — for when something outside the invoice's own data changed (business
-  // logo/settings) and the cached copy needs to be replaced.
+  // Bypasses the cache — for when something outside the invoice's own data (business logo/settings) changed.
   async function handleRegenerate(inv: Invoice) {
     if (pdfBusyRef.current) return;
     pdfBusyRef.current = true;
@@ -260,7 +252,6 @@ export default function InvoicesPage() {
     />
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
     {openingEditId && <OverlayLoader text="Opening editor…" />}
-    {isRefetching && <FloatingSpinner />}
 
     <PdfCopyDialog
       open={!!pdfDialogInvoice}

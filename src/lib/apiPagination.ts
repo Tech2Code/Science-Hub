@@ -1,8 +1,5 @@
-// Shared helpers for server-side pagination + search on API routes whose
-// underlying table grows unbounded (e.g. activity log). Client-side
-// paginate-in-browser (see src/components/ui/Pagination.tsx) stays the
-// default for bounded lists (invoices, customers, products, ...) — only
-// reach for these when a table has no natural cap.
+// Server-side pagination/search for API routes whose table grows unbounded (e.g. activity log).
+// Bounded lists still use client-side Pagination.tsx.
 
 export interface PaginationParams {
   limit: number;
@@ -24,13 +21,7 @@ export function parsePaginationParams(
 
 type SearchWhere = { OR: Record<string, unknown>[] };
 
-/**
- * Builds a Prisma case-insensitive `contains` OR-clause across the given
- * field paths. A path with a dot (e.g. "user.name") builds a one-level
- * relation filter: { user: { name: { contains, mode: "insensitive" } } }.
- * Returns undefined when `search` is empty, so callers can spread the
- * result straight into a `where` object without an extra branch.
- */
+// A dotted field path (e.g. "user.name") builds a one-level relation filter. Returns undefined when search is empty.
 export function buildSearchWhere(search: string | undefined, fields: string[]): SearchWhere | undefined {
   const term = search?.trim();
   if (!term) return undefined;

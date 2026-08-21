@@ -38,13 +38,8 @@ export interface DateInputProps extends Omit<React.InputHTMLAttributes<HTMLInput
   sz?: "sm" | "md";
 }
 
-/**
- * Custom calendar dropdown standing in for a native <input type="date">.
- * Same drop-in strategy as Select: a visually-hidden native date input
- * stays the real controlled element, so existing onChange handlers keep
- * getting a genuine ChangeEvent<HTMLInputElement> with an ISO e.target.value,
- * unchanged.
- */
+// Custom calendar dropdown for native <input type="date">; same drop-in strategy as Select —
+// a hidden native date input stays the real controlled element so onChange keeps getting a normal ISO value.
 export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(function DateInput(
   { sz, className, value, onChange, name, id, disabled, required, min, max, placeholder, onClick: _onClick, "aria-label": ariaLabel, ...rest },
   forwardedRef
@@ -112,9 +107,7 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(func
     const estHeight = 320;
     const spaceBelow = window.innerHeight - rect.bottom;
     const openUp = spaceBelow < estHeight && rect.top > spaceBelow;
-    // Clamp horizontally so the panel (fixed-width, 17.5rem) never renders
-    // past the right edge of the viewport — on narrow/mobile screens a
-    // trigger near the right side otherwise pushes the calendar off-screen.
+    // Clamp horizontally so the fixed-width panel never renders past the viewport's right edge.
     const margin = 8;
     const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
     const panelWidth = 17.5 * rootFontSize;

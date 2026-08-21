@@ -170,13 +170,8 @@ export default function ProductViewPage() {
   if (!loading && (error || !product))
     return <div className={`loading-center ${styles.errorCenter}`}>{error || "Product not found."}</div>;
 
-  // Rendered unconditionally (loading or loaded) so adding/removing a header
-  // button, stat, or column only ever needs one edit — see SkeletonSwap.
   const movements = product?.stockMovements ?? [];
-  // "Below min" here deliberately covers both out-of-stock and low-stock —
-  // unlike the Products list's separate Low/Out tabs, this is a single
-  // "does current stock satisfy the minimum threshold?" indicator, and
-  // zero stock is certainly at-or-below that threshold.
+  // Unlike the Products list's separate Low/Out tabs, this single indicator covers both out-of-stock and low-stock.
   const isLow = !!product && needsRestock(product.stock, product.minStock);
   const marginAmount = product?.purchasePrice != null ? product.price - product.purchasePrice : null;
   const marginPct = product?.purchasePrice != null && product.purchasePrice > 0

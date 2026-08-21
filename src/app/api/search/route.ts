@@ -6,12 +6,7 @@ import { NAV_GROUPS, BIN_NAV, SETTINGS_SUBSECTIONS, ADMIN_SUBSECTIONS } from "@/
 const PER_GROUP_LIMIT = 5;
 const PAGES_LIMIT = 8;
 
-/**
- * Matches every navigable page and settings sub-section a session is
- * allowed to see against the query, by label/title + keywords. Sourced
- * from `@/lib/navigation` — the same registry the sidebar renders from —
- * so any page/setting added there is automatically searchable here too.
- */
+// Sourced from `@/lib/navigation`, the same registry the sidebar renders from, so new pages/settings are automatically searchable.
 function matchPages(q: string, session: { user: { role: string; sections: string[] } }) {
   const needle = q.toLowerCase();
   const { role, sections } = session.user;

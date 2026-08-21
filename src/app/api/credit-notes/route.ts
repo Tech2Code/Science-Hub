@@ -30,12 +30,8 @@ export async function GET(request: NextRequest) {
       prisma.return.count({ where }),
     ]);
 
-    // Returns have no direct creator FK — the creating user is only ever
-    // recorded on the invoice's "create_return" activity log entry, keyed
-    // by invoiceId (not the return's own id, since a return didn't exist
-    // yet when that log's shape was designed). Disambiguate multiple
-    // returns on the same invoice by matching the credit note number
-    // embedded in the log's details text (unique per return).
+    // Returns have no creator FK — the creator is only in the invoice's "create_return" log entry
+    // (keyed by invoiceId), so disambiguate multiple returns via the credit note number in its text.
     const invoiceIds = [...new Set(returns.map((r) => r.invoiceId))];
     const logs = invoiceIds.length
       ? await prisma.activityLog.findMany({

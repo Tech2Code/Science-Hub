@@ -13,7 +13,7 @@ import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
-import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { isOutOfStock, isLowStock } from "@/lib/stockStatus";
@@ -146,7 +146,6 @@ export default function ProductsPage() {
     <div className="page-stack">
       {openingEdit && <OverlayLoader text="Opening editor…" />}
       {openingView && <OverlayLoader text="Opening…" />}
-      {isRefetching && <FloatingSpinner />}
       <ProductBulkImportModal
         open={bulkImportOpen}
         onClose={() => setBulkImportOpen(false)}

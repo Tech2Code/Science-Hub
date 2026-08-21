@@ -6,9 +6,7 @@ import { deleteAttachmentBlob, isLogoBlobUrl } from "@/lib/blobStorage";
 const MAX_SIZE = 2 * 1024 * 1024; // 2 MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
-// `file.type` is whatever the browser reports and is trivially spoofable —
-// this store is public-access, so check the actual file bytes rather than
-// trusting the client label before anything gets served back out publicly.
+// `file.type` is spoofable and this store is public — verify actual bytes, not the client label.
 function matchesDeclaredType(bytes: Uint8Array, type: string): boolean {
   const hex = (n: number) => bytes[n]?.toString(16).padStart(2, "0");
   switch (type) {

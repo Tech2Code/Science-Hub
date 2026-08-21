@@ -81,15 +81,8 @@ export default function VendorDetailPage() {
   if (!loading && (error || !vendor))
     return <div className={`loading-center ${styles.errorCenter}`}>{error || "Vendor not found."}</div>;
 
-  // Rendered unconditionally (loading or loaded) so adding/removing a header
-  // button, stat, or column only ever needs one edit — see SkeletonSwap.
   const bills = vendor?.purchaseBills ?? [];
-  // Cancelled bills still show in the table below (for a full history) but
-  // are excluded from the spend totals — their stock effect was reversed
-  // and they generally were never actually paid for, so counting them here
-  // would overstate this vendor's real spend, matching the same exclusion
-  // applied to the Purchases dashboard's "Top Vendors" and the category
-  // spend report.
+  // Cancelled bills stay in the history table but are excluded from spend totals (never actually paid) — matches Purchases dashboard/category report.
   const billsForTotals = bills.filter((b) => b.status !== "cancelled");
   const totalBilled = billsForTotals.reduce((s, b) => s + b.total, 0);
   const totalPaid   = billsForTotals.reduce((s, b) => s + b.paidAmount, 0);

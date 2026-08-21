@@ -16,14 +16,8 @@ export interface InvoiceLineForValidation {
   quantity: number;
 }
 
-// An invoice's line-item quantity can never be edited below what's already
-// been returned against it — otherwise stock/ledger/accounting would be
-// reconciled against units that no longer exist on the invoice. Removing a
-// line item entirely counts as reducing its quantity to 0.
-//
-// Call this as the first step inside the same transaction that performs the
-// update, before any stock/ledger/accounting mutation — throwing here aborts
-// the transaction and leaves the invoice, stock, and returns untouched.
+// A line item's quantity can never be edited below what's already returned against it (removal counts as reducing to 0).
+// Call first inside the update transaction — throwing here aborts before any stock/ledger mutation.
 export async function assertInvoiceQuantitiesNotBelowReturned(
   tx: TxClient,
   invoiceId: string,
@@ -46,9 +40,7 @@ export async function assertInvoiceQuantitiesNotBelowReturned(
   }
   if (returnedByProduct.size === 0) return;
 
-  // Sum quantities across lines rather than keying the last one — an invoice
-  // can carry the same product as two separate line items, and taking only
-  // the last would understate (or overstate) how much of it actually remains.
+  // Sum across lines rather than keying the last one — the same product can appear on two separate line items.
   const editedByProduct = new Map<string, InvoiceLineForValidation & { productId: string }>();
   for (const item of editedItems) {
     if (!item.productId) continue;

@@ -38,11 +38,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    // "Just for this invoice" customers still need a real Customer row
-    // (Invoice.customerId is a required FK), but are soft-deleted at
-    // creation so they never surface in the customer directory/search — the
-    // invoice itself keeps working normally via the FK either way. Mirrors
-    // the same one-off pattern used for vendors.
+    // "Just for this invoice" customers still need a real Customer row (required FK), so they're
+    // soft-deleted at creation to stay out of the directory/search. Mirrors the vendor one-off pattern.
     const isOneOff = oneOff === true;
     const customer = await prisma.customer.create({
       data: { name: name.trim(), phone, email, address, city, state, pincode, gstin, ...(isOneOff ? { deletedAt: new Date() } : {}) },

@@ -11,9 +11,7 @@ import styles from "./dashboardHome.module.css";
 interface RecentInvoice { id: string; invoiceNumber: string; date: string; customerName: string; total: number; paidAmount: number; status: string; }
 interface RecentBill { id: string; billNumber: string; billDate: string; vendorName: string; total: number; paidAmount: number; status: string; }
 interface CombinedDashboard {
-  // Null when the current user isn't granted the matching section
-  // (sales_overview/purchase_overview) — the server redacts these rather
-  // than relying on the client to just not render them.
+  // Null when the user lacks the matching section grant — server-redacted, not client-hidden.
   sales: {
     revenueThisMonth: number;
     outstandingAmount: number;
@@ -84,7 +82,7 @@ export default function DashboardPage() {
   const quickActionSections = [
     {
       key: "sales",
-      label: "Sales", tone: "blue" as Tone, color: "#2563eb", borderColor: "var(--c-blue)",
+      label: "Sales", tone: "blue" as Tone, color: "var(--c-blue)", borderColor: "var(--c-blue)",
       icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>,
       tileIcon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>,
       tileSub: canWrite ? "Bill a customer" : "View invoices",

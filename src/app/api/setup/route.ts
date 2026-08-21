@@ -3,9 +3,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
-// One-time database seed endpoint. Disabled in production and refuses to run
-// (or wipe anything) once a single user already exists, so it can never be
-// used to destroy or take over a live deployment.
+// One-time seed endpoint; disabled in production and refuses to run once any user exists.
 export async function POST(request: NextRequest) {
   try {
     if (process.env.NODE_ENV === "production") {

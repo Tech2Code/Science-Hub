@@ -1,26 +1,14 @@
 /**
- * Client-side cache for generated invoice/purchase-bill PDFs, backed by
- * IndexedDB so it survives page reloads within the same login session.
- * Cleared on sign-out (see DashboardShell) — never persists across logins.
- *
- * PDF generation (html2canvas + jsPDF) is the expensive step, not the data
- * fetch (already cached by useCache.ts), so this caches the rendered Blob
- * itself, keyed by entity + the render options/settings that actually change
- * its content (copy labels, payment/return-history toggles, business settings).
+ * IndexedDB cache for generated PDFs (survives reloads, cleared on sign-out). Caches the rendered
+ * Blob itself — since html2canvas/jsPDF rendering, not the data fetch, is the expensive step.
  */
 
 const DB_NAME = "science-hub-pdf-cache";
 const STORE = "pdfs";
 const DB_VERSION = 1;
 
-// Bump this whenever a change to the PDF rendering pipeline itself
-// (generateInvoicePdf.ts, or any print-area markup it reads) would make an
-// already-cached blob look wrong or stale — every previously-cached invoice/
-// bill/etc. would otherwise keep showing the old, buggy render forever, since
-// nothing about the entity's own data changes on a pure rendering-code fix.
-// Bumping this namespaces every cache key by version, so old entries are
-// simply never looked up again (and age out via each browser's own IndexedDB
-// storage limits) rather than needing every user to manually hit "Regenerate".
+// Bump whenever the PDF rendering pipeline itself changes, so already-cached blobs (whose entity data
+// didn't change) aren't served stale — namespaces cache keys by version instead of forcing manual regeneration.
 const RENDER_VERSION = 1;
 
 export type PdfEntity = "invoice" | "purchase-bill" | "return" | "rate-list";
@@ -103,7 +91,10 @@ export async function invalidateCachedPdf(entity: PdfEntity, entityId: string): 
       tx.oncomplete = () => resolve();
       tx.onerror = () => resolve();
     });
-  } catch {}
+  } catch (err) {
+    // Worth logging — a silent failure here means a stale PDF keeps being served with no trace of why.
+    console.error("invalidateCachedPdf failed:", err);
+  }
 }
 
 /** Wipes the entire PDF cache — call on sign-out so nothing carries over to the next login. */
@@ -117,5 +108,7 @@ export async function clearAllCachedPdfs(): Promise<void> {
       tx.oncomplete = () => resolve();
       tx.onerror = () => resolve();
     });
-  } catch {}
+  } catch (err) {
+    console.error("clearAllCachedPdfs failed:", err);
+  }
 }

@@ -15,21 +15,20 @@ async function getPurchaseSummary() {
     return { start, end, label };
   });
 
-  const result = await Promise.all(months.map(async ({ start, end, label }) => {
-    // Cancelled bills are excluded — their stock effect was reversed and
-    // the business generally never actually paid for them, so including
-    // them here would overstate real monthly spend.
-    const bills = await prisma.purchaseBill.findMany({
-      where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: start, lt: end } },
-      select: { total: true, paidAmount: true },
-    });
+  // One query for the whole window, grouped in JS. Cancelled bills are excluded — their stock effect was reversed, so including them would overstate spend.
+  const rangeStart = months[0].start;
+  const rangeEnd = months[months.length - 1].end;
+  const allBills = await prisma.purchaseBill.findMany({
+    where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: rangeStart, lt: rangeEnd } },
+    select: { total: true, paidAmount: true, billDate: true },
+  });
 
+  return months.map(({ start, end, label }) => {
+    const bills = allBills.filter((b) => b.billDate >= start && b.billDate < end);
     const totalSpend = bills.reduce((s, b) => s + b.total, 0);
     const paid = bills.reduce((s, b) => s + b.paidAmount, 0);
     return { month: label, count: bills.length, totalSpend, paid, payable: totalSpend - paid };
-  }));
-
-  return result;
+  });
 }
 
 async function getPurchaseOutstanding(startDate: string | undefined, endDate: string | undefined, skip: number, take: number) {
@@ -104,9 +103,7 @@ async function getPurchaseByCategory() {
     .sort((a, b) => b.totalSpend - a.totalSpend);
 }
 
-// Search matches the same fields the stock-ledger tab used to filter
-// client-side: product name, movement type, document type, reference, and
-// the purchase bill number (via the one relation this model carries).
+// Matches the same fields the stock-ledger tab used to filter client-side.
 function buildStockLedgerWhere(search?: string): Prisma.StockMovementWhereInput {
   if (!search?.trim()) return {};
   const q = search.trim();

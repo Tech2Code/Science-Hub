@@ -16,12 +16,7 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-/**
- * Single source of truth for every top-level dashboard page: the sidebar
- * (`DashboardShell`) renders from this, and global search (`/api/search`)
- * indexes it too. Add a page here once and it shows up in both places
- * automatically — no separate registration step needed.
- */
+/** Single source of truth for every dashboard page — sidebar and global search both render from this. */
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: null,
@@ -85,12 +80,7 @@ export interface SubPageEntry {
   adminOnly: boolean;
 }
 
-/**
- * Sub-sections of `/settings` and `/admin` that aren't separate nav pages
- * but are still things a user searches for by name. Add an entry here
- * (and a matching `id="..."` on the section in the page) to make a new
- * settings sub-section searchable and deep-linkable.
- */
+/** Searchable/deep-linkable sub-sections of `/settings` and `/admin` (needs a matching `id="..."` in the page). */
 export const SETTINGS_SUBSECTIONS: SubPageEntry[] = [
   { id: "branding", title: "Branding / Logo", href: "/settings#branding", keywords: ["logo"], adminOnly: true },
   { id: "identity", title: "Business Identity", href: "/settings#identity", keywords: ["business name", "gstin", "pan", "tagline"], adminOnly: true },

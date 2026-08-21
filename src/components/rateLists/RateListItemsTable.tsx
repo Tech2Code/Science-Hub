@@ -20,6 +20,9 @@ interface RateListItemsTableProps {
   itemsError?: string;
 }
 
+// Mirrors MAX_BYTES in src/app/api/rate-lists/parse-import/route.ts — checked client-side to reject a huge file instantly instead of after a full upload.
+const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
+
 function emptyItem(): RateListLineItem {
   return { key: makeRateListLineItemKey(), name: "", brand: "", unit: "Nos", isNetRate: false, discountPercent: "0", listRate: "" };
 }
@@ -28,10 +31,7 @@ function toLineItems(rows: ParsedRateListRow[]): RateListLineItem[] {
   return rows.map((r) => ({ key: makeRateListLineItemKey(), ...r }));
 }
 
-// Editable rows for a Rate List — free-text (not linked to the Product
-// catalog, unlike invoice/purchase-bill line items) since a rate list's
-// brand/unit text (e.g. "QUALIGENS", "500 GM") often won't match this app's
-// own Brand/Product records.
+// Editable rows for a Rate List — free-text, not linked to the Product catalog, since a rate list's brand/unit text often won't match this app's own records.
 export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }: RateListItemsTableProps) {
   const toast = useToast();
   const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
@@ -40,10 +40,7 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Replaces the table's still-empty scaffold rows on a fresh form, otherwise
-  // appends after whatever's already been filled in — so importing into a
-  // brand-new list doesn't leave a stray blank row, but importing a second
-  // batch into an already-started list doesn't wipe it out either.
+  // Replaces still-empty scaffold rows on a fresh form, otherwise appends — so importing doesn't leave a stray blank row or wipe out an existing batch.
   function mergeImportedItems(rows: ParsedRateListRow[], skipped: number) {
     const imported = toLineItems(rows);
     setItems((prev) => {
@@ -71,6 +68,10 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      toast({ type: "error", title: "File too large", message: "File is too large (max 5MB)." });
+      return;
+    }
     setImporting(true);
     try {
       const formData = new FormData();
@@ -98,13 +99,7 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
   }
 
-  // Press-and-hold row reordering — off by default until "Reorder Items" is
-  // clicked. Same approach as InvoiceLineItemsCard/PurchaseBillItemsTable:
-  // window-level pointermove/pointerup only while a drag is active, drop
-  // target found via elementFromPoint + data-item-key (not a numeric index,
-  // which goes stale the moment the array reorders). serialNo is derived
-  // from array position at save time (calcRateListItems in rateListForm.ts),
-  // so reordering this array is all that's needed.
+  // Press-and-hold reordering, off until "Reorder Items" is clicked (same approach as InvoiceLineItemsCard/PurchaseBillItemsTable). serialNo is derived from array position at save time, so reordering this array is all that's needed.
   const [reorderMode, setReorderMode] = useState(false);
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
 
@@ -275,12 +270,7 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
                       <Input sz="sm" value={item.brand} onChange={(e) => updateItem(idx, "brand", e.target.value)} placeholder="e.g. QUALIGENS" maxLength={100} />
                     </td>
                     <td className={styles.tdUnit}>
-                      {/* Plain input, not UnitCombo — this table sits inside
-                          .itemsTableWrap's overflow-x:auto, which clips an
-                          absolutely-positioned dropdown before it can render
-                          below the fold. UnitCombo is still correct for the
-                          invoice/purchase-bill quick-add modals, which aren't
-                          inside a scrolling container. */}
+                      {/* Plain input, not UnitCombo — .itemsTableWrap's overflow-x:auto clips its absolutely-positioned dropdown. */}
                       <Input sz="sm" value={item.unit} onChange={(e) => updateItem(idx, "unit", e.target.value)} placeholder="e.g. 500 GM" className={styles.numInputCenter} maxLength={50} />
                     </td>
                     <td className={styles.tdDiscount}>

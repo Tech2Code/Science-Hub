@@ -1,16 +1,7 @@
 /**
- * Shared invoice PDF generator.
- * Pass the #invoice-print-area HTMLElement (from any page or iframe).
- * Returns a Blob or null on failure.
- *
- * Pass `copyLabels` to stamp and concatenate multiple labeled copies (e.g.
- * ["ORIGINAL COPY", "DUPLICATE COPY"]) into a single output PDF — each copy
- * renders as its own full paginated section, one after another, and the
- * "Page No. X of Y" marker is scoped to that copy alone (each copy's own
- * page count, not a grand total across every copy) — a copy that is itself
- * only one page shows no marker at all, even if concatenated with other
- * copies makes the overall PDF longer, since the marker describes "how many
- * pages is THIS copy", not "how many pages is this download".
+ * Shared invoice PDF generator — pass the #invoice-print-area element, returns a Blob or null on failure.
+ * `copyLabels` concatenates multiple labeled copies (e.g. ORIGINAL/DUPLICATE) into one PDF, each with its
+ * own independent "Page No. X of Y" count (not a grand total across copies).
  */
 // Border color — matches the @media print override in the invoice detail page CSS
 const BD = "#64748b";
@@ -46,27 +37,15 @@ export async function generateInvoicePdfBlob(
     const { jsPDF } = jspdfModule;
     const A4_PX = 794;
     const SCALE = 2;
-    // Cushion reserved on top of the footer's own measured height when
-    // deciding what fits on a page. Row-height measurements are taken from
-    // the live DOM before html2canvas's own capture runs, and can be a few
-    // px off from the actual captured canvas (font metrics / rounding) —
-    // without this margin, a borderline page had zero slack and the footer
-    // could end up pinned right at (or past) the physical page edge.
+    // Cushion for live-DOM row measurements vs. the actual html2canvas capture (font metrics/rounding),
+    // so the footer never ends up pinned right at/past the page edge.
     const FOOTER_MARGIN_PX = 6 * SCALE;
-    // Extra slack subtracted when deciding whether one more row fits on the
-    // current page — separate from FOOTER_MARGIN_PX above (that one guards
-    // the footer's own position; this one guards the LAST body row picked
-    // for the page). html2canvas lays text out with its own approximation
-    // of the browser's text engine, so a borderline-width cell (an item name
-    // close to wrapping to a second line) can render one line taller in the
-    // actual capture than it measured live — sized to roughly one extra
-    // wrapped text line so that case still lands cleanly on the next page
-    // instead of being sliced across both.
+    // Extra slack for the last body row on a page — guards against a borderline-width cell wrapping
+    // to an extra line in the actual capture that it didn't in the live measurement.
     const ROW_SAFETY_MARGIN_PX = Math.round(9 * 1.3 * SCALE);
 
-    // Temporarily resize to A4 width to measure exact row boundary positions.
-    // Measurement is layout-only and identical across copies (the copy-label
-    // badge is an absolutely positioned overlay that doesn't affect flow).
+    // Temporarily resize to A4 width to measure exact row boundaries — identical across copies since
+    // the copy-label badge is an absolutely positioned overlay that doesn't affect flow.
     const prevW = el.style.width, prevMin = el.style.minWidth, prevMax = el.style.maxWidth;
     el.style.width = `${A4_PX}px`;
     el.style.minWidth = `${A4_PX}px`;
@@ -93,30 +72,11 @@ export async function generateInvoicePdfBlob(
     const tfootTop = tfootRowEl ? Math.round((tfootRowEl.getBoundingClientRect().top - elTop) * SCALE) : 0;
     const tfootOwnBottom = tfootRowEl ? Math.round((tfootRowEl.getBoundingClientRect().bottom - elTop) * SCALE) : 0;
 
-    // "Page No. X of Y" marker — a band reserved right below the tfoot's own
-    // content, on every page. There is deliberately no corresponding DOM
-    // element for this any more (it used to be a live "Page No. 1 of 1"
-    // span baked into the table and overwritten per page) — a real element
-    // either shows a wrong/stale number on the on-screen detail page itself,
-    // or (if hidden via display:none) collapses to zero height and desyncs
-    // this function's measurements from what html2canvas actually renders.
-    // Geometry here is a fixed, computed band instead of anything measured
-    // off the DOM: it's always blank canvas background until stampPageMarker
-    // draws real text into it, so there's never any stale/baked text to leak
-    // through or need erasing.
-    // MARKER_GAP_PX is the literal gap, in raw px, between the footer's
-    // border and the TOP of the "Page No. X of Y" text glyphs (drawn with
-    // textBaseline "top" below, so this is a direct offset, not a formula
-    // derived from font-size/line-height) — tune this one number to move the
-    // text closer to/further from the border above it.
-    // Matches the "Original Copy" badge's own 4px top padding (line ~1125),
-    // so the gap above the page marker reads the same as the gap below that
-    // badge.
+    // "Page No. X of Y" marker band below the tfoot — deliberately not a DOM element (which would
+    // either show stale numbers on-screen or desync measurements if hidden); it's blank canvas
+    // background until stampPageMarker draws into it. MARKER_GAP_PX matches the copy badge's 4px padding.
     const MARKER_GAP_PX = 4 * SCALE;
-    // Total band height reserved below the tfoot's own content for the
-    // marker line — picked directly, not decomposed into gap+line-height.
-    // Must stay >= MARKER_GAP_PX + the 9px font's actual rendered glyph
-    // height, or the text clips against the next page's content.
+    // Must stay >= MARKER_GAP_PX + the font's rendered glyph height, or text clips into the next page.
     const MARKER_ROW_H = 14 * SCALE;
     const MARKER_RIGHT_PAD_PX = 6 * SCALE; // inset from the table's own right border
     const tfootH = tfootRowEl ? (tfootOwnBottom - tfootTop) + MARKER_ROW_H : 0;
@@ -131,19 +91,9 @@ export async function generateInvoicePdfBlob(
     );
     const lastTbodyBottom = tbodySplitPoints[tbodySplitPoints.length - 1] ?? 0;
 
-    // The closing Totals/Bank/Terms/Signature block (invoice/purchase-bill
-    // detail pages only — tagged with data-invoice-summary-start) is really
-    // several <tr>s, but they all share one rowSpan'd left-hand cell (Terms +
-    // Bank + Notes + Signature) that visually spans the whole group. Each of
-    // those <tr> bottoms is still a row boundary in the DOM, so without this
-    // filter they'd look like ordinary safe split points — but slicing the
-    // canvas between two of them crops that rowSpan cell's own content dead,
-    // with no page it re-appears on. Drop every interior boundary so the only
-    // way to split this block from the item rows above it is right at its
-    // start (pushing the whole thing to the next page) or not at all. Scoped
-    // to the summary row's OWN <tbody> only — a following Payment/Return
-    // History <tbody> (plain one-row-per-line, no rowSpan) still splits
-    // normally at its own row boundaries.
+    // The closing Totals/Bank/Terms/Signature block shares one rowSpan'd cell across several <tr>s —
+    // slicing between them would crop that cell's content dead. Drop interior boundaries so the block
+    // only splits at its start (pushed whole to the next page) or not at all; scoped to its own <tbody>.
     const summaryStartRowEl = el.querySelector('tbody tr[data-invoice-summary-start]') as HTMLElement | null;
     if (summaryStartRowEl) {
       const summaryStartTop = Math.round((summaryStartRowEl.getBoundingClientRect().top - elTop) * SCALE);
@@ -184,12 +134,8 @@ export async function generateInvoicePdfBlob(
           printEl.style.minWidth = `${A4_PX}px`;
           printEl.style.maxWidth = `${A4_PX}px`;
 
-          // Stamp the copy-label badge (e.g. "ORIGINAL COPY") for this pass.
-          // Uses visibility (not display) so the row keeps occupying the same
-          // layout space it had on the live page during measurement above —
-          // toggling display:none here would shrink this row only inside the
-          // clone, shifting every row below it out of sync with the already-
-          // captured tfootTop/tbodySplitPoints and corrupting the footer crop.
+          // Stamp the copy-label badge. Uses visibility not display, so the row keeps the layout space
+          // measured above — display:none would shrink it and desync tfootTop/tbodySplitPoints.
           const badge = printEl.querySelector<HTMLElement>("#invoice-copy-badge");
           if (badge) {
             if (copyLabel) {
@@ -200,17 +146,8 @@ export async function generateInvoicePdfBlob(
             }
           }
 
-          // Receiver Signature block — only the Duplicate Copy (the seller's
-          // own retained copy) needs the recipient to sign it as proof of
-          // receipt. Uses visibility (not display), same as the badge above —
-          // its live-DOM default reserves the row's layout space via
-          // visibility:hidden so every pass renders at the same height as
-          // what was measured before the loop. Toggling display here used to
-          // add height only for the Duplicate Copy pass, desyncing that
-          // copy's canvas from the shared tbodySplitPoints/tfootTop
-          // measurements and forcing it onto an extra page with its own
-          // (wrong) page count — e.g. Original showing "Page No. 1 of 1"
-          // immediately followed by Duplicate showing "Page No. 1 of 2".
+          // Receiver Signature: only the Duplicate Copy needs it signed. Uses visibility not display,
+          // same reasoning as the badge above — toggling display used to desync page counts between copies.
           const receiverSignature = printEl.querySelector<HTMLElement>("#invoice-receiver-signature");
           if (receiverSignature) {
             receiverSignature.style.visibility = copyLabel === "DUPLICATE COPY" ? "visible" : "hidden";
@@ -222,9 +159,7 @@ export async function generateInvoicePdfBlob(
             printEl.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
               if (img.src.includes("logo") || img.getAttribute("alt")?.toLowerCase().includes("logo")) {
                 img.src = logoDataUrl;
-                // Use natural image dimensions capped to the logo's container rather
-                // than a hardcoded pixel size, so the logo is never clipped on any
-                // screen size or PDF scale factor.
+                // Cap to natural dimensions rather than a hardcoded size, so the logo is never clipped.
                 img.style.width = "auto";
                 img.style.height = "auto";
                 img.style.maxWidth = "56px";
@@ -257,14 +192,9 @@ export async function generateInvoicePdfBlob(
               c.style.borderBottom = `1px solid ${BD}`;
             }
           });
-          // First row in each table → add top border. Note: tfoot's row is
-          // NOT given its own top border here — it sits immediately after
-          // tbody's last row in the captured image (the pinned-footer
-          // renderer only rearranges pixels *after* capture), so adding one
-          // would double up with that row's existing bottom border and also
-          // grow the row taller than the pre-capture height measurement,
-          // cropping the slice. The pinned renderer draws that top border
-          // itself, directly on the canvas, only where the gap exists.
+          // First row in each table gets a top border. tfoot is excluded — it sits right after tbody's
+          // last row pre-capture, so a top border here would double up and grow the row past its
+          // measured height; the pinned-footer renderer draws that border itself on the canvas instead.
           printEl.querySelectorAll<HTMLElement>("table").forEach((t) => {
             const firstRow = t.querySelector("tr");
             if (firstRow) {
@@ -309,13 +239,8 @@ export async function generateInvoicePdfBlob(
       const pageHeightPx = Math.floor(contentH / mmPerPx);
       const page2HeightPx = pageHeightPx - theadH; // pages 2+ have the TAX INVOICE banner
 
-      // Compute this copy's own split points (this runs even when everything
-      // would otherwise fit on one page). tbody row bottoms are used as safe
-      // break points, reserving room for the footer on every page so it's
-      // never cut across a page break — this already fills page 1 with as
-      // many items as actually fit (rather than an arbitrary fixed ratio),
-      // and only pushes the closing Totals/Bank/Terms/Signature block to its
-      // own page when it genuinely wouldn't fit alongside the last item.
+      // Computes this copy's split points using tbody row bottoms as safe break points, reserving
+      // footer room on every page and packing page 1 with as many items as actually fit.
       const pageSplits: number[] = [];
       {
         let start = 0, pNum = 0;
@@ -342,14 +267,8 @@ export async function generateInvoicePdfBlob(
         }
       }
 
-      // Draws "Page No. X of Y" into the reserved band right below the
-      // tfoot's own content — that band is always blank canvas background
-      // (see the MARKER_ROW_H comment above; there's no DOM element baking
-      // in stray text there to worry about), so single-page documents simply
-      // never call fillText and the band stays blank. `footerY` is where the
-      // footer's top actually landed on this page's composited canvas
-      // (appended, pinned to the bottom, or copied in place) — pass null
-      // when this page doesn't carry a footer at all.
+      // Draws "Page No. X of Y" into the reserved band below the tfoot. `footerY` is where the footer's
+      // top landed on this page's composited canvas — pass null when this page has no footer.
       const stampPageMarker = (ctx: CanvasRenderingContext2D, footerY: number | null, pageNum: number, totalPages: number) => {
         if (!pmWidthPx || !pmHeightPx || footerY == null || totalPages <= 1) return;
         const y = footerY + pmOffsetTopPx;
@@ -357,23 +276,14 @@ export async function generateInvoicePdfBlob(
         ctx.fillStyle = BD;
         ctx.font = `${9 * SCALE}px Arial, sans-serif`;
         ctx.textAlign = "right";
-        // Canvas's "top" baseline sits at the font's em-box top, not the
-        // glyph's actual visible top — Arial reserves several px of internal
-        // leading above the cap height there, so MARKER_GAP_PX alone couldn't
-        // close the gap below it. actualBoundingBoxAscent measures from the
-        // alphabetic baseline to the glyph's real ink top, so placing the
-        // baseline that far below `y` puts the visible text exactly
-        // MARKER_GAP_PX below the footer's own content, pixel for pixel.
+        // "top" baseline sits at the font's em-box top, not the glyph's visible top (Arial's internal
+        // leading) — actualBoundingBoxAscent gets the real ink-top offset so MARKER_GAP_PX is exact.
         ctx.textBaseline = "alphabetic";
         const ascent = ctx.measureText(text).actualBoundingBoxAscent || 9 * SCALE;
         ctx.fillText(text, pmRightPx - MARKER_RIGHT_PAD_PX, y + MARKER_GAP_PX + ascent);
       };
 
-      // Small right-aligned note drawn just below the last item row on every
-      // page that isn't the copy's last — signals to the reader that the
-      // table continues past the page break, since the item rows themselves
-      // give no other visual cue that content was cut off here rather than
-      // genuinely ending.
+      // Signals to the reader that the table continues past this page break (no other visual cue exists).
       const CONTINUED_NOTE_H = 10 * SCALE;
       const CONTINUED_NOTE_GAP_PX = 3 * SCALE;
       const stampContinuedNote = (ctx: CanvasRenderingContext2D, xRight: number, yTop: number) => {
@@ -408,29 +318,16 @@ export async function generateInvoicePdfBlob(
           ctx.drawImage(canvas, 0, tfootTop, canvas.width, tfootH, 0, y, canvas.width, tfootH);
           footerY = y;
         } else if (tfootH > 0 && startPx <= tfootTop && endPx >= tfootTop + tfootH) {
-          // Footer wasn't explicitly appended, but this slice's own range
-          // already covers it (e.g. a single-page invoice copied whole) —
-          // it's present at its natural offset within the copied slice.
+          // Footer wasn't explicitly appended, but this slice already covers it (e.g. a single-page copy) at its natural offset.
           footerY = hdrH + (tfootTop - startPx);
         }
         stampPageMarker(ctx, footerY, pageNum, totalPages);
         return { dataUrl: pc.toDataURL("image/jpeg", 0.95), totalH };
       };
 
-      // Renders a full page-height canvas with the footer (the "Thank you…"
-      // line + page marker) pinned to the very bottom of the page instead of
-      // floating directly under the last content row.
-      //
-      // The blank gap above a pinned footer needs its own left/right border
-      // lines to read as a continuous table frame, drawn on top of the plain
-      // white background already filled above. A prior attempt tried to
-      // reuse a captured border row by drawImage-stretching it vertically —
-      // wrong, because that row's full width also carries whatever cell
-      // content/shading sits at that row (not just the two border columns),
-      // and stretching that content produced vertical smears/gradient bars
-      // instead of clean border lines. A plain canvas stroke, using the
-      // table's own border color and width, has no such risk since it only
-      // ever paints the two thin lines themselves.
+      // Renders a full page-height canvas with the footer pinned to the very bottom, not floating
+      // under the last content row. The blank gap above it gets its own canvas-stroked border lines
+      // (drawImage-stretching a captured border row was tried and rejected — it smeared cell content).
       const slicePagePinned = (startPx: number, endPx: number, withHeader: boolean, pageNum: number, totalPages: number) => {
         const pc = document.createElement("canvas");
         pc.width = canvas.width;
@@ -443,21 +340,11 @@ export async function generateInvoicePdfBlob(
           ctx.drawImage(canvas, 0, theadTop, canvas.width, theadH, 0, y, canvas.width, theadH);
           y += theadH;
         }
-        // Pinned flush to the very bottom of the page canvas — FOOTER_MARGIN_PX
-        // is only a cushion for the body-content-fit calculation above (so a
-        // borderline row-height measurement error still lands the split
-        // before the footer's reserved band), not a gap to leave below the
-        // footer itself. Subtracting it here as well used to leave the
-        // footer's own bottom edge sitting FOOTER_MARGIN_PX short of the
-        // page's actual bottom border on every multi-page invoice, even
-        // though single-page copies (which use slicePage, not this pinned
-        // path) always rendered flush.
+        // Pinned flush to the bottom — FOOTER_MARGIN_PX is only a cushion for the fit calculation
+        // above, not a gap to leave here (subtracting it too used to leave the footer short of the page edge).
         const footerTop = pageHeightPx - (tfootH > 0 ? tfootH : 0);
         const bodyEndPx = Math.min(tfootTop, endPx);
-        // Capped at footerTop so a stale/under-measured row height can never
-        // push body content into (or past) the footer's reserved band — worst
-        // case a sliver of the last row is capped rather than the footer
-        // silently landing off the bottom of this fixed-height canvas.
+        // Capped at footerTop so a stale row-height measurement can never push body content past the footer band.
         const bodySliceH = Math.max(0, Math.min(bodyEndPx - startPx, footerTop - y));
         if (bodySliceH > 0) {
           ctx.drawImage(canvas, 0, startPx, canvas.width, bodySliceH, 0, y, canvas.width, bodySliceH);
@@ -473,11 +360,8 @@ export async function generateInvoicePdfBlob(
         if (hasGap) {
           ctx.strokeStyle = BD;
           ctx.lineWidth = BORDER_W;
-          // A CSS border sits INSIDE the box's edge, not centered on it: a
-          // left border occupies [edge, edge+width), a right border occupies
-          // [edge-width, edge). A canvas stroke centers on its coordinate, so
-          // match that by offsetting the left line inward (+) and the right
-          // line inward (-) by half the width.
+          // A CSS border sits inside the box edge; a canvas stroke centers on its coordinate, so
+          // offset the left line inward (+) and the right line inward (-) by half the width to match.
           [tableLeftPx + BORDER_W / 2, tableRightPx - BORDER_W / 2].forEach((x) => {
             ctx.beginPath();
             ctx.moveTo(x, y);
@@ -488,9 +372,7 @@ export async function generateInvoicePdfBlob(
         if (tfootH > 0) {
           ctx.drawImage(canvas, 0, tfootTop, canvas.width, tfootH, 0, footerTop, canvas.width, tfootH);
         }
-        // Footer's top border, drawn last so it paints over the footer image
-        // instead of being covered by it — not baked into the DOM (which
-        // would double up with the preceding row's existing bottom border).
+        // Drawn last so it paints over the footer image; not baked into the DOM (would double up with the row's own bottom border).
         if (hasGap) {
           ctx.strokeStyle = BD;
           ctx.lineWidth = BORDER_W;
@@ -503,11 +385,7 @@ export async function generateInvoicePdfBlob(
         return { dataUrl: pc.toDataURL("image/jpeg", 0.95), totalH: pageHeightPx };
       };
 
-      // Render — the footer (a repeated copy on every non-last page, its
-      // real content on the last) is pinned to the bottom of every page
-      // that shows it, not just floated directly under that page's content.
-      // pageNum/totalPages are scoped to THIS copy only — see the header
-      // comment on why the marker doesn't count across copies.
+      // Render — footer is pinned to the bottom of every page that shows it. pageNum/totalPages are scoped to this copy only (see header comment).
       let start = 0;
       pageSplits.forEach((splitAt, i) => {
         const withHeader = i > 0;

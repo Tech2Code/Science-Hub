@@ -9,7 +9,7 @@ import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenera
 import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { Input } from "@/components/ui/Input";
-import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -225,7 +225,6 @@ export default function PurchasesPage() {
     />
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
     {openingEdit && <OverlayLoader text="Opening editor…" />}
-    {isRefetching && <FloatingSpinner />}
 
     {pdfPreviewUrl && pdfPreviewBill && (
       <PdfPreviewModal

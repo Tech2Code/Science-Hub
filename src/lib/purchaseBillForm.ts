@@ -36,12 +36,8 @@ export function makePurchaseBillLineItemKey() {
 export function toNum(s: string) { const n = parseFloat(s); return isNaN(n) ? 0 : n; }
 export const fmtCurrency = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// Discount is applied to the line's gross amount (qty × rate) before GST —
-// taxable value = gross - discount, and GST is computed on that taxable value.
-// Mirrors the sales invoice line calculation for consistency. This is the
-// single source of truth for this calc — used by both the purchase-bill
-// client forms (via calcPurchaseBillItem below) and the purchase-bill
-// create/edit API routes, which already have numeric values in hand.
+// Discount applied before GST (mirrors the sales invoice calc). Single source of truth for both
+// purchase-bill client forms (via calcPurchaseBillItem) and the create/edit API routes.
 export function purchaseBillLineBreakdown(qty: number, price: number, rate: number, percent: number) {
   const gross           = qty * price;
   const discountAmount  = gross * percent / 100;
@@ -54,9 +50,7 @@ export function calcPurchaseBillItem(item: PurchaseBillLineItem) {
   return purchaseBillLineBreakdown(toNum(item.quantity), toNum(item.purchasePrice), toNum(item.gstRate), toNum(item.discountPercent));
 }
 
-// transportCharge/transportChargeGstRate mirror the sales-invoice side
-// (src/lib/invoiceCalc.ts) — own line, own GST, kept out of the item tax
-// total and the CGST/SGST/IGST split, added straight into the grand total.
+// transportCharge/transportChargeGstRate mirror invoiceCalc.ts — own line/GST, added straight into the grand total.
 export function computePurchaseBillTotals(items: PurchaseBillLineItem[], discount: string, transportCharge = 0, transportChargeGstRate = 0) {
   const grossTotal        = items.reduce((s, i) => s + calcPurchaseBillItem(i).gross, 0);
   const itemDiscountTotal = items.reduce((s, i) => s + calcPurchaseBillItem(i).discountAmount, 0);

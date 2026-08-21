@@ -5,12 +5,7 @@ import { parseProductRows, parseCsvLine } from "@/lib/productImport";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5MB — a product catalog sheet is a few hundred rows at most
 
-// Bulk-import for the Products list — lets a user drop in a supplier's
-// existing .xlsx/.csv product sheet instead of adding items one by one.
-// Parsing only (no DB write here); the client reviews/edits the returned
-// rows before submitting each one through the normal POST /api/products
-// flow, so every validation rule a manually-added product goes through
-// still applies to an imported one.
+// Parsing only, no DB write — the client reviews/edits rows before submitting each through the normal POST /api/products flow, so all validation still applies.
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireWriteAccess();

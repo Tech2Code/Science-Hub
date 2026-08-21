@@ -236,6 +236,23 @@ Legend for `Status`: `Open` / `Verifying` / `Fix Planned` / `Fixed` / `Won't Fix
 - **Verification**: Initially suspected a stale-cache gap (the invoice detail page reads/writes the cache but never calls `invalidateCachedPdf("invoice", ...)` itself) — traced further and confirmed the edit page calls `invalidateCachedPdf("invoice", id)` on every successful save, so the detail page correctly sees a freshly-invalidated cache after any edit. Matches the project's own commit history ("Fix stale invoice/purchase-bill PDF caching on customer/vendor/settings updates"). No fix needed.
 - **Status**: Won't Fix (verified correct).
 
+### UI-001 — Status filter tabs' mobile `@media` rules were dead code due to CSS source order, causing the last tab(s) to overflow off-screen with no scroll affordance
+- **Severity**: Medium
+- **Category**: Responsive layout / CSS correctness
+- **Location**: `src/app/globals.css` — `.filter-tabs-row`/`.filter-tabs`/`.filter-tab` rules, used by `StatusFilterTabs` (shared by the Invoices and Purchase Bills list pages)
+- **Problem**: Two `@media` blocks narrowing `.filter-tab`'s padding/font-size (at `max-width:480px`) and enabling `.filter-tabs`'s horizontal scroll (at `max-width:640px`) were positioned *before* the plain, unconditional `.filter-tabs`/`.filter-tab` base rules later in the same file. With equal selector specificity (both are single-class selectors), CSS resolves ties by source order — so the later, unconditional desktop rule always won, at every viewport width, making both media blocks dead code since the file was first written this way.
+- **Why it matters**: On a real 375px-wide phone, live-measured: the invoices page's 5 status tabs (All/Overdue/Unpaid/Partial/Paid) rendered at their full desktop padding/font-size, overflowing the tab strip's container by ~22px (`scrollWidth` 373px vs `clientWidth` 351px) — "Paid" ended up scrolled just off-screen with no visual hint (no fade edge, no arrow) that there was more to scroll to. Purchase Bills' 6-tab row (adds "Cancelled") would overflow by even more.
+- **Fix applied (2026-08-21)**: Moved the base `.filter-tabs-row`/`.filter-tabs`/`.filter-tab`/`.filter-tab-active` rules before both `@media` blocks so they now correctly apply as overrides at narrow widths. Also tightened the 480px breakpoint's `.filter-tab` padding (`0.375rem 0.5rem` → `0.375rem 0.25rem`) and font-size (`0.8125rem` → `0.75rem`) so all tabs fit without needing to scroll at all on a typical 375px phone, rather than just relying on the (now-working but still rough) horizontal-scroll fallback.
+- **Verification**: Live-measured before/after via a headless-browser DOM query at a real 375px viewport on both the Invoices (5 tabs) and Purchase Bills (6 tabs) list pages — `scrollWidth === clientWidth` (no overflow) after the fix, confirmed visually via fresh screenshots on both pages.
+- **Regression risk**: Low — purely a mobile-width-only visual tightening; desktop styling (the base rules, still defined the same way, just earlier in the file) is untouched, confirmed via screenshot comparison at desktop width too.
+- **Status**: Fixed.
+
+### Checked, not a bug — invoice/purchase-bill print-area wide table on mobile
+The `#invoice-print-area` table (10+ GST columns, `minWidth: 700`) is wrapped in a `div` with `overflowX: auto`, deliberately keeping the table at its natural print-proportioned width and letting mobile users horizontally scroll it, instead of shrinking columns illegibly — the same established pattern documented for the Rate List items table in `CLAUDE.md`. Live-verified at a 375px viewport: the wrapper's `scrollWidth` (739px) exceeds `clientWidth` (351px) and actually scrolls, confirmed by scrolling programmatically and screenshotting the revealed right-hand columns. The initial (unscrolled) view naturally shows only the left portion, which is expected, not a defect.
+
+### Checked, not a bug — `PdfPreviewModal` has zero `@media` rules
+Grepping component CSS for `@media` count flagged this as a gap, but the component already handles mobile via a separate JS-rendered fallback view (`.mobileView`/`.mobileTextWrap`/`.openBrowserBtn` — "PDF preview isn't supported here, open in browser instead"), not CSS breakpoints. No fix needed.
+
 ## Medium
 
 ### DEP-004 — Transitive vulnerable packages with available non-breaking fixes
@@ -268,6 +285,147 @@ Legend for `Status`: `Open` / `Verifying` / `Fix Planned` / `Fixed` / `Won't Fix
 - **Fix applied (2026-08-19)**: `useCanWrite()` now also reads `useSession()`'s `status` and returns `false` while `status === "loading"`, before even looking at `role`. Once the session resolves, behavior is unchanged (admin/staff → `true`, manager → `false`).
 - **Regression risk**: None — only shortens the window where write buttons show enabled before the real role is known; every already-resolved-session case behaves identically.
 - **Status**: Fixed.
+
+### PERF-001 — `bin/route.ts` and `bin/empty/route.ts` ran a separate DB query per row (sequential `for` loops, or `Promise.all(array.map(...))`) instead of one batched query per entity type
+- **Severity**: Medium
+- **Category**: Performance (N+1 queries)
+- **Location**: `src/app/api/bin/route.ts` (auto-purge loops for products/customers/vendors; the customer/product/vendor "protected reason" computation), `src/app/api/bin/empty/route.ts` (customers/products/brands/categories/vendors purge loops)
+- **Problem**: Deferred from Phase 3's DB review (see that phase's notes) — flagged as "bounded, not a data-integrity risk" at the time, picked up properly here. Every one of these loops fired one `count()`/`findMany()` per row instead of a single `groupBy()` covering every candidate row at once. `GET /api/bin`'s auto-purge runs on *every* page load (bounded by 30-day-old volume, usually small), but `DELETE /api/bin/empty` processes *every currently-binned item across every type regardless of age* — the one place this shape could scale up meaningfully (e.g. a bulk cleanup of a large catalog).
+- **Fix applied (2026-08-21)**: Replaced every per-row loop with a batched `prisma.<model>.groupBy({ by: [...], where: { id: { in: [...] } } })` covering all candidate rows in one query, then filtered/looked up from the result in JS — same filtering logic (skip if referenced elsewhere), same protected-reason messages, just 1 query per entity type instead of N.
+- **Verification**: Live-tested `GET /api/bin` against the running dev server (returned correctly, no errors). Cross-validated the `groupBy` refactor's correctness directly: ran the new batched query and the old per-row `count()` side-by-side against 5 real products and confirmed identical counts for every one. Did **not** live-execute `DELETE /api/bin/empty` (it's a genuinely destructive bulk-delete against the real dev database) — verified via type-check, lint, and code review instead; the query shape is identical to the already-live-verified `GET /api/bin` fix.
+- **Regression risk**: Low — same filtering semantics, cross-validated against the original per-row logic on real data for the GET route; the DELETE route's equivalent change was not independently live-executed.
+- **Status**: Fixed.
+
+### PERF-002 — Dashboard/report routes computed a 12-month breakdown via 12 separate per-month queries instead of one query grouped in JS
+- **Severity**: Medium
+- **Category**: Performance (N+1-shaped queries)
+- **Location**: `src/app/api/reports/route.ts` (`getSalesDashboard`'s `monthlyRevenue`, `getPurchaseDashboard`'s `monthlySpend`), `src/app/api/purchase-reports/route.ts` (`getPurchaseSummary`)
+- **Problem**: Each of these built an `Array.from({length:12}, ...)` of month ranges and fired one `prisma.<model>.aggregate()`/`findMany()` **per month** via `Promise.all(months.map(async ...))`. Firing them "in parallel" didn't actually buy latency back in production: `DATABASE_URL` there is a pooled Neon connection with `connection_limit=1` (per `CLAUDE.md`), so 12 "concurrent" queries queue and serialize through that one connection anyway — meaning this was pure query-count overhead (12x the round-trips) with none of the parallelism benefit the code's shape implied.
+- **Fix applied (2026-08-21)**: Replaced each 12-query pattern with a single `findMany()` covering the entire date range (selecting only the date + amount fields actually needed), then grouped/summed per month in JS. Same output shape, same labels, same skip-future-months behavior.
+- **Verification**: Live-tested all three endpoints (`?type=sales-dashboard`, `?type=purchase-dashboard`, `?type=summary` on purchase-reports) against the running dev server — all returned correctly. Cross-checked correctness two ways: (1) the current month's total from the new `monthlyRevenue` grouping exactly matched the independently-computed `revenueThisMonth` from the unrelated `getReportSummary()` function (different code path, same underlying data, same answer); (2) manually re-derived one month's total by filtering the raw invoice list and confirmed it matched.
+- **Regression risk**: Low — pure query-shape change, same filter conditions and output structure; verified via live cross-checks above rather than trusting the refactor blindly.
+- **Status**: Fixed.
+
+### PERF-003 — `getReportSummary()` awaited 6 independent queries one at a time instead of in parallel
+- **Severity**: Low
+- **Category**: Performance (unnecessary serialization)
+- **Location**: `src/lib/db.ts` — `getReportSummary()`
+- **Problem**: Six `await prisma....` calls in a row (invoice count, invoice aggregate, unpaid-invoices findMany, all-time aggregate, all-products findMany, recent-invoices findMany) — none depend on each other's results, but each one blocked on a full round-trip before the next started, turning what should be one round-trip's worth of latency (the slowest single query) into the sum of all six.
+- **Fix applied (2026-08-21)**: Wrapped all 6 in a single `Promise.all([...])`.
+- **Verification**: Live-tested `GET /api/reports?type=summary` against the running dev server — returned correctly with the same shape.
+- **Regression risk**: None — the six queries are genuinely independent (verified: none reads a variable produced by an earlier one in this block).
+- **Status**: Fixed.
+
+### Checked, not a bug — heavy dependencies (ExcelJS, html2canvas, jsPDF) and client bundle size
+`ExcelJS` (used for Excel import/export) is only ever imported from API routes (`src/app/api/**/route.ts`) — server-only, never reaches the client bundle. `html2canvas`/`jsPDF` (used for client-side PDF generation) are already dynamically imported (`import("html2canvas")`/`import("jspdf")` inside `generateInvoicePdf.ts`) rather than statically bundled. Live-verified via a real browser network trace: loading `/dashboard` (a page with no PDF functionality) does **not** fetch the chunk containing `html2canvas`/`jsPDF` — confirming the code-splitting is actually working, not just present in source.
+
+### SCALE-001 — Dashboard "top customers"/"top vendors" fetched every customer/vendor with every one of their invoices/bills, sorted in JS, just to return the top 5
+- **Severity**: Medium
+- **Category**: Scalability (unbounded query growth)
+- **Location**: `src/app/api/reports/route.ts` — `getSalesDashboard`'s `topCustomers`, `getPurchaseDashboard`'s `topVendors`
+- **Problem**: `prisma.customer.findMany({ include: { invoices: {...} } })` (no `take`) fetched **every** non-deleted customer along with **every** one of their invoices, computed `totalBilled`/`totalPaid` per customer in JS, sorted, and sliced to the top 5. Response size and app-server memory/CPU for this scaled with (customer count × invoices per customer) — unbounded as the business grows — purely to answer "who are the top 5". Same shape for vendors/purchase bills.
+- **Fix applied (2026-08-21)**: Replaced with `prisma.invoice.groupBy({ by: ["customerId"], _sum: {...}, orderBy: { _sum: { total: "desc" } }, take: 5 })` (and the vendor/purchaseBill equivalent) — the DB does the grouping, ordering, and limiting; only 5 rows come back, then a tiny follow-up `findMany` fetches just those 5 customers'/vendors' names. Preserved the original behavior of excluding soft-deleted customers/vendors from the ranking via a `customer: { deletedAt: null }` (`vendor: { deletedAt: null }`) relation filter in the `groupBy`'s `where`.
+- **Behavior note**: one edge-case difference from the original — a customer/vendor with zero invoices/bills never appears in the groupBy result at all (there's no row to group), whereas the old code included every customer with `totalBilled: 0` and could pad out the "top 5" with zero-revenue entries if a business had fewer than 5 customers with any invoices yet. Considered an acceptable, arguably more correct behavior for a "top customers by revenue" widget, not a regression — only observable for a brand-new business with under 5 active customers.
+- **Verification**: Live-tested `?type=sales-dashboard` and `?type=purchase-dashboard` against the running dev server — both returned 5 correctly-sorted entries (descending by `totalBilled`) with real names resolved.
+- **Regression risk**: Low — verified live output shape and sort order; the edge case above is documented and judged acceptable.
+- **Status**: Fixed.
+
+### SCALE-002 — Multiple dashboard/summary endpoints fetched every unpaid/partial invoice or bill (and every product) into app memory just to sum/count in JS, instead of using the real generated columns
+- **Severity**: Medium
+- **Category**: Scalability (unbounded query growth)
+- **Location**: `src/app/api/reports/route.ts` (`getSalesDashboard`, `getPurchaseDashboard`, `getCombinedDashboard`), `src/lib/db.ts` (`getReportSummary`, `getReportStock`)
+- **Problem**: `Invoice.balanceDue`/`PurchaseBill.balanceDue` (`total - paidAmount`) and `Product.isLowStock` are real Postgres `GENERATED ALWAYS AS (...) STORED` columns (per `CLAUDE.md`), but several places still fetched every matching row's `total`/`paidAmount` (or every product's `stock`/`minStock`) into the Node process and summed/filtered with `.reduce()`/`.filter()` in JS — response size for these grew with the number of outstanding invoices/bills or the size of the product catalog, unbounded over the life of the business, when the database could compute the same answer in one pass without shipping any rows at all.
+- **Fix applied (2026-08-21)**: Replaced every instance with `prisma.<model>.aggregate({ _sum: { balanceDue: true } })` (or `_count` where a row count was also needed) and `prisma.product.count({ where: { isLowStock: true } })`. `getCombinedDashboard`'s low-stock count also had a genuinely wasted `prisma.product.count()` call whose result was discarded before immediately doing the real (findMany + filter) work in a `.then()` chain — collapsed into the one query that was actually needed.
+- **Verification**: Live-tested every affected endpoint. Cross-checked correctness two ways: (1) the same `outstandingBalance`/`outstandingAmount` value came back identically across three independently-refactored code paths (`sales-dashboard`, `combined-dashboard`, `summary`); (2) independently re-ran the *old* fetch-all-and-reduce logic directly against the live dev database and confirmed it produced the exact same sum and count as the new `aggregate()` call (₹47,08,424.22 / 46 rows, matched to the last paisa).
+- **Regression risk**: None — verified numerically identical to the pre-refactor computation on real data, not just "didn't error."
+- **Status**: Fixed.
+
+### RESIL-001 — No React error boundary anywhere in the app; an unhandled render error crashed to a blank/generic screen with no recovery path
+- **Severity**: High
+- **Category**: Resilience (unhandled client-side errors)
+- **Location**: `src/app/` — no `error.tsx`, `global-error.tsx`, or `not-found.tsx` existed anywhere in the App Router tree
+- **Problem**: Every page in this app is a client component (`"use client"`, per the project's own architecture). Without a Next.js `error.tsx` boundary, any unhandled render/runtime error on *any* page — a bug, an unexpected null in fetched data, a third-party library throwing — takes down the entire app to Next's generic fallback, with no "try again" affordance and no way to recover short of a full reload (and on a hard failure, a full reload can even re-trigger the same crash if it's a persistent data issue).
+- **Fix applied (2026-08-21)**: Added `src/app/(dashboard)/error.tsx` — sits beside (not inside) `(dashboard)/layout.tsx`, so the sidebar/topbar chrome (`DashboardShell`) stays mounted and only the content area shows the error UI, with "Try again" (`reset()`) and "Go to Dashboard" actions. Also added `src/app/global-error.tsx` as a last-resort boundary for an error thrown by the root layout itself (rarer) — self-contained with its own `<html>`/`<body>` per Next.js's own requirement, using plain inline styles since it can't assume `globals.css`/theme CSS variables loaded successfully.
+- **Verification**: Live-tested against the running dev server — added a temporary page that unconditionally threw, confirmed via console output that React logged "the above error occurred in the `<TestErrorBoundaryPage>` component. It was handled by the `<ErrorBoundaryHandler>` error boundary", confirmed the `console.error` inside the new boundary fired, and screenshotted the result: the topbar/sidebar remained fully intact and functional, with a clean "Something went wrong" card and working "Try again"/"Go to Dashboard" buttons in the content area. Removed the temporary test page afterward.
+- **Regression risk**: None — purely additive; these files only activate when something has already thrown an otherwise-uncaught error.
+- **Status**: Fixed.
+
+### RESIL-002 — `ifsc-lookup` conflated a real upstream service outage with "code not found", unlike the near-identical `pincode-lookup` route
+- **Severity**: Low
+- **Category**: Resilience (error message accuracy)
+- **Location**: `src/app/api/settings/ifsc-lookup/[code]/route.ts`
+- **Problem**: `if (!res.ok) return 404 "IFSC code not found"` treated *every* non-2xx response from the upstream Razorpay IFSC directory as "not found" — including a genuine outage (500/503) or rate-limit (429) on Razorpay's end. `pincode-lookup`'s near-identical route already correctly distinguishes this (`!res.ok` → 502 "could not reach the service", vs. the API's own `Status !== "Success"` → 404 "not found").
+- **Why it matters**: An admin whose bank's IFSC code is genuinely valid could see "not found" during a Razorpay outage and waste time re-checking/re-typing a code that was never wrong.
+- **Fix applied (2026-08-21)**: Only `res.status === 404` now maps to "IFSC code not found"; any other non-2xx maps to 502 "Could not reach the IFSC lookup service", matching `pincode-lookup`'s existing convention.
+- **Regression risk**: None — the genuine "not found" case (Razorpay's real 404 for an invalid code) is unaffected; only other non-2xx statuses now report differently.
+- **Status**: Fixed.
+
+### RESIL-003 — `nodemailer`'s SMTP transport had no explicit timeout, defaulting to up to a 10-minute socket timeout on a synchronous request/response route
+- **Severity**: Low
+- **Category**: Resilience (fail-fast on external dependency)
+- **Location**: `src/app/api/send-invoice/route.ts`, `src/app/api/send-rate-list/route.ts`
+- **Problem**: Neither route's `nodemailer.createTransport()` call set `connectionTimeout`/`greetingTimeout`/`socketTimeout` — nodemailer's own defaults allow a stuck connection to hang for minutes. Since these are synchronous API routes (the client is waiting on the response), a stuck Gmail SMTP connection would hang the serverless function until the *platform's* own execution limit kills it, producing a generic/ungraceful timeout instead of the route's own clean `catch` block returning a proper error response.
+- **Fix applied (2026-08-21)**: Set explicit `connectionTimeout: 10_000`, `greetingTimeout: 10_000`, `socketTimeout: 15_000` (ms) on both transports — short enough to fail fast into the existing `catch` block well within any reasonable platform function-timeout budget.
+- **Regression risk**: None for normal operation — Gmail's SMTP typically responds in well under a second; these timeouts only ever trigger on a connection that was already going to fail or hang regardless.
+- **Status**: Fixed.
+
+### Checked, not a bug — silent-catch sweep
+Grepped for empty/near-empty `catch` blocks across `src/lib`/`src/app/api` beyond the ones already fixed. `src/lib/activity.ts`'s `logActivity()` and `src/lib/pdfCache.ts`'s `invalidateCachedPdf()`/`clearAllCachedPdfs()` correctly never let a logging/cache failure break the calling operation (by design, matching their own doc comments) but previously left zero trace on failure — added `console.error` to all three, consistent with PDF-002's precedent, without changing their never-throws behavior. `pdfIframeGenerator.ts`'s empty catch around a DOM `removeChild` was left as-is — that one's failure mode (the node was already removed) is expected/uninteresting, not worth logging. Every client-side page's `catch {}` block (dozens, across `bin`, `admin`, `reports`, `purchases`, `sales` pages) was spot-checked and confirmed to show a proper error toast to the user — none are actually silent.
+
+### A11Y-001 — No "skip to main content" link; a keyboard user had to tab through the entire sidebar nav on every single page
+- **Severity**: Medium
+- **Category**: Accessibility (keyboard navigation)
+- **Location**: `src/components/layout/DashboardShell.tsx`
+- **Problem**: `DashboardShell` (mounted on every dashboard page) renders a full sidebar (Dashboard + 6 Sales items + 4 Purchases + 3 Catalog + 2 Reports + 2 System + Bin — ~19 links) before the page's own `<main>` content in DOM order, with no way for a keyboard-only user to bypass it. Every single page load/navigation required tabbing through all of it just to reach the actual content.
+- **Fix applied (2026-08-21)**: Added a standard "Skip to main content" link as the very first focusable element, visually hidden until focused (`top: -3rem` → `top: 0.75rem` on `:focus-visible`, using the app's existing color tokens), targeting a new `id="main-content"` on the `<main>` element.
+- **Verification**: Live-tested against the running dev server — confirmed via headless browser that the very first `Tab` press from page load focuses the skip link (not a sidebar item), the link becomes visible, and activating it (`Enter`) navigates to `#main-content`.
+- **Regression risk**: None — purely additive, invisible until a keyboard user actually tabs to it.
+- **Status**: Fixed.
+
+### A11Y-002 — Three icon-only buttons had no accessible name (only a `title` at best, some none at all)
+- **Severity**: Low
+- **Category**: Accessibility (screen reader support)
+- **Location**: `src/app/(dashboard)/sales/invoices/[id]/page.tsx` (Record Return modal's close button — no `aria-label` or `title` at all; the credit-note row's Download and Delete buttons — had `title` but no `aria-label`), `src/components/ui/PdfPreviewModal.tsx` (close button — same `title`-only gap)
+- **Problem**: A dedicated sweep for icon-only buttons (button with only an SVG child, no visible text) across the whole `src/` tree found these 4 gaps — everywhere else in the codebase already correctly uses `aria-label` on icon-only buttons (confirmed: `DashboardShell.tsx`, `Modal.tsx`, `DatePicker.tsx`, `Toast.tsx`, `Switch.tsx`, and the line-item tables' remove/drag buttons all already had it). A screen reader announces a `title`-only button as just "button" in many browser/AT combinations, and nothing at all for the one with neither.
+- **Fix applied (2026-08-21)**: Added `aria-label` to all 4 (kept the existing `title` where present, for the visual tooltip); added the missing `aria-hidden="true"` to the Record Return close button's SVG icon while there (every other icon-only button's SVG already had it).
+- **Regression risk**: None — purely additive attributes.
+- **Status**: Fixed.
+
+### A11Y-003 — `FormField` associated a label with its input (`htmlFor`/`id`) but never wired `aria-describedby` to the error/hint text
+- **Severity**: Medium
+- **Category**: Accessibility (form error announcement)
+- **Location**: `src/components/ui/Input.tsx` — `FormField`
+- **Problem**: `CLAUDE.md`'s own stated global standard requires "error messages tied to their fields via `aria-describedby`/`for`" — the `for`/`htmlFor` half was already done correctly (verified: auto-generated `id` via `useId()`, or an explicit one, correctly applied to both the `<label>` and the actual control), but the `aria-describedby` half was missing entirely. A screen reader user tabbing into a field that already shows a validation error (e.g., re-visiting a form after a failed submit) would hear the label but not the error text unless they explicitly navigated to it separately — `role="alert"` on the error text only announces it at the moment it *first* appears, not on every subsequent focus.
+- **Fix applied (2026-08-21)**: Gave the rendered error/hint `<p>` a derived id (`${fieldId}-error` / `${fieldId}-hint`) and added `aria-describedby` pointing to it on the cloned child control. Confirmed `Select`/`DatePicker`/`PasswordInput`/`PhoneInput` (the other control types `FormField` commonly wraps) all spread `...rest`/`...props` onto their real DOM element, so the new attribute reaches the actual input/button/trigger in every case, not just plain `<Input>`.
+- **Verification**: Live-tested against the running dev server — submitted an empty product-create form, confirmed via DOM inspection that every rendered error message's `id` correctly matched an `aria-describedby` on its corresponding input.
+- **Regression risk**: None — purely additive attribute, no visual or behavioral change.
+- **Status**: Fixed.
+
+### A11Y-004 — `--c-text-3` on `--c-bg-sub` (light mode) measured 4.34:1 contrast, just under the 4.5:1 WCAG AA threshold for normal-size text; and a related dark-mode failure found while fixing it
+- **Severity**: Low → Medium (raised once the second finding below was discovered)
+- **Category**: Accessibility (color contrast)
+- **Location**: `src/app/globals.css` — `.filter-tab`/`.filter-tab-active` (status filter tabs); `src/components/layout/DashboardShell.module.css` — `.navLinkActive` (sidebar's selected nav item)
+- **Problem 1 (the original finding)**: computed WCAG relative-luminance contrast ratios for every core text-color × background-color combination the app's CSS variables define (both themes). Everything passed AA comfortably except `--c-text-3` on `--c-bg-sub` in light mode (4.34:1) — the app's inactive status filter tabs use exactly this combination (`.filter-tab`'s `color: var(--c-text-3)` sits on `.filter-tabs`'s `background: var(--c-bg-sub)`), confirmed live on real invoice/purchase-bill list pages, at 14px/weight-500 (too small to qualify for the "large text" exception).
+- **Problem 2 (found while implementing the fix)**: the user asked to also give the *active* filter tab a solid `var(--c-blue)` background with white text (previously `--c-bg-card` + dark text). Checking `--c-blue`'s dark-mode definition revealed it resolves to a pale, white-mixed color there (`color-mix(in srgb, ... 85%, white)`) — white text on it measures only **2.72:1**, a much worse failure than the original finding. Checking further revealed the sidebar's `.navLinkActive` (the selected nav item, e.g. "Invoices" highlighted in blue) **already had this exact same latent bug** — `background: var(--c-blue); color: #fff;` with no dark-mode-specific adjustment, silently failing contrast in dark mode this whole time, undiscovered until this exact investigation.
+- **Fix applied (2026-08-21)**: `.filter-tab`'s light-mode color darkened to `#5e6d83` (light mode only, computed to land at 4.80:1 — dark mode's already-passing `--c-text-3` is restored via `.dark .filter-tab`, untouched). `.filter-tab-active` and `.navLinkActive` both now use `var(--c-blue-h)` (a darker, solid blue already used elsewhere as a solid-fill background — e.g. `Button`'s `primary:hover`) instead of `var(--c-blue)` specifically in dark mode, keeping white text at 5.17:1 in both themes instead of switching the text color per theme.
+- **A real bug hit and fixed while implementing this**: the sidebar fix was first written as a bare `.dark .navLinkActive` selector inside `DashboardShell.module.css` — a CSS Module file, which by default hashes every class selector it contains, including bare `.dark`, so the rule silently matched nothing against the real global `.dark` class applied to `<html>`. Caught via live contrast measurement (dark mode still showed the old 2.98:1 after the "fix"), fixed by wrapping it as `:global(.dark) .navLinkActive`, matching the established pattern already used elsewhere in that same file (e.g. its theme-toggle switch styles).
+- **Verification**: Live-measured actual rendered colors (not just source CSS) via a headless browser in all 4 combinations — light/dark × filter-tab/sidebar-nav — confirming `scrollWidth`-style ground truth: light filter-tab-active 5.17:1, dark filter-tab-active 5.17:1, dark sidebar-nav-active 5.17:1, light/dark inactive filter-tab 4.80:1/5.48:1. Screenshotted both themes for a visual sanity check — active states read as a clear, solid blue pill in both.
+- **Regression risk**: Low — scoped to 2 components' active/selected-state styling and one inactive-tab text color; light-mode visual change is a slightly darker tab-background blue (`--c-blue-h` vs `--c-blue`, a subtle shift) and a very slightly darker inactive-tab gray; verified via live screenshots in both themes.
+- **Status**: Fixed.
+
+### TEST-001 — `CLAUDE.md`'s test-coverage note was stale: several routes it listed as "no tests yet" already had substantial coverage
+- **Severity**: Low
+- **Category**: Documentation accuracy (same pattern as `DOC-001`/`DOC-002` and the `project_lost_uncommitted_fixes` discovery)
+- **Location**: `CLAUDE.md` — Pending Tasks
+- **Problem**: The note claimed "purchase-bills, payments, returns/credit-notes, rate-lists, and the bin restore/permanent-delete routes have no tests yet." Reading `tests/api/*.test.ts` directly (not trusting the doc) found `purchase-bills.test.ts` (280 lines: POST/PUT/DELETE), `purchase-bill-payments.test.ts` (148 lines: POST), and `returns.test.ts` (222 lines: POST/DELETE) all already exist with real, substantive coverage — not stubs.
+- **Fix applied (2026-08-21)**: Rewrote the note with the actual current state per entity/route, and explicitly named what's still genuinely untested: `brands`/`categories`/`products`, `rate-lists`, the `credit-notes` *list* route itself (as opposed to the `Return` creation/deletion `returns.test.ts` already covers), the sales `payments` sub-route on invoices (only invoice creation is tested), `settings`, `admin/*`, `search`, `send-invoice`/`send-rate-list`, `gst-filing`, `export-xlsx`, and `bin`'s permanent-delete/`empty` routes.
+- **Status**: Fixed (documentation only).
+
+### Test suite review (no test database available this session — see state doc for why)
+Ran `npm run test` — confirmed the currently-documented behavior exactly: **54 unit tests pass**, **56 API tests self-skip** (no `.env.test`/test database). Read every `tests/api/*.test.ts` and `tests/e2e/*.spec.ts` file directly (not just their names) to judge quality independent of whether they can currently execute:
+- **Quality assessment**: genuinely good. Tests call real route handlers directly (`await import("@/app/api/customers/route")` then invoke `POST`/`PUT`) against a real (would-be) test database — no mocking of the database or business logic under test, matching this project's own Testing Standards. Explicit regression tests exist for past bugs (e.g. `customers.test.ts`'s "allows editing a one-off (never explicitly bin-deleted) customer" — directly references the exact bug it was written to prevent recurring). Role-based (403) and unauthenticated (401) cases are covered alongside the happy path in every file checked. The E2E specs correctly avoid Playwright's `.selectOption()` on the app's custom (non-native) `Select` combobox, per this project's own documented gotcha.
+- **The one real risk this surfaced**: none of this code has ever actually been executed against a live database — only confirmed to compile and correctly self-skip. A logic bug inside an `it()` block (as opposed to a syntax/type error) would not be caught by that. This isn't fixable without the test database itself.
+- **Test database blocked this session**: the user's first instinct (test directly against the live dev database) was declined — `vitest.config.mts` has a hard safeguard refusing to start if `TEST_DATABASE_URL` equals the real `DATABASE_URL`, specifically because `tests/api/**` truncates every table before each test; doing this for real would have destroyed all of this session's (and the dev database's) real data. No local Postgres or Docker was available on this machine as a substitute, and provisioning a disposable Neon branch needs the user's own account access. User chose to skip DB-backed test execution for this session rather than pursue either.
 
 ## Low
 

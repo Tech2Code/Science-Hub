@@ -18,10 +18,7 @@ interface ResultGroup {
 }
 
 interface GlobalSearchProps {
-  // On mobile the topbar has no room for a full-width input alongside the
-  // hamburger/page-title on the left and theme/avatar/sign-out on the
-  // right, so below this it collapses to just the search icon — tapping
-  // it expands to a full-width overlay input instead of squeezing in place.
+  // On mobile the topbar has no room for a full-width input, so this collapses to an icon that expands to a full-width overlay when tapped.
   mobile?: boolean;
 }
 
@@ -59,28 +56,20 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
           headers: { "x-no-loader": "1" },
         });
         const data = await res.json();
-        // A superseded request (one that lost the abort race, or never got
-        // aborted in time but a newer one has since started) must not touch
-        // state — otherwise its late-arriving response overwrites the
-        // newer, still-in-flight search's results with stale ones.
+        // A superseded request's late-arriving response must not overwrite a newer, still-in-flight search's results.
         if (controller !== abortRef.current) return;
         setGroups(res.ok ? data.groups ?? [] : []);
       } catch (err) {
         if ((err as Error)?.name !== "AbortError") setGroups([]);
       } finally {
-        // Only the most recent request is allowed to clear `loading` — an
-        // aborted older request's finally block used to fire first and flip
-        // loading to false while the real (newer) request was still
-        // pending, which briefly rendered a false "No results" state.
+        // Only the most recent request may clear `loading` — otherwise an aborted older request briefly flashes a false "No results" state.
         if (controller === abortRef.current) setLoading(false);
       }
     }, 250);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
-  // Aborts a still-in-flight request if the whole search widget unmounts
-  // (e.g. navigating away mid-search) rather than letting it resolve into a
-  // component that's no longer there.
+  // Aborts a still-in-flight request on unmount (e.g. navigating away mid-search).
   useEffect(() => {
     return () => { abortRef.current?.abort(); };
   }, []);
@@ -124,9 +113,7 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
     setQuery("");
     setGroups([]);
     const [path, hash] = href.split("#");
-    // Same-page anchor jumps (e.g. already on /settings, searching "bank
-    // details") don't remount the target page, so its own hash-scroll
-    // effect never re-fires — scroll manually instead of relying on it.
+    // Same-page anchor jumps don't remount the target page, so its hash-scroll effect never re-fires — scroll manually instead.
     if (hash && path === window.location.pathname) {
       document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
@@ -139,10 +126,7 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
   const flatItems = groups.flatMap((g) => g.items);
   const totalResults = flatItems.length;
 
-  // A fresh result set invalidates whatever position the keyboard cursor was
-  // sitting at. Adjusted during render (React's documented pattern for
-  // resetting state in response to a prop/derived-value change) rather than
-  // in a useEffect, which would cost an extra commit-then-rerun-effect pass.
+  // Reset keyboard cursor position on a fresh result set — done during render (not useEffect) to avoid an extra commit-then-rerun pass.
   const [prevGroups, setPrevGroups] = useState(groups);
   if (groups !== prevGroups) {
     setPrevGroups(groups);
@@ -225,12 +209,7 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
               const val = e.target.value;
               setQuery(val);
               setOpen(true);
-              // Set in the same batch as the query change so the very next
-              // render already reflects "searching" — otherwise the effect
-              // below (which only runs after that render) is what flips
-              // `loading` true, leaving one stale frame where groups=[] and
-              // loading=false render as a false "No results" flash before
-              // the real search even starts.
+              // Set loading in the same batch as the query so this render already reflects "searching" — avoids a stale false "No results" flash.
               setLoading(val.trim().length >= 2);
             }}
             onFocus={() => setOpen(true)}

@@ -17,12 +17,8 @@ interface RateListPrintAreaProps {
   } | null;
 }
 
-// Shared print/PDF markup for a Rate List — used by both the detail page
-// (always mounted) and the list page (mounted on-demand for the Preview
-// button, then torn down). generateInvoicePdfBlob() only needs a <table>
-// with <tbody> rows to compute page splits; the invoice-specific bells
-// (thead/tfoot repeat, page markers, copy stamping) are optional and simply
-// don't apply here.
+// Shared print/PDF markup for a Rate List. generateInvoicePdfBlob() only needs a <table>/<tbody> to
+// compute page splits — the invoice-specific bells (repeat headers, page markers, copy stamping) are optional.
 export function RateListPrintArea({ rateList, settings }: RateListPrintAreaProps) {
   const showLogo = settings?.showLogoOnInvoices !== false;
 

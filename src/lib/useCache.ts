@@ -1,11 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 
-// A non-2xx response (401/404/500…) still has a JSON body (typically
-// {error: "..."}), so a plain .then(r => r.json()) never notices the
-// request failed — callers end up treating an error payload as real data
-// and crash later on a missing field. Throwing here lets every consumer's
-// existing .catch()/error-state handling actually fire.
+// A non-2xx response still parses as JSON, so plain .json() wouldn't notice failure — throw here so callers' .catch()/error-state handling fires.
 async function parseOrThrow<T>(r: Response): Promise<T> {
   const body = await r.json().catch(() => null);
   if (!r.ok) {
@@ -17,12 +13,7 @@ async function parseOrThrow<T>(r: Response): Promise<T> {
   return body as T;
 }
 
-// Shared in-memory cache keyed by URL, plus subscribers so every mounted
-// useFetch(url) for the same URL updates in lockstep. This is what lets a
-// page navigated-to a second time show its last-known data instantly
-// (no loading skeleton) while quietly revalidating in the background, and
-// what lets a mutation on one page (e.g. deleting a row) push an update
-// into a list another component is already displaying.
+// Shared in-memory cache keyed by URL + subscribers, so every useFetch(url) for the same URL updates in lockstep (instant revisit, cross-page mutation propagation).
 const cache = new Map<string, unknown>();
 const listeners = new Map<string, Set<(data: unknown) => void>>();
 
@@ -44,10 +35,7 @@ export function useFetch<T>(url: string | null) {
     if (!listeners.has(url)) listeners.set(url, new Set());
     listeners.get(url)!.add(onUpdate);
 
-    // Shows last-known cached data immediately on mount (no skeleton). Cache is
-    // trusted until something explicitly busts it (mutate()/bustCache()/patchCache()
-    // after a write) — mounting a page that hasn't changed since last visit does
-    // NOT trigger a network request.
+    // Shows cached data immediately (no skeleton); trusted until explicitly busted, so an unchanged remount triggers no network request.
     const hasCache = cache.has(url);
     if (hasCache) {
       setData(cache.get(url) as T); // eslint-disable-line react-hooks/set-state-in-effect -- seeds from the module-level cache synchronously so the first paint shows it, not a skeleton
@@ -80,11 +68,7 @@ export function useFetch<T>(url: string | null) {
     setLoading(false);
   }, [url]);
 
-  // Update this URL's data immediately from an already-known value (e.g. a
-  // create/update endpoint's own response, or removing a row after a
-  // successful delete) instead of waiting on a full refetch. Every mounted
-  // component watching this URL — including ones on a different page that
-  // haven't unmounted — updates in the same tick.
+  // Update this URL's cached data from an already-known value instead of refetching; every mounted watcher updates in the same tick.
   const patchData = useCallback((updater: (prev: T | null) => T) => {
     if (!url) return;
     publish(url, updater((cache.has(url) ? cache.get(url) : null) as T | null));
@@ -105,16 +89,7 @@ export function bustCache(url: string) {
   cache.delete(url);
 }
 
-/**
- * Invalidate every cached URL starting with `prefix` — for list endpoints
- * that now carry query params (page/search/sort/filter), a single
- * `bustCachePrefix("/api/products")` call only ever matched the bare, param-less
- * URL and silently missed every parameterized variant actually in use,
- * leaving the list showing stale data after a create/edit/delete elsewhere
- * in the app. Use this instead whenever busting a paginated list's cache
- * from outside the page that owns it (e.g. a "new"/"edit" page navigating
- * back).
- */
+// Invalidates every cached URL starting with `prefix` — plain bustCache() only matches the bare param-less URL and misses parameterized list variants.
 export function bustCachePrefix(prefix: string) {
   for (const key of cache.keys()) {
     if (key === prefix || key.startsWith(`${prefix}?`)) cache.delete(key);

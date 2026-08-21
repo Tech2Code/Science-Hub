@@ -11,7 +11,7 @@ import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
-import { OverlayLoader, FloatingSpinner } from "@/components/ui/Spinner";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { formatDate } from "@/lib/formatDate";
 import { useFetch } from "@/lib/useCache";
@@ -164,13 +164,8 @@ export default function CreditNotesPage() {
     setPdfPreviewNote(null);
   }
 
-  // A credit note's own line items are never edited after creation, so once
-  // rendered its PDF is reused as-is (cached by return id + a variant key
-  // derived from everything else that can still change its content —
-  // business settings and the customer record it was issued to) instead of
-  // re-rendering through the iframe on every click — only regenerated when
-  // settings/customer change (different variant key) or the note itself is
-  // deleted (cache invalidated from the invoice detail page's delete handler).
+  // Line items never change after creation, so the PDF is cached by return id + a variant key over the only
+  // things that still can change (settings, customer) — regenerated only when those change or the note is deleted.
   async function getOrRenderCreditNotePdf(c: CreditNote): Promise<Blob | null> {
     const showLogo = settings?.showLogoOnInvoices !== false;
     const variantKey = buildPdfVariantKey(undefined, {
@@ -209,9 +204,7 @@ export default function CreditNotesPage() {
     }
   }
 
-  // Bypasses the cache entirely — re-renders through the iframe and overwrites
-  // whatever variant was previously stored, then shows the fresh PDF so the
-  // user can confirm the regenerated output without a sign-out or hard cache clear.
+  // Bypasses the cache — re-renders and overwrites the stored variant so the fresh PDF is confirmed immediately.
   async function handleRegeneratePdf(c: CreditNote) {
     if (regenerateBusyRef.current) return;
     regenerateBusyRef.current = true;
@@ -269,7 +262,6 @@ export default function CreditNotesPage() {
       {viewingId && <OverlayLoader text="Preparing preview…" />}
       {downloadingId && <OverlayLoader text="Preparing download…" />}
       {regeneratingId && <OverlayLoader text="Regenerating PDF…" />}
-      {isRefetching && <FloatingSpinner />}
       {pdfPreviewUrl && pdfPreviewNote && (
         <PdfPreviewModal
           url={pdfPreviewUrl}
@@ -374,9 +366,8 @@ export default function CreditNotesPage() {
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
                           PDF
                         </Button>
-                        <Button variant="secondary" size="sm" title="Regenerate PDF (bypass cache)" loading={regeneratingId === c.id} disabled={viewingId === c.id || downloadingId === c.id} onClick={() => handleRegeneratePdf(c)}>
+                        <Button variant="secondary" size="sm" title="Regenerate PDF (bypass cache)" disabled={viewingId === c.id || downloadingId === c.id || regeneratingId === c.id} onClick={() => handleRegeneratePdf(c)}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>
-                          Regenerate
                         </Button>
                       </div>
                     </Cell>

@@ -50,12 +50,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Place of supply is required" }, { status: 400 });
     }
 
-    // Independently verify inter-state vs. intra-state from the business's
-    // own configured state rather than trusting the client-supplied flag —
-    // the browser derives it the same way, so this only changes behavior
-    // if a request's isInterState doesn't actually match its place of
-    // supply. Falls back to the client's value only if the business state
-    // isn't configured yet (nothing to compare against).
+    // Never trust the client's isInterState flag; derive it server-side (fall back to client's value only if business state isn't configured).
     const biz = await getBusinessSettings();
     const derivedIsInterState = deriveIsInterState(String(placeOfSupply), biz.state);
     const isInterState = derivedIsInterState !== null ? derivedIsInterState : Boolean(clientIsInterState);
@@ -119,13 +114,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
     }
 
-    // The client always resolves a real Customer row before submitting
-    // (creating one inline via /api/customers if needed) — mirrors how
-    // /api/purchase-bills requires an existing vendorId rather than
-    // accepting inline vendor details. Deliberately not filtered by
-    // deletedAt: a "just for this invoice" customer is soft-deleted the
-    // moment it's created (so it never surfaces in the directory) but must
-    // still be usable for the invoice being created right now.
+    // Not filtered by deletedAt: a "just for this invoice" customer is soft-deleted on creation but must still be usable here.
     if (!customerId) {
       return NextResponse.json({ error: "Customer is required." }, { status: 400 });
     }
@@ -134,11 +123,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Selected customer was not found." }, { status: 400 });
     }
 
-    // Financial year (Apr-Mar), not calendar year — see getIndianFinancialYear.
-    // Invoice.date always defaults to "now" at creation (not client-set), so
-    // "now" is the correct date to derive this invoice's FY from. Rendered
-    // as a "2026-27" label (not a bare year) so the printed number itself
-    // shows which FY it belongs to.
+    // Indian FY (Apr-Mar), derived from "now" since Invoice.date always defaults to creation time.
     const currentYearLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date()));
 
     // Fetch product details for each item (custom/unlinked items have no productId)
@@ -201,11 +186,7 @@ export async function POST(request: NextRequest) {
       sgst = totalGst / 2;
     }
 
-    // Transport/freight charge — its own line and its own GST, kept out of
-    // the CGST/SGST/IGST split (which stays a pure sum of item tax) rather
-    // than folded into whichever rate bucket happens to match. The amount is
-    // never trusted from the client: always recomputed server-side from the
-    // charge and rate the client sent.
+    // Transport charge GST is kept separate from CGST/SGST/IGST (pure item-tax sum); amount is always recomputed server-side, never trusted from client.
     const transportChargeVal = parseFloat(String(transportCharge ?? 0)) || 0;
     const transportChargeGstRateVal = parseFloat(String(transportChargeGstRate ?? 0)) || 0;
     if (transportChargeVal < 0) {
@@ -218,12 +199,7 @@ export async function POST(request: NextRequest) {
 
     const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + cgst + sgst + igst + transportChargeVal + transportChargeGstAmountVal);
 
-    // Invoice-number generation (highest-existing-number-for-year + 1, or the
-    // admin's one-time "next number" override from Settings if it's higher)
-    // and the create both run inside one Serializable transaction, with a
-    // retry on the write-conflict Postgres reports when two requests race
-    // for the same number — without this, concurrent requests would hand
-    // out duplicate invoice numbers instead of one of them safely retrying.
+    // Number generation + create run in one Serializable transaction, retried on write-conflict, to prevent duplicate invoice numbers under concurrent requests.
     const invoicePrefix = biz.invoiceNumberPrefix || deriveDefaultPrefix(biz.name);
     async function attemptCreate() {
       return prisma.$transaction(async (tx) => {

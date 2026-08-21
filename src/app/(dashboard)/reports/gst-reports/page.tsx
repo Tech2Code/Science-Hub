@@ -35,11 +35,7 @@ interface GstFilingReport {
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-// Builds a "YYYY-MM-DD" string from local calendar fields directly — never
-// round-trip through toISOString() here. That converts to UTC, and since
-// this app is India-only (UTC+5:30), a locally-constructed local midnight
-// (e.g. April 1st IST) lands on the *previous* UTC day, silently shifting
-// every period boundary back by one day.
+// Never use toISOString() here — it converts to UTC, and for IST (UTC+5:30) that shifts a local midnight back a day.
 function ymd(year: number, month1to12: number, day: number): string {
   return `${year.toString().padStart(4, "0")}-${String(month1to12).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
@@ -79,9 +75,7 @@ export default function GstFilingPage() {
   const fyOptions = Array.from({ length: 6 }, (_, i) => currentFyStartYear() - i);
 
   const [mode, setMode] = useState<"month" | "fy">("fy");
-  // Defaults to "1st of this month → today" for the common case (current
-  // month, up to date) — both ends stay freely editable to any date, so a
-  // custom multi-month range (a quarter, say) is just picking a wider "To".
+  // Defaults to current-month-to-date; both ends remain freely editable for custom ranges.
   const [fromDate, setFromDate] = useState(firstDayOfCurrentMonth);
   const [toDate, setToDate] = useState(todayStr);
   const [fyStart, setFyStart] = useState(currentFyStartYear());
@@ -115,10 +109,7 @@ export default function GstFilingPage() {
   }
 
   async function handleDownload() {
-    // A clean period (no validation issues) has nothing worth reviewing in a
-    // separate Validation-Report.csv, so skip the zip and hand back the
-    // workbook directly. A period with errors/warnings still gets the zip,
-    // since the CSV is what surfaces those issues outside of this page.
+    // A clean period skips the zip (nothing to review) and downloads the workbook directly; issues still get zipped with the validation CSV.
     const clean = report ? report.validation.errorCount === 0 && report.validation.warningCount === 0 : false;
     const format = clean ? "xlsx" : "zip";
     setDownloading(true);

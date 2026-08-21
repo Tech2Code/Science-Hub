@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { FloatingSpinner } from "@/components/ui/Spinner";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { Input } from "@/components/ui/Input";
@@ -107,7 +106,6 @@ export default function PaymentsPage() {
 
   return (
     <div className="page-stack">
-      {isRefetching && <FloatingSpinner />}
       <div className="page-header">
         <div>
           <h1 className="page-title">Payments</h1>

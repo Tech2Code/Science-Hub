@@ -2,11 +2,7 @@ import { Prisma } from "@prisma/client";
 
 type TxClient = Prisma.TransactionClient;
 
-// Specific transaction types replace the old catch-all "adjustment" so the
-// ledger reads as an audit trail (which action produced this row) instead of
-// everything but the initial create/return being lumped together. documentType
-// says what kind of source document the row belongs to, independent of the
-// specific action taken on it.
+// Specific movement types (no generic "adjustment") so the ledger reads as an audit trail of which action produced each row.
 export type StockMovementType =
   | "sale" | "sale_edit_reverse" | "sale_edit_apply" | "sale_delete_restore" | "sale_bin_restore"
   | "purchase" | "purchase_edit_reverse" | "purchase_edit_apply" | "purchase_cancel" | "purchase_uncancel" | "purchase_delete_restore" | "purchase_bin_restore"
@@ -31,12 +27,7 @@ interface RecordStockMovementInput {
   notes?: string;
   purchaseBillId?: string;
   createdByUserId?: string;
-  // Pass this whenever the caller already has the product name in hand (e.g.
-  // from the update()/create() it just ran) — skips an extra round-trip
-  // query per call, which matters a lot in per-line-item loops against a
-  // pooled single-connection Neon database (connection_limit=1 in prod),
-  // where each extra query serializes and can push a multi-item transaction
-  // past its timeout.
+  // Pass when already known (e.g. from an update() just run) to skip an extra query — matters in per-line-item loops against the pooled single-connection Neon DB.
   productName?: string;
 }
 
@@ -79,12 +70,8 @@ interface BatchStockMovementInput {
   createdByUserId?: string;
 }
 
-// Applies signed stock deltas for many products in a single round trip (one
-// UPDATE ... RETURNING plus one createMany) instead of one product.update() +
-// one stockMovement.create() per line item. A per-item loop is what pushed
-// large invoices/purchase bills past the transaction timeout against a pooled
-// single-connection Neon database (connection_limit=1 in prod) — every extra
-// round trip there serializes instead of overlapping.
+// Applies stock deltas for many products in one round trip (UPDATE...RETURNING + createMany) instead of per-item queries, which pushed large
+// invoices/bills past the transaction timeout against the pooled single-connection Neon DB.
 export async function batchAdjustStock(
   tx: TxClient,
   deltas: StockDelta[],
@@ -113,10 +100,7 @@ export async function batchAdjustStock(
     RETURNING p.id, p.name, p.stock
   `;
 
-  // The raw UPDATE...WHERE silently skips a productId with no matching row
-  // instead of throwing the way product.update() used to (P2025) — without
-  // this check a stale/deleted product reference would silently drop its
-  // stock adjustment and ledger entry instead of failing the transaction.
+  // Raw UPDATE...WHERE silently skips a missing productId (unlike product.update()'s P2025) — this check catches a stale/deleted reference instead of silently dropping it.
   if (updated.length !== entries.length) {
     const foundIds = new Set(updated.map((p) => p.id));
     throw new ProductNotFoundError(entries.filter(([id]) => !foundIds.has(id)).map(([id]) => id));

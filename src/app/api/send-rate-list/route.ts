@@ -8,8 +8,7 @@ import { requireWriteAccess } from "@/lib/apiAuth";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10MB
 
-// Mirrors /api/send-invoice, but a rate list has no linked customer email to
-// default to — the recipient is always typed in by whoever shares it.
+// Mirrors /api/send-invoice, but a rate list has no linked customer email — the recipient is always typed in.
 export async function POST(req: Request) {
   const auth = await requireWriteAccess();
   if (!auth.ok) return auth.response;
@@ -32,10 +31,7 @@ export async function POST(req: Request) {
     if (to.trim().length > 254 || !EMAIL_RE.test(to.trim())) {
       return NextResponse.json({ error: "Recipient email address is invalid." }, { status: 400 });
     }
-    // title is client-supplied form data — reject any embedded CR/LF before
-    // it can reach the `subject` header, or an authenticated caller could
-    // inject extra SMTP headers (e.g. Bcc) into a message sent from the
-    // business's own Gmail account (mirrors the same fix in /api/send-invoice).
+    // Reject embedded CR/LF before it reaches the `subject` header, or a caller could inject extra SMTP headers (mirrors /api/send-invoice).
     if (/[\r\n]/.test(title) || title.length > 200) {
       return NextResponse.json({ error: "Invalid rate list title." }, { status: 400 });
     }
@@ -52,9 +48,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email not configured. Set Gmail credentials in Business Settings." }, { status: 503 });
     }
 
+    // Explicit timeouts (mirrors /api/send-invoice) — nodemailer's 10-min default would otherwise hang this request past the platform's own limit.
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: { user: gmailUser, pass: gmailPass },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
     });
     const bizAddress = [biz.address, biz.city, biz.state, biz.pincode].filter(Boolean).join(", ");
     const bizFooter = [biz.name, bizAddress, biz.phone ? `Ph: ${biz.phone}` : "", biz.email].filter(Boolean).join(" · ");

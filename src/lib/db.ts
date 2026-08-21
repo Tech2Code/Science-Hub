@@ -1,19 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { safeDecrypt } from "@/lib/crypto";
-import { isLowStock } from "@/lib/stockStatus";
 
 export async function getBusinessSettings() {
-  // Called on every server-rendered page (RootLayout) to resolve business
-  // branding/settings, so this is a hot path. Postgres's INSERT ... ON
-  // CONFLICT DO UPDATE (what Prisma's upsert compiles to here) isn't safe
-  // against two concurrent inserts racing to create the same not-yet-
-  // committed singleton row — the loser can still get a real unique-
-  // constraint violation rather than falling through to the update branch.
-  // Only reachable in the narrow window before this row has ever been
-  // created (a brand-new deploy's first burst of concurrent traffic); once
-  // it exists, every future upsert takes the plain update path and can't
-  // race. Falls back to reading the winner's row instead of 500ing.
+  // Hot path (every server-rendered page). Prisma's upsert can still hit a real unique-constraint
+  // violation if two inserts race to create the not-yet-committed singleton row — falls back to
+  // reading the winner's row instead of 500ing (only reachable before the row first exists).
   let settings;
   try {
     settings = await prisma.businessSettings.upsert({
@@ -33,20 +25,15 @@ export async function getBusinessSettings() {
   return {
     ...settings,
     gmailAppPassword: gmailAppPassword.value,
-    // Surfaced instead of silently treating a broken secret as "not
-    // configured" — a decrypt failure here (e.g. NEXTAUTH_SECRET mismatch
-    // between environments) must not be indistinguishable from an empty
-    // field, or it silently blanks bank details on printed invoices too.
+    // Surfaced instead of silently treating a broken secret (e.g. NEXTAUTH_SECRET mismatch) as "not configured".
     gmailAppPasswordDecryptFailed: gmailAppPassword.failed,
     bankAccountNumber: bankAccountNumber.value,
     bankAccountNumberDecryptFailed: bankAccountNumber.failed,
   };
 }
 
-// RootLayout renders on every route (including pages Next.js will try to
-// statically prerender at build time), so a transient DB outage there would
-// otherwise fail the entire production build rather than just one request.
-// Falls back to the same defaults Prisma would apply to a fresh singleton row.
+// RootLayout renders on every route including statically-prerendered ones, so a transient DB
+// outage here would otherwise fail the whole production build — falls back to fresh-row defaults.
 export async function getBrandingOrDefault(): Promise<{ name: string; tagline: string; logoUrl: string }> {
   try {
     const { name, tagline, logoUrl } = await getBusinessSettings();
@@ -65,10 +52,7 @@ export interface InvoiceListFilters {
   dateRange?: { gte: Date; lt: Date };
 }
 
-// Search matches the same fields the invoice list page used to filter
-// client-side: invoice number, customer name, and item/product/brand/category
-// — the `items: { some: { OR: [...] } }` nested-relation filter reproduces
-// the product/brand/category search server-side.
+// Matches invoice number, customer name, and item/product/brand/category via nested-relation filter.
 function buildInvoiceWhere(filters: InvoiceListFilters): Prisma.InvoiceWhereInput {
   const { status, customerId, search, dateRange } = filters;
   const where: Prisma.InvoiceWhereInput = { deletedAt: null };
@@ -124,16 +108,11 @@ export async function getInvoices(filters: InvoiceListFilters, sort: InvoiceSort
   return { data, total };
 }
 
-// Stats intentionally ignore `search` (matching the old behavior where the
-// stat cards never varied by search text — only by status/date) so typing
-// in the search box doesn't trigger an extra aggregate query per keystroke.
+// Stats intentionally ignore `search` so typing in the search box doesn't trigger an extra aggregate query per keystroke.
 export async function getInvoiceStats(filters: Omit<InvoiceListFilters, "search">) {
   const where = buildInvoiceWhere(filters);
-  // AND'd as a separate nested condition (not merged into `where` directly)
-  // so a status tab like "unpaid"/"paid" keeps its own exact meaning instead
-  // of being overwritten by the overdue condition's own status constraint —
-  // this reproduces the old per-tab-scoped overdue count exactly (e.g. the
-  // "paid" tab always yields 0 overdue, same as before).
+  // AND'd as a separate nested condition so a status tab's own meaning isn't overwritten by the
+  // overdue condition's status constraint (e.g. the "paid" tab always yields 0 overdue).
   const [agg, overdueCount, years] = await Promise.all([
     prisma.invoice.aggregate({ where, _sum: { total: true, paidAmount: true } }),
     prisma.invoice.count({ where: { AND: [where, { status: { not: "paid" }, dueDate: { lt: new Date() } }] } }),
@@ -272,11 +251,7 @@ export async function getProducts(filters: ProductListFilters, sort: ProductSort
   return { data, total };
 }
 
-// Search is intentionally excluded here (matching the same convention as
-// getInvoiceStats/getInvoiceStats etc.) — the stock-filter tab counts (All/
-// Low/Out) are shown simultaneously as badges regardless of the active tab,
-// so they must stay independent of which tab is selected, and independent
-// of the search box so typing doesn't re-trigger three more counts.
+// Search is excluded — the All/Low/Out tab-count badges are shown simultaneously regardless of the active tab/search text.
 export async function getProductStats() {
   const [totalCount, outOfStockCount, lowStockCount] = await Promise.all([
     prisma.product.count({ where: { deletedAt: null } }),
@@ -291,36 +266,35 @@ export async function getReportSummary() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  const invoicesThisMonth = await prisma.invoice.count({
-    where: { deletedAt: null, date: { gte: monthStart, lt: monthEnd } },
-  });
-  const revenueAgg = await prisma.invoice.aggregate({
-    where: { deletedAt: null, date: { gte: monthStart, lt: monthEnd } },
-    _sum: { total: true },
-  });
-  const unpaidInvoices = await prisma.invoice.findMany({
-    where: { deletedAt: null, status: { in: ["unpaid", "partial"] } },
-    select: { total: true, paidAmount: true },
-  });
-  const outstandingAmount = unpaidInvoices.reduce(
-    (sum, inv) => sum + (inv.total - inv.paidAmount),
-    0
-  );
-  const allTimeAgg = await prisma.invoice.aggregate({
-    where: { deletedAt: null },
-    _sum: { total: true, paidAmount: true },
-  });
-  const allProducts = await prisma.product.findMany({
-    where: { deletedAt: null },
-    select: { stock: true, minStock: true },
-  });
-  const lowStockCount = allProducts.filter((p) => isLowStock(p.stock, p.minStock)).length;
-  const recent = await prisma.invoice.findMany({
-    where: { deletedAt: null },
-    orderBy: { date: "desc" },
-    take: 5,
-    include: { customer: { select: { name: true } } },
-  });
+  // These 6 queries are independent — fire together instead of 6 sequential round-trips.
+  const [invoicesThisMonth, revenueAgg, unpaidAgg, allTimeAgg, lowStockCount, recent] = await Promise.all([
+    prisma.invoice.count({
+      where: { deletedAt: null, date: { gte: monthStart, lt: monthEnd } },
+    }),
+    prisma.invoice.aggregate({
+      where: { deletedAt: null, date: { gte: monthStart, lt: monthEnd } },
+      _sum: { total: true },
+    }),
+    // balanceDue/isLowStock are real Postgres GENERATED columns — sum/count them in the DB rather than reducing/filtering in JS.
+    prisma.invoice.aggregate({
+      where: { deletedAt: null, status: { in: ["unpaid", "partial"] } },
+      _sum: { balanceDue: true },
+      _count: true,
+    }),
+    prisma.invoice.aggregate({
+      where: { deletedAt: null },
+      _sum: { total: true, paidAmount: true },
+    }),
+    prisma.product.count({ where: { deletedAt: null, isLowStock: true } }),
+    prisma.invoice.findMany({
+      where: { deletedAt: null },
+      orderBy: { date: "desc" },
+      take: 5,
+      include: { customer: { select: { name: true } } },
+    }),
+  ]);
+  const outstandingAmount = unpaidAgg._sum.balanceDue ?? 0;
+  const pendingCount = unpaidAgg._count;
   const recentInvoices = recent.map((inv) => ({
     id: inv.id,
     invoiceNumber: inv.invoiceNumber,
@@ -339,7 +313,7 @@ export async function getReportSummary() {
     totalRevenue: allTimeAgg._sum.total ?? 0,
     totalCollected: allTimeAgg._sum.paidAmount ?? 0,
     outstandingTotal: outstandingAmount,
-    pendingCount: unpaidInvoices.length,
+    pendingCount,
     lowStockCount,
     recentInvoices,
   };
@@ -385,10 +359,10 @@ export async function getReportOutstanding(startDate: string | undefined, endDat
 }
 
 export async function getReportStock() {
-  const allProducts = await prisma.product.findMany({
-    where: { deletedAt: null },
+  // Filter by the generated isLowStock column directly instead of fetching every product and filtering in JS.
+  return prisma.product.findMany({
+    where: { deletedAt: null, isLowStock: true },
     orderBy: { stock: "asc" },
     include: { category: true, brand: true },
   });
-  return allProducts.filter((p) => isLowStock(p.stock, p.minStock));
 }

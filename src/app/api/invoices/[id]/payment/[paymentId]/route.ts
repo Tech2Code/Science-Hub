@@ -54,11 +54,7 @@ export async function PUT(
       }
     }
 
-    // Re-read the payment/invoice and re-validate the remaining balance
-    // inside a Serializable transaction, mirroring the create-payment route.
-    // Without this, two concurrent edits (or an edit racing a new payment)
-    // could each pass the balance check against the same stale paidAmount
-    // and together push the invoice over its total.
+    // Re-validate balance inside a Serializable transaction (mirrors the create-payment route) so concurrent edits can't together overpay the invoice.
     async function attemptUpdate() {
       return prisma.$transaction(async (tx) => {
         const payment = await tx.payment.findUnique({ where: { id: paymentId } });

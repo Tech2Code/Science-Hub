@@ -32,10 +32,7 @@ export async function POST(req: Request) {
     if (to.trim().length > 254 || !EMAIL_RE.test(to.trim())) {
       return NextResponse.json({ error: "Recipient email address is invalid." }, { status: 400 });
     }
-    // invoiceNumber is client-supplied form data, not re-verified against the
-    // DB here — reject any embedded CR/LF before it can reach the `subject`
-    // header, or an authenticated caller could inject extra SMTP headers
-    // (e.g. Bcc) into a message sent from the business's own Gmail account.
+    // Reject embedded CR/LF before it reaches the `subject` header, or a caller could inject extra SMTP headers (e.g. Bcc).
     if (/[\r\n]/.test(invoiceNumber) || invoiceNumber.length > 100) {
       return NextResponse.json({ error: "Invalid invoice number." }, { status: 400 });
     }
@@ -52,9 +49,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email not configured. Set Gmail credentials in Business Settings." }, { status: 503 });
     }
 
+    // Nodemailer's default 10-min socket timeout would otherwise hang this serverless function until the platform's own limit kills it — fail fast instead.
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: { user: gmailUser, pass: gmailPass },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
     });
     const bizAddress = [biz.address, biz.city, biz.state, biz.pincode].filter(Boolean).join(", ");
     const bizFooter = [biz.name, bizAddress, biz.phone ? `Ph: ${biz.phone}` : "", biz.email].filter(Boolean).join(" · ");

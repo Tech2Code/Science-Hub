@@ -90,10 +90,7 @@ export function PermissionManager() {
   const isEnabled = (user: GrantableUser, section: string) =>
     user.sectionPermissions.some((p) => p.section === section && p.enabled);
 
-  // GST Reports has no section of its own — /api/gst-filing requires both
-  // reports_sales AND reports_purchases (see requireGstFilingAccess). This
-  // toggle is pure UI convenience over those two existing flags, not a
-  // separate permission.
+  // GST Reports has no section of its own — this toggle sets both reports_sales/reports_purchases, which requireGstFilingAccess() actually checks.
   const isGstEnabled = (user: GrantableUser) =>
     isEnabled(user, "reports_sales") && isEnabled(user, "reports_purchases");
 

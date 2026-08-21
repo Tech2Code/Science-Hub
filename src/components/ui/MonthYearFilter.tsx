@@ -13,9 +13,7 @@ interface MonthYearFilterProps {
   label?: string;
 }
 
-// Month + Year dropdown pair — filters an already-fetched list client-side
-// by a record's date field, matching the search/sort/status filters already
-// on the Invoices/Purchase Bills/Credit Notes list pages (all client-side).
+// Month + Year dropdown pair — filters an already-fetched list client-side by a record's date field.
 export function MonthYearFilter({ month, year, years, onMonthChange, onYearChange, label = "Period" }: MonthYearFilterProps) {
   return (
     <div className={styles.wrap}>

@@ -4,10 +4,8 @@ import { buildGstFilingReport } from "@/lib/gstFiling";
 import { buildGstFilingZip } from "@/lib/gstFilingZip";
 import { buildGstFilingWorkbook } from "@/lib/gstFilingWorkbook";
 
-// The GST Filing package merges Sales AND Purchase data, which normally sit
-// behind separate section permissions (reports_sales / reports_purchases) —
-// a combined all-or-nothing gate here avoids handing a partial (and
-// potentially misleading) filing package to a user who only has one half.
+// Sales+Purchase data merge here despite sitting behind separate permissions — an all-or-nothing
+// gate avoids handing a partial, misleading filing package to a user with only one half.
 async function requireGstFilingAccess() {
   const auth = await requireSession();
   if (!auth.ok) return auth;
@@ -49,9 +47,8 @@ export async function GET(request: NextRequest) {
 
     const report = await buildGstFilingReport(startDate, endDate);
 
-    // Content-Disposition must be ASCII/Latin-1 — build the filename from the
-    // raw "YYYY-MM-DD" query dates, not report.period.label (which contains a
-    // non-Latin-1 en-dash "–" and throws when set as a header).
+    // Content-Disposition must be ASCII/Latin-1 — use raw query dates, not report.period.label
+    // (contains a non-Latin-1 en-dash that throws when set as a header).
     const fileLabel = `${startDate}_to_${endDate}`;
 
     if (format === "zip") {

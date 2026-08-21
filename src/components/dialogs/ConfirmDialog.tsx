@@ -59,9 +59,7 @@ export function ConfirmDialog({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        // Mirrors the Cancel button's own `disabled={loading}` — without
-        // this, Escape (or the backdrop click below) could abandon an
-        // in-flight confirm action that the button itself refuses to let go.
+        // Mirrors Cancel's `disabled={loading}` — don't let Escape abandon an in-flight confirm action.
         if (!loading) onCancel();
         return;
       }
@@ -89,12 +87,7 @@ export function ConfirmDialog({
 
   if (!open) return null;
 
-  // Portaled to document.body, same as Modal — otherwise, with an equal
-  // z-index, a ConfirmDialog rendered inline (nested wherever its owning
-  // component sits in the tree) loses the stacking order to any Modal that
-  // was portaled to document.body earlier, since fixed-position elements at
-  // the same z-index paint in DOM order and the portaled node always lands
-  // later as a direct child of body.
+  // Portaled to document.body, same as Modal — otherwise an inline-rendered dialog loses stacking order to a Modal portaled earlier (same z-index, DOM order wins).
   return createPortal(
     <div className={styles.overlay} role="dialog" aria-modal="true">
       <div className={styles.backdrop} onClick={() => { if (!loading) onCancel(); }} />

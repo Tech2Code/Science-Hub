@@ -38,9 +38,8 @@ export const RATE_LIST_UNITS = [
   "Nos", "Pcs", "GM", "KG", "ML", "LTR", "Box", "Pack", "Set", "Dozen",
 ];
 
-// Server-side counterpart to the client form above — normalizes and
-// validates a raw items payload into rows ready for prisma.rateListItem
-// create(), shared by the create and edit routes so they can't drift.
+// Server-side counterpart to the client form — normalizes/validates a raw items payload
+// into rows ready for prisma.rateListItem create(), shared by create and edit routes.
 export interface RateListItemInput {
   name?: string;
   brand?: string;

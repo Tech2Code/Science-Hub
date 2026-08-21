@@ -18,9 +18,7 @@ interface InvoiceOptionsRowProps {
   dueDate: string;
   onDueDateChange: (date: string) => void;
   minDueDate?: string;
-  // Only the Edit Invoice page passes these — invoice date isn't user-set at
-  // creation (always "now" server-side), only correctable afterward. Kept
-  // optional so the New Invoice page's layout is untouched.
+  // Only Edit Invoice passes these — invoice date is always "now" server-side at creation, only correctable afterward.
   invoiceDate?: string;
   onInvoiceDateChange?: (date: string) => void;
   maxInvoiceDate?: string;
@@ -34,9 +32,7 @@ interface InvoiceOptionsRowProps {
   transportChargeError?: string;
 }
 
-// Place of supply / inter-state (IGST) / reverse charge / due date / transport
-// charge — shared by the New Invoice and Edit Invoice pages so the two forms
-// can't drift apart.
+// Shared by New Invoice and Edit Invoice so the two forms can't drift apart.
 export function InvoiceOptionsRow({
   sectionIndex,
   placeOfSupply, onPlaceOfSupplyChange,

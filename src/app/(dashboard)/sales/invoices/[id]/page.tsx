@@ -216,6 +216,7 @@ export default function InvoiceDetailPage() {
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [pdfPrinting, setPdfPrinting] = useState(false);
   const [pdfViewing, setPdfViewing] = useState(false);
+  const [pdfRegenerating, setPdfRegenerating] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
   const [showReturnForm, setShowReturnForm] = useState(false);
@@ -475,9 +476,11 @@ export default function InvoiceDetailPage() {
   // mirroring the list page's "Regenerate" action.
   async function handleRegeneratePdf() {
     if (!invoice) return;
+    setPdfRegenerating(true);
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     await document.fonts.ready;
     const blob = await generatePdfBlob(["ORIGINAL COPY"], true);
+    setPdfRegenerating(false);
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
     setPdfPreviewUrl(URL.createObjectURL(blob));
     toast({ type: "success", title: "Regenerated", message: "Latest PDF generated and cached." });
@@ -760,6 +763,7 @@ export default function InvoiceDetailPage() {
       )}
       {shareLoading && <OverlayLoader text={shareLoadingText} />}
       {pdfPrinting && <OverlayLoader text="Preparing PDF…" />}
+      {pdfRegenerating && <OverlayLoader text="Regenerating PDF…" />}
       {addingPayment && <OverlayLoader text="Saving payment…" />}
       {addingReturn && <OverlayLoader text="Saving return…" />}
       {deletingReturn && <OverlayLoader text="Deleting credit note…" />}
@@ -1010,9 +1014,10 @@ export default function InvoiceDetailPage() {
                     type="button"
                     onClick={() => { if (!addingReturn) setShowReturnForm(false); }}
                     disabled={addingReturn}
+                    aria-label="Close"
                     className={styles.returnModalCloseBtn}
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                   </button>
                 </div>
                 {/* Meta row (pinned, outside the scrollable body) */}
@@ -1346,12 +1351,12 @@ export default function InvoiceDetailPage() {
                   return (
                     <tr id="invoice-col-header" style={{ background: "var(--inv-bg3)", fontWeight: 700, fontSize: 8, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--inv-tx2)" }}>
                       {[
-                        ["#", "center", "3%"], ["Description", "left", "14%"], ["HSN/SAC", "center", "8%"],
+                        ["#", "center", "3%"], ["Description", "left", "12%"], ["HSN/SAC", "center", "8%"],
                         ["Qty", "center", "5%"], ["Unit", "center", "5%"],
                       ].map(([label, align, width]) => (
                         <td key={label} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align as "left" | "right" | "center", width, whiteSpace: "nowrap", verticalAlign: "middle" }}>{label}</td>
                       ))}
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "9%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "11%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                         <div>List</div><div>Price(₹)</div>
                       </td>
                       <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "9%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
@@ -1392,31 +1397,37 @@ export default function InvoiceDetailPage() {
                   return (
                     <tr key={item.id} data-invoice-item-row="true">
                       {c(idx + 1, "center", false, "3%", true)}
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 6px", width: "15%", background: rowBg, fontWeight: 600, color: "var(--inv-tx)" }}>
-                        {/* Fixed single-line height with ellipsis truncation
-                            instead of wrapping to 2 lines — a row whose height
-                            depended on whether the name actually wrapped (1
-                            line vs 2) let html2canvas's own text-wrap
-                            approximation disagree with the live DOM
-                            measurement taken before capture (see
-                            ROW_SAFETY_MARGIN_PX in generateInvoicePdf.ts),
-                            throwing off the page-split math for that row. A
-                            fixed one-line box removes the wrap variance
-                            entirely. The div ALSO needs its own definite
-                            (px) width, not just the td's percentage width —
-                            in table auto-layout, an unwrapped nowrap div with
-                            no width of its own reports its full text length
-                            as the column's required min-content, which wins
-                            over the td's specified width/percentage and
-                            stretches the whole table. A definite width here
-                            caps that measurement so overflow:hidden actually
-                            clips instead of just being ignored. */}
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 6px", width: "13%", background: rowBg, fontWeight: 600, color: "var(--inv-tx)" }}>
+                        {/* TEST: 2-line clamp instead of the previous
+                            fixed-1-line-height ellipsis, to see how the
+                            page-split math in generateInvoicePdf.ts
+                            (ROW_SAFETY_MARGIN_PX) copes with rows whose
+                            height now legitimately varies (1 line vs 2). The
+                            div still needs its own definite px width (see
+                            prior comment) so overflow/line-clamp measure
+                            against a fixed column width, not the text's own
+                            length. */}
                         <div style={{
-                          overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
-                          lineHeight: "14px", height: "14px", width: 145, maxWidth: "100%",
+                          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+                          overflow: "hidden", textOverflow: "ellipsis",
+                          width: 145, maxWidth: "100%",
                         }} title={item.name}>{item.name}</div>
                       </td>
-                      {c(item.hsn || "—")}
+                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", background: rowBg, color: "var(--inv-tx2)" }}>
+                        {/* Real HSN/SAC codes are numeric-only, max 8 digits
+                            (2/4/6/8-digit HSN hierarchy, or 6-digit SAC) —
+                            they never legitimately need to wrap. The server
+                            still allows up to 50 chars as a generic safety
+                            bound (route.ts), so a fixed single-line ellipsis
+                            (rather than the item-name's 2-line clamp) guards
+                            against a stray long/garbage value wrapping
+                            unpredictably and reintroducing the same row-
+                            height page-split risk. 55px comfortably fits 8
+                            digits at this font size with room to spare. */}
+                        <div style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", width: 55, maxWidth: "100%", margin: "0 auto" }} title={item.hsn || "—"}>
+                          {item.hsn || "—"}
+                        </div>
+                      </td>
                       {c(item.quantity)}{c(item.unit)}
                       {c(fmt(item.price), "right", false, undefined, true)}
                       {c(fmt(grossValue), "right", false, undefined, true)}
@@ -2032,6 +2043,7 @@ export default function InvoiceDetailPage() {
                           type="button"
                           className={styles.returnDeleteBtn}
                           title="Download credit note PDF"
+                          aria-label="Download credit note PDF"
                           disabled={creditNoteDownloadingId === ret.id}
                           onClick={() => handleDownloadCreditNotePdf(ret)}
                         >
@@ -2042,6 +2054,7 @@ export default function InvoiceDetailPage() {
                             type="button"
                             className={styles.returnDeleteBtn}
                             title="Delete credit note"
+                            aria-label="Delete credit note"
                             onClick={() => setReturnDeleteConfirm(ret)}
                           >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>

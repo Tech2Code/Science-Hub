@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getReportSummary, getReportOutstanding, getReportStock } from "@/lib/db";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireSectionAccess } from "@/lib/apiAuth";
-import { isLowStock } from "@/lib/stockStatus";
 import { parsePageParams } from "@/lib/listQuery";
 
 async function getSalesDashboard() {
@@ -11,7 +10,7 @@ async function getSalesDashboard() {
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  const [revenueAgg, collectedAgg, unpaidInvoices, overdueCount, recentInvoices, customers] = await Promise.all([
+  const [revenueAgg, collectedAgg, outstandingAgg, overdueCount, recentInvoices, topCustomerAggs] = await Promise.all([
     prisma.invoice.aggregate({
       where: { deletedAt: null, date: { gte: monthStart, lt: monthEnd } },
       _sum: { total: true },
@@ -20,9 +19,10 @@ async function getSalesDashboard() {
       where: { deletedAt: null },
       _sum: { paidAmount: true },
     }),
-    prisma.invoice.findMany({
+    // balanceDue is a real Postgres GENERATED column — sum it in the DB rather than fetching every row to reduce in JS.
+    prisma.invoice.aggregate({
       where: { deletedAt: null, status: { in: ["unpaid", "partial"] } },
-      select: { total: true, paidAmount: true, dueDate: true },
+      _sum: { balanceDue: true },
     }),
     prisma.invoice.count({
       where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } },
@@ -33,40 +33,50 @@ async function getSalesDashboard() {
       take: 10,
       include: { customer: { select: { name: true } } },
     }),
-    prisma.customer.findMany({
-      where: { deletedAt: null },
-      include: { invoices: { where: { deletedAt: null }, select: { total: true, paidAmount: true } } },
+    // Top 5 computed by the DB (groupBy + orderBy + take) instead of fetching every customer's invoices to sort in JS. Excludes soft-deleted customers from the ranking.
+    prisma.invoice.groupBy({
+      by: ["customerId"],
+      where: { deletedAt: null, customer: { deletedAt: null } },
+      _sum: { total: true, paidAmount: true },
+      orderBy: { _sum: { total: "desc" } },
+      take: 5,
     }),
   ]);
 
-  const outstandingBalance = unpaidInvoices.reduce((s, i) => s + (i.total - i.paidAmount), 0);
+  const outstandingBalance = outstandingAgg._sum.balanceDue ?? 0;
 
-  const topCustomers = customers
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      totalBilled: c.invoices.reduce((s, i) => s + i.total, 0),
-      totalPaid: c.invoices.reduce((s, i) => s + i.paidAmount, 0),
-    }))
-    .sort((a, b) => b.totalBilled - a.totalBilled)
-    .slice(0, 5);
+  const topCustomerNames = await prisma.customer.findMany({
+    where: { id: { in: topCustomerAggs.map((c) => c.customerId) } },
+    select: { id: true, name: true },
+  });
+  const topCustomerNameMap = new Map(topCustomerNames.map((c) => [c.id, c.name]));
+  const topCustomers = topCustomerAggs.map((c) => ({
+    id: c.customerId,
+    name: topCustomerNameMap.get(c.customerId) ?? "Unknown",
+    totalBilled: c._sum.total ?? 0,
+    totalPaid: c._sum.paidAmount ?? 0,
+  }));
 
   // Financial year monthly revenue (Apr–Mar)
   const fyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
   const fyStart = new Date(fyYear, 3, 1);
   const fyLabel = `FY ${fyYear}-${String(fyYear + 1).slice(2)}`;
-  const monthlyRevenue: { month: string; total: number }[] = await Promise.all(
-    Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(fyStart.getFullYear(), fyStart.getMonth() + i, 1);
-      const label = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
-      if (d > now) return Promise.resolve({ month: label, total: 0 });
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-      return prisma.invoice.aggregate({
-        where: { deletedAt: null, date: { gte: d, lt: end } },
-        _sum: { total: true },
-      }).then((agg) => ({ month: label, total: agg._sum.total ?? 0 }));
-    })
-  );
+  // One query for the whole FY, grouped in JS — 12 "parallel" per-month aggregates would still serialize through the pooled connection_limit=1 DB anyway.
+  const fyEnd = new Date(fyStart.getFullYear() + 1, fyStart.getMonth(), 1);
+  const fyInvoices = await prisma.invoice.findMany({
+    where: { deletedAt: null, date: { gte: fyStart, lt: fyEnd } },
+    select: { date: true, total: true },
+  });
+  const monthlyRevenue: { month: string; total: number }[] = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(fyStart.getFullYear(), fyStart.getMonth() + i, 1);
+    const label = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
+    if (d > now) return { month: label, total: 0 };
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    const total = fyInvoices
+      .filter((inv) => inv.date >= d && inv.date < end)
+      .reduce((sum, inv) => sum + inv.total, 0);
+    return { month: label, total };
+  });
 
   return {
     revenueThisMonth: revenueAgg._sum.total ?? 0,
@@ -89,7 +99,7 @@ async function getPurchaseDashboard() {
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  const [spendAgg, paidAgg, unpaidBills, overdueCount, recentBills, vendors] = await Promise.all([
+  const [spendAgg, paidAgg, payableAgg, overdueCount, recentBills, topVendorAggs] = await Promise.all([
     prisma.purchaseBill.aggregate({
       where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: monthStart, lt: monthEnd } },
       _sum: { total: true },
@@ -98,9 +108,10 @@ async function getPurchaseDashboard() {
       where: { deletedAt: null, status: { not: "cancelled" } },
       _sum: { paidAmount: true },
     }),
-    prisma.purchaseBill.findMany({
+    // Same fix as getSalesDashboard's outstandingBalance — DB-side sum of the generated balanceDue column.
+    prisma.purchaseBill.aggregate({
       where: { deletedAt: null, status: { in: ["unpaid", "partial"] } },
-      select: { total: true, paidAmount: true, dueDate: true },
+      _sum: { balanceDue: true },
     }),
     prisma.purchaseBill.count({
       where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } },
@@ -111,41 +122,50 @@ async function getPurchaseDashboard() {
       take: 10,
       include: { vendor: { select: { name: true } } },
     }),
-    prisma.vendor.findMany({
-      // Cancelled bills are excluded from vendor totals — their stock effect
-      // was reversed and the business generally never actually paid for
-      // them, so counting them here would overstate a vendor's real spend.
-      include: { purchaseBills: { where: { deletedAt: null, status: { not: "cancelled" } }, select: { total: true, paidAmount: true } } },
+    // Same fix as getSalesDashboard's topCustomers — DB-side groupBy + take(5); cancelled bills excluded since their stock effect was reversed.
+    prisma.purchaseBill.groupBy({
+      by: ["vendorId"],
+      where: { deletedAt: null, status: { not: "cancelled" }, vendor: { deletedAt: null } },
+      _sum: { total: true, paidAmount: true },
+      orderBy: { _sum: { total: "desc" } },
+      take: 5,
     }),
   ]);
 
-  const payableBalance = unpaidBills.reduce((s, b) => s + (b.total - b.paidAmount), 0);
+  const payableBalance = payableAgg._sum.balanceDue ?? 0;
 
-  const topVendors = vendors
-    .map((v) => ({
-      id: v.id, name: v.name,
-      totalBilled: v.purchaseBills.reduce((s, b) => s + b.total, 0),
-      totalPaid: v.purchaseBills.reduce((s, b) => s + b.paidAmount, 0),
-    }))
-    .sort((a, b) => b.totalBilled - a.totalBilled)
-    .slice(0, 5);
+  const topVendorNames = await prisma.vendor.findMany({
+    where: { id: { in: topVendorAggs.map((v) => v.vendorId) } },
+    select: { id: true, name: true },
+  });
+  const topVendorNameMap = new Map(topVendorNames.map((v) => [v.id, v.name]));
+  const topVendors = topVendorAggs.map((v) => ({
+    id: v.vendorId,
+    name: topVendorNameMap.get(v.vendorId) ?? "Unknown",
+    totalBilled: v._sum.total ?? 0,
+    totalPaid: v._sum.paidAmount ?? 0,
+  }));
 
   // Financial year monthly spend (Apr–Mar)
   const fyYearP = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
   const fyStartP = new Date(fyYearP, 3, 1);
   const fyLabelP = `FY ${fyYearP}-${String(fyYearP + 1).slice(2)}`;
-  const monthlySpend: { month: string; total: number }[] = await Promise.all(
-    Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(fyStartP.getFullYear(), fyStartP.getMonth() + i, 1);
-      const label = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
-      if (d > now) return Promise.resolve({ month: label, total: 0 });
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-      return prisma.purchaseBill.aggregate({
-        where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: d, lt: end } },
-        _sum: { total: true },
-      }).then((agg) => ({ month: label, total: agg._sum.total ?? 0 }));
-    })
-  );
+  // Same fix as monthlyRevenue — one query for the whole FY, grouped in JS.
+  const fyEndP = new Date(fyStartP.getFullYear() + 1, fyStartP.getMonth(), 1);
+  const fyBills = await prisma.purchaseBill.findMany({
+    where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: fyStartP, lt: fyEndP } },
+    select: { billDate: true, total: true },
+  });
+  const monthlySpend: { month: string; total: number }[] = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(fyStartP.getFullYear(), fyStartP.getMonth() + i, 1);
+    const label = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
+    if (d > now) return { month: label, total: 0 };
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    const total = fyBills
+      .filter((b) => b.billDate >= d && b.billDate < end)
+      .reduce((sum, b) => sum + b.total, 0);
+    return { month: label, total };
+  });
 
   return {
     spendThisMonth: spendAgg._sum.total ?? 0,
@@ -170,36 +190,30 @@ async function getCombinedDashboard(canSeeSales: boolean, canSeePurchases: boole
   const todayEnd = new Date(todayStart.getTime() + 86400000);
 
   const [
-    salesMonthAgg, salesOutstanding, salesOverdue, collectedTodayAgg,
-    spendMonthAgg, purchaseUnpaid, purchaseOverdue, paidTodayAgg,
+    salesMonthAgg, salesOutstandingAgg, salesOverdue, collectedTodayAgg,
+    spendMonthAgg, purchaseUnpaidAgg, purchaseOverdue, paidTodayAgg,
     recentInvoices, recentBills, lowStockCount,
   ] = await Promise.all([
     prisma.invoice.aggregate({ where: { deletedAt: null, date: { gte: monthStart, lt: monthEnd } }, _sum: { total: true } }),
-    prisma.invoice.findMany({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] } }, select: { total: true, paidAmount: true } }),
+    // balanceDue is a real Postgres GENERATED column — sum it in the DB rather than reducing every row in JS (same fix as getSalesDashboard/getPurchaseDashboard).
+    prisma.invoice.aggregate({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] } }, _sum: { balanceDue: true } }),
     prisma.invoice.count({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } } }),
     prisma.payment.aggregate({ where: { date: { gte: todayStart, lt: todayEnd } }, _sum: { amount: true } }),
     prisma.purchaseBill.aggregate({ where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: monthStart, lt: monthEnd } }, _sum: { total: true } }),
-    prisma.purchaseBill.findMany({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] } }, select: { total: true, paidAmount: true } }),
+    prisma.purchaseBill.aggregate({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] } }, _sum: { balanceDue: true } }),
     prisma.purchaseBill.count({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } } }),
     prisma.purchasePayment.aggregate({ where: { date: { gte: todayStart, lt: todayEnd } }, _sum: { amount: true } }),
     prisma.invoice.findMany({ where: { deletedAt: null }, orderBy: { date: "desc" }, take: 5, include: { customer: { select: { name: true } } } }),
     prisma.purchaseBill.findMany({ where: { deletedAt: null }, orderBy: { billDate: "desc" }, take: 5, include: { vendor: { select: { name: true } } } }),
-    prisma.product.count({ where: { deletedAt: null } }).then(async () => {
-      const prods = await prisma.product.findMany({ where: { deletedAt: null }, select: { stock: true, minStock: true } });
-      return prods.filter((p) => isLowStock(p.stock, p.minStock)).length;
-    }),
+    // isLowStock is also a real Postgres GENERATED column — a plain count against it instead of fetching every product to filter in JS.
+    prisma.product.count({ where: { deletedAt: null, isLowStock: true } }),
   ]);
 
-  // Sales/purchase figures are only returned to callers actually granted the
-  // matching section — the dashboard page already hides these widgets from
-  // a staff/manager without sales_overview/purchase_overview, but that was
-  // purely a client-side render decision; the API itself returned the full
-  // numbers to any authenticated user. Redact server-side too, the same way
-  // /api/reports and /api/purchase-reports already gate their own types.
+  // Redact sales/purchase figures server-side for callers not granted the matching section — the dashboard's own client-side hiding isn't sufficient on its own.
   return {
     sales: canSeeSales ? {
       revenueThisMonth: salesMonthAgg._sum.total ?? 0,
-      outstandingAmount: salesOutstanding.reduce((s, i) => s + (i.total - i.paidAmount), 0),
+      outstandingAmount: salesOutstandingAgg._sum.balanceDue ?? 0,
       overdueInvoices: salesOverdue,
       collectedToday: collectedTodayAgg._sum.amount ?? 0,
       recentInvoices: recentInvoices.map((inv) => ({
@@ -209,7 +223,7 @@ async function getCombinedDashboard(canSeeSales: boolean, canSeePurchases: boole
     } : null,
     purchases: canSeePurchases ? {
       spendThisMonth: spendMonthAgg._sum.total ?? 0,
-      payableBalance: purchaseUnpaid.reduce((s, b) => s + (b.total - b.paidAmount), 0),
+      payableBalance: purchaseUnpaidAgg._sum.balanceDue ?? 0,
       overdueBills: purchaseOverdue,
       paidToday: paidTodayAgg._sum.amount ?? 0,
       recentBills: recentBills.map((b) => ({
@@ -265,11 +279,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid endDate" }, { status: 400 });
     }
 
-    // These types back the dedicated Sales/Purchase Reports and Overview
-    // pages, each already gated client-side by the matching ProtectedSection
-    // (see ROUTE_SECTION_MAP) — enforce the same gate server-side so a
-    // staff/manager user without the section granted can't bypass the UI
-    // redirect by calling the API directly.
+    // Enforce the same ProtectedSection gate server-side so a staff/manager without access can't bypass the UI redirect by calling the API directly.
     if (type === "summary" || type === "outstanding" || type === "gst-summary") {
       const gate = await requireSectionAccess("reports_sales");
       if (!gate.ok) return gate.response;

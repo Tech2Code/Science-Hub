@@ -7,6 +7,26 @@
   transition: background-color 0.2s;
 }
 
+/* Off-screen until focused (Tab from page load) — then pinned to the
+   top-left corner above everything else so a keyboard user can see and
+   activate it before it scrolls back off-screen on blur. */
+.skipLink {
+  position: absolute;
+  top: -3rem;
+  left: 0.75rem;
+  z-index: 10000;
+  padding: 0.625rem 1.125rem;
+  background: var(--c-blue);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: var(--c-radius-sm);
+  transition: top 0.15s ease;
+}
+.skipLink:focus-visible {
+  top: 0.75rem;
+}
+
 /* ── Sidebar ────────────────────────── */
 .sidebar {
   display: flex;
@@ -169,9 +189,21 @@
 .navLinkActive {
   background: var(--c-blue);
   color: #fff;
-  box-shadow: 0 4px 12px rgba(37,99,235,0.3);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--c-blue) 30%, transparent);
 }
 .navLinkActive:hover { background: var(--c-blue); color: #fff; }
+/* --c-blue resolves to a pale, white-mixed blue in dark mode (see its .dark
+   definition in globals.css) — white text on it measures only 2.72:1,
+   well under WCAG AA. --c-blue-h ("hover", already used elsewhere as a
+   solid-fill background, e.g. Button's primary:hover) resolves to the same
+   solid #2563eb as light mode's own --c-blue there, keeping white text at
+   5.17:1 in both themes instead. Same fix applied to globals.css's
+   .filter-tab-active for the same reason. */
+:global(.dark) .navLinkActive,
+:global(.dark) .navLinkActive:hover {
+  background: var(--c-blue-h);
+  color: #fff;
+}
 
 .navIcon { width: 1.25rem; height: 1.25rem; flex-shrink: 0; }
 .navLabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -400,8 +432,8 @@
   background: #e2e8f0;
   transition: background-color 0.2s;
 }
-:global(.dark) .toggleTrack { background: #3b82f6; }
-.toggleTrack:focus-visible { box-shadow: 0 0 0 3px rgba(59,130,246,0.45); }
+:global(.dark) .toggleTrack { background: var(--c-blue); }
+.toggleTrack:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-blue) 45%, transparent); }
 .toggleIcons {
   position: absolute;
   inset: 0;
@@ -442,7 +474,7 @@
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
   width: 0.875rem; height: 0.875rem;
-  color: #3b82f6;
+  color: var(--c-blue);
   opacity: 0;
   transition: opacity 0.15s;
 }

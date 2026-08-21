@@ -54,9 +54,7 @@ interface BillDetailsCardProps {
   transportChargeError?: string;
 }
 
-// Vendor (+ inline "create vendor" flow) / Category / Bill Date / Due Date /
-// Notes / Attachment / Transport Charge — shared by the New Purchase Bill
-// and Edit Purchase Bill pages so the two forms can't drift apart.
+// Shared by New/Edit Purchase Bill pages so the two forms can't drift apart.
 export function BillDetailsCard({
   sectionIndex, vendors, vendorId, onVendorIdChange, onVendorCreated, onVendorUpdated, vendorError,
   category, onCategoryChange, billDate, onBillDateChange, billDateError, dueDate, onDueDateChange, dueDateError,
@@ -80,11 +78,7 @@ export function BillDetailsCard({
 
   const ivDirty = useDirty(ivForm);
   const selectedVendor = vendors.find((v) => v.id === vendorId);
-  // While the user is actively typing a query, that text wins; otherwise fall
-  // back to the selected vendor's name — this way the input reflects the
-  // right vendor even if `vendors` (fetched by the parent page) loads after
-  // `vendorId` is already set (e.g. the Edit Purchase Bill page), with no
-  // extra effect/state-sync required.
+  // Typed query wins over the selected vendor's name — handles `vendors` loading after `vendorId` is already set (e.g. Edit page) with no extra sync effect.
   const vendorSearchValue = vendorSearch || selectedVendor?.name || "";
   const filteredVendors = vendors.filter((v) => {
     const q = vendorSearch.toLowerCase();

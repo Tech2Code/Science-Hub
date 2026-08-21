@@ -1,7 +1,4 @@
-// Pure GST-compliance checks reused by the GST Filing package builder.
-// Each `isValid*` helper mirrors the format rules already enforced on
-// input forms (src/lib/validation.ts's `rules.gstin` etc.) — kept separate
-// here because these run over *stored* data in bulk, not a single form field.
+// Pure GST-compliance checks for the GST Filing package builder — mirrors validation.ts's form rules but runs over stored data in bulk, not a single field.
 
 export type ValidationSeverity = "error" | "warning";
 
@@ -12,18 +9,14 @@ export interface ValidationIssue {
   reference?: string; // invoice/bill number this issue relates to, if any
 }
 
-// Standard Indian GST rate slabs (incl. the reduced/special-category rates
-// used for select goods) — anything outside this set is unusual, not
-// necessarily wrong, so it's flagged as a warning rather than an error.
+// Standard Indian GST rate slabs — anything outside this set is unusual, not necessarily wrong, so it's a warning not an error.
 const STANDARD_GST_RATES = new Set([0, 0.1, 0.25, 1.5, 3, 5, 12, 18, 28]);
 
 export function isValidGstin(gstin: string): boolean {
   return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin.trim().toUpperCase());
 }
 
-// GSTIN's first 2 digits are the GST state code — valid range is 01–38
-// (as of the current state/UT list). A value outside this range means the
-// GSTIN was mistyped even if it otherwise matches the format regex.
+// GSTIN's first 2 digits are the GST state code (valid range 01-38) — out of range means mistyped even if the format regex matches.
 export function hasValidGstinStateCode(gstin: string): boolean {
   const code = parseInt(gstin.trim().slice(0, 2), 10);
   return Number.isFinite(code) && code >= 1 && code <= 38;

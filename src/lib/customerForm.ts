@@ -9,11 +9,8 @@ export const BLANK_CUSTOMER_FORM: CustomerFormData = {
   name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "",
 };
 
-// Phone/address/city/state/pincode are required on both create and edit.
-// City/state are required alongside pincode (not just format-checked)
-// because they're what pincode auto-fill actually resolves, and — as with
-// vendors — a customer with no state can't have its place-of-supply
-// prefilled on invoices.
+// City/state required alongside pincode (not just format-checked) — pincode auto-fill resolves them,
+// and a customer with no state can't have its place-of-supply prefilled on invoices.
 export function validateCustomerForm(form: CustomerFormData, opts: { requirePhone: boolean; requireAddress: boolean; requireCity: boolean; requireState: boolean; requirePincode: boolean }): FormErrors<CustomerFormData> {
   return validateForm(form, {
     name:    [rules.required("Customer name is required."), rules.minLength(2), rules.maxLength(200)],

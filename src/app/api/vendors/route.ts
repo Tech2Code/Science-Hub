@@ -44,10 +44,7 @@ export async function POST(req: NextRequest) {
     const validationError = validateVendorInput({ name, company, phone, email, gstin, address, city, state, pincode, notes }, true);
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
-    // "Just for this bill" vendors still need a real Vendor row
-    // (PurchaseBill.vendorId is a required FK), but are soft-deleted at
-    // creation so they never surface in the vendor directory/search — the
-    // bill itself keeps working normally via the FK either way.
+    // "Just for this bill" vendors still need a real row (required FK) but are soft-deleted at creation to stay out of the directory/search.
     const isOneOff = oneOff === true;
     const vendor = await prisma.vendor.create({
       data: {

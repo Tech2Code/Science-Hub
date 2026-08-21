@@ -95,11 +95,7 @@ export async function PUT(
         data.purchasePrice = parsed;
       }
     }
-    // `stock` is deliberately not accepted here — every stock change must go
-    // through POST /api/products/[id]/adjust-stock instead, which requires a
-    // reason and writes an audited StockMovement row via batchAdjustStock().
-    // Accepting it in this generic edit route would let stock drift out of
-    // sync with the ledger with no record of why (see AUDIT_REPORT.md API-002).
+    // `stock` is deliberately not accepted here — changes must go through /api/products/[id]/adjust-stock so the ledger stays authoritative.
     const numericFields: [string, unknown, number, number, boolean][] = [
       ["price", price, 0, Infinity, false],
       ["gstRate", gstRate, 0, 100, false],

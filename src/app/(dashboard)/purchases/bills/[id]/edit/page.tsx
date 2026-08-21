@@ -26,6 +26,9 @@ import { InfoBanner } from "@/components/ui/InfoBanner";
 import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import styles from "./edit.module.css";
 
+// Mirrors MAX_SIZE in src/app/api/purchase-bills/upload/route.ts — client-side reject before upload.
+const MAX_ATTACHMENT_FILE_BYTES = 10 * 1024 * 1024;
+
 interface BillItem {
   id: string; name: string; hsn: string; quantity: number; unit: string;
   purchasePrice: number; discountPercent: number; gstRate: number; gstAmount: number; total: number;
@@ -95,9 +98,7 @@ export default function EditPurchaseBillPage() {
   const [dueDate,   setDueDate]   = useState("");
   const [dueDateError, setDueDateError] = useState<string | undefined>(undefined);
   const [itemsError, setItemsError] = useState<string | undefined>(undefined);
-  // Snapshot of the items array the current itemsError was raised against —
-  // lets the error auto-hide the moment the items list itself changes (add/
-  // remove/edit a line) without setting state from inside an effect.
+  // Snapshot items array at error-time so the error auto-hides once items change, without an effect.
   const [itemsErrorFor, setItemsErrorFor] = useState<PurchaseBillLineItem[] | null>(null);
   const [category,  setCategory]  = useState("");
   const [notes,     setNotes]     = useState("");
@@ -106,18 +107,12 @@ export default function EditPurchaseBillPage() {
   const [attachmentUrl,  setAttachmentUrl]  = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
-  // Always shown open on Edit too (matches New Bill's default-ON toggle) —
-  // an existing bill's saved amount/rate (if any) is loaded into it below.
-  // Note: the useEffect that loads the bill will set this to false if the
-  // saved transportCharge was 0 or absent (i.e. user previously disabled it).
+  // Defaults true; the load effect below flips it false if the saved bill had no transport charge.
   const [transportChargeEnabled, setTransportChargeEnabled] = useState(true);
   const [transportCharge, setTransportCharge] = useState("");
   const [transportChargeGstRate, setTransportChargeGstRate] = useState("18");
   const [transportChargeError, setTransportChargeError] = useState<string | undefined>(undefined);
-  // The bill's persisted attachment when the page loaded — used to tell a
-  // saved attachment apart from one uploaded this session but not saved yet,
-  // so an unsaved upload that gets replaced/removed can be discarded right
-  // away instead of orphaning in Blob storage until someone notices.
+  // Persisted attachment at load time; lets an unsaved replacement/removal be discarded from Blob immediately.
   const originalAttachmentUrl = useRef<string | null>(null);
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
 
@@ -181,11 +176,7 @@ export default function EditPurchaseBillPage() {
       fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
     ]).then(([b, v, p]: [PurchaseBill, { data: PurchaseBillVendor[] }, { data: PurchaseBillProduct[] }]) => {
       setBill(b);
-      // The bill's own vendor might be a "one-off" vendor (created via the
-      // "just for this bill — don't save" option), which is soft-deleted at
-      // creation so /api/vendors never returns it — without this, the vendor
-      // <select> below would render as unselected/blank despite the bill's
-      // vendorId being intact.
+      // A "one-off" vendor is soft-deleted at creation so /api/vendors omits it; inject it back so the select isn't blank.
       const fetchedVendors = v.data ?? [];
       setVendors(b.vendor && !fetchedVendors.some(x => x.id === b.vendor.id) ? [...fetchedVendors, b.vendor] : fetchedVendors);
       setProducts(p.data ?? []);
@@ -206,9 +197,7 @@ export default function EditPurchaseBillPage() {
       setTransportChargeEnabled(b.transportCharge != null && b.transportCharge > 0);
       setTransportCharge(transportChargeVal);
       setTransportChargeGstRate(transportChargeGstRateVal);
-      // Snapshot the freshly-loaded values directly rather than relying on
-      // the state set above — those updates haven't committed yet at this
-      // point in the callback, so reading them back here would be stale.
+      // Use the freshly-fetched values directly — the state setters above haven't committed yet here.
       markClean({
         vendorId: b.vendorId ?? "",
         billDate: b.billDate ? b.billDate.slice(0, 10) : "",
@@ -244,6 +233,11 @@ export default function EditPurchaseBillPage() {
   async function handleAttachmentChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_ATTACHMENT_FILE_BYTES) {
+      toast({ type: "error", title: "File too large", message: "File must be under 10 MB." });
+      e.target.value = "";
+      return;
+    }
     setAttachmentUploading(true);
     try {
       const form = new FormData();
@@ -415,9 +409,7 @@ export default function EditPurchaseBillPage() {
   );
   if (loadErr)  return <div className={`error-banner ${styles.loadErr}`}>{loadErr}</div>;
 
-  // Fully paid/cancelled bills have nothing left to edit — reachable directly
-  // by URL even though the detail page's Edit button is disabled for these,
-  // so guard here too rather than showing a form that has nowhere useful to go.
+  // Guard here too — reachable directly by URL even though the detail page's Edit button is disabled for these.
   if (bill && (bill.status === "paid" || bill.status === "cancelled")) {
     return (
       <div className="page-stack">

@@ -61,10 +61,7 @@ interface PurchaseBillFormBodyProps {
   footer: ReactNode;
 }
 
-// Shared leftCol/rightCol layout + Bill Details / Items / Totals wiring for
-// the New Purchase Bill and Edit Purchase Bill pages, so the two forms can't
-// drift apart. Each page still owns its own state/handlers/validation and
-// supplies its own `footer` (Create vs. Save Changes, optional payment, etc.).
+// Shared layout for New/Edit Purchase Bill; each page owns its own state/validation and supplies `footer`.
 export function PurchaseBillFormBody({
   startIndex = 0,
   vendors, vendorId, onVendorIdChange, onVendorCreated, onVendorUpdated, vendorError,

@@ -83,9 +83,7 @@ export default function NewCustomerPage() {
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/customers");
       toast({ type: "success", title: "Customer created", message: `"${created.name}" added.` });
-      // Deliberately not resetting `saving` here — it must stay locked until
-      // navigation actually replaces this page, or the form briefly
-      // re-enables during the gap between this await and the route change.
+      // saving stays true until navigation replaces this page.
       router.push(`/sales/customers/${created.id}`);
       return;
     } else {

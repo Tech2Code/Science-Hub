@@ -63,11 +63,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       );
     }
 
-    // Bill date is editable (e.g. correcting a same-week typo), but never
-    // across a financial-year boundary — the bill number was generated for
-    // a specific FY (see src/lib/documentNumbering.ts) and moving the date
-    // into a different one would leave the printed number pointing at the
-    // wrong period with no way to reconcile it automatically.
+    // Bill date is editable but never across an FY boundary — the bill number was already generated for a specific FY.
     let parsedBillDate: Date | undefined;
     if (billDate) {
       parsedBillDate = new Date(billDate);
@@ -95,10 +91,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     let subtotal: number | undefined;
     let taxAmount: number | undefined;
-    // Recomputed items (GST/total derived from quantity × price × rate, not
-    // trusted from the client) — mirrors the POST route's fix; kept undefined
-    // when items aren't being edited so the update below only touches items
-    // when the caller actually sent a new set.
+    // Recomputed server-side (mirrors POST); stays undefined when items aren't being edited so the update only touches items when sent.
     let computedItems: Array<{
       productId?: string; name: string; quantity: number; hsn: string;
       unit?: string; purchasePrice: number; gstRate: number;
@@ -131,9 +124,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         }
       }
       {
-        // Mirrors the same guard on /api/invoices/[id] and the POST route
-        // above — without it, batchAdjustStock silently merges duplicate-
-        // product lines into one combined ledger entry.
+        // Mirrors /api/invoices/[id] and the POST route — without it, duplicate-product lines silently merge into one ledger entry.
         const seenProductIds = new Set<string>();
         for (const item of items as { productId?: string }[]) {
           if (!item.productId) continue;
@@ -161,9 +152,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       taxAmount = computedItems.reduce((s, i) => s + i.gstAmount, 0);
     }
 
-    // Re-derive the GST type on every edit (cheap, and keeps it correct if
-    // the vendor was switched or the vendor's own state was corrected after
-    // this bill was created) — same reasoning as the POST route.
+    // Re-derive GST type on every edit — keeps it correct if the vendor was switched or its state corrected after creation.
     const effectiveVendorId = vendorId || existing.vendorId;
     const effectiveVendor = await prisma.vendor.findUnique({ where: { id: effectiveVendorId }, select: { state: true } });
     const biz = await getBusinessSettings();
@@ -182,9 +171,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     const effectiveDiscount = parsedDiscount !== undefined ? parsedDiscount : existing.discount;
 
-    // Transport/freight charge — same "only touch what was sent" partial-
-    // update semantics as discount above, own line/GST kept out of the
-    // CGST/SGST/IGST split, always server-recomputed rather than trusted.
+    // Transport charge follows the same partial-update semantics as discount above; GST amount is always server-recomputed.
     const parsedTransportCharge = transportCharge !== undefined && transportCharge !== null && transportCharge !== ""
       ? parseFloat(String(transportCharge))
       : undefined;
@@ -211,18 +198,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Total cannot be negative" }, { status: 400 });
     }
 
-    // Status isn't a free-form field the user picks — it's derived from
-    // paidAmount vs total, the same way invoices work, so editing anything
-    // that changes total (items or the bill-level discount) can never leave
-    // a stale status behind. The one status a user DOES set directly is
-    // literally the string "cancelled", via the dedicated Cancel Bill action,
-    // which calls this route with only `{ status: "cancelled" }` and no
-    // `items`/`discount`. Any other explicit `status` value sent by a caller
-    // (e.g. "paid", or an un-cancel that isn't actually "cancelled") is never
-    // trusted verbatim — it's recomputed from paidAmount instead, exactly
-    // like the totalChanged branch, so a client can't decouple the stored
-    // status from the real balance (see AUDIT_REPORT.md API-003; mirrors the
-    // fix already applied to invoices, API-001).
+    // Status is derived from paidAmount vs total, never trusted verbatim from the client — the one exception is the literal "cancelled" value sent by the dedicated Cancel Bill action.
     const totalChanged = items !== undefined || parsedDiscount !== undefined;
     const recomputedStatus = existing.paidAmount + 0.01 >= total ? "paid" : existing.paidAmount > 0 ? "partial" : "unpaid";
     const effectiveStatus = totalChanged
@@ -240,19 +216,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       );
     }
 
-    // Cancelling a bill must reverse the stock it added on creation (mirrors
-    // the DELETE handler below) — otherwise "Cancel Bill" silently leaves
-    // phantom stock in inventory with no ledger trail. Un-cancelling
-    // (status moved back off "cancelled") re-applies it symmetrically.
+    // Cancelling must reverse the stock added on creation (mirrors DELETE below); un-cancelling re-applies it symmetrically.
     const isCancelling = effectiveStatus === "cancelled" && existing.status !== "cancelled";
     const isUncancelling = effectiveStatus !== undefined && effectiveStatus !== "cancelled" && existing.status === "cancelled";
 
     const bill = await prisma.$transaction(async (tx) => {
       if (items !== undefined) {
-        // Reverse the stock the old line items added, then apply the new
-        // ones — the exact inverse-then-reapply pattern used for invoice
-        // item edits, so a re-priced or re-quantified purchase reconciles
-        // stock instead of leaving it at whatever the original bill set.
+        // Reverse old line items' stock, then apply the new ones — same inverse-then-reapply pattern as invoice item edits.
         const oldItems = await tx.purchaseBillItem.findMany({
           where: { purchaseBillId: id },
           select: { productId: true, quantity: true },
@@ -381,15 +351,8 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     if (!auth.ok) return auth.response;
     const { id } = await params;
 
-    // Deliberately soft-delete only — a bill number is part of the GST
-    // filing sequence, so this route never permanently removes the row.
-    // Permanent deletion (admin-only, from the Bin page) is a separate,
-    // explicit decision — see src/app/api/bin/[type]/[id]/route.ts.
-    //
-    // Reverse the stock this bill added at creation — and guard against a
-    // repeated delete call double-reversing it. A cancelled bill already had
-    // its stock reversed when it was cancelled, so deleting it must not
-    // reverse it again.
+    // Soft-delete only — bill numbers are part of the GST filing sequence; permanent deletion is admin-only, from the Bin page.
+    // Reverse stock added at creation, guarding against double-reversal on a repeated delete call; a cancelled bill already had its stock reversed, so skip it.
     const result = await prisma.$transaction(async (tx) => {
       const bill = await tx.purchaseBill.findUnique({ where: { id }, select: { billNumber: true, status: true, deletedAt: true } });
       if (!bill) return null;

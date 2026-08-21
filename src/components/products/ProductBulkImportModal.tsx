@@ -26,10 +26,7 @@ interface ReviewRow {
   errorMsg?: string;
 }
 
-// A plain incrementing counter would collide once a draft restored from an
-// earlier session (whose rows already carry keys like "row-6") meets a
-// counter that reset to 0 on this page load — crypto.randomUUID() stays
-// unique across reloads/restores, not just within one.
+// crypto.randomUUID() stays unique across reloads/restores, unlike a plain counter that could collide with a restored draft's existing keys.
 function nextKey(): string {
   return `bulk-import-row-${crypto.randomUUID()}`;
 }
@@ -61,16 +58,13 @@ function validateRow(row: ReviewRow): ProductFieldErrors {
 
 const errorBorderStyle = { borderColor: "var(--c-red-border, #fecaca)" } as const;
 
-// A native <textarea> placeholder can't be styled per-line, so a header row
-// stacked above an example row inside it renders in the same flat gray with
-// no visual distinction between "this is the column name" and "this is an
-// example value" — confusing regardless of how well the two lines align.
-// The column order is shown instead as a persistent, numbered legend
-// (rendered as real markup, not a placeholder) right above the textarea;
-// the placeholder itself only needs one plain example row.
+// A <textarea> placeholder can't distinguish a header line from an example line visually, so the column order is shown as a real numbered legend above it instead.
 const PASTE_COLUMN_HEADERS = ["Name", "SKU", "HSN", "Unit", "Price", "Purchase Price", "GST %", "Stock", "Min Stock", "Brand", "Category"];
 const PASTE_PLACEHOLDER_EXAMPLE = ["Sodium Nitrate", "SN-001", "28151100", "Kg", "450", "380", "18", "100", "10", "QUALIGENS", "Chemicals"];
 const PASTE_PLACEHOLDER = PASTE_PLACEHOLDER_EXAMPLE.join("\t");
+
+// Mirrors MAX_BYTES in src/app/api/products/parse-import/route.ts — checked client-side to reject a huge file instantly instead of after a full upload.
+const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 
 const DRAFT_KEY = "product-bulk-import";
 interface DraftData { step: "input" | "review"; pasteText: string; rows: ReviewRow[]; }
@@ -81,15 +75,7 @@ interface ProductBulkImportModalProps {
   onImported: () => void;
 }
 
-// Lets a user drop in a supplier's product sheet (paste from Excel or
-// upload .xlsx/.csv) instead of adding items to the catalog one by one —
-// mirrors the Rate List item table's bulk-import flow
-// (src/components/rateLists/RateListItemsTable.tsx). Parsed rows land in an
-// editable review table (name/brand/category resolved best-effort against
-// the existing catalog) and go through the same validateProductForm() rules
-// as a manually-typed product before each is submitted individually through
-// the normal POST /api/products route — so an imported row can't bypass any
-// rule a hand-added one has to follow.
+// Bulk-import (paste/upload) mirroring RateListItemsTable's flow. Parsed rows go through an editable review table and the same validateProductForm() rules as a manually-typed product before submitting via POST /api/products.
 export function ProductBulkImportModal({ open, onClose, onImported }: ProductBulkImportModalProps) {
   const toast = useToast();
   const [step, setStep] = useState<"input" | "review">("input");
@@ -100,9 +86,7 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
   const [categories, setCategories] = useState<Category[]>([]);
   const [importing, setImporting] = useState(false);
   const [showDraftBanner, setShowDraftBanner] = useState(false);
-  // Only needed for the banner's "N products" wording when the draft hasn't
-  // been loaded into `rows` yet (the pure-localStorage case, e.g. a fresh
-  // page load) — once rows are in memory, rows.length is used directly.
+  // Only for the banner's "N products" wording before the draft is loaded into `rows`; once loaded, rows.length is used directly.
   const [draftRowCount, setDraftRowCount] = useState(0);
   const [draftReady, setDraftReady] = useState(false);
   const [confirmDismissDraftOpen, setConfirmDismissDraftOpen] = useState(false);
@@ -115,27 +99,13 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
     fetch("/api/categories?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setCategories(d.data ?? [])).catch(() => {});
   }, [open]);
 
-  // Checks for a leftover draft every time the modal is (re)opened — mainly
-  // for a closed browser tab or a page refresh mid-review. If this component
-  // instance already has rows/pasteText in memory (e.g. the user closed and
-  // reopened within the same session, without a page reload), there's
-  // nothing to restore from localStorage — just carry on with what's already
-  // on screen rather than possibly overwriting it with an older snapshot.
+  // Checks for a leftover draft on every (re)open (closed tab / refresh mid-review); if rows are already in memory, don't overwrite them with an older snapshot.
   useEffect(() => {
     if (!open) { setDraftReady(false); return; }
-    // Every open starts on the input step — the "Bulk Import" button should
-    // never silently drop the user straight into a review table they didn't
-    // ask to see. If there's unfinished work (rows already in memory, or a
-    // draft in localStorage from an earlier session), the Resume Draft
-    // banner is the one and only door back into it.
+    // Every open starts on the input step — unfinished work is only ever resumed via the explicit Resume Draft banner, never silently.
     setStep("input");
     if (rows.length > 0) { setShowDraftBanner(true); setDraftReady(true); return; }
-    // Note: this still checks localStorage even if pasteText already has
-    // in-memory content — an unrelated rows-bearing draft can be sitting in
-    // localStorage regardless of whatever's currently typed in the box, and
-    // skipping the check here (as an earlier version did) meant a new
-    // paste/upload could silently overwrite that draft with no chance to
-    // merge or explicitly discard it.
+    // Still check localStorage even with in-memory pasteText — an unrelated saved draft could otherwise be silently overwritten.
     const draft = loadFormDraft<DraftData>(DRAFT_KEY);
     if (draft?.values && (draft.values.rows.length > 0 || draft.values.pasteText?.trim())) {
       setDraftRowCount(draft.values.rows.length);
@@ -150,25 +120,18 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
     if (draft?.values) {
       setRows(draft.values.rows);
       setPasteText(draft.values.pasteText ?? "");
-      // Land on the review table whenever rows exist, even if the draft was
-      // saved mid-"Back to input" — the table is what the user actually
-      // wants back, not wherever they happened to be looking when they left.
+      // Land on the review table whenever rows exist, even if the draft was saved mid-"Back to input".
       setStep(draft.values.rows.length > 0 ? "review" : draft.values.step);
     }
     setShowDraftBanner(false);
     setDraftReady(true);
   }
-  // The × on the banner asks first rather than clearing immediately — it's
-  // permanent (localStorage, not something Undo can bring back), so one
-  // misclick shouldn't be able to throw away a real in-progress import.
+  // Confirm-gated since discarding is permanent (localStorage) — a misclick shouldn't wipe a real in-progress import.
   function requestDismissDraft() {
     setConfirmDismissDraftOpen(true);
   }
   function confirmDismissDraft() {
-    // reset() clears the in-memory rows/pasteText too, not just localStorage
-    // — discarding the draft used to only call clearFormDraft(), leaving
-    // whatever was already loaded into `rows` on screen untouched, so the
-    // review table looked unchanged even though the saved draft was gone.
+    // reset() clears in-memory rows/pasteText too, not just localStorage, so the review table doesn't look unchanged after discarding.
     reset();
     setShowDraftBanner(false);
     setDraftRowCount(0);
@@ -176,11 +139,7 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
     toast({ type: "success", title: "Draft discarded", message: "The saved bulk-import draft has been deleted." });
   }
 
-  // Every row is saved as-is, including already-imported ("done") ones —
-  // handleImportAll below skips re-submitting a "done" row, so keeping it in
-  // the draft can't create a duplicate. Only "saving" is reset to "pending":
-  // that status only ever means "a request was in flight when the tab
-  // closed," which is never true again on reload.
+  // "done" rows are kept as-is (handleImportAll skips re-submitting them); only "saving" resets to "pending" since that status can't survive a reload.
   const draftValue: DraftData = {
     step,
     pasteText,
@@ -196,12 +155,7 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
     clearFormDraft(DRAFT_KEY);
   }
 
-  // Backdrop click / Escape / the header's × button all funnel through
-  // Modal's single onClose. Whatever's on screen is already being
-  // autosaved to the draft above, so closing (or clicking Back to the paste
-  // step) just hides the popup — nothing needs an extra "are you sure"
-  // prompt, and reopening (this session or a fresh tab) picks the draft
-  // straight back up via the banner above.
+  // Closing just hides the popup with no confirm prompt — everything on screen is already autosaved to the draft, reopened via the banner above.
   function handleClose() {
     if (importing) return;
     onClose();
@@ -209,10 +163,7 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
 
   function goToInputStep() {
     setStep("input");
-    // Reuse the same "resume draft" banner as the way back to the review
-    // table — one banner, one dismiss flow (confirm-gated, since dismissing
-    // it discards the draft), instead of a second informational banner with
-    // its own non-destructive dismiss.
+    // Reuse the same resume-draft banner as the way back to the review table, rather than a second banner with its own dismiss flow.
     if (rows.length > 0) setShowDraftBanner(true);
   }
 
@@ -225,19 +176,13 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
     }
   }
 
-  // Appends to whatever's already in the table rather than replacing it —
-  // clicking Back to fix the pasted text (or to paste a second batch) and
-  // then Continue/Upload again used to wipe out every row already reviewed,
-  // since this used to be a plain setRows(parsed...) overwrite.
+  // Appends to what's already in the table rather than replacing it, so re-pasting/uploading after Back doesn't wipe out rows already reviewed.
   function loadRows(parsed: ParsedProductRow[], skipped: number) {
     if (parsed.length === 0) {
       toast({ type: "error", title: "Nothing to import", message: "Couldn't find any usable rows — each needs at least a name and a price." });
       return;
     }
-    // A saved draft exists but hasn't been loaded into memory yet (the user
-    // ignored the Resume Draft banner and pasted/uploaded something new
-    // instead) — pasting these straight in would silently overwrite that
-    // draft the next time it autosaves. Ask which one they actually want.
+    // A saved draft exists but was ignored (Resume Draft banner) — ask which one the user actually wants before it's silently overwritten.
     if (showDraftBanner && rows.length === 0) {
       setPendingImport({ items: parsed, skipped });
       return;
@@ -272,6 +217,10 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      toast({ type: "error", title: "File too large", message: "File is too large (max 5MB)." });
+      return;
+    }
     setParsing(true);
     try {
       const formData = new FormData();
@@ -295,9 +244,7 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
   function removeRow(idx: number) {
     const next = rows.filter((_, i) => i !== idx);
     setRows(next);
-    // Nothing left to review — an empty "Review 0 Products" table is a dead
-    // end with only Back/Cancel to escape, so drop straight back to the
-    // paste/upload screen instead of making the user click Back themselves.
+    // An empty "Review 0 Products" table is a dead end — drop back to the paste/upload screen automatically.
     if (next.length === 0) setStep("input");
   }
 
@@ -309,10 +256,7 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
       return;
     }
 
-    // Rows submit one at a time (not in parallel), so a large batch can take
-    // a few seconds with only the row-by-row "Saving…" text as feedback —
-    // this toast confirms the click registered and how much work is queued,
-    // separate from the completion toast that already runs at the end.
+    // Rows submit one at a time, so a large batch can take a few seconds — this toast confirms the click registered while work is queued.
     const toImportCount = validated.filter((r) => r.status !== "done").length;
     if (toImportCount > 0) {
       toast({ type: "info", title: "Importing…", message: `Adding ${toImportCount} product${toImportCount === 1 ? "" : "s"} to your catalog.` });
@@ -322,9 +266,7 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
     const next = [...validated];
     let newlyAdded = 0;
     for (let i = 0; i < next.length; i++) {
-      // A "done" row here means an earlier attempt (this session, or a
-      // restored draft) already created it — re-submitting would just hit
-      // the "product name already exists" 409, so skip it outright.
+      // A "done" row was already created by an earlier attempt/restored draft — re-submitting would just hit a 409, so skip it.
       if (next[i].status === "done") continue;
       next[i] = { ...next[i], status: "saving" };
       setRows([...next]);

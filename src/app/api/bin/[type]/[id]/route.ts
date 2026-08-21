@@ -123,9 +123,8 @@ export async function POST(
         revalidateTag("vendors", { expire: 0 });
         break;
       case "purchase_bill": {
-        // Guard against double-restore, symmetric to the invoice case above.
-        // A cancelled bill's stock was already reversed at cancel-time, so
-        // restoring it from the bin must not re-apply it again.
+        // Double-restore guard, symmetric to invoice. A cancelled bill's stock was already
+        // reversed at cancel-time, so restoring must not re-apply it.
         const restored = await prisma.$transaction(async (tx) => {
           const updateResult = await tx.purchaseBill.updateMany({
             where: { id, deletedAt: { not: null } },
@@ -153,9 +152,7 @@ export async function POST(
         break;
       }
       case "return": {
-        // Guard against double-restore, symmetric to invoice/purchase-bill —
-        // re-apply the credit note's original stock effect (goods coming
-        // back in) only on the call that actually restores it.
+        // Double-restore guard — re-apply the credit note's stock effect only on the restoring call.
         const restored = await prisma.$transaction(async (tx) => {
           const updateResult = await tx.return.updateMany({
             where: { id, deletedAt: { not: null } },
@@ -222,10 +219,8 @@ export async function DELETE(
         revalidateTag("reports", { expire: 0 });
         break;
       case "customer": {
-        // Check for ANY invoices referencing this customer, active or
-        // soft-deleted — the FK constraint blocks the delete either way, so
-        // a soft-deleted invoice left unpurged would otherwise crash this
-        // with a raw, unexplained 500.
+        // Check ANY invoices (active or soft-deleted) — the FK blocks the delete either way,
+        // and an unpurged soft-deleted one would otherwise crash this with a raw 500.
         const invoiceCount = await prisma.invoice.count({
           where: { customerId: id },
         });
@@ -241,12 +236,8 @@ export async function DELETE(
         break;
       }
       case "product": {
-        // Check every FK that references this product without cascading —
-        // any of these would otherwise crash the delete with a raw,
-        // unexplained 500 instead of a clear message. StockMovement is not
-        // checked here — its product relation is nullable with onDelete:
-        // SetNull, so those ledger rows survive (with a productName
-        // snapshot) instead of blocking the delete.
+        // Check every non-cascading FK referencing this product to avoid a raw 500. StockMovement
+        // is skipped — its productId is nullable (onDelete: SetNull), so ledger rows just survive.
         const [itemCount, purchaseItemCount] = await Promise.all([
           prisma.invoiceItem.count({ where: { productId: id } }),
           prisma.purchaseBillItem.count({ where: { productId: id } }),

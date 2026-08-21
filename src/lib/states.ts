@@ -1,7 +1,4 @@
-// Full India state list, used by every State dropdown (customer/vendor forms,
-// invoice/purchase-bill place-of-supply). Delhi/Haryana/Uttar Pradesh (the NCR
-// states, most of this business's customers) are pinned first; everything
-// else follows alphabetically.
+// Full India state list; Delhi/Haryana/Uttar Pradesh (most customers) pinned first, rest alphabetical.
 export const INDIA_STATES_FULL = [
   "Delhi","Haryana","Uttar Pradesh",
   "Andaman and Nicobar Islands","Andhra Pradesh","Arunachal Pradesh","Assam","Bihar",
@@ -11,11 +8,8 @@ export const INDIA_STATES_FULL = [
   "Sikkim","Tamil Nadu","Telangana","Tripura","Uttarakhand","West Bengal",
 ];
 
-// The public pincode-lookup API (and some address sources) return a handful
-// of state names that don't exactly match INDIA_STATES_FULL's entries — old
-// names, alternate spellings, or "NCT of X" forms. Only used to match an
-// auto-filled value against the form's own State dropdown; an unmatched
-// name is left for the user to pick manually rather than silently guessed.
+// Maps state-name variants from external lookups (old names/spellings/"NCT of X") onto
+// INDIA_STATES_FULL entries; an unmatched name is left for the user to pick manually.
 const STATE_ALIASES: Record<string, string> = {
   "orissa": "Odisha",
   "pondicherry": "Puducherry",

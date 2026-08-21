@@ -1,8 +1,6 @@
 import { Prisma } from "@prisma/client";
 
-// Shared between the credit-notes list route and its stats route so the two
-// can't drift on what search/date-range mean. Credit notes have no status
-// concept (unlike invoices/purchase bills).
+// Shared between the credit-notes list and stats routes. Credit notes have no status concept (unlike invoices/bills).
 export type CreditNoteSort = "newest" | "oldest" | "amount_high" | "amount_low" | "customer_az" | "customer_za";
 
 export interface CreditNoteListFilters {
@@ -10,11 +8,8 @@ export interface CreditNoteListFilters {
   dateRange?: { gte: Date; lt: Date };
 }
 
-// Search matches credit note number, the invoice it's against, and the
-// customer name — dropping the old client-side match against the
-// *formatted* date/time text (e.g. typing "25 jul"), which has no clean
-// server-side equivalent without raw date-formatting SQL and was a minor
-// convenience next to the other three fields.
+// Matches credit note number, invoice number, and customer name — no formatted-date
+// text match (e.g. "25 jul") since that has no clean server-side equivalent.
 export function buildReturnWhere(filters: CreditNoteListFilters): Prisma.ReturnWhereInput {
   const { search, dateRange } = filters;
   const where: Prisma.ReturnWhereInput = { deletedAt: null };

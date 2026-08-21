@@ -5,11 +5,8 @@ import { buildXlsxBuffer } from "@/lib/xlsxExport";
 const MAX_ROWS = 20000;
 const MAX_COLS = 50;
 
-// Generic "turn this already-fetched table into a downloadable .xlsx" endpoint —
-// shared by every list-page export button (Credit Notes, Sales/Purchase
-// Reports) so each one doesn't need its own report-shaped route. The caller
-// already has the rows (filtered/sorted exactly as shown on screen); this
-// only handles the ExcelJS part, which is too heavy to bundle client-side.
+// Generic rows→.xlsx endpoint shared by every list-page export button — caller supplies
+// already-filtered/sorted rows, this only does the ExcelJS part (too heavy for the client bundle).
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireSession();

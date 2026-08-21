@@ -1,10 +1,6 @@
 import { useEffect } from "react";
 
-/**
- * Scrolls to `#hash`-targeted element once `ready` becomes true (e.g. after
- * a page's data has loaded and the real content — not a loading skeleton —
- * is in the DOM). Used by global-search deep links into Settings/Admin.
- */
+// Scrolls to the `#hash`-targeted element once `ready` (real content in DOM, not a skeleton). Used by global-search deep links into Settings/Admin.
 export function useScrollToHash(ready: boolean) {
   useEffect(() => {
     if (!ready) return;

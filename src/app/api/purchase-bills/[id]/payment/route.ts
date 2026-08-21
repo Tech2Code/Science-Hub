@@ -45,13 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    // Re-read the bill and re-validate the remaining balance inside a
-    // Serializable transaction so two concurrent/duplicate submissions can't
-    // both pass the balance check against the same stale paidAmount and
-    // overpay the bill. Postgres aborts the losing side of a genuine
-    // conflict with a serialization failure (Prisma P2034) rather than
-    // silently letting it commit — retry a few times so a same-time
-    // double-click just costs the user a brief delay instead of a raw 500.
+    // Re-read and re-validate balance inside a Serializable transaction so concurrent/duplicate submissions can't overpay; retry on conflict (P2034).
     async function attemptPayment() {
       return prisma.$transaction(async (tx) => {
         const bill = await tx.purchaseBill.findUniqueOrThrow({ where: { id } });
@@ -74,10 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           },
         });
 
-        // Recompute paidAmount from the actual sum of PurchasePayment rows
-        // rather than incrementing bill.paidAmount — matches the sales
-        // invoice payment route's pattern and can't drift if a payment is
-        // ever created/edited/deleted through any other path.
+        // Recompute paidAmount from the actual sum of payment rows (not an increment) so it can't drift if a payment is edited/deleted elsewhere.
         const agg = await tx.purchasePayment.aggregate({
           where: { purchaseBillId: id },
           _sum: { amount: true },

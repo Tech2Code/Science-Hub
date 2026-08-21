@@ -32,10 +32,7 @@ const BILL_INCLUDE = {
   payments: { orderBy: { date: "desc" as const } },
 };
 
-// Lighter than BILL_INCLUDE (used by the detail route) — the list page
-// doesn't render payments or item/product/brand/category details, only
-// what's needed to display a row; search now happens in the `where` clause
-// server-side instead of needing those joins back in the response.
+// Lighter than BILL_INCLUDE — the list page only needs row-display fields, not payments/item joins.
 const BILL_LIST_INCLUDE = {
   vendor: { select: { id: true, name: true, company: true, updatedAt: true } },
   createdBy: { select: { id: true, name: true } },
@@ -80,10 +77,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid attachment URL" }, { status: 400 });
     }
 
-    // Deliberately not filtered by deletedAt: a "just for this bill" vendor
-    // is soft-deleted the moment it's created (so it never surfaces in the
-    // vendor directory) but must still be usable for the bill being created
-    // right now — filtering it out here would make that flow impossible.
+    // Not filtered by deletedAt: a "just for this bill" vendor is soft-deleted at creation but must still be usable here.
     const vendor = await prisma.vendor.findUnique({ where: { id: vendorId } });
     if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 400 });
 
@@ -140,9 +134,7 @@ export async function POST(req: NextRequest) {
       }
     }
     {
-      // Mirrors the same guard on /api/invoices — without it, batchAdjustStock
-      // silently merges duplicate-product lines into one combined ledger
-      // entry, losing per-line audit granularity.
+      // Mirrors /api/invoices — without it, duplicate-product lines silently merge into one ledger entry, losing per-line audit granularity.
       const seenProductIds = new Set<string>();
       for (const item of items as { productId?: string }[]) {
         if (!item.productId) continue; // unlinked custom items (e.g. "Delivery Charges") can repeat freely
@@ -156,11 +148,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
     }
 
-    // Recompute every item's GST/total server-side from quantity × price × rate —
-    // mirrors the invoices route, so a stale or tampered client-sent total/GST
-    // can never get persisted as the bill's authoritative amount. Discount is
-    // applied to the line's gross amount before GST, same as sales invoices:
-    // taxable value = gross - discount, GST computed on that taxable value.
+    // Recompute every item's GST/total server-side so a tampered client total can never persist; discount applies before GST (taxable = gross - discount).
     const computedItems = (items as {
       productId?: string; name: string; quantity: number; hsn?: string;
       unit?: string; purchasePrice: number; gstRate?: number; discountPercent?: number;
@@ -180,11 +168,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Discount cannot be negative" }, { status: 400 });
     }
 
-    // A purchase's GST type is a fact of where the vendor is registered
-    // relative to the business — not something the preparer picks — so it's
-    // derived automatically from the vendor's own state, same reasoning
-    // sales invoices already use via deriveIsInterState (just with the
-    // vendor's state standing in for the invoice's placeOfSupply).
+    // GST type is derived from the vendor's registered state, not chosen by the preparer — same reasoning as deriveIsInterState for sales invoices.
     const vendorState: string | null = vendor.state;
     const biz = await getBusinessSettings();
     const derivedIsInterState = deriveIsInterState(vendorState ?? "", biz.state);
@@ -210,17 +194,10 @@ export async function POST(req: NextRequest) {
     if (billTotal < 0) return NextResponse.json({ error: "Discount cannot exceed the bill total" }, { status: 400 });
     const paidAmount = Math.min(payAmt, billTotal);
     const status = paidAmount >= billTotal && billTotal > 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
-    // Financial year (Apr-Mar) of the bill's own date, not calendar year —
-    // see getIndianFinancialYear. Uses billDate (not "now") since a bill can
-    // be entered late, dated for an earlier period. Rendered as a "2026-27"
-    // label (not a bare year) so the printed number shows which FY it's in.
+    // Indian FY of the bill's own billDate (not "now"), since a bill can be entered late for an earlier period.
     const yearLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date(billDate ?? Date.now())));
 
-    // Bill-number generation (highest-existing-number-for-year + 1, or the
-    // admin's one-time "next number" override from Settings if it's higher)
-    // and the create both run inside one Serializable transaction, with a
-    // retry on the write-conflict Postgres reports when two requests race
-    // for the same number.
+    // Number generation + create run in one Serializable transaction, retried on write-conflict, to prevent duplicate bill numbers under concurrent requests.
     const billPrefix = biz.purchaseBillNumberPrefix || "PB";
     async function attemptCreate() {
       return prisma.$transaction(async (tx) => {

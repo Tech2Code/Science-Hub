@@ -1,9 +1,6 @@
 import ExcelJS from "exceljs";
 
-// Builds a single-sheet .xlsx buffer with columns auto-fit to their longest
-// cell — unlike a CSV, which Excel always opens at a fixed default column
-// width regardless of content, hiding anything longer than that behind the
-// next column.
+// Builds a single-sheet .xlsx with columns auto-fit to their longest cell (unlike CSV, which Excel opens at a fixed default width).
 export async function buildXlsxBuffer(
   sheetName: string,
   headers: string[],

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { FloatingSpinner } from "./Spinner";
 import styles from "./Pagination.module.css";
 
 export const PAGE_SIZE = 10;
@@ -42,16 +43,14 @@ interface Props {
 
 export function Pagination({ total, page, showAll, onPage, label = "items", loading = false }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  if (total <= PAGE_SIZE || showAll) return null;
+  // Spinner renders even without pagination controls, so a short single-page list still gets refetch loading feedback.
+  if (total <= PAGE_SIZE || showAll) return loading ? <FloatingSpinner /> : null;
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const start = (page - 1) * PAGE_SIZE + 1;
   const end = Math.min(page * PAGE_SIZE, total);
 
   const goToPage = (p: number, e: React.MouseEvent<HTMLButtonElement>) => {
-    // Blur before the button becomes `disabled` on the next render — a
-    // disabled element that still has focus gets its focus yanked by the
-    // browser, which can trigger its own scroll adjustment that fights
-    // (and cancels) the smooth scrollIntoView below.
+    // Blur before the button becomes `disabled` — the browser's own focus-yank on a disabled focused element otherwise fights the smooth scrollIntoView below.
     e.currentTarget.blur();
     onPage(p);
     const section = wrapRef.current?.closest(".animate-card") ?? wrapRef.current;
@@ -59,6 +58,8 @@ export function Pagination({ total, page, showAll, onPage, label = "items", load
   };
 
   return (
+    <>
+    {loading && <FloatingSpinner />}
     <div className={styles.wrap} ref={wrapRef}>
       <span className={styles.info}>{start}–{end} of {total} {label}</span>
       <div className={styles.controls}>
@@ -79,5 +80,6 @@ export function Pagination({ total, page, showAll, onPage, label = "items", load
         </button>
       </div>
     </div>
+    </>
   );
 }

@@ -10,10 +10,7 @@ interface FillMaxButtonProps {
   variant?: "amber" | "green";
 }
 
-// Quick-fill "pay the full amount" button that sits next to a money Input —
-// same interaction repeated across the purchase-bill new/detail payment
-// forms (amber) and the invoice payment form (green, smaller, next to a
-// sz="sm" Input) — unified here so the markup isn't copy-pasted per page.
+// Quick-fill "pay the full amount" button that sits next to a money Input.
 export function FillMaxButton({ onClick, label, title, variant = "amber" }: FillMaxButtonProps) {
   return (
     <button

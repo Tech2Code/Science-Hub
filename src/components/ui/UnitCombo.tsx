@@ -14,11 +14,7 @@ interface UnitComboProps {
   className?: string;
 }
 
-// Typeable text input + filtered suggestion dropdown for a "unit" field
-// (e.g. "Nos", "500 GM") — any value can be typed freely, the dropdown is
-// just a shortcut. Single shared implementation for every unit field in the
-// app (invoice/purchase-bill "Add Custom Item" quick-add, rate-list items)
-// so they can't drift into three different unit-picker UIs.
+// Typeable unit field (e.g. "500 GM") with a filtered suggestion dropdown — free text always allowed, dropdown is just a shortcut.
 export function UnitCombo({ id, value, onChange, suggestions, placeholder = "e.g. Nos, Kg, Box", sz, className }: UnitComboProps) {
   const [open, setOpen] = useState(false);
   const filtered = suggestions.filter((u) => u.toLowerCase().includes(value.toLowerCase()));

@@ -1,7 +1,4 @@
-// Client-side companion to /api/export-xlsx — the actual .xlsx generation
-// (ExcelJS) runs server-side so it never bloats the client bundle; this just
-// posts the already-filtered/sorted rows the page has on hand and saves the
-// returned file.
+// Client-side companion to /api/export-xlsx — ExcelJS generation stays server-side to avoid bloating the client bundle.
 export async function downloadXlsx(
   filename: string,
   sheetName: string,

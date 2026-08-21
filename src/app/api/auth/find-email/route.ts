@@ -26,11 +26,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ results: [] });
     }
 
-    // Exact (case-insensitive) name match only — a substring `contains`
-    // match let an unauthenticated caller enumerate the entire user
-    // directory by iterating short fragments (a, b, c, ...). Requiring the
-    // full registered name still serves the legitimate "I know my name but
-    // forgot my email" case without exposing a directory-scraping endpoint.
+    // Exact match only — a substring `contains` match would let an unauthenticated caller enumerate the whole user directory.
     const users = await prisma.user.findMany({
       where: { name: { equals: name.trim(), mode: "insensitive" } },
       select: { name: true, email: true },

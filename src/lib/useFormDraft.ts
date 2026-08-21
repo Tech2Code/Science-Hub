@@ -3,10 +3,8 @@
 import { useEffect, useRef } from "react";
 
 const DRAFT_PREFIX = "sciencehub_draft:";
-// A draft abandoned this long (never saved or dismissed — tab closed,
-// navigated away without deciding) is treated as stale and discarded on next
-// load rather than kept forever, so localStorage doesn't accumulate orphaned
-// drafts for invoices/bills the user gave up on weeks ago.
+// A draft abandoned this long is treated as stale and discarded on next load, so localStorage
+// doesn't accumulate orphaned drafts.
 const DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface StoredDraft<T> {
@@ -14,22 +12,13 @@ interface StoredDraft<T> {
   savedAt: number;
 }
 
-// Debounced localStorage autosave for a long form (invoice/bill/rate-list
-// create+edit) so an accidental sidebar-navigation click mid-fill doesn't
-// lose everything the user already typed — see loadFormDraft() to restore on
-// mount and clearFormDraft() to drop the draft once the form is submitted.
-//
-// `values` should be just the user-editable fields (not loading/UI-only
-// state like dropdown-open flags), so a restored draft can be spread
-// straight back onto individual setState calls.
+// Debounced localStorage autosave for long forms, so an accidental navigation mid-fill doesn't lose
+// input (see loadFormDraft/clearFormDraft). `values` should be user-editable fields only, not UI state.
 export function useFormDraft<T>(key: string, values: T, skip: boolean) {
   const storageKey = DRAFT_PREFIX + key;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Captures the serialized values at the moment autosaving turns on (mount
-  // finishes loading, or the draft-restore banner gets resolved) — without
-  // this, the very first debounce tick after skip flips to false would
-  // immediately re-write the current (often still-blank) state back to
-  // localStorage, resurrecting a draft the user just dismissed/cleared.
+  // Captures values at the moment autosaving turns on — without this, the first debounce tick
+  // after skip flips false would resurrect a draft the user just dismissed/cleared.
   const baselineRef = useRef<string | null>(null);
   const serialized = JSON.stringify(values);
 

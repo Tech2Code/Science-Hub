@@ -1,10 +1,5 @@
-// Assembles the data behind the "Download GST Package" feature — everything
-// a business owner's CA needs each month/quarter to prepare GSTR-1 & GSTR-3B:
-// Sales Register (split B2B/B2C), Credit Notes, Purchase Register, HSN
-// Summary, and a GST Summary tying output tax to input tax credit (ITC).
-// Also runs a validation pass over the same period so obvious filing
-// mistakes (bad GSTIN, missing HSN, tax mismatches...) surface before the
-// business owner sends the package to their CA.
+// Assembles the GSTR-1/GSTR-3B filing data (Sales/Purchase Register, Credit Notes, HSN
+// Summary, GST Summary) and validates it (bad GSTIN, missing HSN, tax mismatches...) for the CA.
 import { prisma } from "@/lib/prisma";
 import { formatDate } from "@/lib/formatDate";
 import {
@@ -111,11 +106,8 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
     } else if (isB2B && !hasValidGstinStateCode(customerGstin)) {
       issues.push(issue("warning", "Sales", `Customer GSTIN "${customerGstin}" on invoice ${inv.invoiceNumber} has an unrecognized state code.`, inv.invoiceNumber));
     }
-    // Legacy invoices predate `placeOfSupply` becoming a required field —
-    // for a plain sale with no separate delivery address, place of supply
-    // is legally the customer's registered state, so fall back to that
-    // before treating it as genuinely missing (matches the Sales Register's
-    // own display fallback below).
+    // Legacy invoices predate `placeOfSupply`; fall back to the customer's registered state
+    // before treating it as missing (matches the Sales Register's own display fallback below).
     if (!(inv.placeOfSupply ?? inv.customer.state ?? "").trim()) {
       issues.push(issue("warning", "Sales", `Invoice ${inv.invoiceNumber} has no place of supply recorded, and the customer has no state on file to fall back to.`, inv.invoiceNumber));
     }
@@ -124,9 +116,7 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
     if (!amountsMatch(inv.cgst + inv.sgst + inv.igst, itemTaxSum)) {
       issues.push(issue("error", "Sales", `Invoice ${inv.invoiceNumber}: stored tax (₹${(inv.cgst + inv.sgst + inv.igst).toFixed(2)}) doesn't match line-item tax (₹${itemTaxSum.toFixed(2)}).`, inv.invoiceNumber));
     }
-    // Transport charge (+ its own GST) is a real, separate addition to the
-    // total — see src/lib/invoiceCalc.ts — so it must be included here too,
-    // or every invoice carrying one would falsely fail this check.
+    // Transport charge (+ its GST) is a real separate addition to the total (invoiceCalc.ts) — must be included here too.
     const expectedTotal = inv.subtotal + inv.cgst + inv.sgst + inv.igst + inv.transportCharge + inv.transportChargeGstAmount + inv.roundOff;
     if (!amountsMatch(inv.total, expectedTotal)) {
       issues.push(issue("error", "Sales", `Invoice ${inv.invoiceNumber}: total (₹${inv.total.toFixed(2)}) doesn't match subtotal + tax + round-off (₹${expectedTotal.toFixed(2)}).`, inv.invoiceNumber));
@@ -176,9 +166,7 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
   const hsnSummary = Array.from(hsnMap.values()).sort((a, b) => a.hsn.localeCompare(b.hsn));
 
   // ── Credit notes (sales returns) ─────────────────────────────────────
-  // Each line's GST was already computed and stored at credit-note creation
-  // time (src/app/api/invoices/[id]/returns/route.ts), inheriting its rate
-  // from the original invoice line — no re-derivation needed here.
+  // Each line's GST was already computed/stored at credit-note creation time — no re-derivation needed.
   const creditNotes: CreditNoteRow[] = [];
   for (const ret of returns) {
     const inv = ret.invoice;

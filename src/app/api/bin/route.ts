@@ -11,32 +11,27 @@ export async function GET() {
 
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    // Invoices, purchase bills, and credit notes (returns) are deliberately
-    // EXEMPT from auto-purge: their numbers (SH-YYYY-0001, PB-YYYY-0001,
-    // CN-YYYY-0001) are legally significant sequential GST document numbers.
-    // Silently hard-deleting one after 30 days would leave an unexplained
-    // gap in the sequence that GST filing can't account for — a staff member
-    // could delete a mis-entered bill, create the next one, and have the
-    // original vanish from the bin before anyone notices the gap. These three
-    // types can only be permanently deleted via an explicit, warned,
-    // admin-only action from this page (see /api/bin/[type]/[id] DELETE).
+    // Invoices/purchase bills/credit notes are exempt from auto-purge — their numbers are legally significant GST sequences; purge only via explicit admin action.
 
-    // Products — only purge if not referenced by invoice items or purchase
-    // items (matches the manual permanent-delete rule; an unguarded
-    // deleteMany would throw on the FK constraint and crash this whole
-    // request). Stock movements no longer block deletion — the product
-    // relation on StockMovement is nullable and set to SetNull on delete.
+    // Products — only purge if not referenced by invoice/purchase items (an unguarded deleteMany would throw on the FK constraint).
     const oldProducts = await prisma.product.findMany({
       where: { deletedAt: { not: null, lt: cutoff } },
       select: { id: true },
     });
-    for (const product of oldProducts) {
-      const [itemCount, purchaseItemCount] = await Promise.all([
-        prisma.invoiceItem.count({ where: { productId: product.id } }),
-        prisma.purchaseBillItem.count({ where: { productId: product.id } }),
+    if (oldProducts.length > 0) {
+      const oldProductIds = oldProducts.map((p) => p.id);
+      // Batched groupBy (2 queries total) instead of a per-product COUNT round-trip to avoid N+1.
+      const [referencedByInvoiceItems, referencedByPurchaseItems] = await Promise.all([
+        prisma.invoiceItem.groupBy({ by: ["productId"], where: { productId: { in: oldProductIds } } }),
+        prisma.purchaseBillItem.groupBy({ by: ["productId"], where: { productId: { in: oldProductIds } } }),
       ]);
-      if (itemCount === 0 && purchaseItemCount === 0) {
-        await prisma.product.delete({ where: { id: product.id } });
+      const blockedProductIds = new Set([
+        ...referencedByInvoiceItems.map((r) => r.productId),
+        ...referencedByPurchaseItems.map((r) => r.productId).filter((id): id is string => id !== null),
+      ]);
+      const deletableProductIds = oldProductIds.filter((id) => !blockedProductIds.has(id));
+      if (deletableProductIds.length > 0) {
+        await prisma.product.deleteMany({ where: { id: { in: deletableProductIds } } });
       }
     }
 
@@ -45,10 +40,16 @@ export async function GET() {
       where: { deletedAt: { not: null, lt: cutoff } },
       select: { id: true },
     });
-    for (const customer of oldCustomers) {
-      const invoiceCount = await prisma.invoice.count({ where: { customerId: customer.id } });
-      if (invoiceCount === 0) {
-        await prisma.customer.delete({ where: { id: customer.id } });
+    if (oldCustomers.length > 0) {
+      const oldCustomerIds = oldCustomers.map((c) => c.id);
+      const referencedByInvoices = await prisma.invoice.groupBy({
+        by: ["customerId"],
+        where: { customerId: { in: oldCustomerIds } },
+      });
+      const blockedCustomerIds = new Set(referencedByInvoices.map((r) => r.customerId));
+      const deletableCustomerIds = oldCustomerIds.filter((id) => !blockedCustomerIds.has(id));
+      if (deletableCustomerIds.length > 0) {
+        await prisma.customer.deleteMany({ where: { id: { in: deletableCustomerIds } } });
       }
     }
 
@@ -81,16 +82,20 @@ export async function GET() {
       where: { deletedAt: { not: null, lt: cutoff } },
       select: { id: true },
     });
-    for (const vendor of oldVendors) {
-      const billCount = await prisma.purchaseBill.count({ where: { vendorId: vendor.id } });
-      if (billCount === 0) {
-        await prisma.vendor.delete({ where: { id: vendor.id } });
+    if (oldVendors.length > 0) {
+      const oldVendorIds = oldVendors.map((v) => v.id);
+      const referencedByBills = await prisma.purchaseBill.groupBy({
+        by: ["vendorId"],
+        where: { vendorId: { in: oldVendorIds } },
+      });
+      const blockedVendorIds = new Set(referencedByBills.map((r) => r.vendorId));
+      const deletableVendorIds = oldVendorIds.filter((id) => !blockedVendorIds.has(id));
+      if (deletableVendorIds.length > 0) {
+        await prisma.vendor.deleteMany({ where: { id: { in: deletableVendorIds } } });
       }
     }
 
-    // Rate lists — not a GST-numbered document, so they follow the standard
-    // 30-day auto-purge like customers/products/brands/vendors. Nothing else
-    // references a RateList and its items cascade, so no FK-safety check.
+    // Rate lists aren't GST-numbered, so they follow the standard 30-day auto-purge; nothing references a RateList so no FK check is needed.
     const oldRateLists = await prisma.rateList.findMany({
       where: { deletedAt: { not: null, lt: cutoff } },
       select: { id: true },
@@ -112,14 +117,7 @@ export async function GET() {
     // Fetch remaining soft-deleted items
     const now = Date.now();
 
-    // A "one-off" customer/vendor (created via an invoice/purchase bill's
-    // "just for this X — don't save" option) is soft-deleted from the moment
-    // it's created and never gets an explicit delete_customer/delete_vendor
-    // log entry — exclude those from the bin listing since the user never
-    // asked to delete them; showing them here would just permanently
-    // clutter the list (they can never be purged while their invoice/bill
-    // exists) and risks an accidental "Restore" click un-deleting a record
-    // the user deliberately chose to keep out of the directory.
+    // One-off customers/vendors are soft-deleted at creation with no delete_* log entry — exclude them here since the user never asked to delete them.
     const [explicitlyDeletedCustomers, explicitlyDeletedVendors] = await Promise.all([
       prisma.activityLog.findMany({ where: { entityType: "customer", action: "delete_customer" }, select: { entityId: true } }),
       prisma.activityLog.findMany({ where: { entityType: "vendor", action: "delete_vendor" }, select: { entityId: true } }),
@@ -178,32 +176,46 @@ export async function GET() {
       }),
     ]);
 
-    // Figure out which items are protected from permanent deletion by an FK
-    // reference, so the UI can explain why "Delete Forever" won't work
-    // instead of letting the user find out via a failed request.
-    const [customerBlocks, productBlocks, vendorBlocks] = await Promise.all([
-      Promise.all(customers.map(async (c) => {
-        const invoiceCount = await prisma.invoice.count({ where: { customerId: c.id } });
-        return [c.id, invoiceCount > 0 ? `Has ${invoiceCount} invoice(s) on record (including any in the bin)` : undefined] as const;
-      })),
-      Promise.all(products.map(async (p) => {
-        const [itemCount, purchaseItemCount] = await Promise.all([
-          prisma.invoiceItem.count({ where: { productId: p.id } }),
-          prisma.purchaseBillItem.count({ where: { productId: p.id } }),
-        ]);
+    // Determine FK-protection reasons for the UI upfront, batched via groupBy per entity type rather than a per-row count query.
+    const customerIds = customers.map((c) => c.id);
+    const productIds = products.map((p) => p.id);
+    const vendorIds = vendors.map((v) => v.id);
+    const [
+      customerInvoiceCounts, productInvoiceItemCounts, productPurchaseItemCounts, vendorBillCounts,
+    ] = await Promise.all([
+      customerIds.length
+        ? prisma.invoice.groupBy({ by: ["customerId"], where: { customerId: { in: customerIds } }, _count: { _all: true } })
+        : [],
+      productIds.length
+        ? prisma.invoiceItem.groupBy({ by: ["productId"], where: { productId: { in: productIds } }, _count: { _all: true } })
+        : [],
+      productIds.length
+        ? prisma.purchaseBillItem.groupBy({ by: ["productId"], where: { productId: { in: productIds } }, _count: { _all: true } })
+        : [],
+      vendorIds.length
+        ? prisma.purchaseBill.groupBy({ by: ["vendorId"], where: { vendorId: { in: vendorIds } }, _count: { _all: true } })
+        : [],
+    ]);
+    const customerBlockMap = new Map(
+      customerInvoiceCounts.map((r) => [r.customerId, `Has ${r._count._all} invoice(s) on record (including any in the bin)`])
+    );
+    const productInvoiceItemCountMap = new Map(productInvoiceItemCounts.map((r) => [r.productId, r._count._all]));
+    const productPurchaseItemCountMap = new Map(
+      productPurchaseItemCounts.filter((r) => r.productId !== null).map((r) => [r.productId as string, r._count._all])
+    );
+    const productBlockMap = new Map(
+      productIds.map((id) => {
+        const itemCount = productInvoiceItemCountMap.get(id) ?? 0;
+        const purchaseItemCount = productPurchaseItemCountMap.get(id) ?? 0;
         let reason: string | undefined;
         if (itemCount > 0) reason = `Used in ${itemCount} invoice line item(s) (including any in the bin)`;
         else if (purchaseItemCount > 0) reason = `Used in ${purchaseItemCount} purchase bill line item(s) (including any in the bin)`;
-        return [p.id, reason] as const;
-      })),
-      Promise.all(vendors.map(async (v) => {
-        const billCount = await prisma.purchaseBill.count({ where: { vendorId: v.id } });
-        return [v.id, billCount > 0 ? `Has ${billCount} purchase bill(s) on record (including any in the bin)` : undefined] as const;
-      })),
-    ]);
-    const customerBlockMap = new Map(customerBlocks);
-    const productBlockMap = new Map(productBlocks);
-    const vendorBlockMap = new Map(vendorBlocks);
+        return [id, reason] as const;
+      })
+    );
+    const vendorBlockMap = new Map(
+      vendorBillCounts.map((r) => [r.vendorId, `Has ${r._count._all} purchase bill(s) on record (including any in the bin)`])
+    );
 
     // Look up who deleted each item from ActivityLog (batch, no schema change needed)
     const allIds = [

@@ -31,12 +31,7 @@ interface PurchaseBillItemsTableProps {
 
 type QuickAddErrors = Partial<Record<"name" | "purchasePrice" | "unit" | "gstRate", string>>;
 
-// Search-and-add product flow (same interaction as the sales invoice's line
-// items card) — shared by the New Purchase Bill and Edit Purchase Bill pages
-// so the two forms can't drift apart. "Add custom item" can either save the
-// new item to the product catalog (default) or, via the "just for this bill"
-// toggle, add it as a one-off line that never becomes a stocked product —
-// for purchase lines like freight or services that aren't inventory.
+// Search-and-add product flow shared by New/Edit Purchase Bill pages. "Add custom item" can save to the catalog or, via "just for this bill", add a one-off non-stock line (e.g. freight).
 export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, items, setItems, itemsError }: PurchaseBillItemsTableProps) {
   const toast = useToast();
   const productSearchWrapRef = useRef<HTMLDivElement>(null);
@@ -129,12 +124,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
   }
 
-  // Press-and-hold row reordering — off by default (identical table to
-  // before) until "Reorder Items" is clicked. Same approach as the sales
-  // invoice's InvoiceLineItemsCard: window-level pointermove/pointerup
-  // listeners only while a drag is active, and the row currently under the
-  // pointer is looked up via elementFromPoint + data-item-key rather than a
-  // numeric index, since the index goes stale the moment the array reorders.
+  // Press-and-hold reordering, off until "Reorder Items" is clicked; the row under the pointer is looked up via data-item-key since a numeric index goes stale on reorder.
   const [reorderMode, setReorderMode] = useState(false);
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
 
@@ -186,17 +176,10 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
     };
   }, [draggedKey, setItems]);
 
-  // Holds exactly what's been typed (e.g. "10." or "10%") per line item, so a
-  // trailing decimal point or "%" isn't stripped out from under the user's
-  // cursor by reformatting item.discountPercent back into the input on every
-  // keystroke — cleared on blur so the field then shows the committed number.
+  // Holds exactly what's been typed per line item so a trailing "." or "%" isn't stripped mid-keystroke; cleared on blur.
   const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
 
-  // Accepts a plain number or one typed with a trailing "%" (e.g. "10%") —
-  // capped at 2 decimal places (matching how every ₹ amount in this app is
-  // displayed) and at 100 overall, since a discount can never exceed the
-  // line's own value. A keystroke that would push past either limit is
-  // rejected outright rather than silently truncated later.
+  // Accepts a trailing "%"; capped at 2 decimals and 100 overall — an out-of-range keystroke is rejected outright, not truncated later.
   function handleDiscountPercentChange(idx: number, key: string, raw: string) {
     const cleaned = raw.replace(/%/g, "");
     if (!/^(100(\.\d{0,2})?|\d{0,2}(\.\d{0,2})?)$/.test(cleaned)) return;

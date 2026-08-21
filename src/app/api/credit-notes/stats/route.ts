@@ -9,12 +9,8 @@ function currentMonthRange(): { gte: Date; lt: Date } {
   return { gte: new Date(now.getFullYear(), now.getMonth(), 1), lt: new Date(now.getFullYear(), now.getMonth() + 1, 1) };
 }
 
-// Summary totals for the Credit Notes list page's stat cards. "Total Credit
-// Notes"/"Total Credited" stay all-time (matching the old behavior, which
-// never varied these). The "period" pair used to hard-code the real current
-// calendar month regardless of any filter — now it reflects the active
-// month/year filter when one is set, defaulting to the current month
-// otherwise (the same default look as before).
+// "Total" figures are always all-time; "period" figures follow the active month/year filter,
+// defaulting to the current calendar month when none is set.
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireSession();

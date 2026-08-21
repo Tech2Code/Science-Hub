@@ -319,9 +319,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const navRef = useRef<HTMLElement>(null);
-  // Below this, AccentPicker + ThemeToggle collapse into the single
-  // MoreMenu button — same fixed-viewport-breakpoint convention the topbar
-  // already uses elsewhere (e.g. signOutBtn goes icon-only at this width too).
+  // Below this, AccentPicker + ThemeToggle collapse into the single MoreMenu button (same breakpoint convention as signOutBtn going icon-only).
   const [condensed, setCondensed] = useState(false);
 
   useEffect(() => {
@@ -338,9 +336,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Covers every way a session can end — the explicit Sign out button,
-    // JWT expiry, or a token invalidated elsewhere (e.g. tokenVersion bump)
-    // — not just the confirm dialog's own clearAllCachedPdfs() call below.
+    // Covers every way a session can end (Sign out, JWT expiry, tokenVersion bump), not just the confirm dialog's own clearAllCachedPdfs() call.
     if (status === "unauthenticated") { clearAllCachedPdfs(); router.replace("/login"); }
   }, [status, router]);
 
@@ -348,10 +344,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (isMobile()) setSidebarOpen(false);
   }, []);
 
-  // Scroll active sidebar item into view instantly when navigating directly to a page,
-  // and again whenever the sidebar (re)opens — closed state hides the group-label headings
-  // (see `group.label && sidebarOpen` below), which shortens the nav layout and makes any
-  // scroll position computed while closed stale once the headings reappear on reopen.
+  // Re-scroll the active sidebar item into view on navigation and on sidebar reopen — closed state hides group-label headings, making a scroll position computed while closed stale on reopen.
   useEffect(() => {
     const nav = navRef.current;
     if (!nav || !sidebarOpen) return;
@@ -378,6 +371,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={styles.shell}>
+      {/* Visually hidden until focused — lets a keyboard user skip straight past the full sidebar nav to page content. */}
+      <a href="#main-content" className={styles.skipLink}>Skip to main content</a>
       <ConfirmDialog
         open={confirmSignOut}
         title="Sign out"
@@ -575,7 +570,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className={styles.content}>
+        <main id="main-content" className={styles.content}>
           {children}
         </main>
       </div>

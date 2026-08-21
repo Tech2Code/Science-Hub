@@ -25,9 +25,7 @@ interface RateListFormBodyProps {
   footer: ReactNode;
 }
 
-// Shared leftCol/rightCol layout + Details / Items / Summary wiring for the
-// New Rate List and Edit Rate List pages, so the two forms can't drift
-// apart — mirrors PurchaseBillFormBody's structure.
+// Shared layout for New/Edit Rate List pages so the two forms can't drift apart — mirrors PurchaseBillFormBody.
 export function RateListFormBody({
   startIndex = 0,
   title, onTitleChange, titleError,

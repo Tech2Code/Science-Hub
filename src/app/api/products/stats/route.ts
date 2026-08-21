@@ -2,9 +2,7 @@ import { NextResponse } from "next/server";
 import { getProductStats } from "@/lib/db";
 import { requireSession } from "@/lib/apiAuth";
 
-// Out-of-stock/low-stock/total counts for the Products list page's stock
-// filter tabs — kept separate from the paginated list route since these
-// counts must reflect the whole catalog regardless of which tab/page is active.
+// Kept separate from the paginated list route — these counts must reflect the whole catalog.
 export async function GET() {
   try {
     const auth = await requireSession();

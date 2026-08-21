@@ -24,10 +24,8 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.email || !credentials?.password) return null;
         const email = credentials.email.trim().toLowerCase();
 
-        // Per-account lockout to slow down brute-force against one account,
-        // plus a per-IP lockout (higher ceiling, to tolerate shared office
-        // IPs) to blunt credential-stuffing across many distinct accounts
-        // from one source, which the per-account limit alone can't catch.
+        // Per-account lockout for brute-force plus a higher-ceiling per-IP lockout for
+        // credential-stuffing across accounts, which the per-account limit alone can't catch.
         const headers = (req?.headers ?? {}) as Record<string, string | undefined>;
         const ip = headers["x-vercel-forwarded-for"]?.split(",")[0]?.trim()
           || headers["x-real-ip"]?.trim()
@@ -37,12 +35,8 @@ export const authOptions: NextAuthOptions = {
         const accountLimit = rateLimit(`login:${email}`, 8, 15 * 60 * 1000);
         if (!ipLimit.allowed || !accountLimit.allowed) return null;
 
-        // A DB error here (Neon cold-start, pooled-connection contention under
-        // connection_limit=1, transient network blip) must not surface to the
-        // user as a distinct message from a wrong password — that would leak
-        // which case occurred. NextAuth already collapses any thrown error
-        // into the same generic "Incorrect email or password", so this catch
-        // exists purely to log the real cause server-side for diagnosis.
+        // A DB error must not surface as a message distinct from "wrong password" (would leak which
+        // case occurred); NextAuth already collapses thrown errors, so this catch is just for server-side logging.
         let user;
         try {
           user = await prisma.user.findUnique({ where: { email } });
@@ -96,35 +90,23 @@ export const authOptions: NextAuthOptions = {
         }
       }
 
-      // getServerSession() runs this callback on every single authenticated
-      // API request — checking tokenVersion against the DB on every one of
-      // those added a full extra Postgres round-trip per request and made
-      // the whole app noticeably slow. Only re-check every few minutes (and
-      // always on an explicit client update()) instead: this bounds how
-      // long a reset/changed password takes to actually lock out an
-      // already-issued token to a few minutes, in exchange for not hitting
-      // the DB on every request.
+      // Checking tokenVersion against the DB on every request made the app noticeably slow —
+      // only re-check every few minutes (or on explicit update()), bounding revocation delay instead.
       const CHECK_INTERVAL_MS = 5 * 60 * 1000;
       const lastChecked = typeof token.tvCheckedAt === "number" ? token.tvCheckedAt : 0;
       if (trigger !== "update" && Date.now() - lastChecked < CHECK_INTERVAL_MS) {
         return token;
       }
 
-      // A password change/reset bumps tokenVersion server-side, which is
-      // how an already-issued, stateless JWT gets invalidated early instead
-      // of staying valid until its natural 8-hour expiry. Client-triggered
-      // `update()` must never be trusted to set name/email/role — always
-      // re-derive those from the database.
+      // A password change/reset bumps tokenVersion server-side to invalidate an issued JWT early.
+      // Client-triggered update() must never be trusted for name/email/role — always re-derive from DB.
       const current = await prisma.user.findUnique({
         where: { id: token.id as string },
         select: { name: true, email: true, role: true, tokenVersion: true },
       });
       if (!current) return { ...token, id: undefined };
-      // A JWT issued before this field existed has no tokenVersion at all
-      // (undefined) rather than a stale one — backfill it instead of
-      // invalidating, or every already-logged-in user gets signed out the
-      // moment this code ships. Only an actual mismatch (a real password
-      // change since the token was issued) invalidates the session.
+      // A JWT issued before this field existed has tokenVersion undefined, not stale — backfill it
+      // rather than invalidating, or every logged-in user gets signed out when this ships.
       if (token.tokenVersion !== undefined && current.tokenVersion !== token.tokenVersion) {
         return { ...token, id: undefined };
       }
@@ -139,12 +121,8 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
-      // Returning `null` here to force useSession() into "unauthenticated"
-      // was tried and reverted — this next-auth version's client code
-      // spreads the fetched session value and crashes on null
-      // ("Cannot convert undefined or null to object"). requireSession()
-      // already rejects API calls once token.id is cleared; pages that need
-      // an active redirect check response status themselves.
+      // Returning null here (to force "unauthenticated") crashes this next-auth version's client code,
+      // which spreads the session value. requireSession() already rejects once token.id is cleared.
       if (token?.id) {
         session.user.id   = token.id   as string;
         session.user.role = token.role as string;

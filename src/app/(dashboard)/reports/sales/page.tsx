@@ -15,7 +15,6 @@ import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
 import { downloadXlsx } from "@/lib/downloadXlsx";
 import { formatDate } from "@/lib/formatDate";
-import { FloatingSpinner } from "@/components/ui/Spinner";
 import styles from "./salesReports.module.css";
 
 interface SummaryRow { invoicesThisMonth: number; revenueThisMonth: number; totalRevenue: number; totalCollected: number; outstandingTotal: number; pendingCount: number; }
@@ -133,7 +132,6 @@ export default function SalesReportsPage() {
 
   return (
     <div className="page-stack">
-      {isOutRefetching && <FloatingSpinner />}
       <div className="page-header">
         <div>
           <h1 className="page-title">Sales Reports</h1>

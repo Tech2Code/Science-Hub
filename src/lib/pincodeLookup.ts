@@ -8,9 +8,7 @@ export interface PincodeLookupResult {
   stateRaw: string;
 }
 
-// Looks up a 6-digit pincode via our own server-side proxy (/api/pincode-lookup)
-// and returns city/state, or null if not found / the request failed. Callers
-// decide whether/how to apply the result (e.g. only filling blank fields).
+// Looks up a 6-digit pincode via our server-side proxy; returns null if not found/failed. Caller decides how to apply the result.
 export async function lookupPincode(pincode: string): Promise<PincodeLookupResult | null> {
   if (!/^\d{6}$/.test(pincode)) return null;
   try {

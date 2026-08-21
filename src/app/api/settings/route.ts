@@ -14,9 +14,7 @@ export async function GET() {
     if (!auth.ok) return auth.response;
 
     const { gmailAppPassword, gmailAppPasswordDecryptFailed, gmailUser, ...settings } = await getBusinessSettings();
-    // Non-admins (e.g. staff viewing/printing an invoice, which needs the
-    // letterhead fields below) must not see the Gmail send-from address —
-    // only admins, who manage it on the Settings page, get it back.
+    // Non-admins need the letterhead fields (for printing) but must not see the Gmail send-from address.
     const isAdmin = auth.session.user.role === "admin";
     return NextResponse.json({
       ...settings,
@@ -28,13 +26,7 @@ export async function GET() {
   }
 }
 
-// Each field group below is written only when the request body actually
-// contains one of its keys — the settings page saves each section (identity,
-// address, bank, email, terms, ...) independently and only ever sends that
-// section's own fields, so a save must never touch, validate, or clobber a
-// section it isn't editing. This is what stops a broken/undecryptable value
-// in one section (e.g. a bank account number that can't be decrypted because
-// NEXTAUTH_SECRET doesn't match) from blocking saves anywhere else.
+// Each field group is written only when the body contains one of its keys — Settings saves each section independently, so a save must never clobber a section it isn't editing.
 const SIMPLE_STRING_KEYS = ["name", "tagline", "email", "phone", "address", "city", "state", "pincode", "gstin", "termsAndConditions"] as const;
 const BANK_KEYS = ["bankName", "bankAccountName", "bankAccountNumber", "bankIfsc", "bankBranch"] as const;
 const ADDRESS_KEYS = ["address", "city", "state", "pincode"] as const;
@@ -87,11 +79,7 @@ export async function PUT(request: NextRequest) {
       if (key in body) updateData[key] = fieldValues[key] ?? "";
     }
     if ("pan" in body) updateData.pan = (pan ?? "").toUpperCase();
-    // Only a real upload from /api/settings/logo (Vercel Blob, magic-byte
-    // validated) or clearing it back to "" is accepted — an arbitrary URL
-    // here would become the authoritative logo shown app-wide (sidebar,
-    // login page, every printed invoice/PDF) and would also be fetched
-    // directly by the browser generating each PDF (generateInvoicePdf.ts).
+    // Only a real upload from /api/settings/logo (or clearing to "") is accepted — an arbitrary URL would become the authoritative logo shown app-wide.
     if (logoUrl !== undefined) {
       if (logoUrl && !isLogoBlobUrl(logoUrl)) {
         return NextResponse.json({ error: "Invalid logo URL." }, { status: 400 });
@@ -113,16 +101,11 @@ export async function PUT(request: NextRequest) {
       updateData.bankAccountNumber = bankAccountNumber ? encrypt(bankAccountNumber) : "";
     }
 
-    // Document numbering (invoice/purchase-bill prefix + one-time "next
-    // number" override) — each field is independently optional, and an
-    // empty/blank value clears back to the auto-derived default rather than
-    // being rejected, mirroring how the rest of this route treats "not set".
+    // Each numbering field is independently optional; an empty value clears back to the auto-derived default rather than being rejected.
     const isNumberingSectionUpdate = NUMBERING_KEYS.some((k) => k in body);
     const numberingActivityDetails: string[] = [];
     if (isNumberingSectionUpdate) {
-      // Must match the same financial-year boundary/label /api/invoices and
-      // /api/purchase-bills use to generate numbers, or this validation
-      // would check the override against the wrong year's highest number.
+      // Must match the same FY boundary/label the invoice/bill routes use, or this validation checks against the wrong year's highest number.
       const currentYearLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date()));
 
       if ("invoiceNumberPrefix" in body) {
@@ -290,11 +273,7 @@ export async function PUT(request: NextRequest) {
     if (numberingActivityDetails.length > 0) {
       await logActivity(auth.session.user.id, "update_numbering_settings", `Updated document numbering: ${numberingActivityDetails.join(", ")}`);
     }
-    // Clean up the replaced/removed logo's old blob server-side, in this same
-    // request — mirrors how purchase-bill attachment replacement already
-    // deletes the old blob synchronously, rather than relying on a client-
-    // fired, unawaited DELETE that a closed tab or dropped request could
-    // silently skip and leave the old blob orphaned in storage indefinitely.
+    // Delete the replaced/removed logo's old blob synchronously here rather than relying on a client-fired DELETE that a closed tab could skip.
     if (logoUrl !== undefined && existing?.logoUrl && existing.logoUrl !== (logoUrl || "")) {
       await deleteAttachmentBlob(existing.logoUrl);
     }
