@@ -6,6 +6,8 @@
 .chartScroll {
   overflow-x: auto;
   overflow-y: visible;
+  margin: 0 -20px;
+  padding: 0px 20px;
 }
 
 .chart {
@@ -28,16 +30,34 @@
   cursor: default;
 }
 
+/* Value label floats directly above its own bar's top (anchored to .chartBar,
+   not the wrap), so it moves with the bar's height instead of sitting in a
+   shared fixed-height row. */
 .chartValue {
-  height: 1.25rem;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 0.25rem;
   font-size: 0.6rem;
   font-weight: 600;
   color: var(--c-text-3);
   white-space: nowrap;
-  transition: color 0.1s, font-size 0.1s;
+  pointer-events: none;
+  z-index: 2;
+  transition: color 0.15s, font-size 0.15s;
+}
+
+.chartValue.hovered {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--c-blue);
+  z-index: 6;
+  background: var(--c-bg-card);
+  border: 1px solid var(--c-border-md);
+  box-shadow: var(--c-shadow);
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.375rem;
 }
 
 .chartBarWrap {
@@ -48,27 +68,8 @@
   width: 100%;
 }
 
-/* Floating tooltip positioned above the bar so it never collides with a
-   neighboring label — the old inline hover value overlapped adjacent bars. */
-.chartTooltip {
-  position: absolute;
-  bottom: calc(100% + 0.375rem);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 5;
-  background: var(--c-bg-card);
-  border: 1px solid var(--c-border-md);
-  box-shadow: var(--c-shadow);
-  padding: 0.2rem 0.5rem;
-  border-radius: 0.375rem;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--c-blue);
-  white-space: nowrap;
-  pointer-events: none;
-}
-
 .chartBar {
+  position: relative;
   width: 100%;
   height: var(--bar-pct, 2%);
   background: linear-gradient(180deg, var(--c-blue), var(--c-blue-h));

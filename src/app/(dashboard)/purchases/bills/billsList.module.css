@@ -15,6 +15,10 @@
   text-decoration: none;
 }
 
+.billNoCell {
+  min-width: calc(9rem + 1rem);
+}
+
 .attachmentIconLink {
   display: inline-flex;
   align-items: center;
@@ -46,7 +50,7 @@
 .vendorCell {
   color: var(--c-text-2);
   font-weight: 500;
-  max-width: 12rem;
+  max-width: 11rem;
 }
 
 .vendorName {

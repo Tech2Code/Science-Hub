@@ -39,7 +39,10 @@ function BarChart({ data }: { data: MonthlyBar[] }) {
     <div className={styles.chartScroll}>
     <div className={styles.chart}>
       {data.map((bar, idx) => {
-        const pct = (bar.total / max) * 100;
+        // Scaled to 84 (not 100) so the tallest bar itself leaves headroom for its value
+        // label — clamping the output instead would flatten every near-max bar to the same
+        // height and hide real differences between them (e.g. 20L vs 22L both reading as 84%).
+        const pct = (bar.total / max) * 84;
         const isHov = hovered === idx;
         return (
           <div
@@ -48,17 +51,20 @@ function BarChart({ data }: { data: MonthlyBar[] }) {
             onMouseEnter={() => setHovered(idx)}
             onMouseLeave={() => setHovered(null)}
           >
-            {/* Value label — always shows the short form; full value floats in a tooltip on hover */}
-            <div className={styles.chartValue}>
-              {shortFmt(bar.total)}
-            </div>
-            {/* Bar */}
+            {/* Bar — value label floats directly above its own bar's top, moving with bar height.
+                Capped at 84% (not 100%) to leave headroom for that label: .chartScroll mixes
+                overflow-x:auto with overflow-y:visible, but per spec a non-visible x-axis forces
+                the y-axis to compute as auto too, so a label poking above a full-height bar would
+                get clipped instead of floating freely. */}
             <div className={styles.chartBarWrap}>
-              {isHov && <div className={styles.chartTooltip}>{fmt(bar.total)}</div>}
               <div
                 className={`${styles.chartBar} ${hovered !== null && !isHov ? styles.dimmed : ""}`}
                 style={{ "--bar-pct": `${Math.max(pct, 2)}%` } as React.CSSProperties}
-              />
+              >
+                <div className={`${styles.chartValue} ${isHov ? styles.hovered : ""}`}>
+                  {isHov ? fmt(bar.total) : shortFmt(bar.total)}
+                </div>
+              </div>
             </div>
             <div className={`${styles.chartLabel} ${isHov ? styles.hovered : ""}`}>
               {bar.month.split(" ")[0]}

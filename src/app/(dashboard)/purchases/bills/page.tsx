@@ -315,7 +315,7 @@ export default function PurchasesPage() {
                 </td></tr>
               ) : bills.map(b => (
                 <tr key={b.id}>
-                  <Cell col={COLUMNS[0]}>
+                  <Cell col={COLUMNS[0]} className={styles.billNoCell}>
                     <a href={`/purchases/bills/${b.id}`} className={styles.billLink}>{b.billNumber}</a>
                     {b.attachmentUrl && (
                       <a
