@@ -23,6 +23,9 @@ interface RateListFormBodyProps {
 
   /** Validation warnings + submit/cancel actions — rendered inside the same summary card, mirroring the purchase-bill totals card. */
   footer: ReactNode;
+
+  /** Draft-resume InfoBanner — rendered as the first child of leftCol, inside the form. */
+  banner?: ReactNode;
 }
 
 // Shared layout for New/Edit Rate List pages so the two forms can't drift apart — mirrors PurchaseBillFormBody.
@@ -32,6 +35,7 @@ export function RateListFormBody({
   note, onNoteChange,
   items, setItems, itemsError,
   footer,
+  banner,
 }: RateListFormBodyProps) {
   const itemCount = items.filter((i) => i.name.trim()).length;
 
@@ -39,6 +43,7 @@ export function RateListFormBody({
     <div className={styles.layout}>
       {/* Left column */}
       <div className={styles.leftCol}>
+        {banner}
         <div {...animateSection(startIndex, "form-card")}>
           <h2 className="form-section-title">Details</h2>
           <div className="form-grid-2">

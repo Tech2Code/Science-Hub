@@ -419,22 +419,6 @@ export default function NewInvoicePage() {
         <p className="page-sub">Generate a GST-compliant invoice</p>
       </div>
       <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
-      {showDraftBanner && (
-        <InfoBanner
-          message="You have an unsaved invoice draft from earlier — want to resume it?"
-          actionLabel="Resume draft"
-          onAction={restoreDraft}
-          onDismiss={dismissDraft}
-        />
-      )}
-      {showFirstInvoiceNudge && (
-        <InfoBanner
-          message={`This is your first invoice — it will be numbered "${firstInvoicePreviewNumber}" by default. Want a different prefix or starting number?`}
-          actionHref="/settings#numbering"
-          actionLabel="Customize in Settings →"
-          onDismiss={dismissFirstInvoiceNudge}
-        />
-      )}
       <ConfirmDialog
         open={showCancelConfirm}
         title="Discard this invoice?"
@@ -485,6 +469,22 @@ export default function NewInvoicePage() {
         <div className={styles.layout}>
           {/* Left column */}
           <div className={styles.leftCol}>
+            {showDraftBanner && (
+              <InfoBanner
+                message="You have an unsaved invoice draft from earlier — want to resume it?"
+                actionLabel="Resume draft"
+                onAction={restoreDraft}
+                onDismiss={dismissDraft}
+              />
+            )}
+            {showFirstInvoiceNudge && (
+              <InfoBanner
+                message={`This is your first invoice — it will be numbered "${firstInvoicePreviewNumber}" by default. Want a different prefix or starting number?`}
+                actionHref="/settings#numbering"
+                actionLabel="Customize in Settings →"
+                onDismiss={dismissFirstInvoiceNudge}
+              />
+            )}
             {/* Customer selector */}
             {(() => {
               const section = animateSection(0, `card ${styles.cardPad}`);

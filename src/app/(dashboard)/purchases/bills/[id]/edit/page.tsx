@@ -448,14 +448,6 @@ export default function EditPurchaseBillPage() {
       </div>
 
       <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
-      {showDraftBanner && (
-        <InfoBanner
-          message="You have unsaved edits to this bill from earlier — want to resume them?"
-          actionLabel="Resume draft"
-          onAction={restoreDraft}
-          onDismiss={dismissDraft}
-        />
-      )}
 
       {/* Summary stats */}
       {bill && (
@@ -468,6 +460,14 @@ export default function EditPurchaseBillPage() {
       <form onSubmit={handleSubmit} noValidate>
         <PurchaseBillFormBody
           startIndex={1}
+          banner={showDraftBanner && (
+            <InfoBanner
+              message="You have unsaved edits to this bill from earlier — want to resume them?"
+              actionLabel="Resume draft"
+              onAction={restoreDraft}
+              onDismiss={dismissDraft}
+            />
+          )}
           vendors={vendors}
           vendorId={vendorId}
           onVendorIdChange={(id) => { setVendorId(id); setVendorError(undefined); }}

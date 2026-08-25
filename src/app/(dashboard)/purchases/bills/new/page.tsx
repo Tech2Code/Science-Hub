@@ -348,25 +348,29 @@ export default function NewPurchaseBillPage() {
         <p className="page-sub">Record a GST-compliant purchase bill</p>
       </div>
       <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
-      {showDraftBanner && (
-        <InfoBanner
-          message="You have an unsaved purchase bill draft from earlier — want to resume it?"
-          actionLabel="Resume draft"
-          onAction={restoreDraft}
-          onDismiss={dismissDraft}
-        />
-      )}
-      {showFirstBillNudge && (
-        <InfoBanner
-          message={`This is your first purchase bill — it will be numbered "${firstBillPreviewNumber}" by default. Want a different prefix or starting number?`}
-          actionHref="/settings#numbering"
-          actionLabel="Customize in Settings →"
-          onDismiss={dismissFirstBillNudge}
-        />
-      )}
 
       <form onSubmit={handleSubmit} noValidate>
         <PurchaseBillFormBody
+          banner={
+            <>
+              {showDraftBanner && (
+                <InfoBanner
+                  message="You have an unsaved purchase bill draft from earlier — want to resume it?"
+                  actionLabel="Resume draft"
+                  onAction={restoreDraft}
+                  onDismiss={dismissDraft}
+                />
+              )}
+              {showFirstBillNudge && (
+                <InfoBanner
+                  message={`This is your first purchase bill — it will be numbered "${firstBillPreviewNumber}" by default. Want a different prefix or starting number?`}
+                  actionHref="/settings#numbering"
+                  actionLabel="Customize in Settings →"
+                  onDismiss={dismissFirstBillNudge}
+                />
+              )}
+            </>
+          }
           vendors={vendors}
           vendorId={vendorId}
           onVendorIdChange={(id) => { setVendorId(id); setVendorError(undefined); }}

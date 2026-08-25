@@ -201,17 +201,17 @@ export default function EditRateListPage() {
       </div>
 
       <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
-      {showDraftBanner && (
-        <InfoBanner
-          message="You have unsaved edits to this rate list from earlier — want to resume them?"
-          actionLabel="Resume draft"
-          onAction={restoreDraft}
-          onDismiss={dismissDraft}
-        />
-      )}
 
       <form onSubmit={handleSubmit} noValidate>
         <RateListFormBody
+          banner={showDraftBanner && (
+            <InfoBanner
+              message="You have unsaved edits to this rate list from earlier — want to resume them?"
+              actionLabel="Resume draft"
+              onAction={restoreDraft}
+              onDismiss={dismissDraft}
+            />
+          )}
           title={title}
           onTitleChange={(v) => { setTitle(v); setTitleError(undefined); }}
           titleError={titleError}

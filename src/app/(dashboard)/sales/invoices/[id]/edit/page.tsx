@@ -566,18 +566,18 @@ export default function EditInvoicePage() {
         <p className="page-sub">Editing is allowed only while the invoice is unpaid or partially paid.</p>
       </div>
       <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
-      {showDraftBanner && (
-        <InfoBanner
-          message="You have unsaved edits to this invoice from earlier — want to resume them?"
-          actionLabel="Resume draft"
-          onAction={restoreDraft}
-          onDismiss={dismissDraft}
-        />
-      )}
       <form onSubmit={handleSubmit} noValidate>
         <div className={styles.layout}>
           {/* Left column */}
           <div className={styles.leftCol}>
+            {showDraftBanner && (
+              <InfoBanner
+                message="You have unsaved edits to this invoice from earlier — want to resume them?"
+                actionLabel="Resume draft"
+                onAction={restoreDraft}
+                onDismiss={dismissDraft}
+              />
+            )}
             {/* Customer */}
             {(() => {
               const section = animateSection(0, `card ${styles.sectionCard}`);

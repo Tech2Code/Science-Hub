@@ -135,17 +135,17 @@ export default function NewRateListPage() {
       </div>
 
       <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
-      {showDraftBanner && (
-        <InfoBanner
-          message="You have an unsaved rate list draft from earlier — want to resume it?"
-          actionLabel="Resume draft"
-          onAction={restoreDraft}
-          onDismiss={dismissDraft}
-        />
-      )}
 
       <form onSubmit={handleSubmit} noValidate>
         <RateListFormBody
+          banner={showDraftBanner && (
+            <InfoBanner
+              message="You have an unsaved rate list draft from earlier — want to resume it?"
+              actionLabel="Resume draft"
+              onAction={restoreDraft}
+              onDismiss={dismissDraft}
+            />
+          )}
           title={title}
           onTitleChange={(v) => { setTitle(v); setTitleError(undefined); }}
           titleError={titleError}

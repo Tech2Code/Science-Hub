@@ -59,6 +59,9 @@ interface PurchaseBillFormBodyProps {
 
   /** Validation warnings + submit/cancel actions (and, on the New Bill page, the Record Payment trigger) — rendered inside the same totals card, mirroring the invoice summary card. */
   footer: ReactNode;
+
+  /** Draft-resume / first-bill numbering nudge InfoBanners — rendered as the first children of leftCol, inside the form. */
+  banner?: ReactNode;
 }
 
 // Shared layout for New/Edit Purchase Bill; each page owns its own state/validation and supplies `footer`.
@@ -73,11 +76,13 @@ export function PurchaseBillFormBody({
   products, setProducts, items, setItems, itemsError,
   grossTotal, itemDiscountTotal, taxTotal, transportChargeGstAmount, roundOff, grandTotal, discount, onDiscountChange,
   footer,
+  banner,
 }: PurchaseBillFormBodyProps) {
   return (
     <div className={styles.layout}>
       {/* Left column */}
       <div className={styles.leftCol}>
+        {banner}
         <BillDetailsCard
           sectionIndex={startIndex}
           vendors={vendors}
