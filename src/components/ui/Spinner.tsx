@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import styles from "./Spinner.module.css";
 
 interface SpinnerProps {
@@ -24,24 +25,33 @@ export function Spinner({ size = "md", className }: SpinnerProps) {
   );
 }
 
-/* ── Full-screen modal overlay used for async actions (save, delete, restore…) ── */
+/* ── Full-screen modal overlay used for async actions (save, delete, restore…) ──
+   Portaled to document.body (same as ConfirmDialog/Modal) — an `.animate-card` ancestor's
+   `animation: ... forwards` leaves a `transform` permanently applied after it finishes, and
+   any transform on an ancestor gives `position: fixed` descendants a new containing block,
+   trapping an inline-rendered overlay inside that card's box instead of covering the viewport. */
 export function OverlayLoader({ text }: { text: string }) {
-  return (
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div className={styles.overlayBackdrop}>
       <div className={styles.overlayCard}>
         <Spinner size="lg" />
         <span className={styles.overlayText}>{text}</span>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
-/* ── Bare spinner, no backdrop/card — for background refetches where content is already dimmed ── */
+/* ── Bare spinner, no backdrop/card — for background refetches where content is already dimmed ──
+   Portaled for the same reason as OverlayLoader above. */
 export function FloatingSpinner() {
-  return (
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div className={styles.floatingSpinner}>
       <Spinner size="lg" />
-    </div>
+    </div>,
+    document.body
   );
 }
 

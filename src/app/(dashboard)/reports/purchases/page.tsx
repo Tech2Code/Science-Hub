@@ -6,14 +6,17 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
-import { TableSkeleton } from "@/components/ui/Skeleton";
+import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
-import { Input } from "@/components/ui/Input";
+import { SearchField } from "@/components/ui/SearchField";
+import { DateRangeFilter } from "@/components/ui/DateRangeFilter";
+import { HeaderActionsRow } from "@/components/ui/HeaderActionsRow";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { downloadXlsx } from "@/lib/downloadXlsx";
 import { formatDate } from "@/lib/formatDate";
 import styles from "./purchaseReports.module.css";
@@ -90,11 +93,6 @@ const DOCUMENT_TYPE_LABEL: Record<string, string> = {
 };
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-// Floors the date pickers so scrolling the native year spinner can't wander
-// off into 1800s nonsense — no business data predates this.
-const MIN_REPORT_DATE = "2015-01-01";
-
 
 type Tab = "summary" | "outstanding" | "category" | "ledger";
 
@@ -230,6 +228,7 @@ export default function PurchaseReportsPage() {
 
   return (
     <div className="page-stack">
+      {(exportingOutstanding || exportingCategory || exportingLedger) && <OverlayLoader text="Generating Excel file…" />}
       <div className="page-header">
         <div>
           <h1 className="page-title">Purchase Reports</h1>
@@ -241,22 +240,22 @@ export default function PurchaseReportsPage() {
       <div {...animateSection(0, "stat-banners")}>
         <div className="stat-banner stat-banner-amber">
           <div className="stat-banner-label">Total Spend (12 months)</div>
-          <div className="stat-banner-value">{loadingSummary ? "—" : fmt(totalSpend)}</div>
-          <div className="stat-banner-sub">{loadingSummary ? "…" : `${summaryRows.reduce((s, r) => s + r.count, 0)} bills`}</div>
+          <div className="stat-banner-value"><SkeletonSwap loading={loadingSummary} w={90} h={20}>{fmt(totalSpend)}</SkeletonSwap></div>
+          <div className="stat-banner-sub"><SkeletonSwap loading={loadingSummary} w={80} h={13}>{`${summaryRows.reduce((s, r) => s + r.count, 0)} bills`}</SkeletonSwap></div>
         </div>
         <div className="stat-banner stat-banner-red">
           <div className="stat-banner-label">Total Payable</div>
-          <div className="stat-banner-value">{showOutSkeleton ? "—" : fmt(outTotalBalance)}</div>
-          <div className="stat-banner-sub">{showOutSkeleton ? "…" : `Across ${outTotal} unpaid/partial bill${outTotal !== 1 ? "s" : ""}`}</div>
+          <div className="stat-banner-value"><SkeletonSwap loading={showOutSkeleton} w={90} h={20}>{fmt(outTotalBalance)}</SkeletonSwap></div>
+          <div className="stat-banner-sub"><SkeletonSwap loading={showOutSkeleton} w={140} h={13}>{`Across ${outTotal} unpaid/partial bill${outTotal !== 1 ? "s" : ""}`}</SkeletonSwap></div>
         </div>
         <div className="stat-banner stat-banner-purple">
           <div className="stat-banner-label">Overdue Bills</div>
-          <div className="stat-banner-value">{showOutSkeleton ? "—" : outOverdueCount}</div>
+          <div className="stat-banner-value"><SkeletonSwap loading={showOutSkeleton} w={50} h={20}>{outOverdueCount}</SkeletonSwap></div>
           <div className="stat-banner-sub">Bills past their due date</div>
         </div>
         <div className="stat-banner stat-banner-blue">
           <div className="stat-banner-label">Categories</div>
-          <div className="stat-banner-value">{loadingCat ? "—" : categoryRows.length}</div>
+          <div className="stat-banner-value"><SkeletonSwap loading={loadingCat} w={50} h={20}>{categoryRows.length}</SkeletonSwap></div>
           <div className="stat-banner-sub">Distinct purchase categories</div>
         </div>
       </div>
@@ -272,34 +271,14 @@ export default function PurchaseReportsPage() {
         </div>
 
         {tab === "outstanding" && (
-          <div className={styles.dateFilterRow}>
-            <label className={styles.dateFilterLabel}>
-              From
-              <Input
-                type="date" aria-label="Start date" value={startDate} min={MIN_REPORT_DATE} max={endDate || todayStr}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setStartDate(v);
-                  if (endDate && v > endDate) setEndDate(v);
-                  setOutPage(1);
-                }}
-                onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
-                className={styles.dateInput}
-              />
-            </label>
-            <label className={styles.dateFilterLabel}>
-              To
-              <Input
-                type="date" aria-label="End date" value={endDate} min={startDate || MIN_REPORT_DATE} max={todayStr}
-                onChange={(e) => { setEndDate(e.target.value); setOutPage(1); }}
-                onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
-                className={styles.dateInput}
-              />
-            </label>
-            {(startDate || endDate) && (
-              <Button variant="secondary" size="sm" onClick={() => { setStartDate(""); setEndDate(""); setOutPage(1); }}>Clear</Button>
-            )}
-          </div>
+          <DateRangeFilter
+            startDate={startDate}
+            endDate={endDate}
+            todayStr={todayStr}
+            onStartChange={(v) => { setStartDate(v); setOutPage(1); }}
+            onEndChange={(v) => { setEndDate(v); setOutPage(1); }}
+            onClear={() => { setStartDate(""); setEndDate(""); setOutPage(1); }}
+          />
         )}
 
         {/* Outstanding tab */}
@@ -310,14 +289,14 @@ export default function PurchaseReportsPage() {
                 <h2 className="card-header-title">Outstanding Bills</h2>
                 <p className="card-header-sub">Unpaid and partially paid purchase bills with aging</p>
               </div>
-              <div className={styles.headerActionsRow}>
+              <HeaderActionsRow>
                 {outstandingResponse && outTotal > 0 && (
                   <Button variant="secondary" size="sm" loading={exportingOutstanding} onClick={exportOutstandingCsv}>Export Excel</Button>
                 )}
                 {outstandingResponse && (
                   <ShowAllToggle total={outTotal} showAll={outShowAll} onToggle={() => { setOutShowAll((v) => !v); setOutPage(1); }} />
                 )}
-              </div>
+              </HeaderActionsRow>
             </div>
             <div className="table-wrap">
               <table className="table-base" style={isOutRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
@@ -468,23 +447,21 @@ export default function PurchaseReportsPage() {
                   products remain here permanently for audit purposes.
                 </p>
               </div>
-              <div className={styles.headerActionsRow}>
+              <HeaderActionsRow>
                 {ledgerResponse && ledgerTotal > 0 && (
                   <Button variant="secondary" size="sm" loading={exportingLedger} onClick={exportLedgerCsv}>Export Excel</Button>
                 )}
                 {ledgerResponse && (
                   <ShowAllToggle total={ledgerTotal} showAll={ledgerShowAll} onToggle={() => { setLedgerShowAll((v) => !v); setLedgerPage(1); }} />
                 )}
-              </div>
+              </HeaderActionsRow>
             </div>
-            <div className={styles.dateFilterRow}>
-              <Input
-                type="search"
+            <div className="card-toolbar">
+              <SearchField
                 aria-label="Search stock ledger"
                 placeholder="Search by product, type, or reference…"
                 value={ledgerSearch}
                 onChange={(e) => { setLedgerSearch(e.target.value); setLedgerPage(1); }}
-                className=""
               />
             </div>
             <div className="table-wrap">

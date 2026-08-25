@@ -166,9 +166,8 @@
 @media (max-width: 1024px) {
   .wrap { max-width: none; }
 
-  /* Expanded state overlays the whole topbar row so the input gets the
-     full screen width instead of being squeezed between the hamburger/
-     page-title on the left and the theme/avatar icons on the right. */
+  /* Overlays the whole topbar row so the input gets full screen width instead of
+     being squeezed between the hamburger/title and the theme/avatar icons. */
   .wrapMobileExpanded {
     position: fixed;
     top: 0;
@@ -183,10 +182,7 @@
     z-index: 60;
   }
   .wrapMobileExpanded .inputWrap { width: 100%; }
-  /* .panel's containing block is .wrap's padding box, but an absolutely
-     positioned child's left/right:0 aligns to the outer edge of that box —
-     it ignores the padding rather than sitting inside it — so without this
-     override the panel spans edge-to-edge of the screen while the input
-     above it sits inset by .wrapMobileExpanded's 0.5rem padding. */
+  /* An absolutely positioned child's left/right:0 ignores the containing box's
+     padding, so without this the panel spans edge-to-edge while the input above stays inset. */
   .wrapMobileExpanded .panel { left: 0.5rem; right: 0.5rem; }
 }

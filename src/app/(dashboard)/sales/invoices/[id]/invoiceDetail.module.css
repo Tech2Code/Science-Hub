@@ -1,6 +1,5 @@
-/* Invoice detail page — styles for everything OUTSIDE #invoice-print-area.
-   The print area itself keeps literal inline styles (read imperatively by
-   src/lib/generateInvoicePdf.ts for PDF generation) and must not use these. */
+/* Styles for everything OUTSIDE #invoice-print-area — that area keeps literal inline
+   styles (read by src/lib/generateInvoicePdf.ts for PDF generation) instead. */
 
 .errorText { color: var(--c-red); }
 .shareIconMargin { margin-right: 0.375rem; }

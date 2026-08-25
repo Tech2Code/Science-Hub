@@ -40,9 +40,8 @@
   font-weight: 700;
 }
 
-/* white-space: pre + overflow-x: auto instead of the default soft-wrap —
-   a wrapped line makes a real pasted spreadsheet row (many narrow columns)
-   hard to read, so long lines scroll horizontally instead. */
+/* white-space: pre + overflow-x: auto instead of soft-wrap: a wrapped spreadsheet
+   row (many narrow columns) is hard to read, so long lines scroll instead. */
 .pasteTextarea { font-family: var(--font-mono); font-size: 0.78rem; resize: vertical; white-space: pre; overflow-x: auto; }
 
 .uploadRow { display: flex; align-items: center; gap: 0.625rem; }

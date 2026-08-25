@@ -218,11 +218,9 @@
 .kpiCard[data-tone="red"]   .kpiValue { color: var(--c-red); }
 .kpiCard[data-tone="green"] .kpiValue { color: var(--c-green-text); }
 
-/* Card chrome (icon/padding/font) shrinks based on the ACTUAL rendered card
-   width (via container query on .sideBySideCol), not viewport size — a fixed
-   viewport breakpoint missed the case where the outer sideBySideGrid splits
-   into 2 columns at medium widths, leaving each kpiCard just as narrow as on
-   mobile without ever triggering a viewport-based "mobile" media query. */
+/* Card chrome shrinks by container query (rendered card width), not viewport —
+   a viewport breakpoint missed the case where sideBySideGrid splits into 2
+   columns, leaving kpiCard as narrow as mobile without a "mobile" viewport ever firing. */
 @container (max-width: 540px) {
   .kpiCard{padding: 1rem .7rem;}
 }
@@ -335,10 +333,8 @@
   gap: 0.75rem;
 }
 
-/* Nested inside .sideBySideCol (a container-query root): once the column is
-   wide enough for 3+ cards to auto-fit, pin it back to 2 — with only 4 KPIs
-   per section, 3+1 reads worse than a clean 2x2. Auto-fit still handles the
-   collapse to a single card on very small screens on its own. */
+/* Once the column is wide enough for 3+ cards to auto-fit, pin back to 2 —
+   with only 4 KPIs per section, 3+1 reads worse than a clean 2x2. */
 @container (min-width: 460px) and (max-width: 900px) {
   .kpiGrid { grid-template-columns: 1fr 1fr; }
 }
@@ -373,9 +369,8 @@
   overflow-x: auto;
 }
 
-/* !important needed: global `.table-base th { text-align: left; }` (0,1,1)
-   outranks this single class selector (0,1,0) on <th>, so it silently wins
-   without this override. Not needed on <td> — no competing rule there. */
+/* !important needed: global `.table-base th { text-align: left }` (0,1,1)
+   outranks this class alone (0,1,0) on <th>; not needed on <td>. */
 .textRight {
   text-align: right !important;
 }

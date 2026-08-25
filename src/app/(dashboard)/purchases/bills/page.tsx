@@ -8,7 +8,7 @@ import { useFetch } from "@/lib/useCache";
 import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenerator";
 import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
-import { Input } from "@/components/ui/Input";
+import { SearchField } from "@/components/ui/SearchField";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -270,13 +270,13 @@ export default function PurchasesPage() {
         tabs={STATUS_TABS}
         value={filter}
         onChange={(tab) => { setFilter(tab); setPage(1); }}
+        disabled={!data}
       />
 
       <div {...animateSection(2, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
-            <Input
-              type="search"
+            <SearchField
               aria-label="Search purchase bills"
               placeholder="Search by bill no., vendor, product, brand, category or staff…"
               value={search}

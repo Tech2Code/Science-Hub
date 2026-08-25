@@ -7,11 +7,12 @@ interface StatusFilterTabsProps<T extends string> {
   tabs: readonly T[];
   value: T;
   onChange: (tab: T) => void;
+  disabled?: boolean;
 }
 
 // Status filter tab row (All/unpaid/partial/paid/…) shown atop list pages —
 // shared by the Invoices and Purchase Bills list pages so they can't drift apart.
-export function StatusFilterTabs<T extends string>({ sectionIndex, tabs, value, onChange }: StatusFilterTabsProps<T>) {
+export function StatusFilterTabs<T extends string>({ sectionIndex, tabs, value, onChange, disabled }: StatusFilterTabsProps<T>) {
   return (
     <div {...animateSection(sectionIndex, "filter-tabs-row")}>
       <div className="filter-tabs">
@@ -19,6 +20,7 @@ export function StatusFilterTabs<T extends string>({ sectionIndex, tabs, value, 
           <button
             key={tab}
             onClick={() => onChange(tab)}
+            disabled={disabled}
             className={["filter-tab", value === tab ? "filter-tab-active" : ""].join(" ")}
           >
             {tab}

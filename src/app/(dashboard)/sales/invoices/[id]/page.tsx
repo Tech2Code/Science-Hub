@@ -763,6 +763,7 @@ export default function InvoiceDetailPage() {
       )}
       {shareLoading && <OverlayLoader text={shareLoadingText} />}
       {pdfPrinting && <OverlayLoader text="Preparing PDF…" />}
+      {pdfViewing && <OverlayLoader text="Preparing PDF…" />}
       {pdfRegenerating && <OverlayLoader text="Regenerating PDF…" />}
       {addingPayment && <OverlayLoader text="Saving payment…" />}
       {addingReturn && <OverlayLoader text="Saving return…" />}

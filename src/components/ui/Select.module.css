@@ -21,11 +21,13 @@
   transition: background-color 0.2s, color 0.2s, border-color 0.15s, box-shadow 0.15s;
 }
 
-/* Match Input.module.css's breakpoint — keep the select trigger at its
-   original, more compact size on phone-sized screens. */
+/* Match Input.module.css's breakpoint — height is fixed here (mobile only)
+   so it matches Input/DatePicker/PasswordInput/PhoneInput/Button's own fixed
+   mobile height exactly. */
 @media (max-width: 768px) {
   .trigger {
-    padding: 0.5rem 0.75rem;
+    height: 1.875rem;
+    padding: 0 0.75rem;
     font-size: 0.875rem;
   }
 }
@@ -67,9 +69,8 @@
   height: 12px;
 }
 
-/* Real controlled <select> stays functionally present (keeps existing
-   onChange/name/value contracts working unchanged) but fully invisible —
-   the button + listbox above are the only thing the user ever sees. */
+/* Real <select> stays mounted (keeps onChange/name/value working) but
+   visually hidden — the button + listbox above is what the user sees. */
 .native {
   position: absolute;
   width: 1px;

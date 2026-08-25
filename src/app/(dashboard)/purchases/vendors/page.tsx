@@ -8,7 +8,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
-import { Input } from "@/components/ui/Input";
+import { SearchField } from "@/components/ui/SearchField";
 import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
@@ -135,8 +135,7 @@ export default function VendorsPage() {
       <div {...animateSection(0, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
-            <Input
-              type="search"
+            <SearchField
               aria-label="Search vendors"
               placeholder="Search by name, company, GSTIN, phone or email…"
               value={search}

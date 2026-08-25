@@ -2,6 +2,7 @@
 
 import { Select } from "./Select";
 import { MONTH_NAMES } from "@/lib/dateFilter";
+import shared from "./ToolbarField.module.css";
 import styles from "./MonthYearFilter.module.css";
 
 interface MonthYearFilterProps {
@@ -16,8 +17,8 @@ interface MonthYearFilterProps {
 // Month + Year dropdown pair — filters an already-fetched list client-side by a record's date field.
 export function MonthYearFilter({ month, year, years, onMonthChange, onYearChange, label = "Period" }: MonthYearFilterProps) {
   return (
-    <div className={styles.wrap}>
-      <span className={styles.label}>{label}</span>
+    <div className={shared.wrap}>
+      <span className={shared.label}>{label}</span>
       <Select aria-label="Filter by month" value={month} onChange={(e) => onMonthChange(e.target.value)} className={styles.select}>
         <option value="">All Months</option>
         {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}

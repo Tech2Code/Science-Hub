@@ -50,9 +50,16 @@
   outline: none;
 }
 
+/* Match Input.module.css's breakpoint — .wrap gets a fixed height here
+   (mobile only) so it matches Input/Select/DatePicker/PasswordInput/
+   Button's own fixed mobile height exactly; .input's padding is zeroed so
+   it stretches to fill that height instead of overflowing it. */
 @media (max-width: 768px) {
+  .wrap {
+    height: 1.875rem;
+  }
   .input {
-    padding: 0.5rem 0.75rem;
+    padding: 0 0.75rem;
     font-size: 0.875rem;
   }
 }

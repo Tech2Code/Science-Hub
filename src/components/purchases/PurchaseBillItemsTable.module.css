@@ -93,21 +93,16 @@
 }
 
 /* ── Quick-add item form (rendered inside a Modal) ───────────────────── */
-/* Row gap matches the app-wide .form-grid-2/.form-grid-3 convention
-   (globals.css) — FormField's error text is absolutely positioned below the
-   field (Input.module.css .errorMsg) so it doesn't push the layout down,
-   which means the gap to the next row has to be wide enough to fit it
-   without overlapping; a smaller ad-hoc gap here caused exactly that. */
+/* Matches the app-wide .form-grid-2/.form-grid-3 gap — wide enough for FormField's
+   absolutely-positioned error text to not overlap the next row. */
 .customForm {
   display: flex;
   flex-direction: column;
   gap: 1.325rem;
 }
 
-/* This grid lives inside a fixed-width Modal (not the full page), so its
-   available width doesn't track the viewport — a viewport media query would
-   keep forcing 4 cramped columns on any desktop-width window. Two columns
-   keeps each field wide enough to read at the modal's actual ~34rem width. */
+/* This grid lives inside a fixed-width Modal, not the full page, so a viewport
+   media query would keep forcing cramped columns — 2 columns fits its ~34rem width. */
 .grid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.325rem 1rem; }
 @media (max-width: 480px) {
   .grid4 { grid-template-columns: 1fr; }
@@ -150,10 +145,8 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.73rem;
-  /* Keeps every column at its desktop width on narrow screens instead of
-     the % widths squeezing headers/fields into an unreadable, overlapping
-     mess — .itemsTableWrap's overflow-x:auto lets the row scroll sideways
-     on mobile instead. */
+  /* Keeps columns at desktop width instead of squeezing on narrow screens;
+     .itemsTableWrap's overflow-x:auto lets the row scroll sideways on mobile. */
   min-width: 780px;
 }
 
@@ -218,14 +211,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
-  border-radius: 0.375rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
   background: none;
   border: 1px solid var(--c-border);
   cursor: grab;
   color: var(--c-text-4);
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   line-height: 1;
   touch-action: none;
   user-select: none;
@@ -248,11 +241,8 @@
 
 .discountAmountHint {
   position: absolute;
-  /* This table's row padding (0.4rem, vs. 0.625rem on the sales invoice
-     table this was copied from) is tighter — the same -0.7rem offset used
-     there would eat almost the whole row-above's padding here, so this is
-     pulled in closer to avoid the pill visually touching the row above on
-     bills with several consecutive discounted line items. */
+  /* This table's row padding is tighter than the sales invoice table this was
+     copied from, so the offset is pulled in closer to avoid touching the row above. */
   top: -0.5rem;
   left: 50%;
   transform: translateX(-50%);

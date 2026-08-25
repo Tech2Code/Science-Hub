@@ -6,13 +6,15 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
-import { TableSkeleton } from "@/components/ui/Skeleton";
+import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
-import { Input } from "@/components/ui/Input";
+import { DateRangeFilter } from "@/components/ui/DateRangeFilter";
+import { HeaderActionsRow } from "@/components/ui/HeaderActionsRow";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { downloadXlsx } from "@/lib/downloadXlsx";
 import { formatDate } from "@/lib/formatDate";
 import styles from "./salesReports.module.css";
@@ -43,10 +45,6 @@ const GST_COLUMNS: Column[] = [
 ];
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-// Floors the date pickers so scrolling the native year spinner can't wander
-// off into 1800s nonsense — no business data predates this.
-const MIN_REPORT_DATE = "2015-01-01";
 
 type Tab = "summary" | "outstanding" | "gst";
 
@@ -132,6 +130,8 @@ export default function SalesReportsPage() {
 
   return (
     <div className="page-stack">
+      {exportingOutstanding && <OverlayLoader text="Generating Excel file…" />}
+      {exportingGst && <OverlayLoader text="Generating Excel file…" />}
       <div className="page-header">
         <div>
           <h1 className="page-title">Sales Reports</h1>
@@ -143,22 +143,22 @@ export default function SalesReportsPage() {
       <div {...animateSection(0, "stat-banners")}>
         <div className="stat-banner stat-banner-blue">
           <div className="stat-banner-label">Revenue This Month</div>
-          <div className="stat-banner-value">{loadingSummary ? "—" : fmt(summaryData?.revenueThisMonth ?? 0)}</div>
-          <div className="stat-banner-sub">{loadingSummary ? "…" : `${summaryData?.invoicesThisMonth ?? 0} invoice${(summaryData?.invoicesThisMonth ?? 0) !== 1 ? "s" : ""} this month`}</div>
+          <div className="stat-banner-value"><SkeletonSwap loading={loadingSummary} w={90} h={20}>{fmt(summaryData?.revenueThisMonth ?? 0)}</SkeletonSwap></div>
+          <div className="stat-banner-sub"><SkeletonSwap loading={loadingSummary} w={140} h={13}>{`${summaryData?.invoicesThisMonth ?? 0} invoice${(summaryData?.invoicesThisMonth ?? 0) !== 1 ? "s" : ""} this month`}</SkeletonSwap></div>
         </div>
         <div className="stat-banner stat-banner-amber">
           <div className="stat-banner-label">Total Outstanding</div>
-          <div className="stat-banner-value">{showOutSkeleton ? "—" : fmt(outTotalBalance)}</div>
-          <div className="stat-banner-sub">{showOutSkeleton ? "…" : `Across ${outTotal} unpaid/partial invoice${outTotal !== 1 ? "s" : ""}`}</div>
+          <div className="stat-banner-value"><SkeletonSwap loading={showOutSkeleton} w={90} h={20}>{fmt(outTotalBalance)}</SkeletonSwap></div>
+          <div className="stat-banner-sub"><SkeletonSwap loading={showOutSkeleton} w={140} h={13}>{`Across ${outTotal} unpaid/partial invoice${outTotal !== 1 ? "s" : ""}`}</SkeletonSwap></div>
         </div>
         <div className="stat-banner stat-banner-green">
           <div className="stat-banner-label">Total Collected</div>
-          <div className="stat-banner-value">{loadingSummary ? "—" : fmt(summaryData?.totalCollected ?? 0)}</div>
+          <div className="stat-banner-value"><SkeletonSwap loading={loadingSummary} w={90} h={20}>{fmt(summaryData?.totalCollected ?? 0)}</SkeletonSwap></div>
           <div className="stat-banner-sub">All time payments received</div>
         </div>
         <div className="stat-banner stat-banner-purple">
           <div className="stat-banner-label">Total GST Collected</div>
-          <div className="stat-banner-value">{loadingGst ? "—" : fmt(totalGst)}</div>
+          <div className="stat-banner-value"><SkeletonSwap loading={loadingGst} w={90} h={20}>{fmt(totalGst)}</SkeletonSwap></div>
           <div className="stat-banner-sub">CGST + SGST + IGST across all invoices</div>
         </div>
       </div>
@@ -174,34 +174,14 @@ export default function SalesReportsPage() {
         </div>
 
         {(tab === "outstanding" || tab === "gst") && (
-          <div className={styles.dateFilterRow}>
-            <label className={styles.dateFilterLabel}>
-              From
-              <Input
-                type="date" aria-label="Start date" value={startDate} min={MIN_REPORT_DATE} max={endDate || todayStr}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setStartDate(v);
-                  if (endDate && v > endDate) setEndDate(v);
-                  setOutPage(1);
-                }}
-                onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
-                className={styles.dateInput}
-              />
-            </label>
-            <label className={styles.dateFilterLabel}>
-              To
-              <Input
-                type="date" aria-label="End date" value={endDate} min={startDate || MIN_REPORT_DATE} max={todayStr}
-                onChange={(e) => { setEndDate(e.target.value); setOutPage(1); }}
-                onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ } }}
-                className={styles.dateInput}
-              />
-            </label>
-            {(startDate || endDate) && (
-              <Button variant="secondary" size="sm" onClick={() => { setStartDate(""); setEndDate(""); setOutPage(1); }}>Clear</Button>
-            )}
-          </div>
+          <DateRangeFilter
+            startDate={startDate}
+            endDate={endDate}
+            todayStr={todayStr}
+            onStartChange={(v) => { setStartDate(v); setOutPage(1); }}
+            onEndChange={(v) => { setEndDate(v); setOutPage(1); }}
+            onClear={() => { setStartDate(""); setEndDate(""); setOutPage(1); }}
+          />
         )}
 
         {/* Outstanding tab */}
@@ -212,14 +192,14 @@ export default function SalesReportsPage() {
                 <h2 className="card-header-title">Outstanding Invoices</h2>
                 <p className="card-header-sub">Invoices awaiting full payment</p>
               </div>
-              <div className={styles.headerActionsRow}>
+              <HeaderActionsRow>
                 {outstandingResponse && outTotal > 0 && (
                   <Button variant="secondary" size="sm" loading={exportingOutstanding} onClick={exportOutstandingCsv}>Export Excel</Button>
                 )}
                 {outstandingResponse && (
                   <ShowAllToggle total={outTotal} showAll={outShowAll} onToggle={() => { setOutShowAll((v) => !v); setOutPage(1); }} />
                 )}
-              </div>
+              </HeaderActionsRow>
             </div>
             <div className="table-wrap">
               <table className="table-base" style={isOutRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>

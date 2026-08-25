@@ -72,3 +72,10 @@
   background: var(--c-blue-bg);
   color: var(--c-blue-h);
 }
+
+/* Match the products page's stacked layout — once its toolbar row wraps,
+   the toggle takes the full width of its own line instead of staying content-sized. */
+@media (max-width: 640px) {
+  .showAll, .showAllActive { width: 100%; }
+  .controls{flex: 1;justify-content: space-between;}
+}

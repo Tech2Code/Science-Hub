@@ -14,7 +14,6 @@
   .rightCol { width: 18rem; flex-shrink: 0; position: sticky; top: 1rem; }
 }
 
-/* Tighter, even rhythm between the totals/payment/warnings/actions blocks
-   stacked inside the summary card — the default form-card gap (1.325rem)
-   is sized for full form fields, not this compact sidebar. */
+/* Tighter gap for the summary sidebar's stacked blocks — the default
+   form-card gap (1.325rem) is sized for full form fields, not this. */
 .rightCol :global(.form-card) { gap: 1rem; }

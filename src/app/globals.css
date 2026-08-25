@@ -22,9 +22,8 @@
   --c-text-3:      #64748b;
   --c-text-4:      #5b6472;
 
-  /* Brand blue — overridable per-user via --c-accent (see AccentPicker),
-     derived shades computed with color-mix() so only this one variable
-     needs to change to retheme every button/link/active-state in the app */
+  /* Brand blue is overridable per-user via --c-accent (AccentPicker); shades below are
+     derived with color-mix() so changing that one variable retheme the whole app. */
   --c-blue:        var(--c-accent, #2563eb);
   --c-blue-h:      color-mix(in srgb, var(--c-accent, #2563eb) 80%, black);
   --c-blue-bg:     color-mix(in srgb, var(--c-accent, #2563eb) 6%, white);
@@ -549,19 +548,17 @@ select::-moz-focus-inner {
   font-family: var(--font-sans);
   transition: all 0.15s;
   background: transparent;
-  /* Plain --c-text-3 on this component's --c-bg-sub background measures
-     4.34:1 in light mode — just under WCAG AA's 4.5:1 for normal-size text
-     (confirmed via computed relative luminance, not eyeballed). Scoped to
-     this one component rather than darkening the shared --c-text-3 token
-     itself, since that token is used in 50+ other files where it already
-     passes comfortably against the backgrounds it's actually paired with
-     there. Dark mode's own --c-text-3 already passes here (5.71:1), so
-     it's restored below instead of being touched. */
+  /* Plain --c-text-3 only hits 4.34:1 here (below WCAG AA 4.5:1); hardcoded darker
+     just for this component instead of changing the shared token used elsewhere. */
   color: #5e6d83;
   text-transform: capitalize;
 }
 .dark .filter-tab {
   color: var(--c-text-3);
+}
+.filter-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 .filter-tab-active {
   background: var(--c-blue);
@@ -569,39 +566,18 @@ select::-moz-focus-inner {
   box-shadow: var(--c-shadow-sm);
 }
 .dark .filter-tab-active {
-  /* --c-blue resolves to a pale, white-mixed blue in dark mode (see its
-     .dark definition above) — white text on it is only 2.72:1, well under
-     WCAG AA. --c-blue-h ("hover" — already used elsewhere as a solid-fill
-     background, e.g. Button's primary:hover) resolves to the same solid
-     #2563eb as light mode's own --c-blue in dark mode specifically, so
-     reusing it here keeps white text at the same 5.17:1 both themes get,
-     instead of switching the text color per theme. */
+  /* --c-blue is too pale in dark mode for white text (2.72:1); --c-blue-h resolves to
+     a solid #2563eb here instead, keeping the same 5.17:1 contrast as light mode. */
   background: var(--c-blue-h);
   color: #fff;
 }
 
-/* These two media blocks must stay AFTER the base .filter-tabs-row/
-   .filter-tabs/.filter-tab rules above — equal-specificity single-class
-   selectors resolve by source order, so a later plain rule silently wins
-   over an earlier @media one regardless of which viewport actually
-   matches. This exact ordering bug previously made both blocks below
-   dead code: the 480px block's narrower .filter-tab padding/font-size
-   never actually applied at any viewport width, right up until this fix. */
-@media (max-width: 480px) {
-  .filter-tabs-row { flex-direction: column; align-items: stretch; }
-  .filter-tabs { width: 100%; justify-content: space-between; overflow-x: auto; }
-  /* Tighter than the desktop padding/font-size so all 5 status tabs
-     (All/Overdue/Unpaid/Partial/Paid) fit within a ~360px phone viewport
-     without needing the horizontal scroll overflow-x above to kick in —
-     confirmed via a real 375px-viewport measurement that the previous
-     values overflowed by ~22px, leaving "Paid" scrolled just off-screen
-     with no visual hint there was more to scroll to. */
-  .filter-tab { flex: 1; text-align: center; padding: 0.375rem 0.25rem; font-size: 0.75rem; }
-}
-
-/* Allow filter-tabs to scroll horizontally if they overflow on small screens */
+/* Must stay AFTER the base .filter-tab rules above — equal-specificity source order
+   means an earlier @media block here would be silently overridden by them. */
 @media (max-width: 640px) {
-  .filter-tabs { max-width: 100%; overflow-x: auto; flex-shrink: 0; }
+  .filter-tabs-row { width: 100%; flex-direction: column; align-items: stretch; }
+  .filter-tabs { width: 100%; overflow-x: auto; flex-shrink: 0; }
+  .filter-tab { flex: 1; text-align: center; padding: 0.375rem 0.25rem; font-size: 0.75rem; }
   .page-title { font-size: 1.125rem; }
   .page-sub   { font-size: 0.8125rem; }
 }

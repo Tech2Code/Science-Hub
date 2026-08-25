@@ -358,6 +358,7 @@ export default function PurchaseBillDetailPage() {
     {deleting && <OverlayLoader text="Deleting…" />}
     {openingEdit && <OverlayLoader text="Opening editor…" />}
     {pdfDownloading && <OverlayLoader text="Generating PDF…" />}
+    {pdfViewing && <OverlayLoader text="Preparing PDF…" />}
 
     {pdfPreviewUrl && (
       <PdfPreviewModal

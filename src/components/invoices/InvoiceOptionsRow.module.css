@@ -28,25 +28,20 @@
   outline: none;
 }
 
-/* The place-of-supply select shares .dueDateInput with the due-date input,
-   but with no option selected it shrinks to fit "Select state…" — give it
-   its own floor so it doesn't collapse to a sliver. */
+/* Give place-of-supply its own min-width floor — with no option selected it
+   shrinks to fit "Select state…" and collapses to a sliver otherwise. */
 .placeOfSupplySelect { min-width: 150px; }
 
-/* A native date input's intrinsic width can change between its empty state
-   ("dd-mm-yyyy" placeholder) and a filled state in some browsers — pin a
-   fixed width so picking a date doesn't reflow the rest of the row. */
+/* Pin a fixed width so a native date input doesn't reflow the row when it
+   switches between its empty placeholder and a filled value. */
 .dueDateDateInput { width: 140px; }
 
-/* On narrow screens the toggleRow's flex-wrap only gives each row/switch
-   as much width as its own content needs, which squashes the place-of-supply
-   dropdown down to a sliver — force each row to its own full-width line. */
+/* Force each toggleRow item to its own full-width line on narrow screens —
+   flex-wrap alone squashes the place-of-supply dropdown to a sliver. */
 @media (max-width: 640px) {
   .toggleRow { flex-direction: column; align-items: stretch; gap: 0.875rem; }
-  /* Side-by-side label+input made each row's input a different width
-     (whatever space was left after its own label), so Place of supply /
-     Invoice date / Due date visually misaligned on narrow screens — stack
-     the label above a full-width input instead so all three line up. */
+  /* Stack label above a full-width input so Place of supply / Invoice date /
+     Due date align, instead of each getting a different leftover width. */
   .dueDateRow { flex-direction: column; align-items: stretch; gap: 0.375rem; width: 100%; }
   .dueDateInput, .placeOfSupplySelect, .dueDateDateInput { flex: 1 1 auto; min-width: 0; width: 100%; }
 }

@@ -8,7 +8,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { MonthYearFilter } from "@/components/ui/MonthYearFilter";
-import { Input } from "@/components/ui/Input";
+import { SearchField } from "@/components/ui/SearchField";
 import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenerator";
@@ -301,13 +301,13 @@ export default function InvoicesPage() {
         tabs={STATUS_TABS}
         value={filter}
         onChange={(tab) => { setFilter(tab); setPage(1); }}
+        disabled={!data}
       />
 
       <div {...animateSection(2, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
-            <Input
-              type="search"
+            <SearchField
               aria-label="Search invoices"
               placeholder="Search by invoice no., customer, product, brand or category…"
               value={search}

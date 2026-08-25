@@ -8,8 +8,9 @@ import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination
 import { SortSelect } from "@/components/ui/SortSelect";
 import { MonthYearFilter } from "@/components/ui/MonthYearFilter";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { Input } from "@/components/ui/Input";
+import { SearchField } from "@/components/ui/SearchField";
 import { Button } from "@/components/ui/Button";
+import { HeaderActionsRow } from "@/components/ui/HeaderActionsRow";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
@@ -262,6 +263,7 @@ export default function CreditNotesPage() {
       {viewingId && <OverlayLoader text="Preparing preview…" />}
       {downloadingId && <OverlayLoader text="Preparing download…" />}
       {regeneratingId && <OverlayLoader text="Regenerating PDF…" />}
+      {exportingCsv && <OverlayLoader text="Generating Excel file…" />}
       {pdfPreviewUrl && pdfPreviewNote && (
         <PdfPreviewModal
           url={pdfPreviewUrl}
@@ -298,8 +300,7 @@ export default function CreditNotesPage() {
         <div {...animateSection(1, "card")}>
           <div className="card-toolbar">
             <div className="toolbar-left">
-              <Input
-                type="search"
+              <SearchField
                 aria-label="Search credit notes"
                 placeholder="Search by customer, invoice no, or credit note no…"
                 value={search}
@@ -315,14 +316,14 @@ export default function CreditNotesPage() {
                 onYearChange={(v) => { setYear(v); setPage(1); }}
               />
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <HeaderActionsRow>
               {data && isAdmin && total > 0 && (
                 <Button variant="secondary" size="sm" loading={exportingCsv} onClick={exportCsv}>Export Excel</Button>
               )}
               {data && (
                 <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
               )}
-            </div>
+            </HeaderActionsRow>
           </div>
           <div className="table-wrap">
             <table className="table-base" style={isRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>

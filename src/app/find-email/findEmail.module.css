@@ -15,9 +15,8 @@
 
 .noResults {
   font-size: 0.875rem;
-  /* Hardcoded (not CSS vars) — this page's card is always light regardless
-     of a `.dark` class persisted on <html> from a prior dashboard session,
-     see the pinning comment in ../login/login.module.css */
+  /* Hardcoded, not a CSS var: this card stays light even if `.dark` persists on
+     <html> from a prior dashboard session — see ../login/login.module.css. */
   color: #92400e;
   background: #fffbeb;
   border: 1px solid #fcd34d;
@@ -39,11 +38,8 @@
 }
 
 .recogniseLink {
-  /* var(--c-blue), not --c-blue-text: this page reuses login.module.css's
-     .page wrapper, which pins --c-blue to a fixed light-mode value on
-     purpose (see its comment) — --c-blue-text isn't pinned there, so using
-     it would leak dark-mode's accent-derived color if a stale `.dark` class
-     persists on <html>, defeating that pin. */
+  /* Use --c-blue (pinned to light mode by login.module.css's .page wrapper), not
+     --c-blue-text, which isn't pinned and would leak a stale dark-mode color. */
   color: var(--c-blue);
   text-decoration: underline;
 }

@@ -48,9 +48,8 @@
   width: 100%;
 }
 
-/* Floating tooltip for the full value — positioned above the bar so it never
-   collides with a neighboring column's label (the old inline hover value grew
-   in size/width and visually overlapped adjacent bars in narrow charts). */
+/* Floating tooltip positioned above the bar so it never collides with a
+   neighboring label — the old inline hover value overlapped adjacent bars. */
 .chartTooltip {
   position: absolute;
   bottom: calc(100% + 0.375rem);
@@ -207,9 +206,8 @@
   overflow-x: auto;
 }
 
-/* !important needed: global `.table-base th { text-align: left; }` (0,1,1)
-   outranks this single class selector (0,1,0) on <th>, so it silently wins
-   without this override. Not needed on <td> — no competing rule there. */
+/* !important needed: global `.table-base th { text-align: left }` (0,1,1)
+   outranks this class alone (0,1,0) on <th>; not needed on <td>. */
 .textRight {
   text-align: right !important;
 }

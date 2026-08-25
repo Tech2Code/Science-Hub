@@ -8,7 +8,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
-import { Input } from "@/components/ui/Input";
+import { SearchField } from "@/components/ui/SearchField";
 import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
@@ -178,8 +178,7 @@ export default function ProductsPage() {
       <div {...animateSection(0, "card")}>
         <div className={`card-toolbar ${styles.toolbar}`}>
           <div className="toolbar-left">
-            <Input
-              type="search"
+            <SearchField
               aria-label="Search products"
               placeholder="Search by name, SKU, brand, or category…"
               value={search}
@@ -188,7 +187,7 @@ export default function ProductsPage() {
             />
             <SortSelect ariaLabel="Sort products" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
-          <div className={styles.filterRow}>
+          <div className="filter-tabs-row">
             {/* Stock filter tabs */}
             <div className="filter-tabs">
               {([
@@ -200,6 +199,7 @@ export default function ProductsPage() {
                   key={tab.key}
                   className={["filter-tab", styles.filterTabInner, stockFilter === tab.key ? "filter-tab-active" : ""].join(" ")}
                   onClick={() => handleStockFilter(tab.key)}
+                  disabled={!data}
                 >
                   {tab.label}
                   {tab.count > 0 && (

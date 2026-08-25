@@ -1,7 +1,6 @@
 /**
  * Shared invoice PDF generator — pass the #invoice-print-area element, returns a Blob or null on failure.
- * `copyLabels` concatenates multiple labeled copies (e.g. ORIGINAL/DUPLICATE) into one PDF, each with its
- * own independent "Page No. X of Y" count (not a grand total across copies).
+ * `copyLabels` concatenates multiple labeled copies into one PDF, each with its own page count.
  */
 // Border color — matches the @media print override in the invoice detail page CSS
 const BD = "#64748b";
@@ -72,9 +71,8 @@ export async function generateInvoicePdfBlob(
     const tfootTop = tfootRowEl ? Math.round((tfootRowEl.getBoundingClientRect().top - elTop) * SCALE) : 0;
     const tfootOwnBottom = tfootRowEl ? Math.round((tfootRowEl.getBoundingClientRect().bottom - elTop) * SCALE) : 0;
 
-    // "Page No. X of Y" marker band below the tfoot — deliberately not a DOM element (which would
-    // either show stale numbers on-screen or desync measurements if hidden); it's blank canvas
-    // background until stampPageMarker draws into it. MARKER_GAP_PX matches the copy badge's 4px padding.
+    // "Page No. X of Y" band below the tfoot is deliberately not a DOM element (would show stale
+    // numbers or desync measurements) — blank canvas until stampPageMarker draws into it.
     const MARKER_GAP_PX = 4 * SCALE;
     // Must stay >= MARKER_GAP_PX + the font's rendered glyph height, or text clips into the next page.
     const MARKER_ROW_H = 14 * SCALE;
@@ -91,9 +89,8 @@ export async function generateInvoicePdfBlob(
     );
     const lastTbodyBottom = tbodySplitPoints[tbodySplitPoints.length - 1] ?? 0;
 
-    // The closing Totals/Bank/Terms/Signature block shares one rowSpan'd cell across several <tr>s —
-    // slicing between them would crop that cell's content dead. Drop interior boundaries so the block
-    // only splits at its start (pushed whole to the next page) or not at all; scoped to its own <tbody>.
+    // The Totals/Bank/Terms/Signature block shares one rowSpan'd cell across several <tr>s, so it can
+    // only split at its start (pushed whole to the next page) or not at all — never mid-block.
     const summaryStartRowEl = el.querySelector('tbody tr[data-invoice-summary-start]') as HTMLElement | null;
     if (summaryStartRowEl) {
       const summaryStartTop = Math.round((summaryStartRowEl.getBoundingClientRect().top - elTop) * SCALE);
@@ -192,9 +189,8 @@ export async function generateInvoicePdfBlob(
               c.style.borderBottom = `1px solid ${BD}`;
             }
           });
-          // First row in each table gets a top border. tfoot is excluded — it sits right after tbody's
-          // last row pre-capture, so a top border here would double up and grow the row past its
-          // measured height; the pinned-footer renderer draws that border itself on the canvas instead.
+          // First row in each table gets a top border; tfoot is excluded since the pinned-footer
+          // renderer draws that border on the canvas itself (a DOM one would grow past the measured height).
           printEl.querySelectorAll<HTMLElement>("table").forEach((t) => {
             const firstRow = t.querySelector("tr");
             if (firstRow) {
@@ -325,9 +321,8 @@ export async function generateInvoicePdfBlob(
         return { dataUrl: pc.toDataURL("image/jpeg", 0.95), totalH };
       };
 
-      // Renders a full page-height canvas with the footer pinned to the very bottom, not floating
-      // under the last content row. The blank gap above it gets its own canvas-stroked border lines
-      // (drawImage-stretching a captured border row was tried and rejected — it smeared cell content).
+      // Renders a full page-height canvas with the footer pinned to the bottom, not floating under the
+      // last content row; the blank gap above it gets canvas-stroked border lines (a stretched drawImage smeared).
       const slicePagePinned = (startPx: number, endPx: number, withHeader: boolean, pageNum: number, totalPages: number) => {
         const pc = document.createElement("canvas");
         pc.width = canvas.width;

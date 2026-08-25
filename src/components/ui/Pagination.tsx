@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef } from "react";
-import { FloatingSpinner } from "./Spinner";
+import { useEffect, useRef, useState } from "react";
+import { FloatingSpinner, OverlayLoader } from "./Spinner";
 import styles from "./Pagination.module.css";
 
 export const PAGE_SIZE = 10;
@@ -43,6 +43,11 @@ interface Props {
 
 export function Pagination({ total, page, showAll, onPage, label = "items", loading = false }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  // Tracks whether the in-flight refetch was actually caused by a Prev/Next click here, so page-navigation
+  // gets a full-page block (the user must see the new page settle before doing anything else) while other
+  // triggers of the same `loading` prop (search/sort/filter typing) keep their existing lighter table-dim behavior.
+  const [navigating, setNavigating] = useState(false);
+  useEffect(() => { if (!loading) setNavigating(false); }, [loading]);
   // Spinner renders even without pagination controls, so a short single-page list still gets refetch loading feedback.
   if (total <= PAGE_SIZE || showAll) return loading ? <FloatingSpinner /> : null;
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -52,6 +57,7 @@ export function Pagination({ total, page, showAll, onPage, label = "items", load
   const goToPage = (p: number, e: React.MouseEvent<HTMLButtonElement>) => {
     // Blur before the button becomes `disabled` — the browser's own focus-yank on a disabled focused element otherwise fights the smooth scrollIntoView below.
     e.currentTarget.blur();
+    setNavigating(true);
     onPage(p);
     const section = wrapRef.current?.closest(".animate-card") ?? wrapRef.current;
     section?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -59,7 +65,7 @@ export function Pagination({ total, page, showAll, onPage, label = "items", load
 
   return (
     <>
-    {loading && <FloatingSpinner />}
+    {loading && (navigating ? <OverlayLoader text="Loading…" /> : <FloatingSpinner />)}
     <div className={styles.wrap} ref={wrapRef}>
       <span className={styles.info}>{start}–{end} of {total} {label}</span>
       <div className={styles.controls}>

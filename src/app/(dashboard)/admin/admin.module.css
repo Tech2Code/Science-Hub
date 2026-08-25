@@ -45,13 +45,8 @@
 }
 
 /* ── Inputs ─────────────────────────────────────────────── */
-/* Element-qualified selectors (input.inp, not just .inp) so this always
-   wins over Input/Select/PasswordInput's own base `.input` class — two
-   bare single-class selectors have equal specificity, so which one wins
-   would otherwise depend on unstable CSS-module bundling/import order
-   (the exact cause of these fields randomly rendering with the wrong
-   background/border depending on the build). Bumping specificity here
-   makes the outcome deterministic instead of order-dependent. */
+/* Element-qualified (input.inp, not .inp) to reliably beat Input/Select/PasswordInput's
+   own `.input` class — equal-specificity classes otherwise won by unstable build order. */
 input.inp,
 button.inp {
   width: 100%;
@@ -122,9 +117,8 @@ button.inpCompact { max-width: 18rem; padding: 0.375rem 0.75rem; }
 .footerTitle { font-weight: 600; font-size: 0.875rem; color: var(--c-text); }
 .footerSub { font-size: 0.8125rem; color: var(--c-text-4); margin-top: 0.125rem; }
 
-/* gap matches .fg2/.fg3's row-gap (and globals.css's .form-grid-2/3) so a
-   FormField's absolutely-positioned error text has room below the field
-   without overlapping the next row/field. */
+/* Matches .fg2/.fg3's row-gap so a FormField's absolutely-positioned error text
+   has room below the field without overlapping the next row. */
 .formCol { display: flex; flex-direction: column; gap: 1.325rem; }
 .formColTight { display: flex; flex-direction: column; gap: 1.325rem; }
 .formActions { display: flex; gap: 0.5rem; justify-content: flex-end; }
@@ -234,10 +228,8 @@ button.inpCompact { max-width: 18rem; padding: 0.375rem 0.75rem; }
   flex-wrap: wrap;
   align-items: center;
 }
-/* Select's own outer wrapper is always width:100% regardless of any
-   className passed to the component — constrain it here instead, or it
-   claims the filter bar's full width and forces every sibling onto its own
-   line even when there's plenty of room. */
+/* Select's outer wrapper is always width:100% regardless of className passed in;
+   constrain it here or it forces every sibling onto its own line. */
 .filterSelectWrap {
   flex: 0 0 auto;
   width: 12rem;

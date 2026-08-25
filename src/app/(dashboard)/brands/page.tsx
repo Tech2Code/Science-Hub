@@ -11,6 +11,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { Input, FormField } from "@/components/ui/Input";
+import { SearchField } from "@/components/ui/SearchField";
 import { rules, validate } from "@/lib/validation";
 import { useFetch, bustCachePrefix } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
@@ -265,8 +266,7 @@ export default function BrandsPage() {
       <div {...animateSection(0, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
-            <Input
-              type="search"
+            <SearchField
               aria-label="Search brands"
               placeholder="Search brands…"
               value={search}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input, FormField } from "@/components/ui/Input";
+import { SearchField } from "@/components/ui/SearchField";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
@@ -268,8 +269,7 @@ export default function CategoriesPage() {
       <div {...animateSection(0, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
-            <Input
-              type="search"
+            <SearchField
               aria-label="Search categories"
               placeholder="Search categories…"
               value={search}

@@ -14,9 +14,8 @@
   -webkit-appearance: none;
 }
 
-/* iOS Safari renders type="search" with its own taller native chrome
-   (search icon + clear button) unless the decorations are stripped —
-   otherwise it ignores our padding and blows up the field height. */
+/* iOS Safari adds its own taller search-icon/clear-button chrome to
+   type="search" unless stripped, ignoring our padding and inflating height. */
 .input[type="search"]::-webkit-search-decoration,
 .input[type="search"]::-webkit-search-cancel-button,
 .input[type="search"]::-webkit-search-results-button,
@@ -24,14 +23,21 @@
   -webkit-appearance: none;
 }
 
-/* Below this, keep inputs at their original, more compact size — the
-   desktop bump above would otherwise eat too much vertical space on a
-   phone-sized screen where every row of a scrolling form counts. */
+/* Keep inputs compact below this width — the desktop size bump wastes
+   too much vertical space on a scrolling phone-sized form. .input gets a
+   fixed height here (mobile only) so it matches Select/DatePicker/
+   PasswordInput/PhoneInput/Button's own fixed mobile height exactly, instead
+   of drifting apart from line-height differences between elements. */
 @media (max-width: 768px) {
   .input,
   .textarea {
     padding: 0.5rem 0.75rem;
     font-size: 0.875rem;
+  }
+  .input {
+    height: 1.875rem;
+    padding-top: 0;
+    padding-bottom: 0;
   }
 }
 .input::placeholder,

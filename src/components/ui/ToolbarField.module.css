@@ -1,0 +1,31 @@
+/* Shared styles for a labeled toolbar control (search input, sort select, month/year
+   filter) — kept identical across all of them so their labels line up when stacked
+   on mobile. Each component still owns its own grow/width behavior for its control. */
+.wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--c-text-3);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .wrap {
+    width: 100%;
+  }
+  .label {
+    flex: none;
+    /* `ch` is the width of the font's "0" glyph, not real text width — in Geist it measured
+       ~57px for 7 characters while the actual widest label ("Sorting") only renders ~41px,
+       so calc(Nch + gap) overshot badly. Measured with Playwright against the real font
+       instead: Search 39.6px, Sorting 41.4px, Period 35.9px — 3.25rem (52px) covers the
+       widest ("Sorting") plus a small buffer. */
+    width: 3.25rem;
+  }
+}

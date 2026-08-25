@@ -17,7 +17,6 @@ interface RateListItemsTableProps {
   sectionIndex: number;
   items: RateListLineItem[];
   setItems: Dispatch<SetStateAction<RateListLineItem[]>>;
-  itemsError?: string;
 }
 
 // Mirrors MAX_BYTES in src/app/api/rate-lists/parse-import/route.ts — checked client-side to reject a huge file instantly instead of after a full upload.
@@ -32,7 +31,7 @@ function toLineItems(rows: ParsedRateListRow[]): RateListLineItem[] {
 }
 
 // Editable rows for a Rate List — free-text, not linked to the Product catalog, since a rate list's brand/unit text often won't match this app's own records.
-export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }: RateListItemsTableProps) {
+export function RateListItemsTable({ sectionIndex, items, setItems }: RateListItemsTableProps) {
   const toast = useToast();
   const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
   const [pasteModalOpen, setPasteModalOpen] = useState(false);
@@ -189,7 +188,6 @@ export function RateListItemsTable({ sectionIndex, items, setItems, itemsError }
           <input ref={fileInputRef} type="file" accept=".xlsx,.csv" className={styles.hiddenFileInput} onChange={handleFileChange} />
         </div>
       </div>
-      {itemsError && <p className={styles.itemsErrorMsg} role="alert">{itemsError}</p>}
 
       <Modal
         open={pasteModalOpen}

@@ -93,11 +93,8 @@
 }
 
 /* ── Quick-add product form (rendered inside a Modal) ───────────────────── */
-/* Row gap matches the app-wide .form-grid-2/.form-grid-3 convention
-   (globals.css) — FormField's error text is absolutely positioned below the
-   field (Input.module.css .errorMsg) so it doesn't push the layout down,
-   which means the gap to the next row has to be wide enough to fit it
-   without overlapping; a smaller ad-hoc gap here caused exactly that. */
+/* Matches the app-wide .form-grid-2/.form-grid-3 gap — wide enough for FormField's
+   absolutely-positioned error text to not overlap the next row. */
 .customForm {
   display: flex;
   flex-direction: column;
@@ -259,14 +256,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
-  border-radius: 0.375rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
   background: none;
   border: 1px solid var(--c-border);
   cursor: grab;
   color: var(--c-text-4);
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   line-height: 1;
   touch-action: none;
   user-select: none;
@@ -281,10 +278,8 @@
   cursor: grabbing;
 }
 
-/* The row actually being carried — outlined and dimmed in place. Swaps
-   position live as the pointer crosses into another row (see the
-   pointermove handler), so this row's own table position is always the
-   up-to-date "where it currently is". */
+/* The row being carried — outlined and dimmed; swaps position live as the pointer
+   crosses another row (see the pointermove handler). */
 .draggingRow {
   position: relative;
   background: var(--c-blue-bg) !important;

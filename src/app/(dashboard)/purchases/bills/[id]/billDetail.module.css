@@ -246,10 +246,8 @@
   table-layout: fixed;
 }
 
-/* Explicit widths on <col>, shared by the header and every body row, so a
-   column's <th> and <td> always resolve to the exact same box — table-layout:
-   auto let each row size its own cells independently, which is what let the
-   header and values drift out of alignment. */
+/* Explicit widths, shared by header and every body row, so <th>/<td> always resolve
+   to the same box — table-layout: auto let rows size cells independently and drift. */
 .colNum       { width: 4%; }
 .colItem      { width: 24%; }
 .colHsn       { width: 9%; }
@@ -260,11 +258,8 @@
 .colGstAmt    { width: 12%; }
 .colTotal     { width: 14%; }
 
-/* !important is required here: global `.table-base th { text-align: left; }`
-   is a class+element selector (specificity 0,1,1), which beats this single
-   class selector (0,1,0) regardless of source order — so on <th> elements
-   the global left-align silently wins unless this overrides it explicitly.
-   (On <td> there's no competing rule, so it isn't needed there.) */
+/* !important needed on <th>: global `.table-base th { text-align: left; }` has higher
+   specificity (0,1,1) than this class alone and would otherwise silently win. */
 .textRight {
   text-align: right !important;
 }

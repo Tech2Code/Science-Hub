@@ -7,9 +7,8 @@
   transition: background-color 0.2s;
 }
 
-/* Off-screen until focused (Tab from page load) — then pinned to the
-   top-left corner above everything else so a keyboard user can see and
-   activate it before it scrolls back off-screen on blur. */
+/* Off-screen until focused (Tab from page load), then pinned top-left above
+   everything so a keyboard user can see and activate it before it blurs away. */
 .skipLink {
   position: absolute;
   top: -3rem;
@@ -53,9 +52,8 @@
     width: 13rem !important;
     transform: translateX(-100%);
     box-shadow: var(--c-shadow-lg);
-    /* Must sit above both the dimmed backdrop (z-index 40) and the sticky
-       page-nav row (z-index 5) — otherwise the backdrop dims the open
-       drawer itself, and the Back/Forward buttons render on top of it. */
+    /* Above both the backdrop (z-index 40) and the sticky page-nav row (z-index 5),
+       or the backdrop dims the open drawer and nav buttons render on top of it. */
     z-index: 50;
   }
   .sidebarOpen  { transform: translateX(0); }
@@ -192,13 +190,8 @@
   box-shadow: 0 4px 12px color-mix(in srgb, var(--c-blue) 30%, transparent);
 }
 .navLinkActive:hover { background: var(--c-blue); color: #fff; }
-/* --c-blue resolves to a pale, white-mixed blue in dark mode (see its .dark
-   definition in globals.css) — white text on it measures only 2.72:1,
-   well under WCAG AA. --c-blue-h ("hover", already used elsewhere as a
-   solid-fill background, e.g. Button's primary:hover) resolves to the same
-   solid #2563eb as light mode's own --c-blue there, keeping white text at
-   5.17:1 in both themes instead. Same fix applied to globals.css's
-   .filter-tab-active for the same reason. */
+/* --c-blue is too pale in dark mode for white text (2.72:1); --c-blue-h resolves to
+   a solid #2563eb instead, keeping 5.17:1 in both themes (same fix as .filter-tab-active). */
 :global(.dark) .navLinkActive,
 :global(.dark) .navLinkActive:hover {
   background: var(--c-blue-h);
@@ -306,15 +299,11 @@
   gap: 0.75rem;
   transition: background-color 0.2s, border-color 0.2s;
 }
-/* Fixed width (rather than sizing to the label's content) so the global
-   search box right after it always starts at the same x position instead
-   of shifting left/right as the page label text changes length. */
+/* Fixed width (not content-sized) so the search box after it always starts at
+   the same x position instead of shifting as the page label text changes. */
 .topbarLeft  { display: flex; align-items: center; gap: 0.75rem; min-width: 0; width: 13rem; flex-shrink: 0; }
-/* Pushed to the far right explicitly (rather than via the row's own
-   justify-content) so the search — full-width flex:1 on desktop, a small
-   icon button on mobile — always sits right next to topbarLeft with just
-   the row's normal gap, instead of `space-between` spreading the leftover
-   space evenly between all three items when the search isn't flex:1. */
+/* margin-left: auto instead of the row's own justify-content, so this stays
+   right next to topbarLeft when search isn't flex:1 (mobile icon button). */
 .topbarRight { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; margin-left: auto; }
 
 .collapseBtn {

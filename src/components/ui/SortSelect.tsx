@@ -1,6 +1,7 @@
 "use client";
 
 import { Select } from "./Select";
+import shared from "./ToolbarField.module.css";
 import styles from "./SortSelect.module.css";
 
 export interface SortOptionDef<T extends string> {
@@ -18,8 +19,8 @@ interface Props<T extends string> {
 
 export function SortSelect<T extends string>({ value, onChange, options, ariaLabel, label = "Sorting" }: Props<T>) {
   return (
-    <label className={styles.sortWrap}>
-      <span className={styles.sortLabel}>{label}</span>
+    <label className={shared.wrap}>
+      <span className={shared.label}>{label}</span>
       <Select
         aria-label={ariaLabel}
         value={value}

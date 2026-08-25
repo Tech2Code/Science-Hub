@@ -15,16 +15,11 @@
   max-width: 24rem;
 }
 
-.filterRow {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
 .filterTabInner {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  white-space: nowrap;
   gap: 0.375rem;
 }
 
@@ -40,7 +35,10 @@
 }
 
 .filterCountActive {
-  background: var(--badge-bg);
+  /* Active tab background is a solid blue (see .filter-tab-active in globals.css) —
+     the amber/red badge's own translucent --badge-bg nearly disappears against it,
+     so give it a solid white chip instead of the mixed-transparent background. */
+  background: #fff;
   color: var(--badge-color);
 }
 

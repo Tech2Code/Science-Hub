@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
-import { Input } from "@/components/ui/Input";
+import { SearchField } from "@/components/ui/SearchField";
 import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -118,8 +118,7 @@ export default function PurchasePaymentsPage() {
       <div {...animateSection(0, "card")}>
         <div className="card-toolbar">
           <div className="toolbar-left">
-            <Input
-              type="search"
+            <SearchField
               aria-label="Search purchase payments"
               placeholder="Search by vendor, bill no, method or reference…"
               value={search}

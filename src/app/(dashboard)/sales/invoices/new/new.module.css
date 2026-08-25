@@ -138,9 +138,8 @@
 }
 
 /* ── Custom customer form (inside modal) ──────── */
-/* Matches the app-wide .form-grid-2/.form-grid-3 row-gap convention
-   (globals.css) so a FormField's absolutely-positioned error text has room
-   below the field without overlapping the next row. */
+/* Matches the app-wide .form-grid-2/.form-grid-3 row-gap so a FormField's
+   absolutely-positioned error text doesn't overlap the next row. */
 
 .customForm { display: flex; flex-direction: column; gap: 1.325rem; }
 

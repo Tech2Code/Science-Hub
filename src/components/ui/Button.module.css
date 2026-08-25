@@ -22,26 +22,31 @@
   opacity: 0.5;
 }
 
-/* Spinner.module.css hardcodes a blue color for its standalone (page/overlay
-   loader) use — but inline in a button it must match the button's own text
-   color, or it goes invisible against colored backgrounds (blue spinner on a
-   blue "primary" button, for example). */
+/* Spinner.module.css hardcodes blue for standalone use, but inline in a
+   button it must match the button's text color or it vanishes on colored backgrounds (blue-on-blue). */
 .inlineSpinner {
   color: currentColor !important;
 }
 
 /* ── Sizes ───────────────────────────── */
-.sm   { padding: 0.25rem 0.625rem; font-size: 0.75rem; border-radius: var(--c-radius-xs); }
+/* Matches Pagination.module.css's .btn (Prev/Next/Show all) so every small
+   action button in a toolbar/pagination row shares the same height — .sm is
+   deliberately kept smaller than .md/.full, not stretched to match them. */
+.sm   { padding: 0.3125rem 0.75rem; font-size: 0.8125rem; border-radius: var(--c-radius-xs); }
 .md   { padding: 0.625rem 1.25rem; }
 .lg   { padding: 0.75rem 1.5rem; font-size: 1rem; }
 .full { width: 100%; padding: 0.625rem 1.25rem; justify-content: center; }
 
-@media (max-width: 640px) {
-  .btn  { font-size: 0.8125rem; }
-  .sm   { padding: 0.2rem 0.5rem; font-size: 0.6875rem; }
-  .md   { padding: 0.5rem 0.875rem; }
-  .lg   { padding: 0.625rem 1.125rem; font-size: 0.9375rem; }
-  .full { padding: 0.5rem 0.875rem; }
+/* Breakpoint intentionally matches Input.module.css's compact-mode threshold
+   (see CLAUDE.md's "standardized off an inconsistent 767/768 mix" note).
+   .md/.full get a fixed height here (mobile only) so they match
+   Input/Select/DatePicker/PasswordInput/PhoneInput's own fixed mobile
+   height (1.875rem) exactly, instead of relying on padding+line-height
+   happening to add up the same across elements. */
+@media (max-width: 768px) {
+  .md   { height: 1.875rem; padding: 0 1rem; }
+  .lg   { padding: 0.625rem 1.25rem; }
+  .full { height: 1.875rem; padding: 0 1rem; }
 }
 
 /* ── Variants ────────────────────────── */

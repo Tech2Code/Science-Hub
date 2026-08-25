@@ -56,7 +56,7 @@ export function RateListFormBody({
           </FormField>
         </div>
 
-        <RateListItemsTable sectionIndex={startIndex + 1} items={items} setItems={setItems} itemsError={itemsError} />
+        <RateListItemsTable sectionIndex={startIndex + 1} items={items} setItems={setItems} />
       </div>
 
       {/* Right column */}
@@ -66,6 +66,7 @@ export function RateListFormBody({
           <div className={styles.summaryLine}>
             <span>Items</span><span>{itemCount}</span>
           </div>
+          {itemsError && <p className={styles.itemsErrorMsg} role="alert">{itemsError}</p>}
           {footer}
         </div>
       </div>
