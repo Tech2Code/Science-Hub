@@ -445,7 +445,9 @@ export default function EditInvoicePage() {
       const d = await res.json();
       clearFormDraft(DRAFT_KEY);
       bustCache(`/api/invoices/${id}`);
+      bustCachePrefix("/api/invoices");
       bustCachePrefix("/api/products");
+      bustCachePrefix("/api/reports");
       invalidateCachedPdf("invoice", id);
       toast({ type: "success", title: "Invoice updated", message: "Changes saved." });
       if (d.stockWarnings?.length > 0) {

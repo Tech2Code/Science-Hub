@@ -115,6 +115,9 @@ export default function NewRateListPage() {
         bustCachePrefix("/api/rate-lists");
         toast({ type: "success", title: "Rate list created", message: `"${data.title}" saved.` });
         router.push(`/sales/rate-lists/${data.id}`);
+        // No setSaving(false) here — page is navigating away; resetting it first would briefly
+        // re-enable Save mid-transition and allow a duplicate create submission.
+        return;
       } else {
         toast({ type: "error", title: "Failed to save", message: data.error ?? "Failed to create rate list." });
       }

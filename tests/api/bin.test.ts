@@ -3,6 +3,10 @@ import { hasTestDatabase, testPrisma, resetDb, seedUser } from "../helpers/db";
 import { mockSession } from "../helpers/auth";
 import { jsonRequest } from "../helpers/request";
 
+function binListRequest() {
+  return jsonRequest("http://localhost/api/bin", "GET");
+}
+
 vi.mock("next-auth/next", () => ({ getServerSession: vi.fn() }));
 
 function binParamsOf(type: string, id: string) {
@@ -26,8 +30,8 @@ describe.skipIf(!hasTestDatabase)("GET /api/bin", () => {
       data: { name: "One Off", address: "x", city: "x", state: "x", pincode: "110001", deletedAt: new Date() },
     });
     const { GET } = await import("@/app/api/bin/route");
-    const res = await GET();
-    const items = await res.json();
+    const res = await GET(binListRequest());
+    const { items } = await res.json();
     expect(items.some((i: { type: string }) => i.type === "customer")).toBe(false);
   });
 
@@ -36,8 +40,8 @@ describe.skipIf(!hasTestDatabase)("GET /api/bin", () => {
       data: { name: "One Off Supplies", address: "x", city: "x", state: "x", pincode: "110001", deletedAt: new Date() },
     });
     const { GET } = await import("@/app/api/bin/route");
-    const res = await GET();
-    const items = await res.json();
+    const res = await GET(binListRequest());
+    const { items } = await res.json();
     expect(items.some((i: { type: string }) => i.type === "vendor")).toBe(false);
   });
 
@@ -50,8 +54,8 @@ describe.skipIf(!hasTestDatabase)("GET /api/bin", () => {
       data: { userId: user.id, action: "delete_customer", details: "Moved to bin", entityId: customer.id, entityType: "customer" },
     });
     const { GET } = await import("@/app/api/bin/route");
-    const res = await GET();
-    const items = await res.json();
+    const res = await GET(binListRequest());
+    const { items } = await res.json();
     const found = items.find((i: { type: string; id: string }) => i.type === "customer" && i.id === customer.id);
     expect(found).toBeDefined();
   });

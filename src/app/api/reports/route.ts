@@ -3,6 +3,7 @@ import { getReportSummary, getReportOutstanding, getReportStock } from "@/lib/db
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireSectionAccess } from "@/lib/apiAuth";
 import { parsePageParams } from "@/lib/listQuery";
+import { Prisma } from "@prisma/client";
 
 async function getSalesDashboard() {
   const now = new Date();
@@ -236,27 +237,33 @@ async function getCombinedDashboard(canSeeSales: boolean, canSeePurchases: boole
 }
 
 async function getGstSummary(startDate?: string, endDate?: string) {
-  const dateFilter: { gte?: Date; lte?: Date } = {};
-  if (startDate) dateFilter.gte = new Date(startDate);
-  if (endDate) dateFilter.lte = new Date(endDate);
+  // Stays scoped to "all invoices" when no range is picked (matches the Sales Reports page's own
+  // label) — the aggregation itself is pushed into Postgres via date_trunc/groupBy so this never
+  // has to load every invoice row into Node to bucket by month, regardless of table size.
+  const gte = startDate ? new Date(startDate) : undefined;
+  const lte = endDate ? new Date(endDate) : undefined;
 
-  const invoices = await prisma.invoice.findMany({
-    where: { deletedAt: null, ...(Object.keys(dateFilter).length > 0 && { date: dateFilter }) },
-    select: { date: true, subtotal: true, cgst: true, sgst: true, igst: true },
-    orderBy: { date: "asc" },
-  });
+  const rows = await prisma.$queryRaw<Array<{ month: Date; taxableValue: number; cgst: number; sgst: number; igst: number }>>`
+    SELECT date_trunc('month', "date") AS month,
+           COALESCE(SUM("subtotal"), 0) AS "taxableValue",
+           COALESCE(SUM("cgst"), 0) AS cgst,
+           COALESCE(SUM("sgst"), 0) AS sgst,
+           COALESCE(SUM("igst"), 0) AS igst
+    FROM "Invoice"
+    WHERE "deletedAt" IS NULL
+      ${gte ? Prisma.sql`AND "date" >= ${gte}` : Prisma.empty}
+      ${lte ? Prisma.sql`AND "date" <= ${lte}` : Prisma.empty}
+    GROUP BY month
+    ORDER BY month ASC
+  `;
 
-  const byMonth: Record<string, { taxableValue: number; cgst: number; sgst: number; igst: number }> = {};
-  for (const inv of invoices) {
-    const label = new Date(inv.date).toLocaleString("en-IN", { month: "short", year: "numeric" });
-    if (!byMonth[label]) byMonth[label] = { taxableValue: 0, cgst: 0, sgst: 0, igst: 0 };
-    byMonth[label].taxableValue += inv.subtotal;
-    byMonth[label].cgst += inv.cgst;
-    byMonth[label].sgst += inv.sgst;
-    byMonth[label].igst += inv.igst;
-  }
-
-  return Object.entries(byMonth).map(([month, data]) => ({ month, ...data }));
+  return rows.map((r) => ({
+    month: new Date(r.month).toLocaleString("en-IN", { month: "short", year: "numeric" }),
+    taxableValue: Number(r.taxableValue) || 0,
+    cgst: Number(r.cgst) || 0,
+    sgst: Number(r.sgst) || 0,
+    igst: Number(r.igst) || 0,
+  }));
 }
 
 export async function GET(request: NextRequest) {

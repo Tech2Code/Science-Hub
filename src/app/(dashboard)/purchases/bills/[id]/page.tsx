@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -12,6 +12,8 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Sk } from "@/components/ui/Skeleton";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Modal } from "@/components/dialogs/Modal";
+import { rules, validate } from "@/lib/validation";
 import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
@@ -23,6 +25,7 @@ import { truncateFilename } from "@/lib/truncateFilename";
 import { AttachmentIcon } from "@/components/purchases/AttachmentIcon";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import styles from "./billDetail.module.css";
 
 interface PurchaseBillItem {
@@ -81,6 +84,7 @@ export default function PurchaseBillDetailPage() {
   const toast   = useToast();
   const router  = useRouter();
   const canWrite = useCanWrite();
+  const paymentIdempotency = useIdempotencyKey();
 
   const [bill,    setBill]    = useState<PurchaseBill | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,6 +94,19 @@ export default function PurchaseBillDetailPage() {
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [pdfViewing, setPdfViewing] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareDropStyle, setShareDropStyle] = useState<CSSProperties>({});
+  const shareContainerRef = useRef<HTMLDivElement>(null);
+
+  // Vendor's own email pre-fills the field so it can be selected directly
+  // instead of retyped, but stays editable/extendable — a bill may need to
+  // go to more than one recipient (e.g. vendor + their accountant), so the
+  // field accepts a comma-separated list.
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailToError, setEmailToError] = useState<string | undefined>(undefined);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   useEffect(() => {
     return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
@@ -173,6 +190,107 @@ export default function PurchaseBillDetailPage() {
     setPdfPreviewUrl(URL.createObjectURL(blob));
   }
 
+  async function handleShare(channel: "native" | "whatsapp" | "email") {
+    setShareOpen(false);
+    if (!bill) return;
+    const num = bill.billNumber;
+
+    if (channel === "email") {
+      setEmailTo(bill.vendor.email ?? "");
+      setEmailToError(undefined);
+      setEmailModalOpen(true);
+      return;
+    }
+
+    setShareLoading(true);
+    const blob = await generateBillPdfBlob(false);
+    setShareLoading(false);
+    if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
+
+    const file = new File([blob], `${num}.pdf`, { type: "application/pdf" });
+
+    const downloadPdf = () => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `${num}.pdf`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    };
+
+    if (channel === "native") {
+      try {
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: `Purchase Bill ${num}` });
+        } else {
+          downloadPdf();
+        }
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") toast({ type: "error", title: "Share failed", message: "Could not open share sheet." });
+      }
+      return;
+    }
+
+    if (channel === "whatsapp") {
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: `Purchase Bill ${num}`, text: `Purchase Bill ${num} — ₹${fmt(bill.total)}` });
+        } catch (err) {
+          if ((err as Error).name !== "AbortError") toast({ type: "error", title: "Share failed", message: "Could not open share sheet." });
+        }
+      } else {
+        toast({ type: "error", title: "Not supported", message: "File sharing is not supported on this browser." });
+      }
+      return;
+    }
+  }
+
+  // Splits the comma-separated recipient field into individual addresses so
+  // a bill can be sent to more than one email (e.g. vendor + their
+  // accountant) in a single send, mirroring how the server itself validates
+  // and forwards the list to nodemailer's `to`.
+  function parseEmailList(raw: string): string[] {
+    return raw.split(",").map(e => e.trim()).filter(Boolean);
+  }
+
+  async function handleSendEmail(e: React.FormEvent) {
+    e.preventDefault();
+    if (!bill) return;
+    const emails = parseEmailList(emailTo);
+    if (emails.length === 0) { setEmailToError("Enter at least one email address."); return; }
+    if (emails.length > 10) { setEmailToError("You can send to at most 10 recipients at once."); return; }
+    for (const addr of emails) {
+      const err = validate(addr, rules.email());
+      if (err) { setEmailToError(`"${addr}" is not a valid email address.`); return; }
+    }
+    setEmailToError(undefined);
+    setSendingEmail(true);
+    try {
+      const blob = await generateBillPdfBlob(false);
+      if (!blob) {
+        toast({ type: "error", title: "Failed", message: "Could not generate PDF." });
+        setSendingEmail(false);
+        return;
+      }
+      const formData = new FormData();
+      formData.append("pdf", blob, `${bill.billNumber}.pdf`);
+      formData.append("to", emails.join(","));
+      formData.append("billNumber", bill.billNumber);
+      formData.append("vendorName", bill.vendor.name);
+      formData.append("total", fmt(bill.total));
+      const res = await fetch("/api/send-purchase-bill", { method: "POST", body: formData });
+      if (res.ok) {
+        toast({ type: "success", title: "Email sent", message: `Purchase Bill ${bill.billNumber} sent to ${emails.join(", ")}` });
+        setEmailModalOpen(false);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast({ type: "error", title: "Email failed", message: d.error ?? "Could not send email." });
+      }
+    } catch {
+      toast({ type: "error", title: "Email failed", message: "Network error. Could not send email." });
+    }
+    setSendingEmail(false);
+  }
+
   async function handlePayment(e: React.FormEvent) {
     e.preventDefault();
     if (!bill) return;
@@ -188,11 +306,14 @@ export default function PurchaseBillDetailPage() {
       const res = await fetch(`/api/purchase-bills/${id}/payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount, method: payMethod, reference: payRef.trim() || null, date: payDate }),
+        body: JSON.stringify({ amount, method: payMethod, reference: payRef.trim() || null, date: payDate, idempotencyKey: paymentIdempotency.key() }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        paymentIdempotency.renew(); // this dialog can be reopened for another payment — a fresh key must back the next submit
         bustCachePrefix("/api/purchase-bills");
+        bustCachePrefix("/api/reports");
+        bustCachePrefix("/api/purchase-reports");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Payment recorded", message: `₹${fmt(amount)} via ${payMethod}.` });
         setShowPayForm(false);
@@ -218,6 +339,8 @@ export default function PurchaseBillDetailPage() {
       if (res.ok) {
         bustCachePrefix("/api/purchase-bills");
         bustCachePrefix("/api/products");
+        bustCachePrefix("/api/reports");
+        bustCachePrefix("/api/purchase-reports");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Bill cancelled", message: "Status updated to cancelled." });
         load();
@@ -239,9 +362,14 @@ export default function PurchaseBillDetailPage() {
       if (res.ok) {
         bustCachePrefix("/api/purchase-bills");
         bustCachePrefix("/api/products");
+        bustCachePrefix("/api/reports");
+        bustCachePrefix("/api/purchase-reports");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Deleted", message: "Purchase bill moved to bin." });
         router.push("/purchases/bills");
+        // No setDeleting(false)/setConfirmDelete(false) here — page is navigating away; resetting
+        // first would briefly re-enable Delete mid-transition and allow a duplicate delete click.
+        return;
       } else {
         const d = await res.json().catch(() => ({}));
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete purchase bill." });
@@ -359,6 +487,8 @@ export default function PurchaseBillDetailPage() {
     {openingEdit && <OverlayLoader text="Opening editor…" />}
     {pdfDownloading && <OverlayLoader text="Generating PDF…" />}
     {pdfViewing && <OverlayLoader text="Preparing PDF…" />}
+    {shareLoading && <OverlayLoader text="Preparing PDF…" />}
+    {sendingEmail && <OverlayLoader text="Sending email…" />}
 
     {pdfPreviewUrl && (
       <PdfPreviewModal
@@ -600,6 +730,33 @@ export default function PurchaseBillDetailPage() {
       onCancel={() => { if (!deleting) setConfirmDelete(false); }}
     />
 
+    <Modal
+      open={emailModalOpen}
+      title="Email Purchase Bill"
+      onClose={() => { if (!sendingEmail) setEmailModalOpen(false); }}
+      variant="fullscreen"
+      footer={
+        <>
+          <Button type="button" variant="secondary" disabled={sendingEmail} onClick={() => setEmailModalOpen(false)}>Cancel</Button>
+          <Button type="submit" form="purchase-bill-email-form" variant="primary" loading={sendingEmail} disabled={sendingEmail}>Send</Button>
+        </>
+      }
+    >
+      <form id="purchase-bill-email-form" onSubmit={handleSendEmail} noValidate>
+        <FormField label="Recipient Email(s)" required error={emailToError} hint="Separate multiple addresses with commas.">
+          <Input
+            type="text"
+            value={emailTo}
+            onChange={(e) => { setEmailTo(e.target.value); setEmailToError(undefined); }}
+            placeholder="vendor@example.com, accounts@example.com"
+            maxLength={1000}
+            autoFocus
+            disabled={sendingEmail}
+          />
+        </FormField>
+      </form>
+    </Modal>
+
     <div className={`page-stack ${styles.pageStack}`}>
 
       {/* ── Breadcrumb + toolbar ── */}
@@ -643,6 +800,61 @@ export default function PurchaseBillDetailPage() {
           <Button variant="secondary" size="sm" title="Discard the cached PDF and download a freshly generated copy" onClick={() => handleDownloadPdf(true)} disabled={pdfDownloading}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
           </Button>
+          {/* Share PDF button */}
+          <div className={styles.shareWrap} ref={shareContainerRef}>
+            <Button variant="secondary" size="sm" disabled={shareLoading} onClick={() => {
+              setShareOpen(o => {
+                const next = !o;
+                if (next && shareContainerRef.current) {
+                  const rect = shareContainerRef.current.getBoundingClientRect();
+                  const dropW = 240;
+                  const viewW = window.innerWidth;
+                  let right = viewW - rect.right;
+                  if (viewW - right - dropW < 8) right = viewW - dropW - 8;
+                  right = Math.max(8, right);
+                  setShareDropStyle({ position: "fixed", top: rect.bottom + 8, right });
+                }
+                return next;
+              });
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.shareIconMargin}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+              Share PDF
+            </Button>
+            {shareOpen && (
+              <>
+                <div className={styles.shareOverlay} onClick={() => setShareOpen(false)} />
+                <div className={styles.shareMenu} style={shareDropStyle}>
+                  <div className={styles.shareMenuTitle}>Share PDF</div>
+                  {([
+                    typeof navigator !== "undefined" && "share" in navigator ? {
+                      key: "native", label: "Share / Send File",
+                      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>,
+                      color: "var(--c-blue)",
+                    } : null,
+                    {
+                      key: "whatsapp", label: "WhatsApp",
+                      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>,
+                      color: "#25d366",
+                    },
+                    {
+                      key: "email", label: "Email",
+                      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
+                      color: "var(--c-text-2)",
+                    },
+                  ] as const).filter(Boolean).map((opt) => (
+                    <button
+                      key={opt!.key}
+                      onClick={() => handleShare(opt!.key as "native" | "whatsapp" | "email")}
+                      className={styles.shareMenuItem}
+                    >
+                      <span className={styles.shareMenuItemIcon} style={{ color: opt!.color }}>{opt!.icon}</span>
+                      {opt!.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           {canWrite && bill.status !== "cancelled" && (
             <Button variant="dangerOutline" size="sm" onClick={() => setConfirmCancel(true)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>

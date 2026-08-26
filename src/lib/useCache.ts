@@ -89,10 +89,12 @@ export function bustCache(url: string) {
   cache.delete(url);
 }
 
-// Invalidates every cached URL starting with `prefix` — plain bustCache() only matches the bare param-less URL and misses parameterized list variants.
+// Invalidates every cached URL starting with `prefix` — plain bustCache() only matches the bare param-less URL
+// and misses parameterized list variants. Also matches sibling sub-routes (e.g. bustCachePrefix("/api/invoices")
+// busts "/api/invoices/stats" too) so callers don't have to separately remember every companion endpoint.
 export function bustCachePrefix(prefix: string) {
   for (const key of cache.keys()) {
-    if (key === prefix || key.startsWith(`${prefix}?`)) cache.delete(key);
+    if (key === prefix || key.startsWith(`${prefix}?`) || key.startsWith(`${prefix}/`)) cache.delete(key);
   }
 }
 

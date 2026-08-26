@@ -161,6 +161,9 @@ export default function EditRateListPage() {
         await invalidateCachedPdf("rate-list", String(id));
         toast({ type: "success", title: "Rate list updated", message: `"${data.title}" saved.` });
         router.push(`/sales/rate-lists/${id}`);
+        // No setSaving(false) here — page is navigating away; resetting it first would briefly
+        // re-enable Save mid-transition and allow a duplicate update submission.
+        return;
       } else {
         toast({ type: "error", title: "Failed to save", message: data.error ?? "Failed to update rate list." });
       }

@@ -818,7 +818,9 @@ export default function AdminPage() {
         <div className={styles.sectionHeaderWrap}>
           <div>
             <h2 className={styles.sectionTitle}>Activity Log</h2>
-            <p className={styles.sectionSub}>{logsTotal} total actions recorded</p>
+            <p className={styles.sectionSub}>
+              {logsTotal} total actions recorded · entries older than 30 days are automatically removed (except invoice/purchase bill/credit note activity, which is kept indefinitely)
+            </p>
           </div>
           <div className={styles.logsHeaderActions}>
             <Button variant="secondary" size="sm" onClick={() => loadLogs(logsPage, logsFilter, logsSearch.trim())}>

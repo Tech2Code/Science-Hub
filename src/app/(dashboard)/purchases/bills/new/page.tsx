@@ -19,6 +19,7 @@ import { InfoBanner } from "@/components/ui/InfoBanner";
 import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import { getIndianFinancialYear, formatFinancialYearLabel, resolveNumberFormat } from "@/lib/documentNumbering";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import styles from "./billNew.module.css";
 
 // Shown once before the business's first purchase bill, if numbering is still default.
@@ -31,6 +32,7 @@ export default function NewPurchaseBillPage() {
   const router = useRouter();
   const toast  = useToast();
   const { data: session } = useSession();
+  const idempotency = useIdempotencyKey();
   useEffect(() => {
     if (session?.user?.role === "manager") router.replace("/dashboard");
   }, [session, router]);
@@ -81,6 +83,7 @@ export default function NewPurchaseBillPage() {
     setAddPayment(true);
     setShowPaymentDialog(false);
     setPaymentDateError(undefined);
+    toast({ type: "success", title: "Payment added", message: `₹${fmtCurrency(toNum(payment.amount))} will be recorded when this bill is saved.` });
   }
 
   function removePayment() {
@@ -288,6 +291,7 @@ export default function NewPurchaseBillPage() {
       attachmentName,
       transportCharge: effectiveTransportCharge,
       transportChargeGstRate: effectiveTransportGstRate,
+      idempotencyKey: idempotency.key(),
     };
 
     if (addPayment && toNum(payAmount) > 0) {
@@ -311,8 +315,13 @@ export default function NewPurchaseBillPage() {
         clearFormDraft(DRAFT_KEY);
         bustCachePrefix("/api/purchase-bills");
         bustCachePrefix("/api/products");
+        bustCachePrefix("/api/reports");
+        bustCachePrefix("/api/purchase-reports");
         toast({ type: "success", title: "Bill created", message: `${data.billNumber} saved.` });
         router.push(`/purchases/bills/${data.id}`);
+        // No setSaving(false) here — page is navigating away; resetting it first would briefly
+        // re-enable Save mid-transition and allow a duplicate create submission.
+        return;
       } else {
         toast({ type: "error", title: "Failed to save", message: data.error ?? "Failed to create purchase bill." });
       }

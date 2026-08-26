@@ -14,6 +14,7 @@ import { PhoneInput } from "@/components/ui/PhoneInput";
 import { INDIA_STATES_FULL } from "@/lib/states";
 import { usePincodeAutofill } from "@/lib/usePincodeLookup";
 import { InvoiceOptionsRow } from "@/components/invoices/InvoiceOptionsRow";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
 import { computeInvoiceTotals, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
 import styles from "./new.module.css";
@@ -42,6 +43,7 @@ export default function NewInvoicePage() {
   const toast = useToast();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
+  const idempotency = useIdempotencyKey();
   useEffect(() => {
     if (session?.user?.role === "manager") router.replace("/dashboard");
   }, [session, router]);
@@ -380,6 +382,7 @@ export default function NewInvoicePage() {
       customerId,
       transportCharge: effectiveTransportCharge,
       transportChargeGstRate: effectiveTransportGstRate,
+      idempotencyKey: idempotency.key(),
     };
     const res = await fetch("/api/invoices", {
       method: "POST",

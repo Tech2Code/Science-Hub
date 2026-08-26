@@ -210,12 +210,25 @@ export default function RateListDetailPage() {
 
   }
 
+  // Splits the comma-separated recipient field into individual addresses so
+  // a rate list can be sent to more than one email in a single send,
+  // mirroring how the server itself validates and forwards the list to
+  // nodemailer's `to`.
+  function parseEmailList(raw: string): string[] {
+    return raw.split(",").map(e => e.trim()).filter(Boolean);
+  }
+
   async function handleSendEmail(e: React.FormEvent) {
     e.preventDefault();
     if (!rateList) return;
-    const err = validate(emailTo, rules.required("Enter an email address."), rules.email());
-    setEmailToError(err ?? undefined);
-    if (err) return;
+    const emails = parseEmailList(emailTo);
+    if (emails.length === 0) { setEmailToError("Enter at least one email address."); return; }
+    if (emails.length > 10) { setEmailToError("You can send to at most 10 recipients at once."); return; }
+    for (const addr of emails) {
+      const err = validate(addr, rules.email());
+      if (err) { setEmailToError(`"${addr}" is not a valid email address.`); return; }
+    }
+    setEmailToError(undefined);
     setSendingEmail(true);
     try {
       const blob = await generateRateListPdfBlob(false);
@@ -226,11 +239,11 @@ export default function RateListDetailPage() {
       }
       const formData = new FormData();
       formData.append("pdf", blob, `${rateList.title}.pdf`);
-      formData.append("to", emailTo.trim());
+      formData.append("to", emails.join(","));
       formData.append("title", rateList.title);
       const res = await fetch("/api/send-rate-list", { method: "POST", body: formData });
       if (res.ok) {
-        toast({ type: "success", title: "Email sent", message: `"${rateList.title}" sent to ${emailTo.trim()}` });
+        toast({ type: "success", title: "Email sent", message: `"${rateList.title}" sent to ${emails.join(", ")}` });
         setEmailModalOpen(false);
       } else {
         const d = await res.json().catch(() => ({}));
@@ -324,13 +337,13 @@ export default function RateListDetailPage() {
       }
     >
       <form id="rate-list-email-form" onSubmit={handleSendEmail} noValidate>
-        <FormField label="Recipient Email" required error={emailToError}>
+        <FormField label="Recipient Email(s)" required error={emailToError} hint="Separate multiple addresses with commas.">
           <Input
-            type="email"
+            type="text"
             value={emailTo}
             onChange={(e) => { setEmailTo(e.target.value); setEmailToError(undefined); }}
-            placeholder="customer@example.com"
-            maxLength={254}
+            placeholder="customer@example.com, accounts@example.com"
+            maxLength={1000}
             autoFocus
             disabled={sendingEmail}
           />

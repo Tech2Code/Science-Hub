@@ -19,9 +19,14 @@ export async function GET() {
     const auth = await requireAdmin();
     if (!auth.ok) return auth.response;
 
+    // Hard safety cap — this route has never had pagination and realistically never needs it
+    // (staff headcount for a business using this app), but an unbounded findMany with no cap
+    // at all is still the wrong default; this keeps the response shape unchanged for the
+    // existing client while guaranteeing the query itself can't scale past a bounded size.
     const users = await prisma.user.findMany({
       select: USER_SELECT,
       orderBy: { createdAt: "asc" },
+      take: 500,
     });
 
     return NextResponse.json(users);

@@ -6,11 +6,13 @@ import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { deleteAttachmentBlob, isPurchaseBillBlobUrl } from "@/lib/blobStorage";
 import { computeRoundOff } from "@/lib/roundOff";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
-import { purchaseBillLineBreakdown } from "@/lib/purchaseBillForm";
+import { purchaseBillLineBreakdown, normalizeCategoryInput } from "@/lib/purchaseBillForm";
 import { getBusinessSettings } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
 import { isFutureIstDate } from "@/lib/validation";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
+
+class BillConflictError extends Error {}
 
 const BILL_INCLUDE = {
   vendor: { select: { id: true, name: true, company: true, phone: true, email: true, gstin: true, address: true, state: true, updatedAt: true } },
@@ -221,6 +223,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const isUncancelling = effectiveStatus !== undefined && effectiveStatus !== "cancelled" && existing.status === "cancelled";
 
     const bill = await prisma.$transaction(async (tx) => {
+      // Re-check the optimistic-lock atomically under a row lock — the earlier check ran as a
+      // separate query before this transaction started, leaving a race window where two concurrent
+      // edits could both pass the pre-check and silently corrupt the item/stock state (mirrors
+      // the same guard on PUT /api/invoices/[id]).
+      if (expectedUpdatedAt) {
+        const guard = await tx.purchaseBill.updateMany({
+          where: { id, updatedAt: existing.updatedAt },
+          data: { updatedAt: new Date() },
+        });
+        if (guard.count === 0) throw new BillConflictError();
+      }
+
       if (items !== undefined) {
         // Reverse old line items' stock, then apply the new ones — same inverse-then-reapply pattern as invoice item edits.
         const oldItems = await tx.purchaseBillItem.findMany({
@@ -261,7 +275,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           total,
           roundOff,
           ...(notes !== undefined && { notes: notes || null }),
-          ...(category !== undefined && { category: category || null }),
+          ...(category !== undefined && { category: normalizeCategoryInput(category) }),
           ...(effectiveStatus !== undefined && { status: effectiveStatus }),
           ...(attachmentUrl !== undefined && { attachmentUrl: attachmentUrl || null }),
           ...(attachmentName !== undefined && { attachmentName: attachmentName || null }),
@@ -338,6 +352,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json(bill);
   } catch (err) {
     console.error("PUT /api/purchase-bills/[id] error:", err);
+    if (err instanceof BillConflictError) {
+      return NextResponse.json({ error: "This purchase bill was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
+    }
     if (err instanceof ProductNotFoundError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }

@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   if (!auth.ok) return auth.response;
   const { session } = auth;
 
-  const limit = rateLimit(`send-invoice:${session.user.id}`, 20, 15 * 60 * 1000);
+  const limit = rateLimit(`send-purchase-bill:${session.user.id}`, 20, 15 * 60 * 1000);
   if (!limit.allowed) {
     return NextResponse.json({ error: "Too many emails sent. Please try again later." }, { status: 429 });
   }
@@ -22,15 +22,15 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const pdf = form.get("pdf") as File | null;
     const to = form.get("to") as string | null;
-    const invoiceNumber = form.get("invoiceNumber") as string | null;
-    const customerName = form.get("customerName") as string | null;
+    const billNumber = form.get("billNumber") as string | null;
+    const vendorName = form.get("vendorName") as string | null;
     const total = form.get("total") as string | null;
 
-    if (!pdf || !to || !invoiceNumber) {
+    if (!pdf || !to || !billNumber) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
-    // Supports a comma-separated list so an invoice can go to more than one
-    // recipient in a single send.
+    // Supports a comma-separated list so a bill can go to more than one
+    // recipient (e.g. vendor + their accountant) in a single send.
     const recipients = to.split(",").map(e => e.trim()).filter(Boolean);
     if (recipients.length === 0) {
       return NextResponse.json({ error: "Recipient email address is invalid." }, { status: 400 });
@@ -44,8 +44,8 @@ export async function POST(req: Request) {
       }
     }
     // Reject embedded CR/LF before it reaches the `subject` header, or a caller could inject extra SMTP headers (e.g. Bcc).
-    if (/[\r\n]/.test(invoiceNumber) || invoiceNumber.length > 100) {
-      return NextResponse.json({ error: "Invalid invoice number." }, { status: 400 });
+    if (/[\r\n]/.test(billNumber) || billNumber.length > 100) {
+      return NextResponse.json({ error: "Invalid bill number." }, { status: 400 });
     }
     if (pdf.size > MAX_PDF_BYTES) {
       return NextResponse.json({ error: "PDF attachment is too large (max 10MB)." }, { status: 413 });
@@ -71,33 +71,33 @@ export async function POST(req: Request) {
     const bizAddress = [biz.address, biz.city, biz.state, biz.pincode].filter(Boolean).join(", ");
     const bizFooter = [biz.name, bizAddress, biz.phone ? `Ph: ${biz.phone}` : "", biz.email].filter(Boolean).join(" · ");
 
-    const safeInvoiceNumber = escapeHtml(invoiceNumber);
-    const safeCustomerName = escapeHtml(customerName ?? "Customer");
+    const safeBillNumber = escapeHtml(billNumber);
+    const safeVendorName = escapeHtml(vendorName ?? "Vendor");
     const safeTotal = total ? escapeHtml(total) : "";
 
     await transporter.sendMail({
       from: `"${biz.name}" <${gmailUser}>`,
       to: recipients,
-      subject: `Invoice ${invoiceNumber} — ${biz.name}`,
+      subject: `Purchase Bill ${billNumber} — ${biz.name}`,
       html: `
         <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
           <h2 style="color:#1e3a8a">${escapeHtml(biz.name)}</h2>
-          <p>Dear ${safeCustomerName},</p>
-          <p>Please find your invoice <strong>${safeInvoiceNumber}</strong> attached to this email.</p>
-          ${safeTotal ? `<p>Invoice Amount: <strong>₹${safeTotal}</strong></p>` : ""}
-          <p>Thank you for your business.</p>
+          <p>Dear ${safeVendorName},</p>
+          <p>Please find purchase bill <strong>${safeBillNumber}</strong> attached to this email.</p>
+          ${safeTotal ? `<p>Bill Amount: <strong>₹${safeTotal}</strong></p>` : ""}
+          <p>Thank you.</p>
           <hr style="border:none;border-top:1px solid #e2e8f0;margin:1.5rem 0"/>
           <p style="color:#64748b;font-size:0.85rem">${escapeHtml(bizFooter)}</p>
         </div>
       `,
       attachments: [
-        { filename: `${invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`, content: buffer, contentType: "application/pdf" },
+        { filename: `${billNumber.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`, content: buffer, contentType: "application/pdf" },
       ],
     });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("send-invoice error:", err);
+    console.error("send-purchase-bill error:", err);
     return NextResponse.json({ error: "Failed to send email." }, { status: 500 });
   }
 }

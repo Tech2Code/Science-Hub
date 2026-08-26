@@ -78,27 +78,23 @@ async function getPurchaseOutstanding(startDate: string | undefined, endDate: st
 
 async function getPurchaseByCategory() {
   // Cancelled bills are excluded — see getPurchaseSummary above for why.
-  const bills = await prisma.purchaseBill.findMany({
+  // Aggregated DB-side (single groupBy) instead of fetching every non-cancelled bill ever created
+  // into memory to reduce in JS — this only grows over the life of the business.
+  const groups = await prisma.purchaseBill.groupBy({
+    by: ["category"],
     where: { deletedAt: null, status: { not: "cancelled" } },
-    select: { category: true, total: true },
+    _sum: { total: true },
+    _count: { _all: true },
   });
 
-  const totalSpend = bills.reduce((s, b) => s + b.total, 0);
-  const byCategory: Record<string, { count: number; total: number }> = {};
+  const totalSpend = groups.reduce((s, g) => s + (g._sum.total ?? 0), 0);
 
-  for (const b of bills) {
-    const cat = b.category ?? "Uncategorized";
-    if (!byCategory[cat]) byCategory[cat] = { count: 0, total: 0 };
-    byCategory[cat].count += 1;
-    byCategory[cat].total += b.total;
-  }
-
-  return Object.entries(byCategory)
-    .map(([category, data]) => ({
-      category,
-      count: data.count,
-      totalSpend: data.total,
-      pct: totalSpend > 0 ? Math.round((data.total / totalSpend) * 1000) / 10 : 0,
+  return groups
+    .map((g) => ({
+      category: g.category ?? "Uncategorized",
+      count: g._count._all,
+      totalSpend: g._sum.total ?? 0,
+      pct: totalSpend > 0 ? Math.round(((g._sum.total ?? 0) / totalSpend) * 1000) / 10 : 0,
     }))
     .sort((a, b) => b.totalSpend - a.totalSpend);
 }

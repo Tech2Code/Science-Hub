@@ -1,13 +1,26 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireWriteAccess } from "@/lib/apiAuth";
 
-export async function GET() {
+// Invoices/purchase-bills/credit-notes are exempt from the 30-day auto-purge (see comment below),
+// so they're the only bin entity types that can grow without bound over the life of the business —
+// every other type is naturally capped by the purge window. Cap how many of each this route
+// returns per request rather than always fetching the full history; the client "Load more"s past
+// this via the `limit` query param.
+const DEFAULT_RETAINED_LIMIT = 100;
+const MAX_RETAINED_LIMIT = 2000;
+
+export async function GET(req: NextRequest) {
   try {
     // Managers have no bin access — requireWriteAccess blocks them.
     const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
+
+    const limitParam = parseInt(req.nextUrl.searchParams.get("limit") ?? "", 10);
+    const retainedLimit = Number.isFinite(limitParam) && limitParam > 0
+      ? Math.min(limitParam, MAX_RETAINED_LIMIT)
+      : DEFAULT_RETAINED_LIMIT;
 
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
@@ -58,11 +71,10 @@ export async function GET() {
       where: { deletedAt: { not: null, lt: cutoff } },
       select: { id: true },
     });
-    for (const brand of oldBrands) {
-      await prisma.product.updateMany({ where: { brandId: brand.id }, data: { brandId: null } });
-    }
     if (oldBrands.length > 0) {
-      await prisma.brand.deleteMany({ where: { id: { in: oldBrands.map((b) => b.id) } } });
+      const oldBrandIds = oldBrands.map((b) => b.id);
+      await prisma.product.updateMany({ where: { brandId: { in: oldBrandIds } }, data: { brandId: null } });
+      await prisma.brand.deleteMany({ where: { id: { in: oldBrandIds } } });
     }
 
     // Categories — unassign products first
@@ -70,11 +82,10 @@ export async function GET() {
       where: { deletedAt: { not: null, lt: cutoff } },
       select: { id: true },
     });
-    for (const cat of oldCategories) {
-      await prisma.product.updateMany({ where: { categoryId: cat.id }, data: { categoryId: null } });
-    }
     if (oldCategories.length > 0) {
-      await prisma.category.deleteMany({ where: { id: { in: oldCategories.map((c) => c.id) } } });
+      const oldCategoryIds = oldCategories.map((c) => c.id);
+      await prisma.product.updateMany({ where: { categoryId: { in: oldCategoryIds } }, data: { categoryId: null } });
+      await prisma.category.deleteMany({ where: { id: { in: oldCategoryIds } } });
     }
 
     // Vendors — only purge if no purchase bills reference them at all
@@ -125,11 +136,12 @@ export async function GET() {
     const explicitlyDeletedCustomerIds = [...new Set(explicitlyDeletedCustomers.map((l) => l.entityId).filter((id): id is string => !!id))];
     const explicitlyDeletedVendorIds = [...new Set(explicitlyDeletedVendors.map((l) => l.entityId).filter((id): id is string => !!id))];
 
-    const [invoices, customers, products, brands, categories, vendors, purchaseBills, returns, rateLists] = await Promise.all([
+    const [invoices, customers, products, brands, categories, vendors, purchaseBills, returns, rateLists, retainedCounts] = await Promise.all([
       prisma.invoice.findMany({
         where: { deletedAt: { not: null } },
         select: { id: true, invoiceNumber: true, deletedAt: true, total: true, customer: { select: { name: true } } },
         orderBy: { deletedAt: "desc" },
+        take: retainedLimit,
       }),
       prisma.customer.findMany({
         where: { deletedAt: { not: null }, id: { in: explicitlyDeletedCustomerIds } },
@@ -160,6 +172,7 @@ export async function GET() {
         where: { deletedAt: { not: null } },
         select: { id: true, billNumber: true, deletedAt: true, total: true, vendor: { select: { name: true } } },
         orderBy: { deletedAt: "desc" },
+        take: retainedLimit,
       }),
       prisma.return.findMany({
         where: { deletedAt: { not: null } },
@@ -168,13 +181,20 @@ export async function GET() {
           invoice: { select: { invoiceNumber: true, customer: { select: { name: true } } } },
         },
         orderBy: { deletedAt: "desc" },
+        take: retainedLimit,
       }),
       prisma.rateList.findMany({
         where: { deletedAt: { not: null } },
         select: { id: true, title: true, deletedAt: true, _count: { select: { items: true } } },
         orderBy: { deletedAt: "desc" },
       }),
+      Promise.all([
+        prisma.invoice.count({ where: { deletedAt: { not: null } } }),
+        prisma.purchaseBill.count({ where: { deletedAt: { not: null } } }),
+        prisma.return.count({ where: { deletedAt: { not: null } } }),
+      ]),
     ]);
+    const [invoiceTotal, purchaseBillTotal, returnTotal] = retainedCounts;
 
     // Determine FK-protection reasons for the UI upfront, batched via groupBy per entity type rather than a per-row count query.
     const customerIds = customers.map((c) => c.id);
@@ -364,7 +384,18 @@ export async function GET() {
     // Sort by deletedAt desc
     items.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 
-    return NextResponse.json(items);
+    return NextResponse.json({
+      items,
+      // How many of each GST-retained (never auto-purged) type exist in total vs. how many this
+      // response actually included — lets the client show "Load more" instead of silently acting
+      // like the retainedLimit-capped list is everything.
+      retained: {
+        limit: retainedLimit,
+        invoice: { shown: invoices.length, total: invoiceTotal },
+        purchase_bill: { shown: purchaseBills.length, total: purchaseBillTotal },
+        return: { shown: returns.length, total: returnTotal },
+      },
+    });
   } catch (error) {
     console.error("GET /api/bin error:", error);
     return NextResponse.json({ error: "Failed to fetch bin" }, { status: 500 });

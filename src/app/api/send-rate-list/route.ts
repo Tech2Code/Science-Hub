@@ -28,8 +28,19 @@ export async function POST(req: Request) {
     if (!pdf || !to || !title) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
-    if (to.trim().length > 254 || !EMAIL_RE.test(to.trim())) {
+    // Supports a comma-separated list so a rate list can go to more than one
+    // recipient in a single send.
+    const recipients = to.split(",").map(e => e.trim()).filter(Boolean);
+    if (recipients.length === 0) {
       return NextResponse.json({ error: "Recipient email address is invalid." }, { status: 400 });
+    }
+    if (recipients.length > 10) {
+      return NextResponse.json({ error: "Too many recipients (max 10)." }, { status: 400 });
+    }
+    for (const addr of recipients) {
+      if (addr.length > 254 || !EMAIL_RE.test(addr)) {
+        return NextResponse.json({ error: `"${addr}" is not a valid email address.` }, { status: 400 });
+      }
     }
     // Reject embedded CR/LF before it reaches the `subject` header, or a caller could inject extra SMTP headers (mirrors /api/send-invoice).
     if (/[\r\n]/.test(title) || title.length > 200) {
@@ -63,7 +74,7 @@ export async function POST(req: Request) {
 
     await transporter.sendMail({
       from: `"${biz.name}" <${gmailUser}>`,
-      to: to.trim(),
+      to: recipients,
       subject: `${title} — ${biz.name}`,
       html: `
         <div style="font-family:sans-serif;max-width:480px;margin:0 auto">

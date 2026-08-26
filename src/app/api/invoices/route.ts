@@ -40,11 +40,23 @@ export async function POST(request: NextRequest) {
     const user = auth.session.user;
 
     const body = await request.json();
-    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, transportCharge, transportChargeGstRate } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, transportCharge, transportChargeGstRate, idempotencyKey } = body;
     const { customerId } = body;
 
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "At least one item is required" }, { status: 400 });
+    }
+    if (idempotencyKey !== undefined && (typeof idempotencyKey !== "string" || idempotencyKey.length > 200)) {
+      return NextResponse.json({ error: "Invalid idempotency key" }, { status: 400 });
+    }
+    // A retried/duplicated create submission of the same client-generated key is a no-op —
+    // return the invoice that submission already created rather than creating a second one.
+    if (idempotencyKey) {
+      const existing = await prisma.invoice.findUnique({
+        where: { idempotencyKey },
+        include: { customer: true, items: true },
+      });
+      if (existing) return NextResponse.json({ ...existing, stockWarnings: [] }, { status: 200 });
     }
     if (!placeOfSupply || !String(placeOfSupply).trim()) {
       return NextResponse.json({ error: "Place of supply is required" }, { status: 400 });
@@ -239,6 +251,7 @@ export async function POST(request: NextRequest) {
             isInterState: Boolean(isInterState),
             placeOfSupply: String(placeOfSupply).trim(),
             reverseCharge: Boolean(reverseCharge),
+            idempotencyKey: idempotencyKey || null,
             items: { create: invoiceItems },
           },
           include: { customer: true, items: true },
@@ -270,6 +283,20 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
         if (isWriteConflict && attempt < maxAttempts) continue;
+        // Two near-simultaneous requests carrying the same idempotency key can both pass the
+        // pre-check above and race to insert — the loser hits the unique constraint here.
+        const isDuplicateKey = idempotencyKey
+          && error instanceof Prisma.PrismaClientKnownRequestError
+          && error.code === "P2002"
+          && Array.isArray((error.meta as { target?: unknown })?.target)
+          && (error.meta as { target: string[] }).target.includes("idempotencyKey");
+        if (isDuplicateKey) {
+          const existing = await prisma.invoice.findUnique({
+            where: { idempotencyKey },
+            include: { customer: true, items: true },
+          });
+          if (existing) return NextResponse.json({ ...existing, stockWarnings: [] }, { status: 200 });
+        }
         throw error;
       }
     }

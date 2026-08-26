@@ -178,6 +178,11 @@ model Invoice {
   transportCharge          Float @default(0)
   transportChargeGstRate   Float @default(0)
   transportChargeGstAmount Float @default(0)
+  // Client-generated key (a UUID minted once per form session) so a retried/duplicated POST
+  // (network timeout, double-tap) can't create a second invoice — nullable so existing rows and
+  // any caller that doesn't send one are unaffected; the unique constraint is what actually
+  // blocks the duplicate insert.
+  idempotencyKey String?      @unique
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
@@ -224,8 +229,12 @@ model Payment {
   date      DateTime @default(now())
   notes     String?
   invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  // Same reasoning as Invoice.idempotencyKey — blocks a retried/duplicated record-payment POST
+  // from creating a second payment row for the same submission.
+  idempotencyKey String? @unique
 
   @@index([invoiceId])
+  @@index([date])
 }
 
 model Return {
@@ -245,8 +254,13 @@ model Return {
   deletedAt        DateTime?
   items            ReturnItem[]
 
+  // Same reasoning as Invoice.idempotencyKey — blocks a retried/duplicated create POST from
+  // consuming a second credit-note number and double-restoring stock.
+  idempotencyKey   String?      @unique
+
   @@index([invoiceId])
   @@index([deletedAt])
+  @@index([date])
 }
 
 model ReturnItem {
@@ -360,6 +374,9 @@ model PurchaseBill {
   transportCharge          Float @default(0)
   transportChargeGstRate   Float @default(0)
   transportChargeGstAmount Float @default(0)
+  // Same reasoning as Invoice.idempotencyKey — blocks a retried/duplicated create POST from
+  // inserting a second bill.
+  idempotencyKey  String?           @unique
   total           Float
   roundOff        Float             @default(0)
   paidAmount      Float             @default(0)
@@ -417,8 +434,11 @@ model PurchasePayment {
   date           DateTime     @default(now())
   notes          String?
   createdAt      DateTime     @default(now())
+  // Same reasoning as Payment.idempotencyKey.
+  idempotencyKey String?      @unique
 
   @@index([purchaseBillId])
+  @@index([date])
 }
 
 // ── Stock Movement Ledger ─────────────────────────────────────────────────────

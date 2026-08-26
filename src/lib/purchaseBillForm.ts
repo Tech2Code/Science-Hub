@@ -26,6 +26,19 @@ export const PURCHASE_BILL_GST_RATES = ["0", "5", "12", "18", "28"];
 export const PURCHASE_BILL_CATEGORIES = ["Raw Materials", "Lab Chemicals", "Lab Equipment", "Office Supplies", "Packaging", "Services", "Other"];
 export const PURCHASE_BILL_MARGIN_PRESETS = ["10", "15", "20", "25", "30", "40", "50"];
 
+// `category` is free text with no assigned-value guarantee (unlike Product's categoryId FK), so
+// "no category" can otherwise be represented two ways in the DB — a null column or someone
+// literally typing "Uncategorized" — which then show up as two separate rows wherever a report
+// groups bills by category (see getPurchaseByCategory in purchase-reports/route.ts). Normalizing
+// at write time keeps that ambiguity from ever entering the data, so no downstream aggregation
+// has to defend against it. Called from both POST and PUT /api/purchase-bills.
+export function normalizeCategoryInput(category: unknown): string | null {
+  if (typeof category !== "string") return null;
+  const trimmed = category.trim();
+  if (!trimmed || trimmed.toLowerCase() === "uncategorized") return null;
+  return trimmed;
+}
+
 // A stable per-row id, separate from array index.
 let itemKeySeq = 0;
 export function makePurchaseBillLineItemKey() {

@@ -140,6 +140,8 @@ export default function CategoriesPage() {
     if (r.ok) {
       setEditingId(null);
       await mutate();
+      // Product list/detail embed the category's name, so a rename leaves them stale until this bust.
+      bustCachePrefix("/api/products");
       toast({ type: "success", title: "Category renamed", message: `Renamed to "${name}".` });
       // Deliberately not resetting `renaming` here — it must stay locked
       // until navigation actually replaces this page.

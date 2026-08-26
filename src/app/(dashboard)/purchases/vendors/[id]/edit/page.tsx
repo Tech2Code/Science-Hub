@@ -94,13 +94,17 @@ export default function EditVendorPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, expectedUpdatedAt: loadedUpdatedAt }),
     });
-    setSaving(false);
     if (res.ok) {
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/vendors");
       toast({ type: "success", title: "Vendor updated", message: "Changes saved." });
       router.push(`/purchases/vendors/${id}`);
-    } else if (res.status === 409) {
+      // No setSaving(false) here — page is navigating away; resetting it first would briefly
+      // re-enable Save mid-transition and allow a duplicate update submission.
+      return;
+    }
+    setSaving(false);
+    if (res.status === 409) {
       const d = await res.json().catch(() => ({}));
       bustCache(`/api/vendors/${id}`);
       toast({ type: "error", title: "Update conflict", message: d?.error ?? "This vendor was changed by someone else. Please reload and try again." });

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
-import { useFetch } from "@/lib/useCache";
+import { useFetch, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -28,6 +28,16 @@ interface BinItem {
   protectedReason?: string;
 }
 
+// invoice/purchase_bill/return are the three GST-retained types (never auto-purged) that can
+// grow without bound — the API caps how many of each it returns per request and reports how
+// many exist in total, so this page can offer "Load more" instead of always fetching everything.
+interface RetainedCounts { shown: number; total: number }
+interface BinResponse {
+  items: BinItem[];
+  retained: { limit: number; invoice: RetainedCounts; purchase_bill: RetainedCounts; return: RetainedCounts };
+}
+const RETAINED_TYPES: BinType[] = ["invoice", "purchase_bill", "return"];
+
 const TYPE_META: Record<BinType, { plural: string; pillCls: string }> = {
   invoice:       { plural: "Invoices",      pillCls: styles.typePillInvoice },
   customer:      { plural: "Customers",     pillCls: styles.typePillCustomer },
@@ -41,6 +51,22 @@ const TYPE_META: Record<BinType, { plural: string; pillCls: string }> = {
 };
 
 const TYPE_ORDER: BinType[] = ["invoice", "customer", "product", "brand", "category", "vendor", "purchase_bill", "return", "rate_list"];
+
+// A restore/permanent-delete only busts the bin page's own "/api/bin" cache — the entity's
+// own list page (e.g. Credit Notes) can still be holding a stale cached copy from an earlier
+// visit this session, so it must be busted here too or the restored/removed row won't show
+// up there until a full page refresh clears the in-memory cache.
+const TYPE_CACHE_PREFIXES: Record<BinType, string[]> = {
+  invoice:       ["/api/invoices", "/api/invoices/stats", "/api/reports"],
+  customer:      ["/api/customers", "/api/reports"],
+  product:       ["/api/products", "/api/products/stats", "/api/reports"],
+  brand:         ["/api/brands", "/api/reports"],
+  category:      ["/api/categories", "/api/reports"],
+  vendor:        ["/api/vendors"],
+  purchase_bill: ["/api/purchase-bills", "/api/purchase-bills/stats", "/api/reports", "/api/purchase-reports"],
+  return:        ["/api/credit-notes", "/api/credit-notes/stats", "/api/reports"],
+  rate_list:     ["/api/rate-lists"],
+};
 
 function DaysLeftPill({ daysLeft }: { daysLeft: number }) {
   // -1 = invoices/purchase bills/credit notes, exempt from auto-purge
@@ -68,13 +94,16 @@ const BIN_COLUMNS: Column[] = [
 ];
 
 function TypeSection({
-  type, items, index, onRestore, onDeleteForever,
+  type, items, index, onRestore, onDeleteForever, retainedCounts, loadingMore, onLoadMore,
 }: {
   type: BinType;
   items: BinItem[];
   index: number;
   onRestore: (item: BinItem) => void;
   onDeleteForever: (item: BinItem) => void;
+  retainedCounts?: RetainedCounts;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
 }) {
   const [open, setOpen] = useState(true);
   const m = TYPE_META[type];
@@ -159,6 +188,16 @@ function TypeSection({
               ))}
             </tbody>
           </table>
+          {retainedCounts && retainedCounts.shown < retainedCounts.total && (
+            <div className={styles.loadMoreRow}>
+              <span className={styles.mutedCell}>
+                Showing {retainedCounts.shown} of {retainedCounts.total} — this type is retained indefinitely for GST filing.
+              </span>
+              <Button variant="secondary" size="sm" loading={loadingMore} onClick={onLoadMore}>
+                Load more
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -167,9 +206,20 @@ function TypeSection({
 
 const EMPTY_BIN_PHRASE = "DELETE ALL";
 
+const RETAINED_LOAD_MORE_STEP = 200;
+
 export default function BinPage() {
-  const { data, loading, mutate } = useFetch<BinItem[]>("/api/bin");
-  const items = useMemo(() => data ?? [], [data]);
+  const [retainedLimit, setRetainedLimit] = useState(100);
+  const { data, loading, mutate } = useFetch<BinResponse>(`/api/bin?limit=${retainedLimit}`);
+  const items = useMemo(() => data?.items ?? [], [data]);
+  // Only the very first load (no data cached yet at any limit) should show the full-page
+  // skeleton — bumping the limit via "Load more" re-fetches a new URL but the previous data
+  // should stay visible with just the clicked button spinning, not flash back to a skeleton.
+  const isInitialLoad = loading && !data;
+  const loadingMore = loading && !!data;
+  function handleLoadMoreRetained() {
+    setRetainedLimit((l) => l + RETAINED_LOAD_MORE_STEP);
+  }
   const toast = useToast();
   const { data: session } = useSession();
   const router = useRouter();
@@ -206,6 +256,7 @@ export default function BinPage() {
           setConfirmState(null);
           if (res.ok) {
             mutate();
+            TYPE_CACHE_PREFIXES[item.type].forEach(bustCachePrefix);
             toast({ type: "success", title: "Restored", message: `"${item.name}" restored successfully.` });
           } else {
             toast({ type: "error", title: "Restore failed", message: d.error ?? "Could not restore item." });
@@ -243,6 +294,7 @@ export default function BinPage() {
           setConfirmState(null);
           if (res.ok) {
             mutate();
+            TYPE_CACHE_PREFIXES[item.type].forEach(bustCachePrefix);
             toast({ type: "success", title: "Permanently deleted", message: `"${item.name}" has been permanently deleted.` });
           } else {
             toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not permanently delete item." });
@@ -271,6 +323,7 @@ export default function BinPage() {
       setEmptyBinOpen(false);
       if (res.ok) {
         mutate();
+        Object.values(TYPE_CACHE_PREFIXES).flat().forEach(bustCachePrefix);
         toast({
           type: "success",
           title: "Bin emptied",
@@ -307,6 +360,15 @@ export default function BinPage() {
 
   const totalCount = items.length;
   const filteredCount = filteredItems.length;
+  // The true count across every retained type, not just what this page currently has loaded —
+  // invoice/purchase_bill/return can be capped by retainedLimit while more exist server-side.
+  // "Empty Bin" must warn with the real number it's about to permanently delete, not the
+  // possibly-smaller number this page happens to have fetched so far.
+  const trueTotalCount = data
+    ? items.length
+      - (data.retained.invoice.shown + data.retained.purchase_bill.shown + data.retained.return.shown)
+      + (data.retained.invoice.total + data.retained.purchase_bill.total + data.retained.return.total)
+    : totalCount;
 
   return (
     <>
@@ -326,7 +388,7 @@ export default function BinPage() {
       <ConfirmDialog
         open={emptyBinOpen}
         title="Empty Recycle Bin"
-        message={`Permanently delete all ${items.length} item(s) currently in the bin? This cannot be undone.`}
+        message={`Permanently delete all ${trueTotalCount} item(s) currently in the bin? This cannot be undone.`}
         confirmLabel="Empty Bin"
         variant="danger"
         loading={emptyBinLoading}
@@ -356,7 +418,7 @@ export default function BinPage() {
         <div>
           <h1 className="page-title">Recycle Bin</h1>
           <p className="page-sub">
-            {loading
+            {isInitialLoad
               ? "Loading…"
               : totalCount === 0
               ? "Bin is empty"
@@ -365,7 +427,7 @@ export default function BinPage() {
               : `${totalCount} item${totalCount !== 1 ? "s" : ""} — most types auto-purge after 30 days; invoices, purchase bills and credit notes are retained indefinitely`}
           </p>
         </div>
-        {isAdmin && !loading && totalCount > 0 && (
+        {isAdmin && !isInitialLoad && totalCount > 0 && (
           <Button variant="dangerOutline" size="sm" onClick={handleEmptyBin}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
             Empty Recycle Bin
@@ -373,7 +435,7 @@ export default function BinPage() {
         )}
       </div>
 
-      {!loading && totalCount > 0 && (
+      {!isInitialLoad && totalCount > 0 && (
         <div {...animateSection(0, `card ${styles.searchCard}`)}>
           <Input
             type="search"
@@ -386,7 +448,7 @@ export default function BinPage() {
         </div>
       )}
 
-      {loading ? (
+      {isInitialLoad ? (
         <div {...animateSection(0, "card")}>
           <div className="table-wrap">
             <table className="table-base">
@@ -417,6 +479,9 @@ export default function BinPage() {
             index={i + 1}
             onRestore={handleRestore}
             onDeleteForever={handleDeleteForever}
+            retainedCounts={RETAINED_TYPES.includes(type) ? data?.retained[type as "invoice" | "purchase_bill" | "return"] : undefined}
+            loadingMore={loadingMore}
+            onLoadMore={handleLoadMoreRetained}
           />
         ))
       )}

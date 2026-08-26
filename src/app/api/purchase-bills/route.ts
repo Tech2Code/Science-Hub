@@ -8,7 +8,7 @@ import { isPurchaseBillBlobUrl } from "@/lib/blobStorage";
 import { isFutureIstDate } from "@/lib/validation";
 import { computeRoundOff } from "@/lib/roundOff";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
-import { purchaseBillLineBreakdown } from "@/lib/purchaseBillForm";
+import { purchaseBillLineBreakdown, normalizeCategoryInput } from "@/lib/purchaseBillForm";
 import { getBusinessSettings } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
 import { computeNextNumber, numberFormatDbFilter, getIndianFinancialYear, formatFinancialYearLabel } from "@/lib/documentNumbering";
@@ -69,10 +69,19 @@ export async function POST(req: NextRequest) {
     const userId = auth.session.user.id;
 
     const body = await req.json();
-    const { vendorId, billDate, dueDate, discount, notes, category, items, payment, attachmentUrl, attachmentName, transportCharge, transportChargeGstRate } = body;
+    const { vendorId, billDate, dueDate, discount, notes, category, items, payment, attachmentUrl, attachmentName, transportCharge, transportChargeGstRate, idempotencyKey } = body;
 
     if (!vendorId) return NextResponse.json({ error: "Vendor is required." }, { status: 400 });
     if (!Array.isArray(items) || items.length === 0) return NextResponse.json({ error: "At least one item is required." }, { status: 400 });
+    if (idempotencyKey !== undefined && (typeof idempotencyKey !== "string" || idempotencyKey.length > 200)) {
+      return NextResponse.json({ error: "Invalid idempotency key" }, { status: 400 });
+    }
+    // A retried/duplicated create submission of the same client-generated key is a no-op —
+    // return the bill that submission already created rather than creating a second one.
+    if (idempotencyKey) {
+      const existing = await prisma.purchaseBill.findUnique({ where: { idempotencyKey }, include: BILL_INCLUDE });
+      if (existing) return NextResponse.json(existing, { status: 200 });
+    }
     if (attachmentUrl && !isPurchaseBillBlobUrl(attachmentUrl)) {
       return NextResponse.json({ error: "Invalid attachment URL" }, { status: 400 });
     }
@@ -238,10 +247,11 @@ export async function POST(req: NextRequest) {
             paidAmount,
             status,
             notes: notes || null,
-            category: category || null,
+            category: normalizeCategoryInput(category),
             attachmentUrl: attachmentUrl || null,
             attachmentName: attachmentName || null,
             createdByUserId: userId,
+            idempotencyKey: idempotencyKey || null,
             items: {
               create: computedItems.map((item) => ({
                 productId: item.productId || null,
@@ -294,6 +304,17 @@ export async function POST(req: NextRequest) {
       } catch (error) {
         const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
         if (isWriteConflict && attempt < maxAttempts) continue;
+        // Two near-simultaneous requests carrying the same idempotency key can both pass the
+        // pre-check above and race to insert — the loser hits the unique constraint here.
+        const isDuplicateKey = idempotencyKey
+          && error instanceof Prisma.PrismaClientKnownRequestError
+          && error.code === "P2002"
+          && Array.isArray((error.meta as { target?: unknown })?.target)
+          && (error.meta as { target: string[] }).target.includes("idempotencyKey");
+        if (isDuplicateKey) {
+          const existing = await prisma.purchaseBill.findUnique({ where: { idempotencyKey }, include: BILL_INCLUDE });
+          if (existing) return NextResponse.json(existing, { status: 200 });
+        }
         throw error;
       }
     }

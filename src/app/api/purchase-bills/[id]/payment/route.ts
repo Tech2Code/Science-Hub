@@ -15,14 +15,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const { id } = await params;
     const body = await req.json();
-    const { amount, method, reference, date, notes } = body;
+    const { amount: rawAmount, method, reference, date, notes, idempotencyKey } = body;
 
-    if (!amount || amount <= 0) return NextResponse.json({ error: "Payment amount must be greater than 0." }, { status: 400 });
+    const amountStr = (typeof rawAmount === "string" || typeof rawAmount === "number") ? String(rawAmount).trim() : "";
+    if (!/^\d+(\.\d+)?$/.test(amountStr) || parseFloat(amountStr) <= 0) {
+      return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
+    }
+    const amount = parseFloat(amountStr);
     if (typeof reference === "string" && reference.length > 500) {
       return NextResponse.json({ error: "Reference is too long (max 500 characters)." }, { status: 400 });
     }
     if (typeof notes === "string" && notes.length > 2000) {
       return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
+    }
+    if (idempotencyKey !== undefined && (typeof idempotencyKey !== "string" || idempotencyKey.length > 200)) {
+      return NextResponse.json({ error: "Invalid idempotency key" }, { status: 400 });
+    }
+
+    // A retried/duplicated submission of the same client-generated key is a no-op — return the
+    // already-recorded payment rather than creating a second one. The key is only globally
+    // unique in the DB, not scoped to this bill, so a match belonging to a DIFFERENT purchase
+    // bill must NOT be treated as "this payment already happened" — that would silently drop
+    // the real payment while reporting 200 success.
+    if (idempotencyKey) {
+      const existing = await prisma.purchasePayment.findUnique({ where: { idempotencyKey } });
+      if (existing && existing.purchaseBillId === id) {
+        return NextResponse.json(existing, { status: 200 });
+      } else if (existing) {
+        return NextResponse.json({ error: "This idempotency key was already used for a different payment." }, { status: 409 });
+      }
     }
 
     const billCheck = await prisma.purchaseBill.findFirst({ where: { id, deletedAt: null } });
@@ -65,6 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             reference: reference || null,
             date: paymentDate,
             notes: notes || null,
+            idempotencyKey: idempotencyKey || null,
           },
         });
 
@@ -81,7 +103,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { paidAmount: newPaid, status: newStatus },
         });
         return created;
-      }, { isolationLevel: "Serializable" });
+      }, { isolationLevel: "Serializable", timeout: 20000, maxWait: 10000 });
     }
 
     const maxAttempts = 5;
@@ -93,6 +115,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       } catch (error) {
         const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
         if (isWriteConflict && attempt < maxAttempts) continue;
+        // Two near-simultaneous requests carrying the same idempotency key can both pass the
+        // pre-check above and race to insert — the loser hits the unique constraint here.
+        const isDuplicateKey = idempotencyKey
+          && error instanceof Prisma.PrismaClientKnownRequestError
+          && error.code === "P2002"
+          && Array.isArray((error.meta as { target?: unknown })?.target)
+          && (error.meta as { target: string[] }).target.includes("idempotencyKey");
+        if (isDuplicateKey) {
+          const existing = await prisma.purchasePayment.findUnique({ where: { idempotencyKey } });
+          if (existing && existing.purchaseBillId === id) {
+            return NextResponse.json(existing, { status: 200 });
+          }
+          return NextResponse.json({ error: "This idempotency key was already used for a different payment." }, { status: 409 });
+        }
         throw error;
       }
     }

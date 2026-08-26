@@ -4,6 +4,14 @@ import { logActivity } from "@/lib/activity";
 import { requireAdmin } from "@/lib/apiAuth";
 import { parsePaginationParams, buildSearchWhere } from "@/lib/apiPagination";
 
+// Entries tied to GST-numbered documents (invoices/purchase bills/credit
+// notes) are exempt — those documents are themselves retained indefinitely
+// (see the Bin's own GST exemption), so their audit trail (who created/
+// edited/deleted/paid them) shouldn't silently disappear out from under
+// them while the document itself is still around, possibly for years.
+const PURGE_EXEMPT_ENTITY_TYPES = ["invoice", "purchase_bill", "return"];
+const ACTIVITY_LOG_RETENTION_DAYS = 30;
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireAdmin();
@@ -14,6 +22,31 @@ export async function GET(request: NextRequest) {
     const pagination = parsePaginationParams(searchParams);
     if (!pagination) return NextResponse.json({ error: "Invalid limit or offset" }, { status: 400 });
     const { limit, offset } = pagination;
+
+    // Lazy purge (mirrors the Bin's own 30-day auto-purge — runs opportunistically
+    // whenever this admin-only page is loaded, no cron/scheduler needed): silently
+    // drop activity log rows older than the retention window, except entries tied
+    // to a document type that's itself retained indefinitely. Restricted to the
+    // page's first load (offset 0) — this route is re-fetched on every page-turn and
+    // search keystroke, and a DELETE on every one of those requests would (a) add
+    // an unnecessary write to a read-heavy list endpoint, and (b) risk rows vanishing
+    // out from under an in-progress pagination session, shifting the skip window.
+    if (offset === 0) {
+      const cutoff = new Date(Date.now() - ACTIVITY_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+      await prisma.activityLog.deleteMany({
+        where: {
+          createdAt: { lt: cutoff },
+          // Explicit OR (rather than NOT: { entityType: { in: [...] } }) so rows with
+          // a null entityType (logins, settings changes, etc.) are still purged —
+          // SQL's NULL IN (...) is neither true nor false, which would otherwise
+          // silently exclude every non-entity-scoped log row from ever being purged.
+          OR: [
+            { entityType: null },
+            { entityType: { notIn: PURGE_EXEMPT_ENTITY_TYPES } },
+          ],
+        },
+      });
+    }
 
     const where = {
       ...(userId ? { userId } : {}),

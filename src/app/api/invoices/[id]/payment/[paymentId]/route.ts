@@ -21,7 +21,8 @@ export async function PUT(
     const body = await request.json();
     const { amount, method, reference, date } = body;
 
-    if (!amount || parseFloat(amount) <= 0) {
+    const amountStr = (typeof amount === "string" || typeof amount === "number") ? String(amount).trim() : "";
+    if (!/^\d+(\.\d+)?$/.test(amountStr) || parseFloat(amountStr) <= 0) {
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
     }
     if (typeof reference === "string" && reference.length > 500) {
@@ -68,16 +69,16 @@ export async function PUT(
           _sum: { amount: true },
         });
         const remaining = invoice.total - (otherPayments._sum.amount ?? 0);
-        if (parseFloat(amount) > remaining + 0.01) {
+        if (parseFloat(amountStr) > remaining + 0.01) {
           throw new PaymentExceedsBalanceError(
-            `Payment (₹${parseFloat(amount).toFixed(2)}) exceeds the remaining balance (₹${remaining.toFixed(2)})`
+            `Payment (₹${parseFloat(amountStr).toFixed(2)}) exceeds the remaining balance (₹${remaining.toFixed(2)})`
           );
         }
 
         await tx.payment.update({
           where: { id: paymentId },
           data: {
-            amount: parseFloat(amount),
+            amount: parseFloat(amountStr),
             method: method || payment.method,
             reference: reference || null,
             ...(paymentDate ? { date: paymentDate } : {}),
@@ -96,7 +97,7 @@ export async function PUT(
           data: { paidAmount, status },
           include: { payments: { orderBy: { date: "desc" } } },
         });
-      }, { isolationLevel: "Serializable" });
+      }, { isolationLevel: "Serializable", timeout: 20000, maxWait: 10000 });
     }
 
     const maxAttempts = 5;
@@ -119,7 +120,7 @@ export async function PUT(
     await logActivity(
       auth.session.user.id,
       "update_payment",
-      `Updated payment to ₹${fmt(parseFloat(amount))} via ${method} for invoice ${invoiceCheck.invoiceNumber} (${invoiceCheck.customer.name})`,
+      `Updated payment to ₹${fmt(parseFloat(amountStr))} via ${method} for invoice ${invoiceCheck.invoiceNumber} (${invoiceCheck.customer.name})`,
       id,
       "invoice"
     );

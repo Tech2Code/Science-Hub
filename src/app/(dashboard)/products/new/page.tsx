@@ -8,7 +8,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ProductFormFields } from "@/components/products/ProductFormFields";
 import { validateProductForm, hasProductFieldErrors, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
-import { bustCache, bustCachePrefix } from "@/lib/useCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
@@ -105,8 +105,7 @@ export default function NewProductPage() {
       const created = await res.json();
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/products");
-      bustCache("/api/reports?type=summary");
-      bustCache("/api/reports?type=stock");
+      bustCachePrefix("/api/reports");
       toast({ type: "success", title: "Product created", message: "New product added to catalog." });
       // Deliberately not resetting `saving` here — it must stay locked until
       // navigation actually replaces this page.

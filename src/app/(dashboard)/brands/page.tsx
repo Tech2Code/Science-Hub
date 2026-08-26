@@ -142,6 +142,8 @@ export default function BrandsPage() {
     if (r.ok) {
       setEditingId(null);
       await mutate();
+      // Product list/detail embed the brand's name, so a rename leaves them stale until this bust.
+      bustCachePrefix("/api/products");
       toast({ type: "success", title: "Brand renamed", message: `Renamed to "${name}".` });
     } else if (r.status === 409) {
       bustCachePrefix("/api/brands");

@@ -9,6 +9,7 @@ export async function GET() {
   if (!auth.ok) return auth.response;
 
   try {
+    // Same hard safety cap as GET /api/admin/users, for the same reason.
     const users = await prisma.user.findMany({
       where: { role: { not: "admin" } },
       select: {
@@ -19,6 +20,7 @@ export async function GET() {
         sectionPermissions: { select: { section: true, enabled: true } },
       },
       orderBy: { name: "asc" },
+      take: 500,
     });
 
     return NextResponse.json(users);

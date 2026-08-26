@@ -42,14 +42,30 @@ export async function POST(
 
     const { id } = await params;
     const body = await request.json();
-    const { items, notes, date } = body as {
+    const { items, notes, date, idempotencyKey } = body as {
       items: { productId: string; name: string; quantity: number; price: number }[];
       notes?: string;
       date?: string;
+      idempotencyKey?: string;
     };
 
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "At least one item is required" }, { status: 400 });
+    }
+    if (idempotencyKey !== undefined && (typeof idempotencyKey !== "string" || idempotencyKey.length > 200)) {
+      return NextResponse.json({ error: "Invalid idempotency key" }, { status: 400 });
+    }
+    // A retried/duplicated create submission of the same client-generated key is a no-op —
+    // return the credit note that submission already created rather than creating a second one.
+    // The key is only globally unique in the DB, not scoped to this invoice, so a match
+    // belonging to a DIFFERENT invoice must not be treated as a replay of THIS submission.
+    if (idempotencyKey) {
+      const existingReturn = await prisma.return.findUnique({ where: { idempotencyKey }, include: { items: true } });
+      if (existingReturn && existingReturn.invoiceId === id) {
+        return NextResponse.json(existingReturn, { status: 200 });
+      } else if (existingReturn) {
+        return NextResponse.json({ error: "This idempotency key was already used for a different credit note." }, { status: 409 });
+      }
     }
     if (typeof notes === "string" && notes.length > 2000) {
       return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
@@ -175,6 +191,7 @@ export async function POST(
             date: returnDate,
             notes: notes || null,
             subtotal, cgst, sgst, igst, roundOff, total: creditNoteTotal,
+            idempotencyKey: idempotencyKey || null,
             items: {
               create: computedItems.map((item) => ({
                 productId: item.productId || null,
@@ -210,6 +227,20 @@ export async function POST(
       } catch (error) {
         const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
         if (isWriteConflict && attempt < maxAttempts) continue;
+        // Two near-simultaneous requests carrying the same idempotency key can both pass the
+        // pre-check above and race to insert — the loser hits the unique constraint here.
+        const isDuplicateKey = idempotencyKey
+          && error instanceof Prisma.PrismaClientKnownRequestError
+          && error.code === "P2002"
+          && Array.isArray((error.meta as { target?: unknown })?.target)
+          && (error.meta as { target: string[] }).target.includes("idempotencyKey");
+        if (isDuplicateKey) {
+          const racing = await prisma.return.findUnique({ where: { idempotencyKey }, include: { items: true } });
+          if (racing && racing.invoiceId === id) {
+            return NextResponse.json(racing, { status: 200 });
+          }
+          return NextResponse.json({ error: "This idempotency key was already used for a different credit note." }, { status: 409 });
+        }
         throw error;
       }
     }

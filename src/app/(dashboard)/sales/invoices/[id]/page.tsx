@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { rules, validate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Modal } from "@/components/dialogs/Modal";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
@@ -21,6 +22,7 @@ import { amountInWordsINR } from "@/lib/numberToWords";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import styles from "./invoiceDetail.module.css";
 
 interface InvoiceItem {
@@ -194,6 +196,8 @@ function InvoiceSkeleton() {
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const canWrite = useCanWrite();
+  const paymentIdempotency = useIdempotencyKey();
+  const returnIdempotency = useIdempotencyKey();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const { data: settings, loading: settingsLoading } = useFetch<BusinessSettings>("/api/settings");
   const [loading, setLoading] = useState(true);
@@ -205,9 +209,16 @@ export default function InvoiceDetailPage() {
   const [addingPayment, setAddingPayment] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
-  const [shareLoadingText, setShareLoadingText] = useState("Preparing PDF…");
   const [shareDropStyle, setShareDropStyle] = useState<React.CSSProperties>({});
   const shareContainerRef = useRef<HTMLDivElement>(null);
+
+  // Customer's own email pre-fills the field so it can be selected directly
+  // instead of retyped, but stays editable/extendable — an invoice may need
+  // to go to more than one recipient, so the field accepts a comma-separated list.
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailToError, setEmailToError] = useState<string | undefined>(undefined);
+  const [sendingEmail, setSendingEmail] = useState(false);
   const [showPaymentInPdf, setShowPaymentInPdf] = useState(false);
   const [showReturnInPdf, setShowReturnInPdf] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -298,15 +309,19 @@ export default function InvoiceDetailPage() {
     const res = await fetch(`/api/invoices/${id}/payment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: amt, method: paymentForm.method, reference: paymentForm.reference, date: paymentForm.date }),
+      body: JSON.stringify({ amount: amt, method: paymentForm.method, reference: paymentForm.reference, date: paymentForm.date, idempotencyKey: paymentIdempotency.key() }),
     });
     setAddingPayment(false);
     if (res.ok) {
+      paymentIdempotency.renew(); // this dialog can be reopened for another payment — a fresh key must back the next submit
       setShowPaymentForm(false);
       setPaymentForm({ amount: "", method: "Cash", reference: "", date: new Date().toISOString().slice(0, 10) });
       setPaymentAmountError(undefined);
       setPaymentDateError(undefined);
       bustCache(`/api/invoices/${id}`);
+      bustCachePrefix("/api/invoices");
+      bustCachePrefix("/api/payments");
+      bustCachePrefix("/api/reports");
       load(true);
       toast({ type: "success", title: "Payment recorded", message: `₹${parseFloat(paymentForm.amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via ${paymentForm.method}` });
     } else {
@@ -366,15 +381,19 @@ export default function InvoiceDetailPage() {
           items: selected.map(ri => ({ productId: ri.productId, name: ri.name, quantity: ri.qty, price: ri.price })),
           notes: returnNotes || undefined,
           date: returnDate || undefined,
+          idempotencyKey: returnIdempotency.key(),
         }),
       });
       if (res.ok) {
+        returnIdempotency.renew(); // this form can be reopened for another return — a fresh key must back the next submit
         const created = await res.json();
         setReturns(prev => [created, ...prev]);
         setShowReturnForm(false);
         bustCache(`/api/invoices/${id}`);
+        bustCachePrefix("/api/invoices");
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/credit-notes");
+        bustCachePrefix("/api/reports");
         toast({ type: "success", title: "Return recorded", message: `${selected.length} item(s) returned.` });
       } else {
         const d = await res.json().catch(() => ({}));
@@ -395,8 +414,10 @@ export default function InvoiceDetailPage() {
         setReturns(prev => prev.filter(r => r.id !== returnDeleteConfirm.id));
         invalidateCachedPdf("return", returnDeleteConfirm.id);
         bustCache(`/api/invoices/${id}`);
+        bustCachePrefix("/api/invoices");
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/credit-notes");
+        bustCachePrefix("/api/reports");
         toast({ type: "success", title: "Deleted", message: "Credit note moved to bin." });
       } else {
         const d = await res.json().catch(() => ({}));
@@ -608,15 +629,20 @@ export default function InvoiceDetailPage() {
     iframe.src = url;
   }
 
-  async function handleShare(channel: "native" | "whatsapp" | "email" | "copy") {
+  async function handleShare(channel: "native" | "whatsapp" | "email") {
     setShareOpen(false);
     if (!invoice) return;
     const num = invoice.invoiceNumber;
-    const customer = invoice.customer.name;
 
-    // Generate PDF for all channels — shared copies are always the Original
-    // (the Duplicate is for the seller's own records, not for the customer).
-    setShareLoadingText("Preparing PDF…");
+    if (channel === "email") {
+      setEmailTo(invoice.customer.email ?? "");
+      setEmailToError(undefined);
+      setEmailModalOpen(true);
+      return;
+    }
+
+    // Generate PDF for the remaining channels — shared copies are always the
+    // Original (the Duplicate is for the seller's own records).
     setShareLoading(true);
     await document.fonts.ready;
     const blob = await generatePdfBlob(["ORIGINAL COPY"]);
@@ -625,7 +651,6 @@ export default function InvoiceDetailPage() {
 
     const file = new File([blob], `${num}.pdf`, { type: "application/pdf" });
 
-    // Helper to trigger a PDF download.
     const downloadPdf = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -659,39 +684,54 @@ export default function InvoiceDetailPage() {
       }
       return;
     }
+  }
 
-    if (channel === "email") {
-      const toEmail = invoice.customer.email;
-      if (!toEmail) {
-        toast({ type: "error", title: "No email on file", message: "This customer has no email address. Add one on the customer profile." });
+  // Splits the comma-separated recipient field into individual addresses so
+  // an invoice can be sent to more than one email in a single send,
+  // mirroring how the server itself validates and forwards the list to
+  // nodemailer's `to`.
+  function parseEmailList(raw: string): string[] {
+    return raw.split(",").map(e => e.trim()).filter(Boolean);
+  }
+
+  async function handleSendEmail(e: React.FormEvent) {
+    e.preventDefault();
+    if (!invoice) return;
+    const emails = parseEmailList(emailTo);
+    if (emails.length === 0) { setEmailToError("Enter at least one email address."); return; }
+    if (emails.length > 10) { setEmailToError("You can send to at most 10 recipients at once."); return; }
+    for (const addr of emails) {
+      const err = validate(addr, rules.email());
+      if (err) { setEmailToError(`"${addr}" is not a valid email address.`); return; }
+    }
+    setEmailToError(undefined);
+    setSendingEmail(true);
+    try {
+      await document.fonts.ready;
+      const blob = await generatePdfBlob(["ORIGINAL COPY"]);
+      if (!blob) {
+        toast({ type: "error", title: "Failed", message: "Could not generate PDF." });
+        setSendingEmail(false);
         return;
       }
-      setShareLoadingText("Sending email…");
-      setShareLoading(true);
-      try {
-        const formData = new FormData();
-        formData.append("pdf", blob, `${num}.pdf`);
-        formData.append("to", toEmail);
-        formData.append("invoiceNumber", num);
-        formData.append("customerName", customer);
-        formData.append("total", fmt(invoice.total));
-        const res = await fetch("/api/send-invoice", { method: "POST", body: formData });
-        if (res.ok) {
-          toast({ type: "success", title: "Email sent", message: `Invoice ${num} sent to ${toEmail}` });
-        } else {
-          const d = await res.json().catch(() => ({}));
-          toast({ type: "error", title: "Email failed", message: d.error ?? "Could not send email." });
-        }
-      } catch {
-        toast({ type: "error", title: "Email failed", message: "Network error. Could not send email." });
+      const formData = new FormData();
+      formData.append("pdf", blob, `${invoice.invoiceNumber}.pdf`);
+      formData.append("to", emails.join(","));
+      formData.append("invoiceNumber", invoice.invoiceNumber);
+      formData.append("customerName", invoice.customer.name);
+      formData.append("total", fmt(invoice.total));
+      const res = await fetch("/api/send-invoice", { method: "POST", body: formData });
+      if (res.ok) {
+        toast({ type: "success", title: "Email sent", message: `Invoice ${invoice.invoiceNumber} sent to ${emails.join(", ")}` });
+        setEmailModalOpen(false);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast({ type: "error", title: "Email failed", message: d.error ?? "Could not send email." });
       }
-      setShareLoading(false);
-      return;
+    } catch {
+      toast({ type: "error", title: "Email failed", message: "Network error. Could not send email." });
     }
-
-    if (channel === "copy") {
-      downloadPdf();
-    }
+    setSendingEmail(false);
   }
 
   async function handleDelete() {
@@ -699,8 +739,18 @@ export default function InvoiceDetailPage() {
     try {
       const res = await fetch(`/api/invoices/${id}`, { method: "DELETE" });
       if (res.ok) {
+        bustCachePrefix("/api/invoices");
+        bustCachePrefix("/api/products");
+        bustCachePrefix("/api/reports");
+        // Payments Received filters out payments whose invoice is deleted (buildPaymentWhere),
+        // so a deleted invoice's payment rows disappear from that list too.
+        bustCachePrefix("/api/payments");
         toast({ type: "success", title: "Deleted", message: "Invoice moved to bin." });
         router.push("/sales/invoices");
+        // Deliberately no setDeleting(false)/setDeleteConfirm(false) here — this page is about to
+        // unmount from the navigation above; resetting them first would briefly re-enable the
+        // Delete button/dialog while the push is still in flight, allowing a duplicate delete click.
+        return;
       } else {
         const d = await res.json().catch(() => ({}));
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete invoice." });
@@ -752,6 +802,32 @@ export default function InvoiceDetailPage() {
         onConfirm={handleDownloadConfirm}
         onCancel={() => { if (!pdfDownloading) setPdfCopyDialogOpen(false); }}
       />
+      <Modal
+        open={emailModalOpen}
+        title="Email Invoice"
+        onClose={() => { if (!sendingEmail) setEmailModalOpen(false); }}
+        variant="fullscreen"
+        footer={
+          <>
+            <Button type="button" variant="secondary" disabled={sendingEmail} onClick={() => setEmailModalOpen(false)}>Cancel</Button>
+            <Button type="submit" form="invoice-email-form" variant="primary" loading={sendingEmail} disabled={sendingEmail}>Send</Button>
+          </>
+        }
+      >
+        <form id="invoice-email-form" onSubmit={handleSendEmail} noValidate>
+          <FormField label="Recipient Email(s)" required error={emailToError} hint="Separate multiple addresses with commas.">
+            <Input
+              type="text"
+              value={emailTo}
+              onChange={(e) => { setEmailTo(e.target.value); setEmailToError(undefined); }}
+              placeholder="customer@example.com, accounts@example.com"
+              maxLength={1000}
+              autoFocus
+              disabled={sendingEmail}
+            />
+          </FormField>
+        </form>
+      </Modal>
       {pdfPreviewUrl && invoice && (
         <PdfPreviewModal
           url={pdfPreviewUrl}
@@ -761,7 +837,8 @@ export default function InvoiceDetailPage() {
           onClose={() => { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }}
         />
       )}
-      {shareLoading && <OverlayLoader text={shareLoadingText} />}
+      {shareLoading && <OverlayLoader text="Preparing PDF…" />}
+      {sendingEmail && <OverlayLoader text="Sending email…" />}
       {pdfPrinting && <OverlayLoader text="Preparing PDF…" />}
       {pdfViewing && <OverlayLoader text="Preparing PDF…" />}
       {pdfRegenerating && <OverlayLoader text="Regenerating PDF…" />}
@@ -905,7 +982,7 @@ export default function InvoiceDetailPage() {
                     ] as const).filter(Boolean).map((opt) => (
                       <button
                         key={opt!.key}
-                        onClick={() => handleShare(opt!.key as "native" | "whatsapp" | "email" | "copy")}
+                        onClick={() => handleShare(opt!.key as "native" | "whatsapp" | "email")}
                         className={styles.shareMenuItem}
                       >
                         <span className={styles.shareMenuItemIcon} style={{ color: opt!.color }}>{opt!.icon}</span>
@@ -1352,8 +1429,8 @@ export default function InvoiceDetailPage() {
                   return (
                     <tr id="invoice-col-header" style={{ background: "var(--inv-bg3)", fontWeight: 700, fontSize: 8, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--inv-tx2)" }}>
                       {[
-                        ["#", "center", "3%"], ["Description", "left", "12%"], ["HSN/SAC", "center", "8%"],
-                        ["Qty", "center", "5%"], ["Unit", "center", "5%"],
+                        ["#", "center", "3%"], ["Description", "left", "7%"], ["HSN/SAC", "center", "8%"],
+                        ["Qty", "center", "5%"], ["Unit", "center", "10%"],
                       ].map(([label, align, width]) => (
                         <td key={label} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align as "left" | "right" | "center", width, whiteSpace: "nowrap", verticalAlign: "middle" }}>{label}</td>
                       ))}
@@ -1429,7 +1506,7 @@ export default function InvoiceDetailPage() {
                           {item.hsn || "—"}
                         </div>
                       </td>
-                      {c(item.quantity)}{c(item.unit)}
+                      {c(item.quantity, "center", false, undefined, true)}{c(item.unit, "center", false, undefined, true)}
                       {c(fmt(item.price), "right", false, undefined, true)}
                       {c(fmt(grossValue), "right", false, undefined, true)}
                       {c(`${(item.discountPercent ?? 0).toFixed(2)}%`, "center", false, undefined, true)}

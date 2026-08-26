@@ -112,16 +112,18 @@ export default function EditProductPage() {
         expectedUpdatedAt: loadedUpdatedAt,
       }),
     });
-    setSaving(false);
     if (res.ok) {
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/products");
-      bustCache("/api/reports?type=summary");
-      bustCache("/api/reports?type=stock");
+      bustCachePrefix("/api/reports");
       toast({ type: "success", title: "Product updated", message: "Changes saved." });
       router.push(`/products/${id}`);
+      // No setSaving(false) here — page is navigating away; resetting it first would briefly
+      // re-enable Save mid-transition and allow a duplicate update submission.
+      return;
     }
-    else if (res.status === 409) {
+    setSaving(false);
+    if (res.status === 409) {
       const d = await res.json().catch(() => ({}));
       bustCache(`/api/products/${id}`);
       toast({ type: "error", title: "Update conflict", message: d?.error ?? "This product was changed by someone else. Please reload and try again." });

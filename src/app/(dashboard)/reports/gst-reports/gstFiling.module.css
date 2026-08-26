@@ -49,6 +49,10 @@
   color: var(--c-text-3);
 }
 
+.fySelectWrap {
+  min-width: 9.5rem;
+}
+
 .errorText {
   margin-top: 0.25rem;
   color: var(--c-red);

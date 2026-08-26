@@ -182,6 +182,7 @@ export default function GstFilingPage() {
                 aria-label="Financial year" value={fyStart}
                 onChange={(e) => { setFyStart(Number(e.target.value)); setReport(null); }}
                 sz="sm"
+                wrapClassName={styles.fySelectWrap}
               >
                 {fyOptions.map((y) => <option key={y} value={y}>{`FY ${y}-${String(y + 1).slice(2)}`}</option>)}
               </Select>

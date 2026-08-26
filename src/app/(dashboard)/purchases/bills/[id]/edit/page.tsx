@@ -361,9 +361,14 @@ export default function EditPurchaseBillPage() {
         bustCachePrefix("/api/purchase-bills");
         bustCache(`/api/purchase-bills/${id}`);
         bustCachePrefix("/api/products");
+        bustCachePrefix("/api/reports");
+        bustCachePrefix("/api/purchase-reports");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Bill updated", message: "Changes saved successfully." });
         router.push(`/purchases/bills/${id}`);
+        // No setSaving(false) here — page is navigating away; resetting it first would briefly
+        // re-enable Save mid-transition and allow a duplicate update submission.
+        return;
       } else if (res.status === 409) {
         bustCache(`/api/purchase-bills/${id}`);
         toast({ type: "error", title: "Update conflict", message: data.error ?? "This bill was changed by someone else. Please reload and try again." });
