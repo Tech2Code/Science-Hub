@@ -83,6 +83,7 @@ export default function GstFilingPage() {
   const [report, setReport] = useState<GstFilingReport | null>(null);
   const [generating, setGenerating] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingCsv, setDownloadingCsv] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const period = mode === "month" ? { startDate: fromDate, endDate: toDate } : periodFromFy(fyStart);
@@ -131,6 +132,29 @@ export default function GstFilingPage() {
       setError("Failed to download the GST filing package.");
     } finally {
       setDownloading(false);
+    }
+  }
+
+  async function handleDownloadCsv() {
+    setDownloadingCsv(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/gst-filing?startDate=${period.startDate}&endDate=${period.endDate}&format=gstr1csv`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Failed to download the GSTR-1 CSV bundle.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `GSTR1-CSV-${period.startDate}_to_${period.endDate}.zip`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Failed to download the GSTR-1 CSV bundle.");
+    } finally {
+      setDownloadingCsv(false);
     }
   }
 
@@ -274,13 +298,19 @@ export default function GstFilingPage() {
                     ? "Download Excel"
                     : "Download ZIP"}
               </Button>
+              <Button variant="secondary" onClick={handleDownloadCsv} disabled={downloadingCsv || isReportEmpty}>
+                {downloadingCsv ? "Preparing…" : "Download for GST Portal (Offline Tool CSVs)"}
+              </Button>
               {isReportEmpty && <p className={styles.errorText}>No sales, purchases, or credit notes in this period — nothing to download.</p>}
             </div>
+            <p className={styles.downloadHint}>
+              The CSV bundle imports directly into the GST Returns Offline Tool (download from gst.gov.in) for B2B, B2CS, Credit Notes &amp; HSN Summary — see the README inside the zip.
+            </p>
           </div>
         </>
         );
       })()}
-      {(generating || downloading) && (
+      {(generating || downloading || downloadingCsv) && (
         <OverlayLoader text={generating ? "Generating GST package…" : "Preparing download…"} />
       )}
     </div>

@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/apiAuth";
 import { buildGstFilingReport } from "@/lib/gstFiling";
 import { buildGstFilingZip } from "@/lib/gstFilingZip";
 import { buildGstFilingWorkbook } from "@/lib/gstFilingWorkbook";
+import { buildGstr1CsvZip } from "@/lib/gstr1CsvZip";
 
 // Sales+Purchase data merge here despite sitting behind separate permissions — an all-or-nothing
 // gate avoids handing a partial, misleading filing package to a user with only one half.
@@ -33,7 +34,10 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
     const formatParam = searchParams.get("format");
-    const format = formatParam === "zip" ? "zip" : formatParam === "xlsx" ? "xlsx" : "json";
+    const format =
+      formatParam === "zip" ? "zip" :
+      formatParam === "xlsx" ? "xlsx" :
+      formatParam === "gstr1csv" ? "gstr1csv" : "json";
 
     if (!startDate || !endDate) {
       return NextResponse.json({ error: "startDate and endDate are required" }, { status: 400 });
@@ -57,6 +61,16 @@ export async function GET(request: NextRequest) {
         headers: {
           "Content-Type": "application/zip",
           "Content-Disposition": `attachment; filename="GST-Filing-${fileLabel}.zip"`,
+        },
+      });
+    }
+
+    if (format === "gstr1csv") {
+      const zipBuffer = await buildGstr1CsvZip(report);
+      return new NextResponse(new Uint8Array(zipBuffer), {
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition": `attachment; filename="GSTR1-CSV-${fileLabel}.zip"`,
         },
       });
     }

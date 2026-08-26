@@ -8,8 +8,17 @@ import {
 
 export interface SalesRegisterRow {
   invoiceNumber: string; date: Date; customerName: string; customerGstin: string;
-  placeOfSupply: string; supplyType: "Inter-State" | "Intra-State"; isB2B: boolean;
+  placeOfSupply: string; supplyType: "Inter-State" | "Intra-State"; isB2B: boolean; reverseCharge: boolean;
   taxableValue: number; cgst: number; sgst: number; igst: number; total: number;
+}
+
+// One row per (invoice, GST rate) — GSTR-1's B2B/B2CS sections require tax-rate-wise
+// splitting when a single invoice mixes items at different rates; SalesRegisterRow's
+// invoice-level totals can't express that, so this is built alongside it from the same items.
+export interface SalesRateRow {
+  invoiceNumber: string; date: Date; customerName: string; customerGstin: string;
+  placeOfSupply: string; supplyType: "Inter-State" | "Intra-State"; isB2B: boolean; reverseCharge: boolean;
+  gstRate: number; taxableValue: number; cgst: number; sgst: number; igst: number; total: number;
 }
 
 export interface CreditNoteRow {
@@ -32,11 +41,14 @@ export interface GstFilingReport {
   period: { startDate: string; endDate: string; label: string };
   company: { name: string; gstin: string; pan: string; state: string; address: string; gstinValid: boolean };
   salesRegister: SalesRegisterRow[];
+  salesRegisterByRate: SalesRateRow[];
   b2bSales: SalesRegisterRow[];
   b2cSales: SalesRegisterRow[];
   creditNotes: CreditNoteRow[];
   purchaseRegister: PurchaseRegisterRow[];
   hsnSummary: HsnSummaryRow[];
+  hsnSummaryB2B: HsnSummaryRow[];
+  hsnSummaryB2C: HsnSummaryRow[];
   summary: {
     outputTaxable: number; outputCgst: number; outputSgst: number; outputIgst: number; outputTax: number;
     creditNoteTaxable: number; creditNoteTax: number;
@@ -93,7 +105,10 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
 
   // ── Sales register + HSN summary ─────────────────────────────────────
   const salesRegister: SalesRegisterRow[] = [];
+  const salesRateMap = new Map<string, SalesRateRow>();
   const hsnMap = new Map<string, HsnSummaryRow>();
+  const hsnMapB2B = new Map<string, HsnSummaryRow>();
+  const hsnMapB2C = new Map<string, HsnSummaryRow>();
   const seenInvoiceNumbers = new Map<string, number>();
 
   for (const inv of invoices) {
@@ -147,12 +162,42 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
           taxableValue: taxable, cgst: cgstShare, sgst: sgstShare, igst: igstShare, total: it.total,
         });
       }
+
+      const splitMap = isB2B ? hsnMapB2B : hsnMapB2C;
+      const splitExisting = splitMap.get(key);
+      if (splitExisting) {
+        splitExisting.totalQuantity += it.quantity;
+        splitExisting.taxableValue += taxable;
+        splitExisting.cgst += cgstShare; splitExisting.sgst += sgstShare; splitExisting.igst += igstShare;
+        splitExisting.total += it.total;
+        if (splitExisting.unit !== it.unit) splitExisting.unit = "Mixed";
+      } else {
+        splitMap.set(key, {
+          hsn: it.hsn.trim() || "—", gstRate: it.gstRate, unit: it.unit, totalQuantity: it.quantity,
+          taxableValue: taxable, cgst: cgstShare, sgst: sgstShare, igst: igstShare, total: it.total,
+        });
+      }
+
+      const rateKey = `${inv.invoiceNumber}|${it.gstRate}`;
+      const rateExisting = salesRateMap.get(rateKey);
+      if (rateExisting) {
+        rateExisting.taxableValue += taxable;
+        rateExisting.cgst += cgstShare; rateExisting.sgst += sgstShare; rateExisting.igst += igstShare;
+        rateExisting.total += it.total;
+      } else {
+        salesRateMap.set(rateKey, {
+          invoiceNumber: inv.invoiceNumber, date: inv.date, customerName: inv.customer.name, customerGstin,
+          placeOfSupply: inv.placeOfSupply ?? inv.customer.state ?? "",
+          supplyType: inv.isInterState ? "Inter-State" : "Intra-State", isB2B, reverseCharge: inv.reverseCharge,
+          gstRate: it.gstRate, taxableValue: taxable, cgst: cgstShare, sgst: sgstShare, igst: igstShare, total: it.total,
+        });
+      }
     }
 
     salesRegister.push({
       invoiceNumber: inv.invoiceNumber, date: inv.date, customerName: inv.customer.name,
       customerGstin, placeOfSupply: inv.placeOfSupply ?? inv.customer.state ?? "",
-      supplyType: inv.isInterState ? "Inter-State" : "Intra-State", isB2B,
+      supplyType: inv.isInterState ? "Inter-State" : "Intra-State", isB2B, reverseCharge: inv.reverseCharge,
       taxableValue: inv.subtotal, cgst: inv.cgst, sgst: inv.sgst, igst: inv.igst, total: inv.total,
     });
   }
@@ -164,6 +209,9 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
   const b2bSales = salesRegister.filter((r) => r.isB2B);
   const b2cSales = salesRegister.filter((r) => !r.isB2B);
   const hsnSummary = Array.from(hsnMap.values()).sort((a, b) => a.hsn.localeCompare(b.hsn));
+  const hsnSummaryB2B = Array.from(hsnMapB2B.values()).sort((a, b) => a.hsn.localeCompare(b.hsn));
+  const hsnSummaryB2C = Array.from(hsnMapB2C.values()).sort((a, b) => a.hsn.localeCompare(b.hsn));
+  const salesRegisterByRate = Array.from(salesRateMap.values());
 
   // ── Credit notes (sales returns) ─────────────────────────────────────
   // Each line's GST was already computed/stored at credit-note creation time — no re-derivation needed.
@@ -218,7 +266,8 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
   return {
     period: { startDate, endDate, label: `${formatDate(startDate)} – ${formatDate(endDate)}` },
     company,
-    salesRegister, b2bSales, b2cSales, creditNotes, purchaseRegister, hsnSummary,
+    salesRegister, salesRegisterByRate, b2bSales, b2cSales, creditNotes, purchaseRegister,
+    hsnSummary, hsnSummaryB2B, hsnSummaryB2C,
     summary: {
       outputTaxable, outputCgst, outputSgst, outputIgst, outputTax,
       creditNoteTaxable, creditNoteTax, netOutputTax,
