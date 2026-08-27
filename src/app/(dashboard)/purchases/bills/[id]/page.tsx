@@ -138,7 +138,11 @@ export default function PurchaseBillDetailPage() {
   function load() {
     setLoading(true);
     fetch(`/api/purchase-bills/${id}`)
-      .then(r => r.json())
+      // A non-2xx response (e.g. a deleted/invalid bill id) still parses as valid JSON — without
+      // this check, the {error: "..."} body would silently be treated as the bill itself, pass
+      // the `if (error || !bill)` guard below (bill would be truthy), and crash the render on
+      // the many unguarded bill.vendor.* accesses.
+      .then(r => { if (!r.ok) throw new Error("Bill not found."); return r.json(); })
       .then(d => { setBill(d); setLoading(false); })
       .catch(() => { setError("Failed to load purchase bill."); setLoading(false); });
   }

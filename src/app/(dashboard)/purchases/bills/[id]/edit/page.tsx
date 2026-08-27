@@ -171,7 +171,10 @@ export default function EditPurchaseBillPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/purchase-bills/${id}`, { headers: { "x-no-loader": "1" } }).then(r => r.json()),
+      // A non-2xx response (e.g. a deleted/invalid bill id) still parses as valid JSON — without
+      // the r.ok check, the {error: "..."} body would silently be treated as the bill itself and
+      // crash the render below on bill.vendor.name.
+      fetch(`/api/purchase-bills/${id}`, { headers: { "x-no-loader": "1" } }).then(r => { if (!r.ok) throw new Error("Failed to load bill."); return r.json(); }),
       fetch("/api/vendors?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
       fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
     ]).then(([b, v, p]: [PurchaseBill, { data: PurchaseBillVendor[] }, { data: PurchaseBillProduct[] }]) => {
@@ -447,7 +450,7 @@ export default function EditPurchaseBillPage() {
       <div className={styles.header}>
         <div>
           <h1 className="page-title">Edit Bill — {bill?.billNumber}</h1>
-          <p className="page-sub">{bill?.vendor.name}{bill?.vendor.company ? ` · ${bill.vendor.company}` : ""}</p>
+          <p className="page-sub">{bill?.vendor?.name}{bill?.vendor?.company ? ` · ${bill.vendor.company}` : ""}</p>
         </div>
         {bill && <StatusBadge status={bill.status} />}
       </div>

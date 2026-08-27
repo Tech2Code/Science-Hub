@@ -60,7 +60,10 @@ export default function EditVendorPage() {
 
   useEffect(() => {
     fetch(`/api/vendors/${id}`, { headers: { "x-no-loader": "1" } })
-      .then(r => r.json())
+      // A non-2xx response still parses as JSON — without this check an invalid/deleted vendor
+      // id would silently render a blank form (every field defaults via `?? ""` below) instead
+      // of the loading/error state a user would expect.
+      .then(r => { if (!r.ok) throw new Error("Vendor not found."); return r.json(); })
       .then(d => {
         const loaded: VendorFormData = {
           name: d.name ?? "", company: d.company ?? "", gstin: d.gstin ?? "",
