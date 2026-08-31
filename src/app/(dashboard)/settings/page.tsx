@@ -895,7 +895,7 @@ export default function SettingsPage() {
                   hint={addressPincodeLookup.status.status === "loading" ? "Looking up city/state…" : addressPincodeLookup.status.label}
                   hintSuccess={addressPincodeLookup.status.status === "found"}
                 >
-                  <Input value={addressForm.pincode} onChange={handleAddressPincodeChange} placeholder="e.g. 110039" maxLength={6} />
+                  <Input inputMode="numeric" value={addressForm.pincode} onChange={handleAddressPincodeChange} placeholder="e.g. 110039" maxLength={6} />
                 </FormField>
                 <FormField label="City" required error={addressErrors.city}>
                   <Input value={addressForm.city} onChange={(e) => { setAddressForm((f) => ({ ...f, city: e.target.value })); setAddressErrors((er) => ({ ...er, city: undefined })); }} placeholder="e.g. Delhi" maxLength={100} />
@@ -946,7 +946,7 @@ export default function SettingsPage() {
                   <Input value={bankForm.bankAccountName} onChange={(e) => { setBankForm((f) => ({ ...f, bankAccountName: e.target.value })); setBankErrors((p) => ({ ...p, bankAccountName: undefined })); }} placeholder="e.g. Science Hub" maxLength={200} />
                 </FormField>
                 <FormField label="Account Number" required error={bankErrors.bankAccountNumber}>
-                  <Input value={bankForm.bankAccountNumber} onChange={(e) => { setBankForm((f) => ({ ...f, bankAccountNumber: e.target.value.replace(/\D/g, "").slice(0, 18) })); setBankErrors((p) => ({ ...p, bankAccountNumber: undefined })); }} placeholder="e.g. 123456789012" className={styles.gstinInput} maxLength={18} />
+                  <Input inputMode="numeric" value={bankForm.bankAccountNumber} onChange={(e) => { setBankForm((f) => ({ ...f, bankAccountNumber: e.target.value.replace(/\D/g, "").slice(0, 18) })); setBankErrors((p) => ({ ...p, bankAccountNumber: undefined })); }} placeholder="e.g. 123456789012" className={styles.gstinInput} maxLength={18} />
                 </FormField>
                 <FormField
                   label="IFSC Code"

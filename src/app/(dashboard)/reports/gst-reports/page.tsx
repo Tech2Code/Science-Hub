@@ -164,6 +164,7 @@ export default function GstFilingPage() {
                   type="date" aria-label="From date" value={fromDate} max={toDate || todayStr()}
                   onChange={(e) => { setFromDate(e.target.value); setReport(null); }}
                   sz="sm"
+                  className={styles.dateFilterInput}
                 />
               </label>
               <label className={styles.dateFilterLabel}>
@@ -172,6 +173,7 @@ export default function GstFilingPage() {
                   type="date" aria-label="To date" value={toDate} min={fromDate} max={todayStr()}
                   onChange={(e) => { setToDate(e.target.value); setReport(null); }}
                   sz="sm"
+                  className={styles.dateFilterInput}
                 />
               </label>
             </>

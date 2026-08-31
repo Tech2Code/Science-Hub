@@ -639,7 +639,7 @@ export default function NewInvoicePage() {
                     hint={customPincodeLookup.status.status === "loading" ? "Looking up city/state…" : customPincodeLookup.status.label}
                     hintSuccess={customPincodeLookup.status.status === "found"}
                   >
-                    <Input type="text" placeholder="6-digit" value={customCustomer.pincode} onChange={handleCustomPincodeChange} maxLength={6} />
+                    <Input type="text" inputMode="numeric" placeholder="6-digit" value={customCustomer.pincode} onChange={handleCustomPincodeChange} maxLength={6} />
                   </FormField>
                   <FormField label="State" required error={customErrors.state}>
                     <Select value={customCustomer.state}

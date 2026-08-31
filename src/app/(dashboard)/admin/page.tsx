@@ -675,7 +675,7 @@ export default function AdminPage() {
                 </div>
               </FormField>
               <FormField label="Password" required error={addFieldErrors.password}>
-                <PasswordInput className={styles.inp} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} placeholder="min. 8 characters" autoComplete="new-password" maxLength={72} />
+                <PasswordInput className={`${styles.inp} ${addFieldErrors.password ? styles.inpError : ""}`} value={addForm.password} onChange={e => handleAddFormChange("password", e.target.value)} placeholder="min. 8 characters" autoComplete="new-password" maxLength={72} />
               </FormField>
               <FormField
                 label="Re-enter Password"
@@ -684,7 +684,7 @@ export default function AdminPage() {
                 hint={!addFieldErrors.confirmPassword && addForm.confirmPassword && addForm.password === addForm.confirmPassword ? "✓ Passwords match" : undefined}
                 hintSuccess
               >
-                <PasswordInput className={styles.inp} value={addForm.confirmPassword} onChange={e => handleAddFormChange("confirmPassword", e.target.value)} placeholder="repeat password" autoComplete="new-password" maxLength={72} />
+                <PasswordInput className={`${styles.inp} ${addFieldErrors.confirmPassword ? styles.inpError : ""}`} value={addForm.confirmPassword} onChange={e => handleAddFormChange("confirmPassword", e.target.value)} placeholder="repeat password" autoComplete="new-password" maxLength={72} />
               </FormField>
               <FormField label="Role">
                 <Select className={`${styles.inp} ${styles.inpCursor}`} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value as Role }))}>

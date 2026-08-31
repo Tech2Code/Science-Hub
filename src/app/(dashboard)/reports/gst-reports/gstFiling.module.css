@@ -53,6 +53,10 @@
   min-width: 9.5rem;
 }
 
+.dateFilterInput {
+  min-width: 9.5rem;
+}
+
 .errorText {
   margin-top: 0.25rem;
   color: var(--c-red);
@@ -174,5 +178,6 @@
 @media screen and (max-width: 540px) {
   .dateFilterRow { flex-direction: column; }
   .dateFilterRow .dateFilterLabel{ width: 100%; }
+  .dateFilterRow .dateFilterInput{ width: 100%; }
   .dateFilterRow button{ width: 100%; }
 }

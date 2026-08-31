@@ -229,7 +229,6 @@ export function BillDetailsCard({
               id={vendorFieldId}
               type="text"
               placeholder="Search vendor…"
-              autoFocus
               value={vendorSearchValue}
               onChange={(e) => { setVendorSearch(e.target.value); onVendorIdChange(""); setShowVendorDropdown(true); }}
               onFocus={() => setShowVendorDropdown(true)}
@@ -317,7 +316,7 @@ export function BillDetailsCard({
               hint={ivPincodeLookup.status.status === "loading" ? "Looking up city/state…" : ivPincodeLookup.status.label}
               hintSuccess={ivPincodeLookup.status.status === "found"}
             >
-              <Input value={ivForm.pincode} onChange={(e) => handleIvPincodeChange(e.target.value)} placeholder="6-digit" maxLength={6} />
+              <Input inputMode="numeric" value={ivForm.pincode} onChange={(e) => handleIvPincodeChange(e.target.value)} placeholder="6-digit" maxLength={6} />
             </FormField>
             <FormField label="State" required error={ivFieldErrors.state}>
               <Select value={ivForm.state} onChange={(e) => updateIvField("state", e.target.value)}>

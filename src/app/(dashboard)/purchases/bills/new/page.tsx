@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { rules, validate } from "@/lib/validation";
@@ -30,6 +30,7 @@ const MAX_ATTACHMENT_FILE_BYTES = 10 * 1024 * 1024;
 
 export default function NewPurchaseBillPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast  = useToast();
   const { data: session } = useSession();
   const idempotency = useIdempotencyKey();
@@ -94,7 +95,12 @@ export default function NewPurchaseBillPage() {
   }
 
   useEffect(() => {
-    fetch("/api/vendors?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then((res: { data: PurchaseBillVendor[] }) => setVendors(res.data ?? [])).catch(() => {});
+    fetch("/api/vendors?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then((res: { data: PurchaseBillVendor[] }) => {
+      const all = res.data ?? [];
+      setVendors(all);
+      const prefillVendorId = searchParams.get("vendorId");
+      if (prefillVendorId && all.some(v => v.id === prefillVendorId)) setVendorId(prefillVendorId);
+    }).catch(() => {});
     fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then((res: { data: PurchaseBillProduct[] }) => setProducts(res.data ?? [])).catch(() => {});
     fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((s) => {
       const numberingUntouched = !s?.purchaseBillNumberPrefix && !s?.nextPurchaseBillNumberOverride && !s?.purchaseBillNumberFormat;
@@ -107,6 +113,7 @@ export default function NewPurchaseBillPage() {
         .then((res: { total?: number }) => { if ((res.total ?? 0) === 0) setShowFirstBillNudge(true); })
         .catch(() => {});
     }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount prefill from the initial URL, not meant to re-run on searchParams changes
   }, []);
 
   function dismissFirstBillNudge() {

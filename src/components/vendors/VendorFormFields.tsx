@@ -62,7 +62,7 @@ export function VendorFormFields({ form, onChange, errors, disabled, phoneRequir
           hint={pincodeLookup.status.status === "loading" ? "Looking up city/state…" : pincodeLookup.status.label}
           hintSuccess={pincodeLookup.status.status === "found"}
         >
-          <Input name="pincode" value={form.pincode} onChange={handlePincodeChange} placeholder="6-digit PIN" maxLength={6} disabled={disabled} />
+          <Input name="pincode" inputMode="numeric" value={form.pincode} onChange={handlePincodeChange} placeholder="6-digit PIN" maxLength={6} disabled={disabled} />
         </FormField>
         <FormField label="State" required={stateRequired} error={errors.state}>
           <Select name="state" value={form.state} onChange={onChange} disabled={disabled}>

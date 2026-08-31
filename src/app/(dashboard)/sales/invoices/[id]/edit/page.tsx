@@ -677,7 +677,7 @@ export default function EditInvoicePage() {
                     hint={customerPincodeLookup.status.status === "loading" ? "Looking up city/state…" : customerPincodeLookup.status.label}
                     hintSuccess={customerPincodeLookup.status.status === "found"}
                   >
-                    <Input value={customerForm.pincode} onChange={(e) => handleCustomerPincodeChange(e.target.value)} placeholder="6-digit" maxLength={6} />
+                    <Input inputMode="numeric" value={customerForm.pincode} onChange={(e) => handleCustomerPincodeChange(e.target.value)} placeholder="6-digit" maxLength={6} />
                   </FormField>
                   <FormField label="State" required error={customerErrors.state}>
                     <Select value={customerForm.state} onChange={(e) => updateCustomerField("state", e.target.value)}>
