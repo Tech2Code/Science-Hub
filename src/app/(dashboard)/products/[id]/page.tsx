@@ -177,10 +177,15 @@ export default function ProductViewPage() {
   const marginPct = product?.purchasePrice != null && product.purchasePrice > 0
     ? (marginAmount! / product.purchasePrice) * 100
     : null;
+  const adjustParsed = Number(adjustStock);
+  const adjustValid = Number.isFinite(adjustParsed) && adjustStock.trim() !== "";
+  const adjustDelta = adjustValid && product ? adjustParsed - product.stock : 0;
+  const adjustTone = adjustDelta > 0 ? styles.positive : adjustDelta < 0 ? styles.negative : "";
 
   return (
     <div className={`page-stack ${styles.pageStack}`}>
       {openingEdit && <OverlayLoader text="Opening editor…" />}
+      {adjustSaving && <OverlayLoader text="Adjusting stock…" />}
       <ConfirmDialog
         open={confirmOpen}
         title="Delete Product"
@@ -195,9 +200,29 @@ export default function ProductViewPage() {
       <ConfirmDialog
         open={adjustOpen}
         title="Adjust Stock"
-        message={`Current stock: ${product?.stock ?? 0} ${product?.unit ?? ""}. Use this after a physical stock take to correct the recorded quantity — it will be logged in the stock ledger and activity log.`}
+        message="Use this after a physical stock take to correct the recorded quantity — it will be logged in the stock ledger and activity log."
         detail={
           <div className={styles.adjustForm}>
+            {product && (
+              <div className={styles.adjustPreview}>
+                <div className={styles.adjustPreviewItem}>
+                  <span className={styles.adjustPreviewLabel}>Current Stock</span>
+                  <span className={styles.adjustPreviewValue}>{product.stock} {product.unit}</span>
+                </div>
+                <div className={styles.adjustPreviewItem}>
+                  <span className={styles.adjustPreviewLabel}>Adjustment</span>
+                  <span className={`${styles.adjustPreviewValue} ${adjustTone}`}>
+                    {adjustValid ? `${adjustDelta > 0 ? "▲ +" : adjustDelta < 0 ? "▼ " : ""}${adjustDelta}` : "—"} {product.unit}
+                  </span>
+                </div>
+                <div className={styles.adjustPreviewItem}>
+                  <span className={styles.adjustPreviewLabel}>New Stock</span>
+                  <span className={`${styles.adjustPreviewValue} ${adjustTone}`}>
+                    {adjustValid ? adjustParsed : "—"} {product.unit}
+                  </span>
+                </div>
+              </div>
+            )}
             <FormField label="New stock" required error={adjustStockError}>
               <Input
                 type="number"
