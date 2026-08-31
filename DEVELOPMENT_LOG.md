@@ -1,4 +1,4 @@
-# Science Hub — Development Log (2026-06-21 → present)
+# Science Hub — Development Log (2026-06-21 → 2026-08-31)
 
 Full history of the app from the very first commit to today, in one file. Purpose: so a future session (human or AI) can see *what* was built, in what order, *why* things changed shape along the way, and — most importantly — *the working conventions this codebase has settled into*, without having to re-derive them from scratch or re-discover the same bugs twice.
 
@@ -214,6 +214,49 @@ Changed: `resolveNumberFormat()`'s fallback (`documentNumbering.ts`) and the Set
 
 ---
 
+## Era 12 — Validation hardening, full-app audit, PDF rewrite, drag-reorder, mobile/toolbar retrofit, cache/idempotency hardening (2026-08-18 → 2026-08-27)
+
+### 12.1 — `9de3a12`/`f48857a` (2026-08-18): input length bounds, draft-expiry, mobile polish
+
+Server-side min/max length checks added alongside existing format rules (name, address, city, bank fields, password) across `validation.ts` and every per-entity form lib, closing gaps that let empty/oversized/whitespace-only values through — client `FormField`s and API routes were kept in sync in the same commit rather than validating one side only. Alongside it: the topbar condenses into a `MoreMenu` below 480px, a permissions-page mobile-card skeleton was added, admin toolbar buttons resized, stale form drafts now expire, and autosave no longer resurrects a form the user just dismissed empty.
+
+### 12.2 — `3cea3f8`/`f1878aa` (2026-08-19): audit fixes + PDF renderer rewrite
+
+Closes `AUTH-001/002`, `API-001..004`, `DB-001`, `BIZ-001..003`, `SEC-003..005`, `PDF-002`, `UX-001` from `docs/SCIENCE_HUB_AUDIT_REPORT.md` — Vercel Blob URL validation hardened against cross-store spoofing (the exact-hostname-match logic `blobStorage.ts` still documents today), SMTP header injection closed, logo-blob cleanup moved server-side into `PUT /api/settings`, plus a reworked invoice/purchase-bill PDF renderer. A same-day follow-up (`f1878aa`) fixed a Vercel build failure: `@auth/core`/`next-auth` both peer-depend on `nodemailer ^7||^8`, conflicting with the `nodemailer@9.0.5` CVE bump from the audit — resolved via `npm overrides` rather than downgrading either package (a stale local `node_modules` had been masking the conflict; only a clean install, like Vercel's, hit it).
+
+### 12.3 — `0e483eb` (2026-08-20): drag-to-reorder, product bulk import
+
+Invoice/purchase-bill/rate-list line items gained drag-to-reorder. Products gained bulk import from Excel/CSV, plus discard-draft confirmation dialogs. `ConfirmDialog` now portals to `document.body` (fixes it rendering trapped inside a transformed ancestor); the admin activity log switched to the shared `Pagination` component instead of its own hand-rolled version; the Product form's "Price" label was renamed to "List Price" for clarity against `purchasePrice`.
+
+### 12.4 — `66177dc` (2026-08-21): full-app audit, all 14 phases
+
+25+ findings closed across auth/API trust boundaries, blob-URL validation, the same-day payment-date bug (`toIstDateStr()`), N+1/unbounded queries, missing error boundaries, and accessibility contrast/labels; `next`/`nodemailer` bumped and the unused `@auth/prisma-adapter` dropped, clearing every critical/high `npm audit` finding. Added the retrying `prisma migrate deploy` wrapper for Neon cold-start flakiness (`scripts/migrate-deploy-retry.js`). Full finding-by-finding detail lives in `docs/SCIENCE_HUB_AUDIT_REPORT.md`/`SCIENCE_HUB_AUDIT_STATE.md`; the summary is also folded into `CLAUDE.md`'s Features Completed #36.
+
+### 12.5 — `7fbad8e`/`ed66e57`/`d7fc2bb` (2026-08-25): mobile breakpoint + toolbar-component retrofit, dashboard chart fixes
+
+Mobile breakpoints standardized further and four shared toolbar components extracted (`SearchField`, `DateRangeFilter`, `HeaderActionsRow`, `ToolbarField`) and rolled out across every list/report page, replacing hand-duplicated per-page toolbar markup. Full-page loading overlays added for pagination navigation and Excel exports; `Spinner` overlays now portal to `document.body` (same transform-trapped-positioning fix `ConfirmDialog` got in 12.3, applied to the other overlay component); form-control mobile heights synced across `Button`/`Input`/`Select`/`DatePicker`/`PasswordInput`/`PhoneInput`. Separately: dashboard bar-chart value labels now float above each bar's own top (scaled to 84% max height, background badge on hover) instead of a shared fixed row that clipped against `chartScroll`'s overflow interaction; Purchase Bills list narrowed its Vendor column and widened Bill No.; the draft/numbering `InfoBanner`s moved inside the form's left column on New/Edit Invoice, Purchase Bill, and Rate List pages; the Sales/Purchases Overview chart's top padding was fixed.
+
+### 12.6 — `76412b3` (2026-08-26): cache-invalidation, idempotency, and integrity hardening
+
+Triggered by a real report — restoring a credit note from the Bin didn't appear on the Credit Notes list without a hard refresh. Root cause: **`bustCachePrefix()` never matched sibling sub-paths** (busting `/api/invoices` missed `/api/invoices/stats`) — a systemic gap, not just the Bin's. Fixed at the root (`bustCachePrefix()` now also matches `` `${prefix}/...` ``) plus missing cache-bust calls added across invoice/purchase-bill payment/return/delete/edit/cancel flows and brand/category rename (products embed brand/category names, so a rename must bust the products cache too). Multiple rounds of specialist review (security/database/api/react/performance/regression) surfaced further real bugs folded into the same commit:
+- **Purchase Bill edit now re-checks its optimistic-concurrency lock inside the transaction**, mirroring the Invoice edit guard that already existed — closed a race where two concurrent edits could silently corrupt item/stock state.
+- **Client-generated idempotency keys** added to Invoice, PurchaseBill, Payment, PurchasePayment, and Return creation (`useIdempotencyKey.ts`) — a retried/duplicated submission can no longer create a second document/payment/credit-note. Lookups are scoped to the parent resource, so a key collision across two different invoices/bills is rejected (409) rather than silently dropping the real payment.
+- Payment-recording transactions gained an explicit timeout (Prisma's default was too tight for this database's real-world latency, causing intermittent mid-transaction failures).
+- Several more double-submit bugs fixed (the Era 9.4 "saving flag reset before `router.push`" pattern, found recurring in a few flows that pattern hadn't reached yet).
+- **Performance**: GST Summary now aggregates by month in the database instead of loading every invoice into memory; Purchase-by-category now uses one `groupBy` instead of an in-memory reduce; Bin's brand/category purge is batched instead of one query per row; Bin's GST-retained types (invoices/purchase bills/credit notes) are now capped per request with a "Load more" control instead of always fetching full history (Empty Bin's confirmation now shows the true total across all retained items, not just what's loaded); admin activity log's lazy 30-day purge now only runs on the first page; new indexes on `Payment.date`/`PurchasePayment.date`/`Return.date`; admin users/permissions routes capped at 500 rows.
+
+### 12.7 — `baef4f2` (2026-08-27): unguarded fetch responses on 404
+
+Purchase bill detail/edit and vendor edit were treating a non-2xx response body as valid entity data (no `r.ok` check) — a 404 (deleted/invalid id) crashed to the error boundary instead of showing a proper not-found state. Found via live browser testing, not a code-review pass. **New pages should check `r.ok` before treating a fetch response as the entity, not just check for a network-level throw.**
+
+---
+
+## Era 13 — In progress, uncommitted as of 2026-08-31 (see `git status`/`git diff` before trusting this section)
+
+CSV/XLSX export formula-injection hardening (`src/lib/formulaSafety.ts`, new/untracked — a `neutralizeFormulaCell()` helper) wired into `gstFilingWorkbook.ts`, `gstFilingZip.ts`'s CSV writer, and `xlsxExport.ts`, so a cell value starting with `=`/`+`/`-`/`@` can no longer be evaluated as a formula by Excel when a report is opened — CSV in particular has no per-cell type metadata, so a plain string write there is exploitable in a way `.xlsx` isn't. Also in the working tree: a stock-adjustment preview (current/delta/new-stock, with a color tone per direction) added to the Product detail page's Adjust Stock dialog, plus small CSS/copy tweaks to the GST filing date filters and a few form fields. **Not yet committed** — verify against `git log`/`git status` before assuming any of this has shipped.
+
+---
+
 ## Conventions (read this before touching a save/create/delete flow)
 
 - **`OverlayLoader` (`src/components/ui/Spinner.tsx`, `position: fixed; inset: 0; z-index: 9999`) is how this app locks a page or modal during an async action** — not a pile of per-field `disabled` props. Its z-index sits above everything, including an open `Modal`, so it blocks pointer interaction with whatever's underneath regardless of that content's own disabled state. Reach for it on any new save/create flow, gated on that flow's own `saving` boolean.
@@ -224,6 +267,9 @@ Changed: `resolveNumberFormat()`'s fallback (`documentNumbering.ts`) and the Set
 - **`admin/page.tsx` is the reference implementation for a form**: `noValidate`, no `required` prop on `Input`/`Select` (triggers the browser's own validation bubble instead of the app's), per-field `FormField` errors (not a banner or a toast for validation — toasts are for save success/failure), Save button disabled on every mandatory-field-empty check plus the dirty/saving flags.
 - **A document number, once generated, is permanently tied to the financial year (Apr–Mar) its `date` fell in** — any future edit surface on `date`/`billDate` must reject a change that crosses that boundary, the same way the Invoice/Purchase-Bill edit routes do today.
 - **Server-derived facts are never trusted from the client** — `isInterState`, GST splits, totals, and now the FY a document belongs to are all recomputed/verified server-side regardless of what the client sends. This goes back to the Era 4 GST trust-boundary fix and has held ever since.
+- **`bustCachePrefix(prefix)` matches `prefix` itself and any `` `${prefix}/...` `` sibling sub-path** (e.g. busting `/api/invoices` also busts `/api/invoices/stats`) — a mutation route that touches a base resource must still call `bustCachePrefix()` on it even if the change is only reflected in a sibling sub-route's cached response, not the base route's own. Fixed Era 12.6 after this gap turned out to be systemic, not a one-off.
+- **A create endpoint a client can plausibly retry/double-submit should accept a client-generated idempotency key**, scoped to its parent resource (`useIdempotencyKey.ts`) — follow the Invoice/PurchaseBill/Payment/PurchasePayment/Return pattern from Era 12.6 for any new money- or document-creating route.
+- **Any page that fetches a single entity by id must check `r.ok` before treating the response body as that entity** — a non-2xx body (e.g. a 404's error JSON) is not valid entity data; render a not-found state instead of letting it flow into the page as if it were. Fixed Era 12.7.
 
 ## Operational Notes
 
