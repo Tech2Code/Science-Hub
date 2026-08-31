@@ -2,9 +2,12 @@
 import JSZip from "jszip";
 import { buildGstFilingWorkbook } from "@/lib/gstFilingWorkbook";
 import type { GstFilingReport } from "@/lib/gstFiling";
+import { neutralizeFormulaCell } from "@/lib/formulaSafety";
 
 function csvEscape(v: string | number): string {
-  const s = String(v);
+  // CSV carries no per-cell type metadata, so unlike the .xlsx sheets, Excel really does
+  // evaluate a leading =/+/-/@ as a formula the moment this file is opened — neutralize first.
+  const s = String(neutralizeFormulaCell(v));
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

@@ -3,6 +3,7 @@
 import ExcelJS from "exceljs";
 import type { GstFilingReport } from "@/lib/gstFiling";
 import { formatDate } from "@/lib/formatDate";
+import { neutralizeFormulaCell } from "@/lib/formulaSafety";
 
 const money = (n: number) => Math.round(n * 100) / 100;
 
@@ -10,7 +11,11 @@ function addTable(wb: ExcelJS.Workbook, name: string, columns: Partial<ExcelJS.C
   const sheet = wb.addWorksheet(name);
   sheet.columns = columns;
   sheet.getRow(1).font = { bold: true };
-  for (const row of rows) sheet.addRow(row);
+  for (const row of rows) {
+    const safeRow: Record<string, unknown> = {};
+    for (const key of Object.keys(row)) safeRow[key] = neutralizeFormulaCell(row[key]);
+    sheet.addRow(safeRow);
+  }
   return sheet;
 }
 
@@ -29,7 +34,7 @@ export function buildGstFilingWorkbook(report: GstFilingReport): ExcelJS.Workboo
     ["State", report.company.state || "(not set)"],
     ["Address", report.company.address || "(not set)"],
     ["Return Period", report.period.label],
-  ].forEach(([field, value]) => infoSheet.addRow({ field, value }));
+  ].forEach(([field, value]) => infoSheet.addRow({ field, value: neutralizeFormulaCell(value) }));
 
   // Sales Register
   const salesCols: Partial<ExcelJS.Column>[] = [

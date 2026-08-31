@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { neutralizeFormulaCell } from "@/lib/formulaSafety";
 
 // Builds a single-sheet .xlsx with columns auto-fit to their longest cell (unlike CSV, which Excel opens at a fixed default width).
 export async function buildXlsxBuffer(
@@ -10,7 +11,7 @@ export async function buildXlsxBuffer(
   const sheet = wb.addWorksheet(sheetName.slice(0, 31)); // Excel sheet-name limit
   sheet.addRow(headers);
   sheet.getRow(1).font = { bold: true };
-  for (const row of rows) sheet.addRow(row);
+  for (const row of rows) sheet.addRow(row.map(neutralizeFormulaCell));
 
   headers.forEach((header, i) => {
     let maxLen = header.length;
