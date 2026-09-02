@@ -151,9 +151,6 @@ export default function PaymentsPage() {
                   <tr key={p.id}>
                     <Cell col={COLUMNS[0]} className={styles.dateCell}>
                       <div>{formatDate(p.date)}</div>
-                      <div className={styles.dateSub}>
-                        {new Date(p.date).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
-                      </div>
                     </Cell>
                     <Cell col={COLUMNS[1]} className={styles.customerCell}>{p.invoice.customer.name}</Cell>
                     <Cell col={COLUMNS[2]}>

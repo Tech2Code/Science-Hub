@@ -1693,7 +1693,7 @@ export default function InvoiceDetailPage() {
                       </td>
                     </tr>
                     <tr>
-                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date &amp; Time</td>
+                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date</td>
                       <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Method</td>
                       <td colSpan={refCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Reference / UTR</td>
                       <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
@@ -1701,7 +1701,7 @@ export default function InvoiceDetailPage() {
                     {sorted.map((p) => (
                       <tr key={p.id}>
                         <td colSpan={2} style={{ ...bd, color: "var(--inv-tx2)" }}>
-                          {new Date(p.date).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
+                          {new Date(p.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                         </td>
                         <td colSpan={2} style={{ ...bd, color: "var(--inv-tx2)" }}>{p.method}</td>
                         <td colSpan={refCols} style={{ ...bd, color: "var(--inv-tx2)" }}>{p.reference || "—"}</td>
@@ -1739,7 +1739,7 @@ export default function InvoiceDetailPage() {
                       </td>
                     </tr>
                     <tr>
-                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date &amp; Time</td>
+                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date</td>
                       <td colSpan={itemCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Item</td>
                       <td colSpan={qtyRateCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Qty × List Price</td>
                       <td colSpan={gstCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>GST</td>
@@ -2036,7 +2036,7 @@ export default function InvoiceDetailPage() {
                   <thead>
                     <tr>
                       <th>#</th>
-                      <th>Date &amp; Time</th>
+                      <th>Date</th>
                       <th>Method</th>
                       <th>Reference / UTR</th>
                       <th className="table-th-right">Amount</th>
@@ -2050,8 +2050,8 @@ export default function InvoiceDetailPage() {
                         return (
                           <tr key={p.id}>
                             <td className={styles.payIdxCell}>{idx + 1}</td>
-                            <td data-label="Date & Time" className={styles.payDateCell}>
-                              {new Date(p.date).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
+                            <td data-label="Date" className={styles.payDateCell}>
+                              {new Date(p.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                             </td>
                             <td data-label="Method">
                               <span className={styles.methodBadge} style={{ background: ms.bg, color: ms.color, border: `1px solid ${ms.border}` }}>{p.method}</span>
