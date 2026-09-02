@@ -173,6 +173,17 @@
 
 .downloadRow {
   padding: 0.875rem 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.downloadHint {
+  padding: 0 1.25rem 0.875rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--c-text-3);
 }
 
 @media screen and (max-width: 540px) {
@@ -180,4 +191,5 @@
   .dateFilterRow .dateFilterLabel{ width: 100%; }
   .dateFilterRow .dateFilterInput{ width: 100%; }
   .dateFilterRow button{ width: 100%; }
+  .downloadRow { flex-direction: column; align-items: stretch; }
 }

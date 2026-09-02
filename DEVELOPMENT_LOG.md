@@ -1,4 +1,4 @@
-# Science Hub — Development Log (2026-06-21 → 2026-08-31)
+# Science Hub — Development Log (2026-06-21 → 2026-09-02)
 
 Full history of the app from the very first commit to today, in one file. Purpose: so a future session (human or AI) can see *what* was built, in what order, *why* things changed shape along the way, and — most importantly — *the working conventions this codebase has settled into*, without having to re-derive them from scratch or re-discover the same bugs twice.
 
@@ -251,9 +251,19 @@ Purchase bill detail/edit and vendor edit were treating a non-2xx response body 
 
 ---
 
-## Era 13 — In progress, uncommitted as of 2026-08-31 (see `git status`/`git diff` before trusting this section)
+## Era 13 — Formula-injection hardening, stock-adjustment preview (`5f92aaa`/`c4fa94a`/`af4c2df`, 2026-08-31)
 
-CSV/XLSX export formula-injection hardening (`src/lib/formulaSafety.ts`, new/untracked — a `neutralizeFormulaCell()` helper) wired into `gstFilingWorkbook.ts`, `gstFilingZip.ts`'s CSV writer, and `xlsxExport.ts`, so a cell value starting with `=`/`+`/`-`/`@` can no longer be evaluated as a formula by Excel when a report is opened — CSV in particular has no per-cell type metadata, so a plain string write there is exploitable in a way `.xlsx` isn't. Also in the working tree: a stock-adjustment preview (current/delta/new-stock, with a color tone per direction) added to the Product detail page's Adjust Stock dialog, plus small CSS/copy tweaks to the GST filing date filters and a few form fields. **Not yet committed** — verify against `git log`/`git status` before assuming any of this has shipped.
+CSV/XLSX export formula-injection hardening (`src/lib/formulaSafety.ts` — a `neutralizeFormulaCell()` helper) wired into `gstFilingWorkbook.ts`, `gstFilingZip.ts`'s CSV writer, and `xlsxExport.ts`, so a cell value starting with `=`/`+`/`-`/`@` can no longer be evaluated as a formula by Excel when a report is opened — CSV in particular has no per-cell type metadata, so a plain string write there is exploitable in a way `.xlsx` isn't. Alongside: a stock-adjustment preview (current/delta/new-stock, with a color tone per direction) added to the Product detail page's Adjust Stock dialog, mobile numeric keypad (`inputMode="numeric"`) on pincode/bank-account fields, and small CSS/copy tweaks to the GST filing date filters and a few form fields.
+
+---
+
+## Era 14 — GSTR-1 Offline Tool CSV export, Tier 1 no-GSP (`feature/gst-filing-tier1-no-gsp` merged into `dev`, 2026-09-02)
+
+`reports/gst-reports` gained a "Download for GST Portal (Offline Tool CSVs)" button producing a ZIP of section-wise CSVs matching the exact header/column format of the GST Returns Offline Tool's own bundled sample files (verified against the real `Section_wise_CSV_files/GSTR1/*.csv` from Offline Tool V3.2.4): `b2b,sez,de.csv`, `b2cs.csv`, `cdnr.csv`, `hsn(b2b).csv`, `hsn(b2c).csv`, plus a README and a `Validation-Report.csv`. This is deliberately "Tier 1, no GSP" — the app never talks to GSTN directly; the user imports each CSV into the free Offline Tool, reviews there, and generates the upload JSON the portal actually accepts.
+
+New `src/lib/gstStateCodes.ts` (GST state/UT code table, keyed by `INDIA_STATES_FULL` spelling — Lakshadweep deliberately spelled "Lakshdweep" to match the Offline Tool's own master list) and `src/lib/gstUqc.ts` (free-text-unit → GST UQC code mapping, falling back to `OTH-OTHERS` with a validation warning for an unmapped unit rather than blocking the export). `src/lib/gstFiling.ts`'s `buildGstFilingReport()` gained `salesRegisterByRate` (splits a single multi-rate invoice into one B2B row per rate) and `hsnSummaryB2B`/`hsnSummaryB2C`. An unresolvable place-of-supply drops that row with a validation error instead of emitting one the Offline Tool would reject; B2C aggregates by place-of-supply+rate, not invoice-wise. See `src/lib/gstr1CsvExport.ts`/`gstr1CsvZip.ts` and `tests/unit/gstr1CsvExport.test.ts`.
+
+Merge note: `CLAUDE.md` conflicted against `dev`'s own concurrent doc updates (Era 12.6/12.7, formula-safety) — resolved by keeping `dev`'s content and folding this feature's doc updates in on top (Features Completed #42) rather than taking either side wholesale.
 
 ---
 
