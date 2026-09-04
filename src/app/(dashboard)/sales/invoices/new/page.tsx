@@ -98,7 +98,6 @@ export default function NewInvoicePage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (hasContent) setShowDraftBanner(true);
     else setDraftReady(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount check
   }, []);
 
   function restoreDraft() {

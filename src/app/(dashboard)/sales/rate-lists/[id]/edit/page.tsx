@@ -99,7 +99,9 @@ export default function EditRateListPage() {
         else setDraftReady(true);
       })
       .catch(() => { setLoadError("Failed to load rate list."); setLoading(false); });
-  }, [id]);
+    // DRAFT_KEY is a pure derivation of `id` (`rate-list:edit:${id}`) — already covered by the
+    // `id` dep, listed too just to satisfy exhaustive-deps without changing when this re-runs.
+  }, [id, DRAFT_KEY]);
 
   const visibleItemsError = itemsError && itemsErrorFor === items ? itemsError : undefined;
 
