@@ -26,6 +26,7 @@ import { AttachmentIcon } from "@/components/purchases/AttachmentIcon";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
+import { useMenuA11y } from "@/lib/useMenuA11y";
 import styles from "./billDetail.module.css";
 
 interface PurchaseBillItem {
@@ -98,6 +99,8 @@ export default function PurchaseBillDetailPage() {
   const [shareLoading, setShareLoading] = useState(false);
   const [shareDropStyle, setShareDropStyle] = useState<CSSProperties>({});
   const shareContainerRef = useRef<HTMLDivElement>(null);
+  const shareMenuRef = useRef<HTMLDivElement>(null);
+  useMenuA11y(shareOpen, () => setShareOpen(false), shareMenuRef);
 
   // Vendor's own email pre-fills the field so it can be selected directly
   // instead of retyped, but stays editable/extendable — a bill may need to
@@ -132,6 +135,8 @@ export default function PurchaseBillDetailPage() {
   const [updatingStatus] = useState(false);
   const [confirmCancel,  setConfirmCancel]  = useState(false);
   const [cancelling,     setCancelling]     = useState(false);
+  const [confirmUncancel, setConfirmUncancel] = useState(false);
+  const [uncancelling,    setUncancelling]    = useState(false);
   const [confirmDelete,  setConfirmDelete]  = useState(false);
   const [deleting,       setDeleting]       = useState(false);
 
@@ -359,6 +364,33 @@ export default function PurchaseBillDetailPage() {
     setConfirmCancel(false);
   }
 
+  async function handleUncancel() {
+    setUncancelling(true);
+    try {
+      const res = await fetch(`/api/purchase-bills/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "unpaid" }), // any non-"cancelled" value — the server recomputes the real status from paidAmount vs total
+      });
+      if (res.ok) {
+        bustCachePrefix("/api/purchase-bills");
+        bustCachePrefix("/api/products");
+        bustCachePrefix("/api/reports");
+        bustCachePrefix("/api/purchase-reports");
+        invalidateCachedPdf("purchase-bill", id);
+        toast({ type: "success", title: "Bill un-cancelled", message: "Status restored." });
+        load();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast({ type: "error", title: "Failed", message: d.error ?? "Could not un-cancel bill." });
+      }
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Please try again." });
+    }
+    setUncancelling(false);
+    setConfirmUncancel(false);
+  }
+
   async function handleDelete() {
     setDeleting(true);
     try {
@@ -486,7 +518,7 @@ export default function PurchaseBillDetailPage() {
 
   return (
     <>
-    {(submitting || updatingStatus || cancelling) && <OverlayLoader text="Saving…" />}
+    {(submitting || updatingStatus || cancelling || uncancelling) && <OverlayLoader text="Saving…" />}
     {deleting && <OverlayLoader text="Deleting…" />}
     {openingEdit && <OverlayLoader text="Opening editor…" />}
     {pdfDownloading && <OverlayLoader text="Generating PDF…" />}
@@ -715,12 +747,23 @@ export default function PurchaseBillDetailPage() {
     <ConfirmDialog
       open={confirmCancel}
       title="Cancel Purchase Bill"
-      message={`Cancel bill ${bill.billNumber}? This action cannot be undone.`}
+      message={`Cancel bill ${bill.billNumber}? Its stock will be reversed. You can un-cancel it later if needed.`}
       confirmLabel="Cancel Bill"
       variant="danger"
       loading={cancelling}
       onConfirm={handleCancel}
       onCancel={() => { if (!cancelling) setConfirmCancel(false); }}
+    />
+
+    <ConfirmDialog
+      open={confirmUncancel}
+      title="Un-cancel Purchase Bill"
+      message={`Restore bill ${bill.billNumber} from cancelled? Stock will be re-added and its status recomputed from recorded payments.`}
+      confirmLabel="Un-cancel Bill"
+      variant="danger"
+      loading={uncancelling}
+      onConfirm={handleUncancel}
+      onCancel={() => { if (!uncancelling) setConfirmUncancel(false); }}
     />
 
     <ConfirmDialog
@@ -806,7 +849,7 @@ export default function PurchaseBillDetailPage() {
           </Button>
           {/* Share PDF button */}
           <div className={styles.shareWrap} ref={shareContainerRef}>
-            <Button variant="secondary" size="sm" disabled={shareLoading} onClick={() => {
+            <Button variant="secondary" size="sm" disabled={shareLoading} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
               setShareOpen(o => {
                 const next = !o;
                 if (next && shareContainerRef.current) {
@@ -827,7 +870,7 @@ export default function PurchaseBillDetailPage() {
             {shareOpen && (
               <>
                 <div className={styles.shareOverlay} onClick={() => setShareOpen(false)} />
-                <div className={styles.shareMenu} style={shareDropStyle}>
+                <div className={styles.shareMenu} style={shareDropStyle} ref={shareMenuRef} role="menu" aria-label="Share PDF">
                   <div className={styles.shareMenuTitle}>Share PDF</div>
                   {([
                     typeof navigator !== "undefined" && "share" in navigator ? {
@@ -848,6 +891,7 @@ export default function PurchaseBillDetailPage() {
                   ] as const).filter(Boolean).map((opt) => (
                     <button
                       key={opt!.key}
+                      role="menuitem"
                       onClick={() => handleShare(opt!.key as "native" | "whatsapp" | "email")}
                       className={styles.shareMenuItem}
                     >
@@ -863,6 +907,12 @@ export default function PurchaseBillDetailPage() {
             <Button variant="dangerOutline" size="sm" onClick={() => setConfirmCancel(true)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
               Cancel Bill
+            </Button>
+          )}
+          {canWrite && bill.status === "cancelled" && (
+            <Button variant="secondary" size="sm" onClick={() => setConfirmUncancel(true)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              Un-cancel Bill
             </Button>
           )}
           {canWrite && (

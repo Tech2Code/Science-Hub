@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCustomer } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
-import { validateCustomerInput } from "@/lib/validation";
+import { validateCustomerInput, parseCreditLimit } from "@/lib/validation";
 
 export async function GET(
   request: NextRequest,
@@ -45,9 +45,9 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { name, phone, email, address, city, state, pincode, gstin, expectedUpdatedAt } = body;
+    const { name, phone, email, address, city, state, pincode, gstin, creditLimit, expectedUpdatedAt } = body;
 
-    const validationError = validateCustomerInput({ name, phone, email, address, city, state, pincode, gstin }, true);
+    const validationError = validateCustomerInput({ name, phone, email, address, city, state, pincode, gstin, creditLimit }, true);
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
@@ -68,9 +68,9 @@ export async function PUT(
 
     const customer = await prisma.customer.update({
       where: { id },
-      data: { name: name.trim(), phone, email, address, city, state, pincode, gstin },
+      data: { name: name.trim(), phone, email, address, city, state, pincode, gstin, creditLimit: parseCreditLimit(creditLimit) },
     });
-    await logActivity(auth.session.user.id, "update_customer", `Updated customer "${customer.name}" | Phone: ${phone || "—"} | Email: ${email || "—"} | City: ${city || "—"}${state ? ", " + state : ""} | GSTIN: ${gstin || "—"}`, id, "customer");
+    await logActivity(auth.session.user.id, "update_customer", `Updated customer "${customer.name}" | Phone: ${phone || "—"} | Email: ${email || "—"} | City: ${city || "—"}${state ? ", " + state : ""} | GSTIN: ${gstin || "—"}${customer.creditLimit != null ? ` | Credit Limit: ₹${customer.creditLimit.toFixed(2)}` : ""}`, id, "customer");
     revalidateTag("customers", { expire: 0 });
     return NextResponse.json(customer);
   } catch (error) {

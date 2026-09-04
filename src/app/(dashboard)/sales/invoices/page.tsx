@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -89,7 +89,11 @@ const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2,
 
 export default function InvoicesPage() {
   const canWrite = useCanWrite();
-  const [filter, setFilter] = useState<StatusFilter>("All");
+  const searchParams = useSearchParams();
+  const urlFilter = searchParams.get("filter");
+  const [filter, setFilter] = useState<StatusFilter>(
+    urlFilter && (STATUS_TABS as string[]).includes(urlFilter) ? (urlFilter as StatusFilter) : "All"
+  );
   const [search, setSearch] = useState("");
   const [month, setMonth] = useState("");
   const [year, setYear] = useState("");
@@ -109,6 +113,13 @@ export default function InvoicesPage() {
   const [openingEditId, setOpeningEditId] = useState<string | null>(null);
   const toast = useToast();
   const router = useRouter();
+
+  useEffect(() => {
+    if (urlFilter && (STATUS_TABS as string[]).includes(urlFilter)) {
+      setFilter(urlFilter as StatusFilter); // eslint-disable-line react-hooks/set-state-in-effect -- re-syncs the filter when the URL's ?filter param changes while already mounted (e.g. clicking a notification link while /sales/invoices is already open)
+      setPage(1);
+    }
+  }, [urlFilter]);
 
   function closePdfPreview() {
     setPdfPreviewUrl(null);

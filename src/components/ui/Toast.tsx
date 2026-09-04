@@ -12,6 +12,8 @@ export interface ToastItem {
   title: string;
   message?: string;
   duration?: number; // ms, default 3500
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 type AddToast = (toast: Omit<ToastItem, "id">) => void;
@@ -86,6 +88,14 @@ function Toast({ item, onDismiss }: { item: ToastItem; onDismiss: (id: string) =
         {item.message && (
           <div className={styles.message}>{item.message}</div>
         )}
+        {item.actionLabel && item.onAction && (
+          <button
+            className={styles.actionBtn}
+            onClick={() => { item.onAction!(); dismiss(); }}
+          >
+            {item.actionLabel}
+          </button>
+        )}
       </div>
       <button onClick={dismiss} className={styles.closeBtn} aria-label="Dismiss">×</button>
       <div className={styles.progressTrack} style={{ background: `${cfg.bar}30` }}>
@@ -114,7 +124,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastCtx.Provider value={addToast}>
       {children}
-      <div aria-live="polite" className={styles.container}>
+      <div aria-live="polite" className={styles.container} data-toast-container>
         {toasts.map(t => (
           <div key={t.id} className={styles.itemWrap}>
             <Toast item={t} onDismiss={dismiss} />

@@ -16,11 +16,15 @@ interface Props {
   onEndChange: (value: string) => void;
   onClear: () => void;
   minDate?: string;
+  // Drops this row's own padding/border — for a caller that already nests it inside another
+  // bordered/padded toolbar (e.g. a shared `.card-toolbar`), where the standalone chrome would
+  // just double up as a second border/inset instead of framing anything of its own.
+  inline?: boolean;
 }
 
 // Shared "From ... To ... [Clear]" date-range row used by the Sales and Purchase
 // report pages — kept as one component so their layout/behavior can't drift apart.
-export function DateRangeFilter({ startDate, endDate, todayStr, onStartChange, onEndChange, onClear, minDate = MIN_REPORT_DATE }: Props) {
+export function DateRangeFilter({ startDate, endDate, todayStr, onStartChange, onEndChange, onClear, minDate = MIN_REPORT_DATE, inline = false }: Props) {
   const openPicker = (e: MouseEvent<HTMLInputElement>) => {
     try { e.currentTarget.showPicker?.(); } catch { /* unsupported browser */ }
   };
@@ -31,14 +35,13 @@ export function DateRangeFilter({ startDate, endDate, todayStr, onStartChange, o
   };
 
   return (
-    <div className={styles.dateFilterRow}>
+    <div className={inline ? styles.dateFilterRowInline : styles.dateFilterRow}>
       <label className={styles.dateFilterLabel}>
         From
         <Input
           type="date" aria-label="Start date" value={startDate} min={minDate} max={endDate || todayStr}
           onChange={(e) => handleStartChange(e.target.value)}
           onClick={openPicker}
-          className={styles.dateInput}
         />
       </label>
       <label className={styles.dateFilterLabel}>
@@ -47,7 +50,6 @@ export function DateRangeFilter({ startDate, endDate, todayStr, onStartChange, o
           type="date" aria-label="End date" value={endDate} min={startDate || minDate} max={todayStr}
           onChange={(e) => onEndChange(e.target.value)}
           onClick={openPicker}
-          className={styles.dateInput}
         />
       </label>
       {(startDate || endDate) && (

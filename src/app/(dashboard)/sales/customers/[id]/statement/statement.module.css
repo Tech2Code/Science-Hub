@@ -1,0 +1,82 @@
+.pageStack { max-width: 64rem; }
+
+.errorCenter { color: var(--c-red); }
+
+.sectionHeader {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--c-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.sectionTitle {
+  font-weight: 600;
+  color: var(--c-text);
+  font-size: 0.875rem;
+}
+
+.toolbarActions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.shareIconMargin { margin-right: 0.375rem; }
+.shareWrap { position: relative; }
+.shareOverlay { position: fixed; inset: 0; z-index: 99; }
+.shareMenu {
+  z-index: 100;
+  background: var(--c-bg-card);
+  border: 1px solid var(--c-border-md);
+  border-radius: var(--c-radius-sm);
+  box-shadow: var(--c-shadow-lg);
+  min-width: 15rem;
+  overflow: hidden;
+  padding: 0.375rem 0;
+}
+.shareMenuTitle {
+  padding: 0.5rem 1rem 0.375rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-4);
+  border-bottom: 1px solid var(--c-border);
+  margin-bottom: 0.25rem;
+}
+.shareMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.625rem 1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--c-text);
+  text-align: left;
+}
+.shareMenuItem:hover { background: var(--c-bg-sub); }
+.shareMenuItemIcon { flex-shrink: 0; display: flex; }
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+@media (max-width: 768px) { .statsGrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .statsGrid { grid-template-columns: 1fr; } }
+
+.cardPadSm { padding: 1rem; }
+
+.statLabel {
+  font-size: 0.75rem;
+  color: var(--c-text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.statValue { font-size: 1.125rem; font-weight: 700; color: var(--c-text); }
+
+.emptyCell { text-align: center; padding: 2.5rem; color: var(--c-text-4); }

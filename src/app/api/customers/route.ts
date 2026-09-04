@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCustomers, type CustomerSort } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
-import { validateCustomerInput } from "@/lib/validation";
+import { validateCustomerInput, parseCreditLimit } from "@/lib/validation";
 import { parsePageParams } from "@/lib/listQuery";
 
 export async function GET(request: NextRequest) {
@@ -31,9 +31,9 @@ export async function POST(request: NextRequest) {
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
-    const { name, phone, email, address, city, state, pincode, gstin, oneOff } = body;
+    const { name, phone, email, address, city, state, pincode, gstin, creditLimit, oneOff } = body;
 
-    const validationError = validateCustomerInput({ name, phone, email, address, city, state, pincode, gstin }, true);
+    const validationError = validateCustomerInput({ name, phone, email, address, city, state, pincode, gstin, creditLimit }, true);
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     // soft-deleted at creation to stay out of the directory/search. Mirrors the vendor one-off pattern.
     const isOneOff = oneOff === true;
     const customer = await prisma.customer.create({
-      data: { name: name.trim(), phone, email, address, city, state, pincode, gstin, ...(isOneOff ? { deletedAt: new Date() } : {}) },
+      data: { name: name.trim(), phone, email, address, city, state, pincode, gstin, creditLimit: parseCreditLimit(creditLimit), ...(isOneOff ? { deletedAt: new Date() } : {}) },
     });
 
     if (isOneOff) {

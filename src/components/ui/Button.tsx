@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Spinner } from "./Spinner";
@@ -17,7 +18,7 @@ type Variant =
 
 type Size = "sm" | "md" | "lg" | "full";
 
-interface ButtonProps {
+interface ButtonProps extends React.AriaAttributes {
   variant?: Variant;
   size?: Size;
   href?: string;
@@ -55,6 +56,7 @@ export function Button({
   style,
   title,
   target,
+  ...aria
 }: ButtonProps) {
   const cls = [
     styles.btn,
@@ -102,7 +104,7 @@ export function Button({
 
   if (href) {
     return (
-      <Link href={href} className={cls} style={style} title={title} target={target}>
+      <Link href={href} className={cls} style={style} title={title} target={target} {...aria}>
         {children}
       </Link>
     );
@@ -119,6 +121,7 @@ export function Button({
         className={cls}
         style={style}
         title={title}
+        {...aria}
       >
         {loading && !fullScreen && <Spinner size="sm" className={styles.inlineSpinner} />}
         {children}

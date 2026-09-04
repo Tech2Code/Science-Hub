@@ -8,7 +8,7 @@ import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import { useToast } from "@/components/ui/Toast";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { InfoBanner } from "@/components/ui/InfoBanner";
-import { validateProductForm, hasProductFieldErrors, PRODUCT_GST_RATES, type ProductFieldErrors } from "@/lib/productForm";
+import { validateProductForm, hasProductFieldErrors, suggestMinStockForUnit, PRODUCT_GST_RATES, type ProductFieldErrors } from "@/lib/productForm";
 import { parsePastedProductText, type ParsedProductRow } from "@/lib/productImport";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import styles from "./ProductBulkImportModal.module.css";
@@ -38,11 +38,12 @@ function resolveId(name: string, list: { id: string; name: string }[]): string {
 }
 
 function toReviewRow(row: ParsedProductRow, brands: Brand[], categories: Category[]): ReviewRow {
+  const unit = row.unit || "Nos";
   return {
     key: nextKey(),
-    name: row.name, sku: row.sku, hsn: row.hsn, unit: row.unit || "Nos",
+    name: row.name, sku: row.sku, hsn: row.hsn, unit,
     price: row.price, purchasePrice: row.purchasePrice, gstRate: row.gstRate || "18",
-    stock: row.stock || "0", minStock: row.minStock || "5",
+    stock: row.stock || "0", minStock: row.minStock || String(suggestMinStockForUnit(unit)),
     brandId: resolveId(row.brand, brands), categoryId: resolveId(row.category, categories),
     errors: {}, status: "pending",
   };
@@ -101,6 +102,9 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
 
   // Checks for a leftover draft on every (re)open (closed tab / refresh mid-review); if rows are already in memory, don't overwrite them with an older snapshot.
   useEffect(() => {
+    // Synchronizes with the modal's `open` transition and localStorage (external systems) — a
+    // legitimate effect, not state derivable from props/render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!open) { setDraftReady(false); return; }
     // Every open starts on the input step — unfinished work is only ever resumed via the explicit Resume Draft banner, never silently.
     setStep("input");

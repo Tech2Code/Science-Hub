@@ -137,6 +137,9 @@ export default function NewPurchaseBillPage() {
     const draft = loadFormDraft<BillNewDraft>(DRAFT_KEY);
     const v = draft?.values;
     const hasContent = !!v && (!!v.vendorId || v.items?.length > 0 || !!v.notes?.trim());
+    // One-time sync from localStorage (an external system) on mount — a legitimate effect, not
+    // state derivable from props/render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (hasContent) setShowDraftBanner(true);
     else setDraftReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount check

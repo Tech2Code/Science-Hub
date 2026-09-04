@@ -12,7 +12,10 @@ interface Props {
   detail?: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
-  variant?: "danger" | "default";
+  // "neutral" renders the confirm button as a plain secondary (gray) button — for a confirm that's
+  // neither destructive ("danger") nor a primary accent-colored action ("default"), so it stays
+  // visually neutral regardless of the user's chosen accent color.
+  variant?: "danger" | "default" | "neutral";
   loading?: boolean;
   confirmDisabled?: boolean;
   onConfirm: () => void;
@@ -103,7 +106,7 @@ export function ConfirmDialog({
               {cancelLabel}
             </Button>
             <Button
-              variant={variant === "danger" ? "danger" : "primary"}
+              variant={variant === "danger" ? "danger" : variant === "neutral" ? "secondary" : "primary"}
               onClick={onConfirm}
               loading={loading}
               disabled={loading || confirmDisabled}

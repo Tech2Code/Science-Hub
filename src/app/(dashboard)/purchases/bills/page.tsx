@@ -22,7 +22,7 @@ import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import styles from "./billsList.module.css";
 
 interface PurchaseBill {
@@ -89,8 +89,12 @@ const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2,
 export default function PurchasesPage() {
   const canWrite = useCanWrite();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlFilter = searchParams.get("filter");
   const [openingEdit, setOpeningEdit] = useState<string | null>(null);
-  const [filter, setFilter] = useState<StatusFilter>("All");
+  const [filter, setFilter] = useState<StatusFilter>(
+    urlFilter && (STATUS_TABS as string[]).includes(urlFilter) ? (urlFilter as StatusFilter) : "All"
+  );
   const [search, setSearch] = useState("");
   const [month, setMonth] = useState("");
   const [year, setYear] = useState("");
@@ -106,6 +110,13 @@ export default function PurchasesPage() {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewBill, setPdfPreviewBill] = useState<{ number: string; vendor: string } | null>(null);
   const toast = useToast();
+
+  useEffect(() => {
+    if (urlFilter && (STATUS_TABS as string[]).includes(urlFilter)) {
+      setFilter(urlFilter as StatusFilter); // eslint-disable-line react-hooks/set-state-in-effect -- re-syncs the filter when the URL's ?filter param changes while already mounted (e.g. clicking a notification link while /purchases/bills is already open)
+      setPage(1);
+    }
+  }, [urlFilter]);
 
   function closePdfPreview() {
     setPdfPreviewUrl(null);

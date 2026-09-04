@@ -11,6 +11,7 @@
 
 .paid    { background: var(--c-green-bg);  color: var(--c-green-text);  }
 .partial { background: var(--c-amber-bg);  color: var(--c-amber-text);  }
-.unpaid  { background: var(--c-red-bg);    color: var(--c-red-text);    }
+.unpaid    { background: var(--c-red-bg);    color: var(--c-red-text);    }
+.cancelled { background: var(--c-red-bg);    color: var(--c-red-text);    }
 .neutral { background: var(--c-bg-sub);    color: var(--c-text-3);      }
 .blue    { background: var(--c-blue-bg);   color: var(--c-blue-text);   }

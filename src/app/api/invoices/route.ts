@@ -11,6 +11,7 @@ import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
+import { checkCustomerCreditLimit } from "@/lib/creditLimit";
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
     const user = auth.session.user;
 
     const body = await request.json();
-    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, transportCharge, transportChargeGstRate, idempotencyKey } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, transportCharge, transportChargeGstRate, idempotencyKey, overrideCreditLimit } = body;
     const { customerId } = body;
 
     if (!items || items.length === 0) {
@@ -211,6 +212,17 @@ export async function POST(request: NextRequest) {
 
     const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + cgst + sgst + igst + transportChargeVal + transportChargeGstAmountVal);
 
+    // A new invoice's balanceDue equals its total (paidAmount is always 0 at creation). Soft-blocked
+    // unless the caller explicitly confirms via overrideCreditLimit — see src/lib/creditLimit.ts.
+    const creditCheck = await checkCustomerCreditLimit(customerId, total);
+    if (creditCheck?.exceeded && overrideCreditLimit !== true) {
+      return NextResponse.json({
+        error: `This invoice would take ${customer.name}'s outstanding balance to ₹${creditCheck.projectedOutstanding.toFixed(2)}, over their ₹${creditCheck.creditLimit.toFixed(2)} credit limit.`,
+        code: "CREDIT_LIMIT_EXCEEDED",
+        creditLimitCheck: creditCheck,
+      }, { status: 422 });
+    }
+
     // Number generation + create run in one Serializable transaction, retried on write-conflict, to prevent duplicate invoice numbers under concurrent requests.
     const invoicePrefix = biz.invoiceNumberPrefix || deriveDefaultPrefix(biz.name);
     async function attemptCreate() {
@@ -302,7 +314,10 @@ export async function POST(request: NextRequest) {
     }
     const { invoice, stockWarnings } = result!;
 
-    await logActivity(user.id, "create_invoice", `Created invoice ${invoice.invoiceNumber} for ${invoice.customer.name} | Total: ₹${invoice.total.toFixed(2)} | Items: ${invoiceItems.length} | Tax: ${isInterState ? "IGST" : "CGST+SGST"}`, invoice.id, "invoice");
+    const creditOverrideNote = creditCheck?.exceeded && overrideCreditLimit === true
+      ? ` | Credit limit override: proceeded past ₹${creditCheck.creditLimit.toFixed(2)} limit (projected outstanding ₹${creditCheck.projectedOutstanding.toFixed(2)})`
+      : "";
+    await logActivity(user.id, "create_invoice", `Created invoice ${invoice.invoiceNumber} for ${invoice.customer.name} | Total: ₹${invoice.total.toFixed(2)} | Items: ${invoiceItems.length} | Tax: ${isInterState ? "IGST" : "CGST+SGST"}${creditOverrideNote}`, invoice.id, "invoice");
     revalidateTag("invoices", { expire: 0 });
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });

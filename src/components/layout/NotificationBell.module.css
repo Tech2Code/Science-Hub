@@ -1,0 +1,231 @@
+.wrap { position: relative; }
+
+.badge {
+  position: absolute;
+  top: -0.1rem;
+  right: -0.1rem;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 0.25rem;
+  border-radius: 9999px;
+  background: var(--c-red);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1rem;
+  text-align: center;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  width: 340px;
+  max-width: calc(100vw - 1rem);
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--c-bg-card);
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius);
+  box-shadow: var(--c-shadow-lg);
+  padding: 0.75rem;
+}
+
+.popoverTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--c-text-2);
+  margin-bottom: 0.5rem;
+}
+
+.popoverTitleActions { display: flex; align-items: center; gap: 0.75rem; }
+
+.clearAllBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--c-red);
+  cursor: pointer;
+}
+.clearAllBtn:hover { color: var(--c-red); text-decoration: underline; }
+
+.dismissedBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--c-text-3);
+  cursor: pointer;
+}
+.dismissedBtn:hover { color: var(--c-text); text-decoration: underline; }
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--c-text-2);
+  cursor: pointer;
+}
+.backBtn:hover { color: var(--c-text); }
+
+.restoreBtn {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--c-blue);
+  background: none;
+  border: none;
+  padding: 0.25rem 0.5rem;
+  margin-right: 0.25rem;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+.restoreBtn:hover { background: var(--c-bg-sub); text-decoration: underline; }
+
+.emptyState {
+  font-size: 0.8125rem;
+  color: var(--c-text-4);
+  padding: 0.75rem 0.25rem;
+  text-align: center;
+}
+
+.sectionList { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.section + .section { padding-top: 0.5rem; border-top: 1px solid var(--c-border); }
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.sectionTitle { font-size: 0.75rem; font-weight: 600; color: var(--c-text-2); }
+
+.sectionCount {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--c-red);
+  background: var(--c-bg-sub);
+  border-radius: 9999px;
+  padding: 0.0625rem 0.4rem;
+}
+
+.list { display: flex; flex-direction: column; gap: 0.125rem; }
+
+.itemRow {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 0.5rem;
+}
+.itemRow:hover { background: var(--c-bg-sub); }
+
+.item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.375rem 0.5rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.dismissBtn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 0.375rem;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--c-text-4);
+  cursor: pointer;
+}
+.dismissBtn:hover { background: var(--c-border); color: var(--c-text-2); }
+
+.itemName {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--c-text);
+}
+
+.itemNameText {
+  display: block;
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dotCritical, .dotWarning {
+  flex-shrink: 0;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+}
+.dotCritical { background: var(--c-red); }
+.dotWarning { background: #d97706; }
+
+.itemDetailCritical { font-size: 0.6875rem; color: var(--c-red); font-weight: 500; }
+.itemDetailWarning { font-size: 0.6875rem; color: #d97706; font-weight: 500; }
+
+.itemTimestamp { font-size: 0.625rem; color: var(--c-text-4); }
+
+.sectionFooter {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.footerLink {
+  /* Shared by <Link> (navigate-away links) and <button> ("Show all"/"Show less" expand toggles) —
+     the reset properties below are no-ops on an <a> but stop a <button> keeping its default UA
+     chrome (border/background/padding). */
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--c-blue);
+  text-decoration: none;
+}
+.footerLink:hover { text-decoration: underline; }
+
+@media (max-width: 480px) {
+  /* .wrap isn't the topbar's rightmost element (the user avatar/name follows it), so
+     anchoring via right:0 relative to .wrap can push the popover's left edge past the
+     screen's left edge on narrow widths. Pin to the viewport itself instead. */
+  .popover {
+    position: fixed;
+    top: 3.25rem;
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    max-width: none;
+    max-height: calc(100vh - 4rem);
+  }
+}

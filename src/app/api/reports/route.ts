@@ -193,7 +193,7 @@ async function getCombinedDashboard(canSeeSales: boolean, canSeePurchases: boole
   const [
     salesMonthAgg, salesOutstandingAgg, salesOverdue, collectedTodayAgg,
     spendMonthAgg, purchaseUnpaidAgg, purchaseOverdue, paidTodayAgg,
-    recentInvoices, recentBills, lowStockCount,
+    recentInvoices, recentBills, lowStockCount, outOfStockCount,
   ] = await Promise.all([
     prisma.invoice.aggregate({ where: { deletedAt: null, date: { gte: monthStart, lt: monthEnd } }, _sum: { total: true } }),
     // balanceDue is a real Postgres GENERATED column — sum it in the DB rather than reducing every row in JS (same fix as getSalesDashboard/getPurchaseDashboard).
@@ -208,6 +208,8 @@ async function getCombinedDashboard(canSeeSales: boolean, canSeePurchases: boole
     prisma.purchaseBill.findMany({ where: { deletedAt: null }, orderBy: { billDate: "desc" }, take: 5, include: { vendor: { select: { name: true } } } }),
     // isLowStock is also a real Postgres GENERATED column — a plain count against it instead of fetching every product to filter in JS.
     prisma.product.count({ where: { deletedAt: null, isLowStock: true } }),
+    // Mirrors isOutOfStock() in stockStatus.ts (stock <= 0) — there's no generated column for this one, so filter directly.
+    prisma.product.count({ where: { deletedAt: null, stock: { lte: 0 } } }),
   ]);
 
   // Redact sales/purchase figures server-side for callers not granted the matching section — the dashboard's own client-side hiding isn't sufficient on its own.
@@ -233,6 +235,7 @@ async function getCombinedDashboard(canSeeSales: boolean, canSeePurchases: boole
       })),
     } : null,
     lowStockCount,
+    outOfStockCount,
   };
 }
 

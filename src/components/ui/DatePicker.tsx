@@ -47,6 +47,7 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(func
   const hiddenRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
@@ -123,8 +124,19 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(func
   useLayoutEffect(() => {
     if (!open) return;
     computePosition();
-    panelRef.current?.focus();
   }, [open]);
+
+  // Separate from the effect above: on the panel's very first-ever open, `pos` starts out null,
+  // so the portal (gated on `mounted && open && pos`) hasn't mounted yet when the position-calc
+  // effect runs — gridRef.current is still null at that point and a focus() call there would
+  // silently no-op. Re-running once `pos` actually changes (which computePosition triggers every
+  // open) guarantees the grid exists in the DOM by the time we try to focus it.
+  useLayoutEffect(() => {
+    if (!open) return;
+    // Focus lands on the grid (not the outer panel) so aria-activedescendant, which must be set
+    // on the actually-focused element, can legitimately live on an element with role="grid".
+    gridRef.current?.focus();
+  }, [open, pos]);
 
   useEffect(() => {
     if (!open) return;
@@ -182,6 +194,14 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(func
     const gridStart = addDays(first, -first.getDay());
     return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
   }, [viewYear, viewMonth]);
+  // Chunked into weeks purely for the role="row" wrapper below — display:contents keeps
+  // them invisible to the CSS grid layout, which still lays out all 42 day buttons flat.
+  const weeks = useMemo(() => Array.from({ length: 6 }, (_, i) => cells.slice(i * 7, i * 7 + 7)), [cells]);
+  const focusedDayId = `daypicker-day-${toISO(focusedDate)}`;
+
+  function dayAriaLabel(d: Date): string {
+    return d.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  }
 
   const label = selected ? formatDate(selected) : "";
   const triggerCls = [styles.trigger, sz === "sm" && styles.sm, disabled && styles.disabled, className].filter(Boolean).join(" ");
@@ -237,34 +257,53 @@ export const DateInput = React.forwardRef<HTMLInputElement, DateInputProps>(func
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M9 18l6-6-6-6" /></svg>
             </button>
           </div>
-          <div className={styles.weekRow}>
-            {WEEKDAYS.map((w) => <div key={w} className={styles.weekday}>{w}</div>)}
+          <div className={styles.weekRow} role="row">
+            {WEEKDAYS.map((w) => <div key={w} className={styles.weekday} role="columnheader" aria-label={w}>{w}</div>)}
           </div>
-          <div className={styles.grid}>
-            {cells.map((d) => {
-              const inMonth = d.getMonth() === viewMonth;
-              const dis = isDisabledDate(d);
-              return (
-                <button
-                  type="button"
-                  key={toISO(d)}
-                  disabled={dis}
-                  tabIndex={-1}
-                  className={[
-                    styles.day,
-                    !inMonth && styles.outMonth,
-                    sameDay(d, today) && styles.today,
-                    sameDay(d, selected) && styles.selected,
-                    sameDay(d, focusedDate) && styles.focused,
-                    dis && styles.dayDisabled,
-                  ].filter(Boolean).join(" ")}
-                  onClick={() => { commit(d); setOpen(false); }}
-                  onMouseEnter={() => setFocusedDate(d)}
-                >
-                  {d.getDate()}
-                </button>
-              );
-            })}
+          <div
+            className={styles.grid}
+            ref={gridRef}
+            role="grid"
+            tabIndex={-1}
+            aria-label={`${MONTHS[viewMonth]} ${viewYear}`}
+            aria-activedescendant={focusedDayId}
+          >
+            {weeks.map((week, wi) => (
+              // display:contents so this wrapper doesn't participate in the CSS grid layout —
+              // the 7 day buttons inside still lay out as flat grid items, same as before.
+              <div key={wi} role="row" style={{ display: "contents" }}>
+                {week.map((d) => {
+                  const inMonth = d.getMonth() === viewMonth;
+                  const dis = isDisabledDate(d);
+                  const isFocused = sameDay(d, focusedDate);
+                  return (
+                    <button
+                      type="button"
+                      id={`daypicker-day-${toISO(d)}`}
+                      role="gridcell"
+                      key={toISO(d)}
+                      disabled={dis}
+                      tabIndex={-1}
+                      aria-selected={sameDay(d, selected)}
+                      aria-current={sameDay(d, today) ? "date" : undefined}
+                      aria-label={dayAriaLabel(d)}
+                      className={[
+                        styles.day,
+                        !inMonth && styles.outMonth,
+                        sameDay(d, today) && styles.today,
+                        sameDay(d, selected) && styles.selected,
+                        isFocused && styles.focused,
+                        dis && styles.dayDisabled,
+                      ].filter(Boolean).join(" ")}
+                      onClick={() => { commit(d); setOpen(false); }}
+                      onMouseEnter={() => setFocusedDate(d)}
+                    >
+                      {d.getDate()}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
           <div className={styles.panelFooter}>
             <button type="button" className={styles.footerBtn} disabled={isDisabledDate(today)} onClick={() => { commit(today); setOpen(false); }}>

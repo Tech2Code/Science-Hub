@@ -64,7 +64,7 @@ export default function EditCustomerPage() {
       .then((d) => {
         const loaded: CustomerFormData = { name: d.name ?? "", phone: d.phone ?? "", email: d.email ?? "",
           address: d.address ?? "", city: d.city ?? "", state: d.state ?? "",
-          pincode: d.pincode ?? "", gstin: d.gstin ?? "" };
+          pincode: d.pincode ?? "", gstin: d.gstin ?? "", creditLimit: d.creditLimit != null ? String(d.creditLimit) : "" };
         setForm(loaded);
         setInitialForm(loaded);
         setLoadedUpdatedAt(d.updatedAt ?? null);

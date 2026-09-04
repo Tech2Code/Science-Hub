@@ -58,6 +58,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/reports/sales",      label: "Sales Reports",    iconKey: "reportsSales",     adminOnly: false, sectionRequired: "reports_sales" },
       { href: "/reports/purchases",  label: "Purchase Reports", iconKey: "reportsPurchases", adminOnly: false, sectionRequired: "reports_purchases" },
       { href: "/reports/gst-reports", label: "GST Reports",     iconKey: "gstFiling",        adminOnly: false, sectionsRequired: ["reports_sales", "reports_purchases"], keywords: ["gstin", "gst filing", "gst summary"] },
+      { href: "/reports/eway-bill",   label: "E-way Bill",      iconKey: "ewayBill",         adminOnly: false, sectionsRequired: ["reports_sales", "reports_purchases"], keywords: ["eway", "e-way bill", "consignment", "transport"] },
     ],
   },
   {

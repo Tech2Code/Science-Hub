@@ -40,6 +40,9 @@ export default function NewRateListPage() {
     const draft = loadFormDraft<RateListNewDraft>(DRAFT_KEY);
     const v = draft?.values;
     const hasContent = !!v && (!!v.title?.trim() || !!v.note?.trim() || v.items?.some((i) => i.name.trim() || toNum(i.listRate) > 0));
+    // One-time sync from localStorage (an external system) on mount — a legitimate effect, not
+    // state derivable from props/render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (hasContent) setShowDraftBanner(true);
     else setDraftReady(true);
   }, []);

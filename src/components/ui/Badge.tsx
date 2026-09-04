@@ -1,6 +1,6 @@
 import styles from "./Badge.module.css";
 
-type Variant = "paid" | "partial" | "unpaid" | "neutral" | "blue";
+type Variant = "paid" | "partial" | "unpaid" | "cancelled" | "neutral" | "blue";
 
 interface BadgeProps {
   variant?: Variant;
@@ -12,6 +12,7 @@ const statusMap: Record<string, Variant> = {
   paid: "paid",
   partial: "partial",
   unpaid: "unpaid",
+  cancelled: "cancelled",
 };
 
 export function Badge({ variant = "neutral", children, className }: BadgeProps) {

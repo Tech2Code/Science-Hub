@@ -17,11 +17,12 @@ interface ProductFormFieldsProps {
   disabled?: boolean;
   stockLabel?: string;
   stockReadOnly?: boolean;
+  minStockAutoSuggested?: boolean;
 }
 
 // Product name/SKU/description/unit/price/GST/stock/brand/category fields —
 // shared by the New Product and Edit Product pages so the two forms can't drift apart.
-export function ProductFormFields({ form, onChange, onUnitChange, fieldErrors, brands, categories, disabled, stockLabel = "Opening Stock", stockReadOnly = false }: ProductFormFieldsProps) {
+export function ProductFormFields({ form, onChange, onUnitChange, fieldErrors, brands, categories, disabled, stockLabel = "Opening Stock", stockReadOnly = false, minStockAutoSuggested = false }: ProductFormFieldsProps) {
   return (
     <>
       <div className="form-grid-3">
@@ -77,7 +78,13 @@ export function ProductFormFields({ form, onChange, onUnitChange, fieldErrors, b
         >
           <Input name="stock" type="number" min="0" value={form.stock} onChange={onChange} disabled={disabled || stockReadOnly} readOnly={stockReadOnly} />
         </FormField>
-        <FormField label="Minimum Stock" hint="Alert triggers when stock drops to or below this." error={fieldErrors.minStock}>
+        <FormField
+          label="Minimum Stock"
+          hint={minStockAutoSuggested
+            ? "Alert triggers when stock drops to or below this. Suggested from the unit above — adjust for this product."
+            : "Alert triggers when stock drops to or below this."}
+          error={fieldErrors.minStock}
+        >
           <Input name="minStock" type="number" min="0" value={form.minStock} onChange={onChange} disabled={disabled} />
         </FormField>
       </div>

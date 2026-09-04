@@ -27,6 +27,7 @@ interface CombinedDashboard {
     recentBills: RecentBill[];
   } | null;
   lowStockCount: number;
+  outOfStockCount: number;
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -276,19 +277,44 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Low stock alert */}
-      {!loading && (data?.lowStockCount ?? 0) > 0 && (
+      {/* Low stock / out of stock alert */}
+      {loading ? (
+        <div className={`card ${styles.lowStockCard}`}>
+          <div className={`${styles.lowStockIconWrap} ${styles.lowStockCardSkeleton} ${styles.skeletonPulse}`} />
+          <div className={styles.lowStockBody}>
+            <div className={`${styles.rowSkeleton} ${styles.skeletonPulse}`} style={{ width: "70%" }} />
+            <div className={`${styles.rowSkeleton} ${styles.skeletonPulse}`} style={{ width: "45%" }} />
+          </div>
+        </div>
+      ) : ((data?.lowStockCount ?? 0) > 0 || (data?.outOfStockCount ?? 0) > 0) && (
         <div {...animateSection(5, `card ${styles.lowStockCard}`)}>
           <div className={styles.lowStockIconWrap}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--c-red)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </div>
           <div className={styles.lowStockBody}>
-            <div className={styles.lowStockTitle}>
-              {data?.lowStockCount} product{(data?.lowStockCount ?? 0) > 1 ? "s" : ""} running low on stock
-            </div>
-            <div className={styles.lowStockSub}>Review and restock to avoid stockouts</div>
+            {(data?.lowStockCount ?? 0) > 0 && (
+              <div className={styles.lowStockRow}>
+                <div>
+                  <div className={styles.lowStockTitle}>
+                    {data?.lowStockCount} product{(data?.lowStockCount ?? 0) > 1 ? "s" : ""} running low on stock
+                  </div>
+                  <div className={styles.lowStockSub}>Review and restock to avoid stockouts</div>
+                </div>
+                <Button variant="secondary" size="sm" href="/products?filter=low">View Products →</Button>
+              </div>
+            )}
+            {(data?.outOfStockCount ?? 0) > 0 && (
+              <div className={styles.lowStockRow}>
+                <div>
+                  <div className={styles.lowStockTitle}>
+                    {data?.outOfStockCount} product{(data?.outOfStockCount ?? 0) > 1 ? "s" : ""} out of stock
+                  </div>
+                  <div className={styles.lowStockSub}>Restock as soon as possible</div>
+                </div>
+                <Button variant="secondary" size="sm" href="/products?filter=out">View Products →</Button>
+              </div>
+            )}
           </div>
-          <Button variant="secondary" size="sm" href="/products?filter=low">View Products →</Button>
         </div>
       )}
     </div>

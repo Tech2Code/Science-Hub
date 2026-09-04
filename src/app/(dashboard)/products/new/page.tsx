@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ProductFormFields } from "@/components/products/ProductFormFields";
-import { validateProductForm, hasProductFieldErrors, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
+import { validateProductForm, hasProductFieldErrors, suggestMinStockForUnit, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
 import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
@@ -21,7 +21,7 @@ interface Category { id: string; name: string; }
 
 const BLANK_FORM: ProductFormData = {
   name: "", sku: "", hsn: "", description: "", unit: "Nos",
-  price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: "5",
+  price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: String(suggestMinStockForUnit("Nos")),
   brandId: "", categoryId: "",
 };
 const DRAFT_KEY = "product:new";
@@ -38,6 +38,9 @@ export default function NewProductPage() {
   const [form, setForm] = useState<ProductFormData>(BLANK_FORM);
   const [fieldErrors, setFieldErrors] = useState<ProductFieldErrors>({});
   const [saving, setSaving] = useState(false);
+  // Tracks whether Minimum Stock still holds the unit-based suggestion vs. a value the user typed
+  // themselves — only re-applied on a unit change while this stays true.
+  const [minStockAuto, setMinStockAuto] = useState(true);
 
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
@@ -52,6 +55,9 @@ export default function NewProductPage() {
     const draft = loadFormDraft<ProductFormData>(DRAFT_KEY);
     const v = draft?.values;
     const hasContent = !!v && Object.entries(v).some(([k, val]) => k !== "unit" && k !== "gstRate" && k !== "stock" && k !== "minStock" && String(val ?? "").trim());
+    // One-time sync from localStorage (an external system) on mount — a legitimate effect, not
+    // state derivable from props/render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (hasContent) setShowDraftBanner(true);
     else setDraftReady(true);
   }, []);
@@ -59,6 +65,7 @@ export default function NewProductPage() {
   function restoreDraft() {
     const draft = loadFormDraft<ProductFormData>(DRAFT_KEY);
     if (draft?.values) setForm(draft.values);
+    setMinStockAuto(false); // a resumed draft may already carry a deliberately-chosen value — don't override it on the next unit change
     setShowDraftBanner(false);
     setDraftReady(true);
   }
@@ -79,7 +86,17 @@ export default function NewProductPage() {
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+    if (name === "minStock") setMinStockAuto(false);
     if (name in fieldErrors) setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
+  }
+
+  function handleUnitChange(value: string) {
+    setForm((prev) => ({
+      ...prev,
+      unit: value,
+      minStock: minStockAuto ? String(suggestMinStockForUnit(value)) : prev.minStock,
+    }));
+    setFieldErrors((prev) => ({ ...prev, unit: undefined }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -135,7 +152,7 @@ export default function NewProductPage() {
         />
       )}
       <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>
-        <ProductFormFields form={form} onChange={handleChange} onUnitChange={(v) => { setForm((prev) => ({ ...prev, unit: v })); setFieldErrors((prev) => ({ ...prev, unit: undefined })); }} fieldErrors={fieldErrors} brands={brands} categories={categories} />
+        <ProductFormFields form={form} onChange={handleChange} onUnitChange={handleUnitChange} fieldErrors={fieldErrors} brands={brands} categories={categories} minStockAutoSuggested />
 
         <div className="form-actions">
           <Button type="submit" variant="primary" disabled={saving}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Save Product</Button>

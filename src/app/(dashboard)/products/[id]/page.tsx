@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { Modal } from "@/components/dialogs/Modal";
 import { FormField, Input, Textarea } from "@/components/ui/Input";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { OverlayLoader } from "@/components/ui/Spinner";
@@ -104,7 +105,8 @@ export default function ProductViewPage() {
     setAdjustOpen(true);
   }
 
-  async function handleAdjustStock() {
+  async function handleAdjustStock(e: React.FormEvent) {
+    e.preventDefault();
     if (!product) return;
     const parsed = Number(adjustStock);
     if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
@@ -197,64 +199,73 @@ export default function ProductViewPage() {
         onCancel={() => { if (!deleting) setConfirmOpen(false); }}
       />
 
-      <ConfirmDialog
+      <Modal
         open={adjustOpen}
         title="Adjust Stock"
-        message="Use this after a physical stock take to correct the recorded quantity — it will be logged in the stock ledger and activity log."
-        detail={
-          <div className={styles.adjustForm}>
-            {product && (
-              <div className={styles.adjustPreview}>
-                <div className={styles.adjustPreviewItem}>
-                  <span className={styles.adjustPreviewLabel}>Current Stock</span>
-                  <span className={styles.adjustPreviewValue}>{product.stock} {product.unit}</span>
-                </div>
-                <div className={styles.adjustPreviewItem}>
-                  <span className={styles.adjustPreviewLabel}>Adjustment</span>
-                  <span className={`${styles.adjustPreviewValue} ${adjustTone}`}>
-                    {adjustValid ? `${adjustDelta > 0 ? "▲ +" : adjustDelta < 0 ? "▼ " : ""}${adjustDelta}` : "—"} {product.unit}
-                  </span>
-                </div>
-                <div className={styles.adjustPreviewItem}>
-                  <span className={styles.adjustPreviewLabel}>New Stock</span>
-                  <span className={`${styles.adjustPreviewValue} ${adjustTone}`}>
-                    {adjustValid ? adjustParsed : "—"} {product.unit}
-                  </span>
-                </div>
+        subtitle="Use this after a physical stock take to correct the recorded quantity — it will be logged in the stock ledger and activity log."
+        onClose={() => { if (!adjustSaving) setAdjustOpen(false); }}
+        variant="fullscreen"
+        footer={
+          <>
+            <Button type="button" variant="secondary" disabled={adjustSaving} onClick={() => setAdjustOpen(false)}>Cancel</Button>
+            <Button
+              type="submit"
+              form="adjust-stock-form"
+              variant="primary"
+              loading={adjustSaving}
+              disabled={
+                adjustSaving || !adjustNotes.trim() ||
+                !Number.isFinite(Number(adjustStock)) || !Number.isInteger(Number(adjustStock)) || Number(adjustStock) < 0 ||
+                (product ? Number(adjustStock) === product.stock : false)
+              }
+            >
+              {adjustSaving ? "Saving…" : "Save Adjustment"}
+            </Button>
+          </>
+        }
+      >
+        <form id="adjust-stock-form" onSubmit={handleAdjustStock} noValidate className={styles.adjustForm}>
+          {product && (
+            <div className={styles.adjustPreview}>
+              <div className={styles.adjustPreviewItem}>
+                <span className={styles.adjustPreviewLabel}>Current Stock</span>
+                <span className={styles.adjustPreviewValue}>{product.stock} {product.unit}</span>
               </div>
-            )}
-            <FormField label="New stock" required error={adjustStockError}>
-              <Input
-                type="number"
-                min={0}
-                step={1}
-                value={adjustStock}
-                onChange={(e) => { setAdjustStock(e.target.value); setAdjustStockError(undefined); }}
-                disabled={adjustSaving}
-              />
-            </FormField>
-            <FormField label="Reason" required error={adjustNotesError} hint={!adjustNotesError ? 'e.g. "Physical count on 24 Jul found 3 fewer units"' : undefined}>
-              <Textarea
-                rows={3}
-                value={adjustNotes}
-                onChange={(e) => { setAdjustNotes(e.target.value); setAdjustNotesError(undefined); }}
-                disabled={adjustSaving}
-                maxLength={500}
-              />
-            </FormField>
-          </div>
-        }
-        confirmLabel="Save Adjustment"
-        cancelLabel="Cancel"
-        loading={adjustSaving}
-        confirmDisabled={
-          !adjustNotes.trim() ||
-          !Number.isFinite(Number(adjustStock)) || !Number.isInteger(Number(adjustStock)) || Number(adjustStock) < 0 ||
-          (product ? Number(adjustStock) === product.stock : false)
-        }
-        onConfirm={handleAdjustStock}
-        onCancel={() => { if (!adjustSaving) setAdjustOpen(false); }}
-      />
+              <div className={styles.adjustPreviewItem}>
+                <span className={styles.adjustPreviewLabel}>Adjustment</span>
+                <span className={`${styles.adjustPreviewValue} ${adjustTone}`}>
+                  {adjustValid ? `${adjustDelta > 0 ? "▲ +" : adjustDelta < 0 ? "▼ " : ""}${adjustDelta}` : "—"} {product.unit}
+                </span>
+              </div>
+              <div className={styles.adjustPreviewItem}>
+                <span className={styles.adjustPreviewLabel}>New Stock</span>
+                <span className={`${styles.adjustPreviewValue} ${adjustTone}`}>
+                  {adjustValid ? adjustParsed : "—"} {product.unit}
+                </span>
+              </div>
+            </div>
+          )}
+          <FormField label="New stock" required error={adjustStockError}>
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              value={adjustStock}
+              onChange={(e) => { setAdjustStock(e.target.value); setAdjustStockError(undefined); }}
+              disabled={adjustSaving}
+            />
+          </FormField>
+          <FormField label="Reason" required error={adjustNotesError} hint={!adjustNotesError ? 'e.g. "Physical count on 24 Jul found 3 fewer units"' : undefined}>
+            <Textarea
+              rows={3}
+              value={adjustNotes}
+              onChange={(e) => { setAdjustNotes(e.target.value); setAdjustNotesError(undefined); }}
+              disabled={adjustSaving}
+              maxLength={500}
+            />
+          </FormField>
+        </form>
+      </Modal>
 
       <Breadcrumb items={product ? [{ label: "Products", href: "/products" }, { label: product.name }] : [{ label: "Products", href: "/products" }]} />
 

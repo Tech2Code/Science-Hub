@@ -24,12 +24,12 @@
 
 .statsGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 1rem;
 }
 @media (max-width: 640px) { .statsGrid { grid-template-columns: 1fr; } }
 
-.pageStack { max-width: 56rem; }
+.pageStack { max-width: 64rem; }
 
 .errorCenter { color: var(--c-red); }
 

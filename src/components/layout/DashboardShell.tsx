@@ -11,6 +11,7 @@ import { NAV_GROUPS, BIN_NAV } from "@/lib/navigation";
 import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { GlobalSearch } from "./GlobalSearch";
+import { NotificationBell } from "./NotificationBell";
 import styles from "./DashboardShell.module.css";
 
 const NavIcons: Record<string, React.FC<{ className?: string }>> = {
@@ -79,6 +80,11 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
   gstFiling: ({ className }) => (
     <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m-9 4h12a2 2 0 002-2V6.828a2 2 0 00-.586-1.414l-2.828-2.828A2 2 0 0014.172 2H6a2 2 0 00-2 2v14a2 2 0 002 2z" />
+    </svg>
+  ),
+  ewayBill: ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16V6a1 1 0 011-1h9a1 1 0 011 1v10m-11 0h11m-11 0a2 2 0 104 0m7 0a2 2 0 104 0m-4 0h4m0 0V10h-3l-3-3v9" />
     </svg>
   ),
   admin: ({ className }) => (
@@ -511,6 +517,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <button
                 onClick={() => setSidebarOpen((v) => !v)}
                 title={sidebarOpen ? "Close menu" : "Open menu"}
+                aria-label={sidebarOpen ? "Close menu" : "Open menu"}
                 className={styles.collapseBtn}
               >
                 <svg className={styles.mobileMenuIcon} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -531,6 +538,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <GlobalSearch mobile={mobile} />
 
           <div className={styles.topbarRight}>
+            <NotificationBell />
             {condensed ? <MoreMenu /> : <><AccentPicker /><ThemeToggle /></>}
             <Link href="/admin" className={styles.plainLink}>
               <div className={[styles.userChip, styles.userChipLink].join(" ")}>

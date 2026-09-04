@@ -14,6 +14,7 @@ class InvoiceConflictError extends Error {}
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
+import { checkCustomerCreditLimit } from "@/lib/creditLimit";
 
 export async function GET(
   request: NextRequest,
@@ -43,7 +44,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, expectedUpdatedAt, date, transportCharge, transportChargeGstRate, customerId } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, expectedUpdatedAt, date, transportCharge, transportChargeGstRate, customerId, overrideCreditLimit } = body;
 
     const existingBase = await prisma.invoice.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existingBase) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -228,6 +229,17 @@ export async function PUT(
     if (paidAmount >= total) newStatus = "paid";
     else if (paidAmount > 0) newStatus = "partial";
 
+    // Excludes this invoice's own (pre-edit) balance from "current outstanding", then adds back its
+    // post-edit balance — an edit that only rearranges this invoice's own items shouldn't double-count it.
+    const creditCheck = await checkCustomerCreditLimit(resolvedCustomerId, total - paidAmount, id);
+    if (creditCheck?.exceeded && overrideCreditLimit !== true) {
+      return NextResponse.json({
+        error: `This change would take the customer's outstanding balance to ₹${creditCheck.projectedOutstanding.toFixed(2)}, over their ₹${creditCheck.creditLimit.toFixed(2)} credit limit.`,
+        code: "CREDIT_LIMIT_EXCEEDED",
+        creditLimitCheck: creditCheck,
+      }, { status: 422 });
+    }
+
     const { invoice, stockWarnings } = await prisma.$transaction(async (tx) => {
       // Re-check the optimistic-lock atomically under the row lock — the earlier check ran as a separate query, leaving a race window for concurrent edits.
       if (expectedUpdatedAt) {
@@ -309,7 +321,10 @@ export async function PUT(
     revalidateTag("reports", { expire: 0 });
 
     const inv = invoice as { invoiceNumber?: string; customer?: { name?: string }; total?: number; items?: unknown[] };
-    await logActivity(auth.session.user.id, "update_invoice", `Edited invoice ${inv.invoiceNumber ?? id} for ${inv.customer?.name ?? ""} | Total: ₹${(inv.total ?? 0).toFixed(2)} | Items: ${inv.items?.length ?? 0} | Tax: ${inter ? "IGST" : "CGST+SGST"}`, id, "invoice");
+    const creditOverrideNote = creditCheck?.exceeded && overrideCreditLimit === true
+      ? ` | Credit limit override: proceeded past ₹${creditCheck.creditLimit.toFixed(2)} limit (projected outstanding ₹${creditCheck.projectedOutstanding.toFixed(2)})`
+      : "";
+    await logActivity(auth.session.user.id, "update_invoice", `Edited invoice ${inv.invoiceNumber ?? id} for ${inv.customer?.name ?? ""} | Total: ₹${(inv.total ?? 0).toFixed(2)} | Items: ${inv.items?.length ?? 0} | Tax: ${inter ? "IGST" : "CGST+SGST"}${creditOverrideNote}`, id, "invoice");
     return NextResponse.json({ ...invoice, stockWarnings });
   } catch (error) {
     if (error instanceof InvoiceQuantityValidationError) {

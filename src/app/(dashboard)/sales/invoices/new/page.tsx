@@ -75,6 +75,8 @@ export default function NewInvoicePage() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showStockDialog, setShowStockDialog] = useState(false);
   const [stockOutItems, setStockOutItems] = useState<{ name: string; available: number; requested: number }[]>([]);
+  const [showCreditLimitDialog, setShowCreditLimitDialog] = useState(false);
+  const [creditLimitMessage, setCreditLimitMessage] = useState("");
   const [showFirstInvoiceNudge, setShowFirstInvoiceNudge] = useState(false);
   const [firstInvoicePreviewNumber, setFirstInvoicePreviewNumber] = useState("");
 
@@ -91,6 +93,9 @@ export default function NewInvoicePage() {
     }>(DRAFT_KEY);
     const v = draft?.values;
     const hasContent = !!v && (!!v.customerId || !!v.customerSearch?.trim() || v.items?.length > 0 || !!v.notes?.trim());
+    // One-time sync from localStorage (an external system) on mount — a legitimate effect, not
+    // state derivable from props/render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (hasContent) setShowDraftBanner(true);
     else setDraftReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount check
@@ -370,8 +375,9 @@ export default function NewInvoicePage() {
     await doSubmit();
   }
 
-  async function doSubmit() {
+  async function doSubmit(overrideCreditLimit: boolean = false) {
     setShowStockDialog(false);
+    setShowCreditLimitDialog(false);
     setSaving(true);
     const body: Record<string, unknown> = {
       isInterState,
@@ -383,6 +389,7 @@ export default function NewInvoicePage() {
       transportCharge: effectiveTransportCharge,
       transportChargeGstRate: effectiveTransportGstRate,
       idempotencyKey: idempotency.key(),
+      ...(overrideCreditLimit ? { overrideCreditLimit: true } : {}),
     };
     const res = await fetch("/api/invoices", {
       method: "POST",
@@ -403,7 +410,14 @@ export default function NewInvoicePage() {
       router.push(`/sales/invoices/${d.id}`);
       return;
     }
-    { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to create invoice." }); }
+    const d = await res.json().catch(() => ({}));
+    if (res.status === 422 && d?.code === "CREDIT_LIMIT_EXCEEDED") {
+      setCreditLimitMessage(d.error ?? "This invoice would exceed the customer's credit limit.");
+      setShowCreditLimitDialog(true);
+      setSaving(false);
+      return;
+    }
+    toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to create invoice." });
     setSaving(false);
   }
 
@@ -464,8 +478,20 @@ export default function NewInvoicePage() {
         cancelLabel="Go Back"
         variant="danger"
         loading={saving}
-        onConfirm={doSubmit}
+        onConfirm={() => doSubmit()}
         onCancel={() => setShowStockDialog(false)}
+      />
+
+      <ConfirmDialog
+        open={showCreditLimitDialog}
+        title="Credit limit exceeded"
+        message={creditLimitMessage}
+        confirmLabel="Create Anyway"
+        cancelLabel="Go Back"
+        variant="danger"
+        loading={saving}
+        onConfirm={() => doSubmit(true)}
+        onCancel={() => setShowCreditLimitDialog(false)}
       />
 
       <form onSubmit={handleSubmit} noValidate>

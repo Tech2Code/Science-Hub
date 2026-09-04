@@ -1,6 +1,8 @@
 // Shared bulk-import parsing for Products (mirrors rateListImport.ts) — used by both the client-side
 // paste flow and the server-side /api/products/parse-import route (ExcelJS-reduced .xlsx/.csv rows).
 
+import { suggestMinStockForUnit } from "@/lib/productForm";
+
 export interface ParsedProductRow {
   name: string;
   sku: string;
@@ -98,16 +100,19 @@ export function parseProductRows(rows: string[][]): { items: ParsedProductRow[];
     const name = cellAt(row, cols.name);
     const price = numCellAt(row, cols.price);
     if (!name || !price) { skipped++; continue; }
+    const unit = cellAt(row, cols.unit) || "Nos";
     items.push({
       name,
       sku: cellAt(row, cols.sku),
       hsn: cellAt(row, cols.hsn),
-      unit: cellAt(row, cols.unit) || "Nos",
+      unit,
       price,
       purchasePrice: numCellAt(row, cols.purchasePrice),
       gstRate: numCellAt(row, cols.gstRate) || "18",
       stock: numCellAt(row, cols.stock) || "0",
-      minStock: numCellAt(row, cols.minStock) || "5",
+      // No Min Stock column in the sheet — suggest from the row's own unit rather than a flat "5",
+      // same reasoning as the New Product form (src/app/(dashboard)/products/new/page.tsx).
+      minStock: numCellAt(row, cols.minStock) || String(suggestMinStockForUnit(unit)),
       brand: cellAt(row, cols.brand),
       category: cellAt(row, cols.category),
     });

@@ -398,7 +398,7 @@
 .lowStockCard {
   padding: 1rem 1.25rem;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 1rem;
   border-left: 3px solid var(--c-red);
 }
@@ -409,8 +409,8 @@
     padding: 1rem;
   }
   .lowStockBody { min-width: 0; }
-  .lowStockCard > a,
-  .lowStockCard > button {
+  .lowStockRow > a,
+  .lowStockRow > button {
     flex: 1 0 100%;
     justify-content: center;
   }
@@ -429,6 +429,23 @@
 
 .lowStockBody {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lowStockRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.lowStockRow + .lowStockRow {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--c-border);
 }
 
 .lowStockTitle {
@@ -441,4 +458,8 @@
   font-size: 0.8125rem;
   color: var(--c-text-4);
   margin-top: 0.125rem;
+}
+
+.lowStockCardSkeleton .lowStockIconWrap {
+  background: var(--c-border);
 }

@@ -83,6 +83,10 @@ export function CustomerFormFields({ form, onChange, errors, disabled, phoneRequ
           <Input name="email" type="email" value={form.email} onChange={onChange} placeholder="billing@customer.com" disabled={disabled} maxLength={254} />
         </FormField>
       </div>
+
+      <FormField label="Credit Limit" hint="Leave blank for no limit. Staff are warned before an invoice would push this customer's outstanding balance over it." error={errors.creditLimit}>
+        <Input name="creditLimit" inputMode="decimal" value={form.creditLimit} onChange={onChange} placeholder="e.g. 50000" disabled={disabled} maxLength={12} />
+      </FormField>
     </>
   );
 }

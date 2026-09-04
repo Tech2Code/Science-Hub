@@ -100,9 +100,6 @@
   color: var(--c-text);
 }
 
-.positive { color: var(--c-green); }
-.negative { color: var(--c-red); }
-
 .statSub {
   font-size: 0.75rem;
   color: var(--c-text-4);
@@ -181,6 +178,9 @@
   font-weight: 700;
   color: var(--c-text);
 }
+
+.positive { color: var(--c-green); }
+.negative { color: var(--c-red); }
 
 @media screen and (max-width: 480px) {
   .adjustPreview { flex-direction: column; gap: 0.625rem; }

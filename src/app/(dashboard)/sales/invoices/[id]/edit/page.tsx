@@ -77,6 +77,8 @@ export default function EditInvoicePage() {
   const [saving, setSaving] = useState(false);
   const [showStockDialog, setShowStockDialog] = useState(false);
   const [stockOutItems, setStockOutItems] = useState<{ name: string; available: number; requested: number }[]>([]);
+  const [showCreditLimitDialog, setShowCreditLimitDialog] = useState(false);
+  const [creditLimitMessage, setCreditLimitMessage] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -421,8 +423,9 @@ export default function EditInvoicePage() {
     await doSubmit();
   }
 
-  async function doSubmit() {
+  async function doSubmit(overrideCreditLimit: boolean = false) {
     setShowStockDialog(false);
+    setShowCreditLimitDialog(false);
     setSaving(true);
     const res = await fetch(`/api/invoices/${id}`, {
       method: "PUT",
@@ -439,6 +442,7 @@ export default function EditInvoicePage() {
         transportCharge: effectiveTransportCharge,
         transportChargeGstRate: effectiveTransportGstRate,
         expectedUpdatedAt: loadedUpdatedAt,
+        ...(overrideCreditLimit ? { overrideCreditLimit: true } : {}),
       }),
     });
     if (res.ok) {
@@ -457,12 +461,20 @@ export default function EditInvoicePage() {
       router.push(`/sales/invoices/${id}`);
       return;
     }
+    const d = await res.json().catch(() => ({}));
     if (res.status === 409) {
-      const d = await res.json().catch(() => ({}));
       bustCache(`/api/invoices/${id}`);
       toast({ type: "error", title: "Update conflict", message: d?.error ?? "This invoice was changed by someone else. Please reload and try again." });
+      setSaving(false);
+      return;
     }
-    else { const d = await res.json().catch(() => ({})); toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to update invoice." }); }
+    if (res.status === 422 && d?.code === "CREDIT_LIMIT_EXCEEDED") {
+      setCreditLimitMessage(d.error ?? "This change would exceed the customer's credit limit.");
+      setShowCreditLimitDialog(true);
+      setSaving(false);
+      return;
+    }
+    toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to update invoice." });
     setSaving(false);
   }
 
@@ -553,8 +565,20 @@ export default function EditInvoicePage() {
       cancelLabel="Go Back"
       variant="danger"
       loading={saving}
-      onConfirm={doSubmit}
+      onConfirm={() => doSubmit()}
       onCancel={() => setShowStockDialog(false)}
+    />
+
+    <ConfirmDialog
+      open={showCreditLimitDialog}
+      title="Credit limit exceeded"
+      message={creditLimitMessage}
+      confirmLabel="Update Anyway"
+      cancelLabel="Go Back"
+      variant="danger"
+      loading={saving}
+      onConfirm={() => doSubmit(true)}
+      onCancel={() => setShowCreditLimitDialog(false)}
     />
 
     <div className="page-stack">

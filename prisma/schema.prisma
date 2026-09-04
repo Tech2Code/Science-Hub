@@ -28,6 +28,7 @@ model User {
   stockMovementsCreated StockMovement[]      @relation("StockMovementCreator")
   sectionPermissions    SectionPermission[]
   rateLists             RateList[]
+  notificationDismissals NotificationDismissal[]
 }
 
 model PasswordResetToken {
@@ -40,6 +41,23 @@ model PasswordResetToken {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([token])
+}
+
+// Per-user dismissal of a topbar notification item — the notification itself is never persisted
+// (always live-derived, see src/lib/notifications.ts), only the fact that this user cleared it.
+// `dismissedAt` is checked against a rolling window (currently 24h) when reading, not just existence
+// — a dismissed-but-still-true alert (e.g. an invoice still overdue tomorrow) must resurface rather
+// than being silently hidden forever.
+model NotificationDismissal {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    String   // "stock" | "overdueInvoices" | "overdueBills" | "overLimitCustomers" | "binExpiring"
+  entityId    String   // the underlying record's id (productId/invoiceId/purchaseBillId/customerId/bin item id)
+  dismissedAt DateTime @default(now())
+
+  @@unique([userId, category, entityId])
+  @@index([userId, dismissedAt])
 }
 
 model ActivityLog {
@@ -66,6 +84,9 @@ model Customer {
   state     String?
   pincode   String?
   gstin     String?
+  // Null = no limit enforced. Checked against outstanding balance (sum of Invoice.balanceDue) on
+  // invoice create/edit — see src/lib/creditLimit.ts.
+  creditLimit Float?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?

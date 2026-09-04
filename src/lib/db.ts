@@ -198,7 +198,7 @@ export async function getCustomer(id: string) {
 }
 
 export type ProductSort = "name_az" | "name_za" | "price_high" | "price_low" | "stock_high" | "stock_low" | "newest" | "oldest";
-export type ProductStockFilter = "all" | "low" | "out";
+export type ProductStockFilter = "all" | "low" | "out" | "needsRestock";
 
 export interface ProductListFilters {
   search?: string | null;
@@ -219,6 +219,15 @@ function buildProductWhere(filters: ProductListFilters): Prisma.ProductWhereInpu
   }
   if (stockFilter === "out") where.stock = { lte: 0 };
   else if (stockFilter === "low") where.isLowStock = true;
+  else if (stockFilter === "needsRestock") {
+    // Out-of-stock and low-stock are mutually exclusive (see stockStatus.ts) — combined for the
+    // topbar stock-alert dropdown, which shows both buckets together sorted by urgency. Composed via
+    // AND rather than overwriting `where.OR` outright, so it still combines correctly if a search
+    // term (which also sets `where.OR` above) is ever passed alongside this filter.
+    const restockOr: Prisma.ProductWhereInput = { OR: [{ stock: { lte: 0 } }, { isLowStock: true }] };
+    if (where.OR) { where.AND = [{ OR: where.OR }, restockOr]; delete where.OR; }
+    else where.OR = restockOr.OR;
+  }
   return where;
 }
 

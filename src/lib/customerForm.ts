@@ -1,12 +1,12 @@
 import { rules, validateForm, type FormErrors } from "@/lib/validation";
 
 export interface CustomerFormData {
-  name: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; gstin: string;
+  name: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; gstin: string; creditLimit: string;
   [key: string]: string;
 }
 
 export const BLANK_CUSTOMER_FORM: CustomerFormData = {
-  name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "",
+  name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "", creditLimit: "",
 };
 
 // City/state required alongside pincode (not just format-checked) — pincode auto-fill resolves them,
@@ -21,6 +21,7 @@ export function validateCustomerForm(form: CustomerFormData, opts: { requirePhon
     state:   opts.requireState ? [rules.required("State is required.")] : [],
     pincode: opts.requirePincode ? [rules.required("Pincode is required."), rules.pincode()] : [rules.pincode()],
     gstin:   [rules.maxLength(15), rules.gstin()],
+    creditLimit: [rules.nonNegativeNumber("Credit limit must be 0 or more.")],
   });
 }
 

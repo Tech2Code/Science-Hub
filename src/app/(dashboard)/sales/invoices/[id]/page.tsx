@@ -23,6 +23,7 @@ import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
+import { useMenuA11y } from "@/lib/useMenuA11y";
 import styles from "./invoiceDetail.module.css";
 
 interface InvoiceItem {
@@ -211,6 +212,8 @@ export default function InvoiceDetailPage() {
   const [shareLoading, setShareLoading] = useState(false);
   const [shareDropStyle, setShareDropStyle] = useState<React.CSSProperties>({});
   const shareContainerRef = useRef<HTMLDivElement>(null);
+  const shareMenuRef = useRef<HTMLDivElement>(null);
+  useMenuA11y(shareOpen, () => setShareOpen(false), shareMenuRef);
 
   // Customer's own email pre-fills the field so it can be selected directly
   // instead of retyped, but stays editable/extendable — an invoice may need
@@ -939,7 +942,7 @@ export default function InvoiceDetailPage() {
             </Button>
             {/* Share PDF button */}
             <div className={styles.shareWrap} ref={shareContainerRef}>
-              <Button variant="secondary" size="sm" disabled={shareLoading} onClick={() => {
+              <Button variant="secondary" size="sm" disabled={shareLoading} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
                 setShareOpen(o => {
                   const next = !o;
                   if (next && shareContainerRef.current) {
@@ -961,7 +964,7 @@ export default function InvoiceDetailPage() {
               {shareOpen && (
                 <>
                   <div className={styles.shareOverlay} onClick={() => setShareOpen(false)} />
-                  <div className={styles.shareMenu} style={shareDropStyle}>
+                  <div className={styles.shareMenu} style={shareDropStyle} ref={shareMenuRef} role="menu" aria-label="Share PDF">
                     <div className={styles.shareMenuTitle}>Share PDF</div>
                     {([
                       typeof navigator !== "undefined" && "share" in navigator ? {
@@ -982,6 +985,7 @@ export default function InvoiceDetailPage() {
                     ] as const).filter(Boolean).map((opt) => (
                       <button
                         key={opt!.key}
+                        role="menuitem"
                         onClick={() => handleShare(opt!.key as "native" | "whatsapp" | "email")}
                         className={styles.shareMenuItem}
                       >

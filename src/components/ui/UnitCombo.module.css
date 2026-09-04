@@ -27,3 +27,4 @@
   cursor: pointer;
 }
 .unitOption:hover { background: var(--c-bg-sub); }
+.unitOptionActive { background: var(--c-bg-sub); }

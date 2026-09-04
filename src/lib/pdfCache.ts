@@ -11,7 +11,7 @@ const DB_VERSION = 1;
 // didn't change) aren't served stale — namespaces cache keys by version instead of forcing manual regeneration.
 const RENDER_VERSION = 1;
 
-export type PdfEntity = "invoice" | "purchase-bill" | "return" | "rate-list";
+export type PdfEntity = "invoice" | "purchase-bill" | "return" | "rate-list" | "statement";
 
 interface CacheRecord {
   id: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { FloatingSpinner, OverlayLoader } from "./Spinner";
 import styles from "./Pagination.module.css";
 
@@ -47,7 +47,9 @@ export function Pagination({ total, page, showAll, onPage, label = "items", load
   // gets a full-page block (the user must see the new page settle before doing anything else) while other
   // triggers of the same `loading` prop (search/sort/filter typing) keep their existing lighter table-dim behavior.
   const [navigating, setNavigating] = useState(false);
-  useEffect(() => { if (!loading) setNavigating(false); }, [loading]);
+  // Derived from the `loading` prop during render (React's documented pattern) rather than in an
+  // effect — `navigating` only ever needs to clear back to false once loading finishes.
+  if (!loading && navigating) setNavigating(false);
   // Spinner renders even without pagination controls, so a short single-page list still gets refetch loading feedback.
   if (total <= PAGE_SIZE || showAll) return loading ? <FloatingSpinner /> : null;
   const totalPages = Math.ceil(total / PAGE_SIZE);

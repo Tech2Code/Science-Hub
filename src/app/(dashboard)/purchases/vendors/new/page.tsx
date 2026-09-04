@@ -37,6 +37,9 @@ export default function NewVendorPage() {
   useEffect(() => {
     const draft = loadFormDraft<VendorFormData>(DRAFT_KEY);
     const hasContent = !!draft?.values && Object.entries(draft.values).some(([k, v]) => k !== "isActive" && String(v ?? "").trim());
+    // One-time sync from localStorage (an external system) on mount — a legitimate effect, not
+    // state derivable from props/render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (hasContent) setShowDraftBanner(true);
     else setDraftReady(true);
   }, []);

@@ -19,6 +19,7 @@ import { downloadXlsx } from "@/lib/downloadXlsx";
 import { fmtCurrency } from "@/lib/rateListForm";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
+import { useMenuA11y } from "@/lib/useMenuA11y";
 import styles from "./rateListDetail.module.css";
 
 interface RateListItem {
@@ -56,6 +57,8 @@ export default function RateListDetailPage() {
   const [shareLoading, setShareLoading] = useState(false);
   const [shareDropStyle, setShareDropStyle] = useState<React.CSSProperties>({});
   const shareContainerRef = useRef<HTMLDivElement>(null);
+  const shareMenuRef = useRef<HTMLDivElement>(null);
+  useMenuA11y(shareOpen, () => setShareOpen(false), shareMenuRef);
 
   // A rate list has no linked customer to default a recipient from (unlike
   // an invoice's customer.email) — always prompt for one.
@@ -384,7 +387,7 @@ export default function RateListDetailPage() {
             Export Excel
           </Button>
           <div className={styles.shareWrap} ref={shareContainerRef}>
-            <Button variant="secondary" size="sm" disabled={shareLoading} onClick={() => {
+            <Button variant="secondary" size="sm" disabled={shareLoading} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
               setShareOpen((o) => {
                 const next = !o;
                 if (next && shareContainerRef.current) {
@@ -405,7 +408,7 @@ export default function RateListDetailPage() {
             {shareOpen && (
               <>
                 <div className={styles.shareOverlay} onClick={() => setShareOpen(false)} />
-                <div className={styles.shareMenu} style={shareDropStyle}>
+                <div className={styles.shareMenu} style={shareDropStyle} ref={shareMenuRef} role="menu" aria-label="Share PDF">
                   <div className={styles.shareMenuTitle}>Share PDF</div>
                   {([
                     typeof navigator !== "undefined" && "share" in navigator ? {
@@ -426,6 +429,7 @@ export default function RateListDetailPage() {
                   ] as const).filter(Boolean).map((opt) => (
                     <button
                       key={opt!.key}
+                      role="menuitem"
                       onClick={() => handleShare(opt!.key as "native" | "whatsapp" | "email")}
                       className={styles.shareMenuItem}
                     >

@@ -98,7 +98,13 @@ export function bustCachePrefix(prefix: string) {
   }
 }
 
-/** Directly patch a cached URL's data from outside a component (e.g. a "new"/"edit" page updating the list it's about to navigate back to). No-op if that URL was never cached. */
+/** Directly patch a cached URL's data from outside a component (e.g. a "new"/"edit" page updating the list it's about to navigate back to). */
 export function patchCache<T>(url: string, updater: (prev: T | null) => T) {
   publish(url, updater((cache.has(url) ? cache.get(url) : null) as T | null));
+}
+
+/** Like patchCache, but a genuine no-op if this URL was never cached (e.g. a panel nobody has opened yet) — avoids seeding a cache entry from a partial optimistic update; the next real open just does a normal fresh fetch instead. */
+export function patchCacheIfPresent<T>(url: string, updater: (prev: T) => T) {
+  if (!cache.has(url)) return;
+  publish(url, updater(cache.get(url) as T));
 }

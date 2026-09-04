@@ -99,7 +99,7 @@ export function hasErrors<T>(errors: FormErrors<T>): boolean {
 // Server-side counterpart to the customer form's client validation. State is required alongside
 // pincode since it's what pincode auto-fill resolves (mirrors the vendor requirement).
 export function validateCustomerInput(input: {
-  name?: string; phone?: string; email?: string; address?: string; city?: string; state?: string; pincode?: string; gstin?: string;
+  name?: string; phone?: string; email?: string; address?: string; city?: string; state?: string; pincode?: string; gstin?: string; creditLimit?: string | number | null;
 }, requireContactDetails = false): string | null {
   const name = (input.name ?? "").trim();
   if (!name) return "Name is required.";
@@ -118,8 +118,18 @@ export function validateCustomerInput(input: {
     validate(input.city ?? "", rules.minLength(2), rules.maxLength(100)) ||
     validate(input.pincode ?? "", rules.pincode()) ||
     validate(input.gstin ?? "", rules.gstin()) ||
+    validate(String(input.creditLimit ?? ""), rules.nonNegativeNumber("Credit limit must be 0 or more.")) ||
     null
   );
+}
+
+// Parses a customer form's creditLimit string into a nullable Float for storage — blank/whitespace means "no limit".
+export function parseCreditLimit(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const str = String(value).trim();
+  if (!str) return null;
+  const n = parseFloat(str);
+  return Number.isFinite(n) ? n : null;
 }
 
 // Generic numeric field check shared by product create/update routes — like a `rules.*` validator but for an already-parsed number.
