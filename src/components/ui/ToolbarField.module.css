@@ -15,7 +15,7 @@
   white-space: nowrap;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 460px) {
   .wrap {
     width: 100%;
   }

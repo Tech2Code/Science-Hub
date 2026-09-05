@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { animateSection } from "@/lib/animateSection";
+import shared from "@/components/ui/ToolbarField.module.css";
 import styles from "./gstFiling.module.css";
 
 interface SalesRegisterRow {
@@ -183,7 +184,7 @@ export default function GstFilingPage() {
           {mode === "month" ? (
             <>
               <label className={styles.dateFilterLabel}>
-                From
+                <span className={shared.label}>From</span>
                 <Input
                   type="date" aria-label="From date" value={fromDate} max={toDate || todayStr()}
                   onChange={(e) => { setFromDate(e.target.value); setReport(null); }}
@@ -192,7 +193,7 @@ export default function GstFilingPage() {
                 />
               </label>
               <label className={styles.dateFilterLabel}>
-                To
+                <span className={shared.label}>To</span>
                 <Input
                   type="date" aria-label="To date" value={toDate} min={fromDate} max={todayStr()}
                   onChange={(e) => { setToDate(e.target.value); setReport(null); }}
@@ -203,7 +204,7 @@ export default function GstFilingPage() {
             </>
           ) : (
             <label className={styles.dateFilterLabel}>
-              Financial Year
+              <span className={shared.label}>Financial Year</span>
               <Select
                 aria-label="Financial year" value={fyStart}
                 onChange={(e) => { setFyStart(Number(e.target.value)); setReport(null); }}

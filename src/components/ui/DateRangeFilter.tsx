@@ -3,6 +3,7 @@
 import type { MouseEvent } from "react";
 import { Input } from "./Input";
 import { Button } from "./Button";
+import shared from "./ToolbarField.module.css";
 import styles from "./DateRangeFilter.module.css";
 
 // Reports predate this date — nothing to query before it.
@@ -37,7 +38,7 @@ export function DateRangeFilter({ startDate, endDate, todayStr, onStartChange, o
   return (
     <div className={inline ? styles.dateFilterRowInline : styles.dateFilterRow}>
       <label className={styles.dateFilterLabel}>
-        From
+        <span className={shared.label}>From</span>
         <Input
           type="date" aria-label="Start date" value={startDate} min={minDate} max={endDate || todayStr}
           onChange={(e) => handleStartChange(e.target.value)}
@@ -45,7 +46,7 @@ export function DateRangeFilter({ startDate, endDate, todayStr, onStartChange, o
         />
       </label>
       <label className={styles.dateFilterLabel}>
-        To
+        <span className={shared.label}>To</span>
         <Input
           type="date" aria-label="End date" value={endDate} min={startDate || minDate} max={todayStr}
           onChange={(e) => onEndChange(e.target.value)}
