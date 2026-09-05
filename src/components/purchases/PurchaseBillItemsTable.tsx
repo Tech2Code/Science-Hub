@@ -30,7 +30,7 @@ interface PurchaseBillItemsTableProps {
   itemsError?: string;
 }
 
-type QuickAddErrors = Partial<Record<"name" | "purchasePrice" | "unit" | "gstRate", string>>;
+type QuickAddErrors = Partial<Record<"name" | "purchasePrice" | "unit" | "gstRate" | "quantity", string>>;
 
 // Search-and-add product flow shared by New/Edit Purchase Bill pages. "Add custom item" can save to the catalog or, via "just for this bill", add a one-off non-stock line (e.g. freight).
 export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, items, setItems, itemsError }: PurchaseBillItemsTableProps) {
@@ -40,30 +40,30 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const { dropUp, measure } = useDropUp(showProductDropdown);
   const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
-  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "", purchasePrice: "", salePrice: "", gstRate: "18", hsn: "", skipCatalog: false });
+  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "", quantity: "1", purchasePrice: "", salePrice: "", gstRate: "18", hsn: "", skipCatalog: false });
   const [quickAddErrors, setQuickAddErrors] = useState<QuickAddErrors>({});
   const [quickAddSaving, setQuickAddSaving] = useState(false);
   const unitFieldId = useId();
 
   const filteredProducts = products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase()));
 
-  function addProduct(p: PurchaseBillProduct) {
+  function addProduct(p: PurchaseBillProduct, quantity = "1") {
     setItems((prev) => {
       const existingIdx = prev.findIndex((i) => i.productId === p.id);
       if (existingIdx !== -1) {
-        return prev.map((item, i) => (i === existingIdx ? { ...item, quantity: String(toNum(item.quantity) + 1) } : item));
+        return prev.map((item, i) => (i === existingIdx ? { ...item, quantity: String(toNum(item.quantity) + toNum(quantity)) } : item));
       }
       const rate = p.purchasePrice ?? p.price;
       return [...prev, {
         key: makePurchaseBillLineItemKey(), productId: p.id, name: p.name, hsn: p.hsn ?? "", unit: p.unit,
-        quantity: "1", purchasePrice: rate != null ? String(rate) : "", gstRate: String(p.gstRate), discountPercent: "0",
+        quantity, purchasePrice: rate != null ? String(rate) : "", gstRate: String(p.gstRate), discountPercent: "0",
       }];
     });
     setProductSearch(""); setShowProductDropdown(false);
   }
 
   function openQuickAddProduct(name = productSearch) {
-    setQuickAddProduct({ name, unit: "", purchasePrice: "", salePrice: "", gstRate: "18", hsn: "", skipCatalog: false });
+    setQuickAddProduct({ name, unit: "", quantity: "1", purchasePrice: "", salePrice: "", gstRate: "18", hsn: "", skipCatalog: false });
     setQuickAddErrors({});
     setShowQuickAddProduct(true);
     setShowProductDropdown(false);
@@ -72,6 +72,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
   async function handleQuickAddProduct() {
     const errs: QuickAddErrors = {
       name: validate(quickAddProduct.name, rules.required("Item name is required."), rules.minLength(2), rules.maxLength(200)) ?? undefined,
+      quantity: validate(quickAddProduct.quantity, rules.required("Quantity is required."), rules.positiveNumber()) ?? undefined,
       purchasePrice: validate(quickAddProduct.purchasePrice, rules.required("Price is required."), rules.nonNegativeNumber()) ?? undefined,
       unit: validate(quickAddProduct.unit, rules.required("Unit is required.")) ?? undefined,
       gstRate: validate(quickAddProduct.gstRate, rules.required("GST rate is required."), rules.nonNegativeNumber()) ?? undefined,
@@ -82,7 +83,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
     if (quickAddProduct.skipCatalog) {
       setItems((prev) => [...prev, {
         key: makePurchaseBillLineItemKey(), productId: "", name: quickAddProduct.name.trim(), hsn: quickAddProduct.hsn.trim(),
-        unit: quickAddProduct.unit, quantity: "1", purchasePrice: quickAddProduct.purchasePrice, gstRate: quickAddProduct.gstRate, discountPercent: "0",
+        unit: quickAddProduct.unit, quantity: quickAddProduct.quantity, purchasePrice: quickAddProduct.purchasePrice, gstRate: quickAddProduct.gstRate, discountPercent: "0",
       }]);
       setShowQuickAddProduct(false);
       setShowProductDropdown(false);
@@ -110,7 +111,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
       if (!res.ok) { toast({ type: "error", title: "Failed", message: d?.error ?? "Could not add product." }); return; }
       bustCachePrefix("/api/products");
       setProducts((prev) => [...prev, d]);
-      addProduct(d);
+      addProduct(d, quickAddProduct.quantity);
       setShowQuickAddProduct(false);
       setShowProductDropdown(false);
       toast({ type: "success", title: "Product added", message: `"${d.name}" was created and added to this bill.` });
@@ -276,6 +277,13 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
             />
           </FormField>
           <div className={styles.grid4}>
+            <FormField label="Quantity" required error={quickAddErrors.quantity}>
+              <Input
+                type="text" inputMode="decimal" placeholder="1"
+                value={quickAddProduct.quantity}
+                onChange={(e) => { setQuickAddProduct((p) => ({ ...p, quantity: e.target.value })); setQuickAddErrors((p) => ({ ...p, quantity: undefined })); }}
+              />
+            </FormField>
             <FormField label="Unit" required error={quickAddErrors.unit} id={unitFieldId}>
               <UnitCombo
                 id={unitFieldId}
