@@ -76,11 +76,19 @@ export async function POST(req: NextRequest) {
     if (idempotencyKey !== undefined && (typeof idempotencyKey !== "string" || idempotencyKey.length > 200)) {
       return NextResponse.json({ error: "Invalid idempotency key" }, { status: 400 });
     }
-    // A retried/duplicated create submission of the same client-generated key is a no-op —
-    // return the bill that submission already created rather than creating a second one.
+    // A retried/duplicated create submission of the same client-generated key is a no-op — return
+    // the bill that submission already created rather than creating a second one. But the key is
+    // only globally unique in the DB, not scoped to a vendor, so a match belonging to a DIFFERENT
+    // vendor must NOT be silently treated as "this create already happened" (total isn't known yet
+    // at this point in the request, so it's re-checked more precisely in the race-handling branch below).
     if (idempotencyKey) {
       const existing = await prisma.purchaseBill.findUnique({ where: { idempotencyKey }, include: BILL_INCLUDE });
-      if (existing) return NextResponse.json(existing, { status: 200 });
+      if (existing) {
+        if (existing.vendorId !== vendorId) {
+          return NextResponse.json({ error: "This idempotency key was already used for a different purchase bill." }, { status: 409 });
+        }
+        return NextResponse.json(existing, { status: 200 });
+      }
     }
     if (attachmentUrl && !isPurchaseBillBlobUrl(attachmentUrl)) {
       return NextResponse.json({ error: "Invalid attachment URL" }, { status: 400 });
@@ -313,7 +321,12 @@ export async function POST(req: NextRequest) {
           && (error.meta as { target: string[] }).target.includes("idempotencyKey");
         if (isDuplicateKey) {
           const existing = await prisma.purchaseBill.findUnique({ where: { idempotencyKey }, include: BILL_INCLUDE });
-          if (existing) return NextResponse.json(existing, { status: 200 });
+          if (existing) {
+            if (existing.vendorId !== vendorId || existing.total !== billTotal) {
+              return NextResponse.json({ error: "This idempotency key was already used for a different purchase bill." }, { status: 409 });
+            }
+            return NextResponse.json(existing, { status: 200 });
+          }
         }
         throw error;
       }

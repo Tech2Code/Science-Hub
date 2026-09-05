@@ -44,12 +44,163 @@ export interface NotificationSummary {
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-async function getActiveDismissedIds(userId: string, category: NotificationCategoryKey): Promise<Set<string>> {
-  const rows = await prisma.notificationDismissal.findMany({
-    where: { userId, category, dismissedAt: { gte: new Date(Date.now() - DISMISSAL_TTL_MS) } },
-    select: { entityId: true },
+// Same threshold/severity rule for both overdue invoices and overdue bills — more than a week
+// late is treated as critical (money genuinely at risk of going unpaid), a fresher miss as a
+// warning. Hoisted once here rather than redefined per exported function.
+function daysOverdue(dueDate: Date, now: Date): number {
+  return Math.floor((now.getTime() - dueDate.getTime()) / (24 * 60 * 60 * 1000));
+}
+function overdueSeverity(days: number): NotificationSeverity {
+  return days > 7 ? "critical" : "warning";
+}
+
+const BIN_PURGE_DAYS = 30;
+const BIN_SOON_THRESHOLD_DAYS = 7; // items with this many days or fewer left before auto-purge surface as "expiring soon"
+
+// A generous cap, not a hard business limit — bounds the worst case (a business with credit
+// limits set on most/all of its customers) without affecting any realistically-sized dataset.
+// The correct long-term fix is pushing the over-limit comparison itself into SQL; this cap is
+// the pragmatic interim guard the audit called for.
+const OVER_LIMIT_CUSTOMER_FETCH_CAP = 1000;
+
+type IdFilter = { in: string[] } | { notIn: string[] };
+
+// A dismissal row is only ever meaningfully queried within the last DISMISSAL_TTL_MS (24h) — past
+// that, nothing in this file ever selects it again, but nothing deleted it either, so the table
+// would otherwise grow one row per user per dismissed item forever. Purged opportunistically here
+// (mirrors the Bin's own auto-purge-on-read pattern) rather than needing a separate cron route;
+// keeps a week of slack past the TTL purely so a slightly-clock-skewed request never races a
+// legitimate still-active row out from under itself.
+const DISMISSAL_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+async function purgeExpiredDismissals(): Promise<void> {
+  await prisma.notificationDismissal.deleteMany({
+    where: { dismissedAt: { lt: new Date(Date.now() - DISMISSAL_RETENTION_MS) } },
   });
-  return new Set(rows.map((r) => r.entityId));
+}
+
+// One query for however many categories a caller needs (previously 5 separate near-identical
+// queries run in parallel through the app's single pooled DB connection, so they queued rather
+// than actually running concurrently) — grouped into a per-category Set of still-active
+// (non-expired) dismissal ids.
+async function getActiveDismissalMap(userId: string, categories: NotificationCategoryKey[]): Promise<Map<NotificationCategoryKey, Set<string>>> {
+  const map = new Map<NotificationCategoryKey, Set<string>>();
+  for (const cat of categories) map.set(cat, new Set());
+  if (categories.length === 0) return map;
+
+  // Fire-and-forget — never let a slow/failed purge delay or break the actual read.
+  purgeExpiredDismissals().catch((err) => console.error("purgeExpiredDismissals error:", err));
+
+  const rows = await prisma.notificationDismissal.findMany({
+    where: { userId, category: { in: categories }, dismissedAt: { gte: new Date(Date.now() - DISMISSAL_TTL_MS) } },
+    select: { category: true, entityId: true },
+  });
+  for (const row of rows) map.get(row.category as NotificationCategoryKey)?.add(row.entityId);
+  return map;
+}
+
+interface OverLimitCustomer {
+  id: string;
+  name: string;
+  creditLimit: number;
+  outstanding: number;
+  latestActivity: Date | null;
+}
+
+// Shared by all four exported functions below (previously copy-pasted once per function) — fetches
+// customers with a credit limit set, capped at OVER_LIMIT_CUSTOMER_FETCH_CAP, then aggregates each
+// one's outstanding balance and filters down to only those actually over their limit.
+async function fetchOverLimitCustomers(idFilter?: IdFilter): Promise<OverLimitCustomer[]> {
+  const customersWithLimit = await prisma.customer.findMany({
+    where: { deletedAt: null, creditLimit: { not: null }, ...(idFilter ? { id: idFilter } : {}) },
+    select: { id: true, name: true, creditLimit: true },
+    take: OVER_LIMIT_CUSTOMER_FETCH_CAP,
+  });
+  if (customersWithLimit.length === 0) return [];
+
+  const sums = await prisma.invoice.groupBy({
+    by: ["customerId"],
+    where: { customerId: { in: customersWithLimit.map((c) => c.id) }, deletedAt: null },
+    _sum: { balanceDue: true },
+    _max: { date: true },
+  });
+  const sumMap = new Map(sums.map((s) => [s.customerId, s._sum.balanceDue ?? 0]));
+  // "Latest" for a customer means their most recent invoice activity, not the size of the
+  // overage — there's no single "date" a credit-limit breach itself happened.
+  const latestMap = new Map(sums.map((s) => [s.customerId, s._max.date]));
+
+  return customersWithLimit
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      creditLimit: c.creditLimit as number,
+      outstanding: sumMap.get(c.id) ?? 0,
+      latestActivity: latestMap.get(c.id) ?? null,
+    }))
+    .filter((c) => c.outstanding > c.creditLimit)
+    // Sorted by latest invoice activity descending — sortKey below negates it so ascending
+    // client-side comparison reproduces the same "most recent first" order.
+    .sort((a, b) => (b.latestActivity?.getTime() ?? 0) - (a.latestActivity?.getTime() ?? 0));
+}
+
+function overLimitCustomerToItem(c: OverLimitCustomer): NotificationItem {
+  return {
+    id: c.id,
+    label: c.name,
+    detail: `${fmt(c.outstanding)} outstanding — limit ${fmt(c.creditLimit)}`,
+    href: `/sales/customers/${c.id}`,
+    severity: "critical",
+    sortKey: -(c.latestActivity?.getTime() ?? 0),
+    timestamp: (c.latestActivity ?? new Date(0)).toISOString(),
+  };
+}
+
+interface BinExpiringEntity {
+  id: string;
+  name: string;
+  deletedAt: Date;
+  daysLeft: number;
+}
+
+// Shared by all four exported functions below — every soft-deleted row (across the 6 bin-eligible
+// entity types) within BIN_SOON_THRESHOLD_DAYS of its 30-day auto-purge.
+async function fetchBinExpiringEntities(idFilter?: IdFilter): Promise<BinExpiringEntity[]> {
+  const now = new Date();
+  const cutoffPurge = new Date(now.getTime() - BIN_PURGE_DAYS * 24 * 60 * 60 * 1000);
+  const cutoffSoon = new Date(now.getTime() - (BIN_PURGE_DAYS - BIN_SOON_THRESHOLD_DAYS) * 24 * 60 * 60 * 1000);
+  const soonWhere = { deletedAt: { not: null, gte: cutoffPurge, lte: cutoffSoon }, ...(idFilter ? { id: idFilter } : {}) };
+
+  const [customers, products, brands, categories, vendors, rateLists] = await Promise.all([
+    prisma.customer.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
+    prisma.product.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
+    prisma.brand.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
+    prisma.category.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
+    prisma.vendor.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
+    prisma.rateList.findMany({ where: soonWhere, select: { id: true, title: true, deletedAt: true } }),
+  ]);
+  const dayMs = 24 * 60 * 60 * 1000;
+  return [
+    ...customers.map((c) => ({ id: c.id, name: c.name, deletedAt: c.deletedAt as Date })),
+    ...products.map((p) => ({ id: p.id, name: p.name, deletedAt: p.deletedAt as Date })),
+    ...brands.map((b) => ({ id: b.id, name: b.name, deletedAt: b.deletedAt as Date })),
+    ...categories.map((c) => ({ id: c.id, name: c.name, deletedAt: c.deletedAt as Date })),
+    ...vendors.map((v) => ({ id: v.id, name: v.name, deletedAt: v.deletedAt as Date })),
+    ...rateLists.map((r) => ({ id: r.id, name: r.title, deletedAt: r.deletedAt as Date })),
+  ]
+    .map((x) => ({ ...x, daysLeft: Math.max(0, BIN_PURGE_DAYS - Math.floor((now.getTime() - x.deletedAt.getTime()) / dayMs)) }))
+    // Most recently moved to the bin first, not soonest-to-purge first.
+    .sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime());
+}
+
+function binEntityToItem(x: BinExpiringEntity): NotificationItem {
+  return {
+    id: x.id,
+    label: x.name,
+    detail: `${x.daysLeft} day${x.daysLeft === 1 ? "" : "s"} left before auto-purge`,
+    href: "/bin",
+    severity: x.daysLeft <= 2 ? "critical" : "warning",
+    sortKey: -x.deletedAt.getTime(),
+    timestamp: x.deletedAt.toISOString(),
+  };
 }
 
 // A live "needs attention" summary, not a persisted notification log — every count/item here is
@@ -57,26 +208,25 @@ async function getActiveDismissedIds(userId: string, category: NotificationCateg
 // dismissal rows themselves. `includeBin` should be false for managers, who have no Bin access
 // (mirrors requireWriteAccess()).
 export async function getNotificationSummary(opts: { includeBin: boolean; userId: string }): Promise<NotificationSummary> {
-  const { userId } = opts;
+  const { userId, includeBin } = opts;
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  const [
-    dismissedStock, dismissedInvoices, dismissedBills, dismissedCustomers, dismissedBin,
-  ] = await Promise.all([
-    getActiveDismissedIds(userId, "stock"),
-    getActiveDismissedIds(userId, "overdueInvoices"),
-    getActiveDismissedIds(userId, "overdueBills"),
-    getActiveDismissedIds(userId, "overLimitCustomers"),
-    opts.includeBin ? getActiveDismissedIds(userId, "binExpiring") : Promise.resolve(new Set<string>()),
-  ]);
-  const notDismissed = (ids: Set<string>) => (ids.size ? { notIn: [...ids] } : undefined);
+  const categories = includeBin ? NOTIFICATION_CATEGORY_KEYS : NOTIFICATION_CATEGORY_KEYS.filter((c) => c !== "binExpiring");
+  const dismissalMap = await getActiveDismissalMap(userId, categories);
+  const dismissedStock = dismissalMap.get("stock") ?? new Set<string>();
+  const dismissedInvoices = dismissalMap.get("overdueInvoices") ?? new Set<string>();
+  const dismissedBills = dismissalMap.get("overdueBills") ?? new Set<string>();
+  const dismissedCustomers = dismissalMap.get("overLimitCustomers") ?? new Set<string>();
+  const dismissedBin = dismissalMap.get("binExpiring") ?? new Set<string>();
+  const notDismissed = (ids: Set<string>): IdFilter | undefined => (ids.size ? { notIn: [...ids] } : undefined);
 
   const [
     outOfStockCount, lowStockCount, stockRows,
     overdueInvoiceCount, overdueInvoiceRows,
     overdueBillCount, overdueBillRows,
-    customersWithLimit,
+    overLimitCustomers,
+    binExpiringEntities,
   ] = await Promise.all([
     prisma.product.count({ where: { deletedAt: null, stock: { lte: 0 }, id: notDismissed(dismissedStock) } }),
     prisma.product.count({ where: { deletedAt: null, isLowStock: true, id: notDismissed(dismissedStock) } }),
@@ -100,88 +250,9 @@ export async function getNotificationSummary(opts: { includeBin: boolean; userId
       orderBy: { dueDate: "desc" },
       take: ITEM_LIMIT,
     }),
-    prisma.customer.findMany({
-      where: { deletedAt: null, creditLimit: { not: null }, id: notDismissed(dismissedCustomers) },
-      select: { id: true, name: true, creditLimit: true },
-    }),
+    fetchOverLimitCustomers(notDismissed(dismissedCustomers)),
+    includeBin ? fetchBinExpiringEntities(notDismissed(dismissedBin)) : Promise.resolve([]),
   ]);
-
-  let overLimitCustomers: NotificationCategory = { count: 0, items: [] };
-  if (customersWithLimit.length > 0) {
-    const sums = await prisma.invoice.groupBy({
-      by: ["customerId"],
-      where: { customerId: { in: customersWithLimit.map((c) => c.id) }, deletedAt: null },
-      _sum: { balanceDue: true },
-      _max: { date: true },
-    });
-    const sumMap = new Map(sums.map((s) => [s.customerId, s._sum.balanceDue ?? 0]));
-    // "Latest" for a customer means their most recent invoice activity, not the size of the
-    // overage — there's no single "date" a credit-limit breach itself happened.
-    const latestMap = new Map(sums.map((s) => [s.customerId, s._max.date]));
-    const over = customersWithLimit
-      .map((c) => ({ ...c, outstanding: sumMap.get(c.id) ?? 0, latestActivity: latestMap.get(c.id) ?? null }))
-      .filter((c) => c.outstanding > (c.creditLimit as number))
-      .sort((a, b) => (b.latestActivity?.getTime() ?? 0) - (a.latestActivity?.getTime() ?? 0));
-    overLimitCustomers = {
-      count: over.length,
-      items: over.slice(0, ITEM_LIMIT).map((c) => ({
-        id: c.id,
-        label: c.name,
-        detail: `${fmt(c.outstanding)} outstanding — limit ${fmt(c.creditLimit as number)}`,
-        href: `/sales/customers/${c.id}`,
-        severity: "critical" as const,
-        // Sorted above by latest invoice activity descending — negate it so ascending
-        // client-side comparison reproduces the same "most recent first" order.
-        sortKey: -(c.latestActivity?.getTime() ?? 0),
-        timestamp: (c.latestActivity ?? new Date(0)).toISOString(),
-      })),
-    };
-  }
-
-  let binExpiring: NotificationCategory | null = null;
-  if (opts.includeBin) {
-    const cutoffPurge = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const cutoffSoon = new Date(now.getTime() - 23 * 24 * 60 * 60 * 1000); // 7 days or fewer left before auto-purge
-    const soonWhere = { deletedAt: { not: null, gte: cutoffPurge, lte: cutoffSoon } };
-    const [customers, products, brands, categories, vendors, rateLists] = await Promise.all([
-      prisma.customer.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
-      prisma.product.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
-      prisma.brand.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
-      prisma.category.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
-      prisma.vendor.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
-      prisma.rateList.findMany({ where: soonWhere, select: { id: true, title: true, deletedAt: true } }),
-    ]);
-    const dayMs = 24 * 60 * 60 * 1000;
-    const combined = [
-      ...customers.map((c) => ({ id: c.id, name: c.name, deletedAt: c.deletedAt as Date })),
-      ...products.map((p) => ({ id: p.id, name: p.name, deletedAt: p.deletedAt as Date })),
-      ...brands.map((b) => ({ id: b.id, name: b.name, deletedAt: b.deletedAt as Date })),
-      ...categories.map((c) => ({ id: c.id, name: c.name, deletedAt: c.deletedAt as Date })),
-      ...vendors.map((v) => ({ id: v.id, name: v.name, deletedAt: v.deletedAt as Date })),
-      ...rateLists.map((r) => ({ id: r.id, name: r.title, deletedAt: r.deletedAt as Date })),
-    ]
-      .filter((x) => !dismissedBin.has(x.id))
-      .map((x) => ({ ...x, daysLeft: Math.max(0, 30 - Math.floor((now.getTime() - x.deletedAt.getTime()) / dayMs)) }))
-      // Most recently moved to the bin first, not soonest-to-purge first.
-      .sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime());
-    binExpiring = {
-      count: combined.length,
-      items: combined.slice(0, ITEM_LIMIT).map((x) => ({
-        id: x.id,
-        label: x.name,
-        detail: `${x.daysLeft} day${x.daysLeft === 1 ? "" : "s"} left before auto-purge`,
-        href: "/bin",
-        severity: (x.daysLeft <= 2 ? "critical" : "warning") as NotificationSeverity,
-        sortKey: -x.deletedAt.getTime(),
-        timestamp: x.deletedAt.toISOString(),
-      })),
-    };
-  }
-
-  // Overdue by more than a week is treated as critical (money genuinely at risk of going unpaid),
-  // a fresher miss as a warning — same threshold for invoices and purchase bills.
-  const daysOverdue = (dueDate: Date) => Math.floor((now.getTime() - dueDate.getTime()) / (24 * 60 * 60 * 1000));
-  const overdueSeverity = (days: number): NotificationSeverity => (days > 7 ? "critical" : "warning");
 
   return {
     stock: {
@@ -203,7 +274,7 @@ export async function getNotificationSummary(opts: { includeBin: boolean; userId
     overdueInvoices: {
       count: overdueInvoiceCount,
       items: overdueInvoiceRows.map((inv) => {
-        const days = daysOverdue(inv.dueDate as Date);
+        const days = daysOverdue(inv.dueDate as Date, now);
         return {
           id: inv.id,
           label: inv.invoiceNumber,
@@ -218,7 +289,7 @@ export async function getNotificationSummary(opts: { includeBin: boolean; userId
     overdueBills: {
       count: overdueBillCount,
       items: overdueBillRows.map((b) => {
-        const days = daysOverdue(b.dueDate as Date);
+        const days = daysOverdue(b.dueDate as Date, now);
         return {
           id: b.id,
           label: b.billNumber,
@@ -230,8 +301,13 @@ export async function getNotificationSummary(opts: { includeBin: boolean; userId
         };
       }),
     },
-    overLimitCustomers,
-    binExpiring,
+    overLimitCustomers: {
+      count: overLimitCustomers.length,
+      items: overLimitCustomers.slice(0, ITEM_LIMIT).map(overLimitCustomerToItem),
+    },
+    binExpiring: includeBin
+      ? { count: binExpiringEntities.length, items: binExpiringEntities.slice(0, ITEM_LIMIT).map(binEntityToItem) }
+      : null,
   };
 }
 
@@ -243,20 +319,17 @@ const DISMISSED_ITEM_LIMIT = 50;
 // same as it would from the active list — nothing to "undo" for it anymore). Powers the popover's
 // "View dismissed" panel so a dismissal isn't a one-way trip until the 24h TTL or tomorrow.
 export async function getDismissedNotificationSummary(opts: { includeBin: boolean; userId: string }): Promise<NotificationSummary> {
-  const { userId } = opts;
+  const { userId, includeBin } = opts;
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  const [
-    dismissedStock, dismissedInvoices, dismissedBills, dismissedCustomers, dismissedBin,
-  ] = await Promise.all([
-    getActiveDismissedIds(userId, "stock"),
-    getActiveDismissedIds(userId, "overdueInvoices"),
-    getActiveDismissedIds(userId, "overdueBills"),
-    getActiveDismissedIds(userId, "overLimitCustomers"),
-    opts.includeBin ? getActiveDismissedIds(userId, "binExpiring") : Promise.resolve(new Set<string>()),
-  ]);
-  const onlyDismissed = (ids: Set<string>) => ({ in: [...ids] });
+  const categories = includeBin ? NOTIFICATION_CATEGORY_KEYS : NOTIFICATION_CATEGORY_KEYS.filter((c) => c !== "binExpiring");
+  const dismissalMap = await getActiveDismissalMap(userId, categories);
+  const dismissedStock = dismissalMap.get("stock") ?? new Set<string>();
+  const dismissedInvoices = dismissalMap.get("overdueInvoices") ?? new Set<string>();
+  const dismissedBills = dismissalMap.get("overdueBills") ?? new Set<string>();
+  const dismissedCustomers = dismissalMap.get("overLimitCustomers") ?? new Set<string>();
+  const dismissedBin = dismissalMap.get("binExpiring") ?? new Set<string>();
 
   if (!dismissedStock.size && !dismissedInvoices.size && !dismissedBills.size && !dismissedCustomers.size && !dismissedBin.size) {
     return {
@@ -264,15 +337,17 @@ export async function getDismissedNotificationSummary(opts: { includeBin: boolea
       overdueInvoices: { count: 0, items: [] },
       overdueBills: { count: 0, items: [] },
       overLimitCustomers: { count: 0, items: [] },
-      binExpiring: opts.includeBin ? { count: 0, items: [] } : null,
+      binExpiring: includeBin ? { count: 0, items: [] } : null,
     };
   }
+  const onlyDismissed = (ids: Set<string>): IdFilter => ({ in: [...ids] });
 
   const [
     stockRows,
     overdueInvoiceRows,
     overdueBillRows,
-    customersWithLimit,
+    overLimitCustomers,
+    binExpiringEntities,
   ] = await Promise.all([
     dismissedStock.size
       ? prisma.product.findMany({
@@ -298,86 +373,9 @@ export async function getDismissedNotificationSummary(opts: { includeBin: boolea
           take: DISMISSED_ITEM_LIMIT,
         })
       : Promise.resolve([]),
-    dismissedCustomers.size
-      ? prisma.customer.findMany({
-          where: { deletedAt: null, creditLimit: { not: null }, id: onlyDismissed(dismissedCustomers) },
-          select: { id: true, name: true, creditLimit: true },
-        })
-      : Promise.resolve([]),
+    dismissedCustomers.size ? fetchOverLimitCustomers(onlyDismissed(dismissedCustomers)) : Promise.resolve([]),
+    includeBin && dismissedBin.size ? fetchBinExpiringEntities(onlyDismissed(dismissedBin)) : Promise.resolve([]),
   ]);
-
-  let overLimitCustomers: NotificationCategory = { count: 0, items: [] };
-  if (customersWithLimit.length > 0) {
-    const sums = await prisma.invoice.groupBy({
-      by: ["customerId"],
-      where: { customerId: { in: customersWithLimit.map((c) => c.id) }, deletedAt: null },
-      _sum: { balanceDue: true },
-      _max: { date: true },
-    });
-    const sumMap = new Map(sums.map((s) => [s.customerId, s._sum.balanceDue ?? 0]));
-    const latestMap = new Map(sums.map((s) => [s.customerId, s._max.date]));
-    const over = customersWithLimit
-      .map((c) => ({ ...c, outstanding: sumMap.get(c.id) ?? 0, latestActivity: latestMap.get(c.id) ?? null }))
-      .filter((c) => c.outstanding > (c.creditLimit as number))
-      .sort((a, b) => (b.latestActivity?.getTime() ?? 0) - (a.latestActivity?.getTime() ?? 0));
-    overLimitCustomers = {
-      count: over.length,
-      items: over.slice(0, DISMISSED_ITEM_LIMIT).map((c) => ({
-        id: c.id,
-        label: c.name,
-        detail: `${fmt(c.outstanding)} outstanding — limit ${fmt(c.creditLimit as number)}`,
-        href: `/sales/customers/${c.id}`,
-        severity: "critical" as const,
-        sortKey: -(c.latestActivity?.getTime() ?? 0),
-        timestamp: (c.latestActivity ?? new Date(0)).toISOString(),
-      })),
-    };
-  }
-
-  let binExpiring: NotificationCategory | null = null;
-  if (opts.includeBin) {
-    binExpiring = { count: 0, items: [] };
-    if (dismissedBin.size) {
-      const cutoffPurge = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      const cutoffSoon = new Date(now.getTime() - 23 * 24 * 60 * 60 * 1000);
-      const soonWhere = { deletedAt: { not: null, gte: cutoffPurge, lte: cutoffSoon } };
-      const dismissedBinFilter = { id: onlyDismissed(dismissedBin) };
-      const [customers, products, brands, categories, vendors, rateLists] = await Promise.all([
-        prisma.customer.findMany({ where: { ...soonWhere, ...dismissedBinFilter }, select: { id: true, name: true, deletedAt: true } }),
-        prisma.product.findMany({ where: { ...soonWhere, ...dismissedBinFilter }, select: { id: true, name: true, deletedAt: true } }),
-        prisma.brand.findMany({ where: { ...soonWhere, ...dismissedBinFilter }, select: { id: true, name: true, deletedAt: true } }),
-        prisma.category.findMany({ where: { ...soonWhere, ...dismissedBinFilter }, select: { id: true, name: true, deletedAt: true } }),
-        prisma.vendor.findMany({ where: { ...soonWhere, ...dismissedBinFilter }, select: { id: true, name: true, deletedAt: true } }),
-        prisma.rateList.findMany({ where: { ...soonWhere, ...dismissedBinFilter }, select: { id: true, title: true, deletedAt: true } }),
-      ]);
-      const dayMs = 24 * 60 * 60 * 1000;
-      const combined = [
-        ...customers.map((c) => ({ id: c.id, name: c.name, deletedAt: c.deletedAt as Date })),
-        ...products.map((p) => ({ id: p.id, name: p.name, deletedAt: p.deletedAt as Date })),
-        ...brands.map((b) => ({ id: b.id, name: b.name, deletedAt: b.deletedAt as Date })),
-        ...categories.map((c) => ({ id: c.id, name: c.name, deletedAt: c.deletedAt as Date })),
-        ...vendors.map((v) => ({ id: v.id, name: v.name, deletedAt: v.deletedAt as Date })),
-        ...rateLists.map((r) => ({ id: r.id, name: r.title, deletedAt: r.deletedAt as Date })),
-      ]
-        .map((x) => ({ ...x, daysLeft: Math.max(0, 30 - Math.floor((now.getTime() - x.deletedAt.getTime()) / dayMs)) }))
-        .sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime());
-      binExpiring = {
-        count: combined.length,
-        items: combined.slice(0, DISMISSED_ITEM_LIMIT).map((x) => ({
-          id: x.id,
-          label: x.name,
-          detail: `${x.daysLeft} day${x.daysLeft === 1 ? "" : "s"} left before auto-purge`,
-          href: "/bin",
-          severity: (x.daysLeft <= 2 ? "critical" : "warning") as NotificationSeverity,
-          sortKey: -x.deletedAt.getTime(),
-          timestamp: x.deletedAt.toISOString(),
-        })),
-      };
-    }
-  }
-
-  const daysOverdue = (dueDate: Date) => Math.floor((now.getTime() - dueDate.getTime()) / (24 * 60 * 60 * 1000));
-  const overdueSeverity = (days: number): NotificationSeverity => (days > 7 ? "critical" : "warning");
 
   const stockOutCount = stockRows.filter((p) => p.stock <= 0).length;
 
@@ -399,7 +397,7 @@ export async function getDismissedNotificationSummary(opts: { includeBin: boolea
     overdueInvoices: {
       count: overdueInvoiceRows.length,
       items: overdueInvoiceRows.map((inv) => {
-        const days = daysOverdue(inv.dueDate as Date);
+        const days = daysOverdue(inv.dueDate as Date, now);
         return {
           id: inv.id,
           label: inv.invoiceNumber,
@@ -414,7 +412,7 @@ export async function getDismissedNotificationSummary(opts: { includeBin: boolea
     overdueBills: {
       count: overdueBillRows.length,
       items: overdueBillRows.map((b) => {
-        const days = daysOverdue(b.dueDate as Date);
+        const days = daysOverdue(b.dueDate as Date, now);
         return {
           id: b.id,
           label: b.billNumber,
@@ -426,8 +424,13 @@ export async function getDismissedNotificationSummary(opts: { includeBin: boolea
         };
       }),
     },
-    overLimitCustomers,
-    binExpiring,
+    overLimitCustomers: {
+      count: overLimitCustomers.length,
+      items: overLimitCustomers.slice(0, DISMISSED_ITEM_LIMIT).map(overLimitCustomerToItem),
+    },
+    binExpiring: includeBin
+      ? { count: binExpiringEntities.length, items: binExpiringEntities.slice(0, DISMISSED_ITEM_LIMIT).map(binEntityToItem) }
+      : null,
   };
 }
 
@@ -437,16 +440,16 @@ export async function getAllActiveNotificationIds(userId: string, includeBin: bo
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  const [dismissedStock, dismissedInvoices, dismissedBills, dismissedCustomers, dismissedBin] = await Promise.all([
-    getActiveDismissedIds(userId, "stock"),
-    getActiveDismissedIds(userId, "overdueInvoices"),
-    getActiveDismissedIds(userId, "overdueBills"),
-    getActiveDismissedIds(userId, "overLimitCustomers"),
-    includeBin ? getActiveDismissedIds(userId, "binExpiring") : Promise.resolve(new Set<string>()),
-  ]);
-  const notDismissed = (ids: Set<string>) => (ids.size ? { notIn: [...ids] } : undefined);
+  const categories = includeBin ? NOTIFICATION_CATEGORY_KEYS : NOTIFICATION_CATEGORY_KEYS.filter((c) => c !== "binExpiring");
+  const dismissalMap = await getActiveDismissalMap(userId, categories);
+  const dismissedStock = dismissalMap.get("stock") ?? new Set<string>();
+  const dismissedInvoices = dismissalMap.get("overdueInvoices") ?? new Set<string>();
+  const dismissedBills = dismissalMap.get("overdueBills") ?? new Set<string>();
+  const dismissedCustomers = dismissalMap.get("overLimitCustomers") ?? new Set<string>();
+  const dismissedBin = dismissalMap.get("binExpiring") ?? new Set<string>();
+  const notDismissed = (ids: Set<string>): IdFilter | undefined => (ids.size ? { notIn: [...ids] } : undefined);
 
-  const [stockRows, invoiceRows, billRows, customersWithLimit] = await Promise.all([
+  const [stockRows, invoiceRows, billRows, overLimitCustomers, binExpiringEntities] = await Promise.all([
     prisma.product.findMany({
       where: { deletedAt: null, OR: [{ stock: { lte: 0 } }, { isLowStock: true }], id: notDismissed(dismissedStock) },
       select: { id: true },
@@ -459,49 +462,16 @@ export async function getAllActiveNotificationIds(userId: string, includeBin: bo
       where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart }, id: notDismissed(dismissedBills) },
       select: { id: true },
     }),
-    prisma.customer.findMany({
-      where: { deletedAt: null, creditLimit: { not: null }, id: notDismissed(dismissedCustomers) },
-      select: { id: true, creditLimit: true },
-    }),
+    fetchOverLimitCustomers(notDismissed(dismissedCustomers)),
+    includeBin ? fetchBinExpiringEntities(notDismissed(dismissedBin)) : Promise.resolve([]),
   ]);
-
-  let overLimitCustomerIds: string[] = [];
-  if (customersWithLimit.length > 0) {
-    const sums = await prisma.invoice.groupBy({
-      by: ["customerId"],
-      where: { customerId: { in: customersWithLimit.map((c) => c.id) }, deletedAt: null },
-      _sum: { balanceDue: true },
-    });
-    const sumMap = new Map(sums.map((s) => [s.customerId, s._sum.balanceDue ?? 0]));
-    overLimitCustomerIds = customersWithLimit
-      .filter((c) => (sumMap.get(c.id) ?? 0) > (c.creditLimit as number))
-      .map((c) => c.id);
-  }
-
-  let binExpiringIds: string[] = [];
-  if (includeBin) {
-    const cutoffPurge = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const cutoffSoon = new Date(now.getTime() - 23 * 24 * 60 * 60 * 1000);
-    const soonWhere = { deletedAt: { not: null, gte: cutoffPurge, lte: cutoffSoon } };
-    const [customers, products, brands, categories, vendors, rateLists] = await Promise.all([
-      prisma.customer.findMany({ where: soonWhere, select: { id: true } }),
-      prisma.product.findMany({ where: soonWhere, select: { id: true } }),
-      prisma.brand.findMany({ where: soonWhere, select: { id: true } }),
-      prisma.category.findMany({ where: soonWhere, select: { id: true } }),
-      prisma.vendor.findMany({ where: soonWhere, select: { id: true } }),
-      prisma.rateList.findMany({ where: soonWhere, select: { id: true } }),
-    ]);
-    binExpiringIds = [...customers, ...products, ...brands, ...categories, ...vendors, ...rateLists]
-      .map((x) => x.id)
-      .filter((id) => !dismissedBin.has(id));
-  }
 
   return {
     stock: stockRows.map((p) => p.id),
     overdueInvoices: invoiceRows.map((i) => i.id),
     overdueBills: billRows.map((b) => b.id),
-    overLimitCustomers: overLimitCustomerIds,
-    binExpiring: binExpiringIds,
+    overLimitCustomers: overLimitCustomers.map((c) => c.id),
+    binExpiring: binExpiringEntities.map((x) => x.id),
   };
 }
 
@@ -516,10 +486,9 @@ const CATEGORY_ITEM_LIMIT = 200;
 export async function getNotificationCategoryItems(userId: string, category: NotificationCategoryKey): Promise<NotificationItem[]> {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dismissed = await getActiveDismissedIds(userId, category);
-  const notDismissed = dismissed.size ? { notIn: [...dismissed] } : undefined;
-  const daysOverdue = (dueDate: Date) => Math.floor((now.getTime() - dueDate.getTime()) / (24 * 60 * 60 * 1000));
-  const overdueSeverity = (days: number): NotificationSeverity => (days > 7 ? "critical" : "warning");
+  const dismissalMap = await getActiveDismissalMap(userId, [category]);
+  const dismissed = dismissalMap.get(category) ?? new Set<string>();
+  const notDismissed: IdFilter | undefined = dismissed.size ? { notIn: [...dismissed] } : undefined;
 
   if (category === "stock") {
     const rows = await prisma.product.findMany({
@@ -547,7 +516,7 @@ export async function getNotificationCategoryItems(userId: string, category: Not
       take: CATEGORY_ITEM_LIMIT,
     });
     return rows.map((inv) => {
-      const days = daysOverdue(inv.dueDate as Date);
+      const days = daysOverdue(inv.dueDate as Date, now);
       return {
         id: inv.id,
         label: inv.invoiceNumber,
@@ -568,7 +537,7 @@ export async function getNotificationCategoryItems(userId: string, category: Not
       take: CATEGORY_ITEM_LIMIT,
     });
     return rows.map((b) => {
-      const days = daysOverdue(b.dueDate as Date);
+      const days = daysOverdue(b.dueDate as Date, now);
       return {
         id: b.id,
         label: b.billNumber,
@@ -582,67 +551,11 @@ export async function getNotificationCategoryItems(userId: string, category: Not
   }
 
   if (category === "overLimitCustomers") {
-    const customersWithLimit = await prisma.customer.findMany({
-      where: { deletedAt: null, creditLimit: { not: null }, id: notDismissed },
-      select: { id: true, name: true, creditLimit: true },
-    });
-    if (customersWithLimit.length === 0) return [];
-    const sums = await prisma.invoice.groupBy({
-      by: ["customerId"],
-      where: { customerId: { in: customersWithLimit.map((c) => c.id) }, deletedAt: null },
-      _sum: { balanceDue: true },
-      _max: { date: true },
-    });
-    const sumMap = new Map(sums.map((s) => [s.customerId, s._sum.balanceDue ?? 0]));
-    const latestMap = new Map(sums.map((s) => [s.customerId, s._max.date]));
-    return customersWithLimit
-      .map((c) => ({ ...c, outstanding: sumMap.get(c.id) ?? 0, latestActivity: latestMap.get(c.id) ?? null }))
-      .filter((c) => c.outstanding > (c.creditLimit as number))
-      .sort((a, b) => (b.latestActivity?.getTime() ?? 0) - (a.latestActivity?.getTime() ?? 0))
-      .slice(0, CATEGORY_ITEM_LIMIT)
-      .map((c) => ({
-        id: c.id,
-        label: c.name,
-        detail: `${fmt(c.outstanding)} outstanding — limit ${fmt(c.creditLimit as number)}`,
-        href: `/sales/customers/${c.id}`,
-        severity: "critical" as const,
-        sortKey: -(c.latestActivity?.getTime() ?? 0),
-        timestamp: (c.latestActivity ?? new Date(0)).toISOString(),
-      }));
+    const overLimitCustomers = await fetchOverLimitCustomers(notDismissed);
+    return overLimitCustomers.slice(0, CATEGORY_ITEM_LIMIT).map(overLimitCustomerToItem);
   }
 
   // binExpiring
-  const cutoffPurge = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const cutoffSoon = new Date(now.getTime() - 23 * 24 * 60 * 60 * 1000);
-  const soonWhere = { deletedAt: { not: null, gte: cutoffPurge, lte: cutoffSoon } };
-  const dismissedBinFilter = notDismissed ? { id: notDismissed } : {};
-  const dayMs = 24 * 60 * 60 * 1000;
-  const [customers, products, brands, categories, vendors, rateLists] = await Promise.all([
-    prisma.customer.findMany({ where: { ...soonWhere, ...dismissedBinFilter }, select: { id: true, name: true, deletedAt: true } }),
-    prisma.product.findMany({ where: { ...soonWhere, ...dismissedBinFilter }, select: { id: true, name: true, deletedAt: true } }),
-    prisma.brand.findMany({ where: { ...soonWhere, ...dismissedBinFilter }, select: { id: true, name: true, deletedAt: true } }),
-    prisma.category.findMany({ where: { ...soonWhere, ...dismissedBinFilter }, select: { id: true, name: true, deletedAt: true } }),
-    prisma.vendor.findMany({ where: { ...soonWhere, ...dismissedBinFilter }, select: { id: true, name: true, deletedAt: true } }),
-    prisma.rateList.findMany({ where: { ...soonWhere, ...dismissedBinFilter }, select: { id: true, title: true, deletedAt: true } }),
-  ]);
-  return [
-    ...customers.map((c) => ({ id: c.id, name: c.name, deletedAt: c.deletedAt as Date })),
-    ...products.map((p) => ({ id: p.id, name: p.name, deletedAt: p.deletedAt as Date })),
-    ...brands.map((b) => ({ id: b.id, name: b.name, deletedAt: b.deletedAt as Date })),
-    ...categories.map((c) => ({ id: c.id, name: c.name, deletedAt: c.deletedAt as Date })),
-    ...vendors.map((v) => ({ id: v.id, name: v.name, deletedAt: v.deletedAt as Date })),
-    ...rateLists.map((r) => ({ id: r.id, name: r.title, deletedAt: r.deletedAt as Date })),
-  ]
-    .map((x) => ({ ...x, daysLeft: Math.max(0, 30 - Math.floor((now.getTime() - x.deletedAt.getTime()) / dayMs)) }))
-    .sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime())
-    .slice(0, CATEGORY_ITEM_LIMIT)
-    .map((x) => ({
-      id: x.id,
-      label: x.name,
-      detail: `${x.daysLeft} day${x.daysLeft === 1 ? "" : "s"} left before auto-purge`,
-      href: "/bin",
-      severity: (x.daysLeft <= 2 ? "critical" : "warning") as NotificationSeverity,
-      sortKey: -x.deletedAt.getTime(),
-      timestamp: x.deletedAt.toISOString(),
-    }));
+  const binExpiringEntities = await fetchBinExpiringEntities(notDismissed);
+  return binExpiringEntities.slice(0, CATEGORY_ITEM_LIMIT).map(binEntityToItem);
 }

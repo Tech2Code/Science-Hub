@@ -7,7 +7,7 @@ import { useRef } from "react";
 // second row. Call `renew()` after a successful submit if the same form instance stays mounted
 // and could legitimately submit again (e.g. a payment dialog reused for a second payment) —
 // otherwise the next submit would be silently treated as a duplicate of the first.
-export function useIdempotencyKey() {
+export function useIdempotencyKey(): { key: () => string; renew: () => void } {
   const ref = useRef(crypto.randomUUID());
   function renew() {
     ref.current = crypto.randomUUID();

@@ -9,7 +9,9 @@ import { useBranding } from "@/lib/businessBranding";
 import { ProtectedSection } from "@/lib/sections";
 import { NAV_GROUPS, BIN_NAV } from "@/lib/navigation";
 import { clearAllCachedPdfs } from "@/lib/pdfCache";
+import { useMenuA11y } from "@/lib/useMenuA11y";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
+import { PopoverScrim } from "@/components/ui/PopoverScrim";
 import { GlobalSearch } from "./GlobalSearch";
 import { NotificationBell } from "./NotificationBell";
 import styles from "./DashboardShell.module.css";
@@ -131,7 +133,7 @@ const allNavItems = NAV_GROUPS.flatMap((g) => g.items);
 const EXACT_MATCH_HREFS = new Set(["/dashboard", "/sales", "/purchases"]);
 
 function isMobile() {
-  return typeof window !== "undefined" && window.innerWidth < 1024;
+  return typeof window !== "undefined" && window.innerWidth <= 1024;
 }
 
 function ThemeToggle() {
@@ -236,6 +238,8 @@ function AccentPicker() {
   const { value, pick, reset } = useAccentPickerState();
   const [open, setOpen] = useState(false);
   const popRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
 
   useEffect(() => {
     if (!open) return;
@@ -245,19 +249,23 @@ function AccentPicker() {
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
+  useMenuA11y(open, close, popoverRef);
 
   return (
     <div className={styles.accentPickerWrap} ref={popRef}>
       <button
         onClick={() => setOpen((v) => !v)}
         aria-label="Choose accent color"
+        aria-haspopup="dialog"
+        aria-expanded={open}
         title="Choose accent color"
         className={styles.collapseBtn}
       >
         <span className={styles.accentSwatch} style={{ "--accent-swatch-color": value } as React.CSSProperties} />
       </button>
+      {open && <PopoverScrim />}
       {open && (
-        <div className={styles.accentPopover}>
+        <div className={styles.accentPopover} ref={popoverRef} role="dialog" aria-modal="true" aria-label="Accent color" tabIndex={-1}>
           <div className={styles.accentPopoverTitle}>Accent Color</div>
           <AccentColorPanel value={value} pick={pick} reset={reset} />
         </div>
@@ -270,6 +278,8 @@ function MoreMenu() {
   const { value, pick, reset } = useAccentPickerState();
   const [open, setOpen] = useState(false);
   const popRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
 
   useEffect(() => {
     if (!open) return;
@@ -279,12 +289,15 @@ function MoreMenu() {
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
+  useMenuA11y(open, close, popoverRef);
 
   return (
     <div className={styles.accentPickerWrap} ref={popRef}>
       <button
         onClick={() => setOpen((v) => !v)}
         aria-label="Appearance settings (theme & accent color)"
+        aria-haspopup="dialog"
+        aria-expanded={open}
         title="Appearance settings"
         className={styles.moreMenuBtn}
       >
@@ -299,8 +312,9 @@ function MoreMenu() {
           <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
+      {open && <PopoverScrim />}
       {open && (
-        <div className={styles.accentPopover}>
+        <div className={styles.accentPopover} ref={popoverRef} role="dialog" aria-modal="true" aria-label="Appearance settings" tabIndex={-1}>
           <div className={styles.accentPopoverTitle}>Theme</div>
           <div className={styles.moreMenuThemeRow}>
             <ThemeToggle />
@@ -330,7 +344,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const check = () => {
-      const mob = window.innerWidth < 1024;
+      const mob = window.innerWidth <= 1024;
       setMobile(mob);
       if (!mob) setSidebarOpen(true);
       else setSidebarOpen(false);

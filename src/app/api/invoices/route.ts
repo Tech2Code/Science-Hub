@@ -11,7 +11,16 @@ import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
-import { checkCustomerCreditLimit } from "@/lib/creditLimit";
+import { checkCustomerCreditLimit, type CreditLimitCheck } from "@/lib/creditLimit";
+
+// Thrown from inside the create transaction so the credit-limit check can be re-validated
+// atomically alongside the invoice insert (see attemptCreate below) while still surfacing to the
+// caller as a plain 422, the same shape as before it moved inside the transaction.
+class CreditLimitExceededError extends Error {
+  constructor(public check: CreditLimitCheck) {
+    super("Credit limit exceeded");
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -51,13 +60,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid idempotency key" }, { status: 400 });
     }
     // A retried/duplicated create submission of the same client-generated key is a no-op —
-    // return the invoice that submission already created rather than creating a second one.
+    // return the invoice that submission already created rather than creating a second one. But
+    // the key is only globally unique in the DB, not scoped to a customer, so a match belonging to
+    // a DIFFERENT customer must NOT be silently treated as "this create already happened" — that
+    // would hand back an unrelated invoice as if it were the one just requested. Only a match for
+    // the SAME customer is treated as a genuine replay (total isn't known yet at this point in the
+    // request, so it's re-checked more precisely in the race-handling branch below).
     if (idempotencyKey) {
       const existing = await prisma.invoice.findUnique({
         where: { idempotencyKey },
         include: { customer: true, items: true },
       });
-      if (existing) return NextResponse.json({ ...existing, stockWarnings: [] }, { status: 200 });
+      if (existing) {
+        if (existing.customerId !== customerId) {
+          return NextResponse.json({ error: "This idempotency key was already used for a different invoice." }, { status: 409 });
+        }
+        return NextResponse.json({ ...existing, stockWarnings: [] }, { status: 200 });
+      }
     }
     if (!placeOfSupply || !String(placeOfSupply).trim()) {
       return NextResponse.json({ error: "Place of supply is required" }, { status: 400 });
@@ -212,21 +231,20 @@ export async function POST(request: NextRequest) {
 
     const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + cgst + sgst + igst + transportChargeVal + transportChargeGstAmountVal);
 
-    // A new invoice's balanceDue equals its total (paidAmount is always 0 at creation). Soft-blocked
-    // unless the caller explicitly confirms via overrideCreditLimit — see src/lib/creditLimit.ts.
-    const creditCheck = await checkCustomerCreditLimit(customerId, total);
-    if (creditCheck?.exceeded && overrideCreditLimit !== true) {
-      return NextResponse.json({
-        error: `This invoice would take ${customer.name}'s outstanding balance to ₹${creditCheck.projectedOutstanding.toFixed(2)}, over their ₹${creditCheck.creditLimit.toFixed(2)} credit limit.`,
-        code: "CREDIT_LIMIT_EXCEEDED",
-        creditLimitCheck: creditCheck,
-      }, { status: 422 });
-    }
-
     // Number generation + create run in one Serializable transaction, retried on write-conflict, to prevent duplicate invoice numbers under concurrent requests.
     const invoicePrefix = biz.invoiceNumberPrefix || deriveDefaultPrefix(biz.name);
     async function attemptCreate() {
       return prisma.$transaction(async (tx) => {
+        // A new invoice's balanceDue equals its total (paidAmount is always 0 at creation).
+        // Soft-blocked unless the caller explicitly confirms via overrideCreditLimit — checked
+        // inside this same Serializable transaction (not before it) so two concurrent invoices for
+        // the same customer can't each read the same outstanding balance, both pass, and jointly
+        // breach the limit with neither ever seeing the other's invoice.
+        const creditCheck = await checkCustomerCreditLimit(tx, customerId, total);
+        if (creditCheck?.exceeded && overrideCreditLimit !== true) {
+          throw new CreditLimitExceededError(creditCheck);
+        }
+
         const candidatesThisYear = await tx.invoice.findMany({
           where: { invoiceNumber: numberFormatDbFilter(biz.invoiceNumberFormat, invoicePrefix, currentYearLabel) },
           select: { invoiceNumber: true },
@@ -282,7 +300,7 @@ export async function POST(request: NextRequest) {
           .filter((p) => p.stock < 0)
           .map((p) => `${p.name} (stock: ${p.stock})`);
 
-        return { invoice: inv, stockWarnings: warnings };
+        return { invoice: inv, stockWarnings: warnings, creditCheck };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });
     }
 
@@ -307,12 +325,24 @@ export async function POST(request: NextRequest) {
             where: { idempotencyKey },
             include: { customer: true, items: true },
           });
-          if (existing) return NextResponse.json({ ...existing, stockWarnings: [] }, { status: 200 });
+          if (existing) {
+            if (existing.customerId !== customerId || existing.total !== total) {
+              return NextResponse.json({ error: "This idempotency key was already used for a different invoice." }, { status: 409 });
+            }
+            return NextResponse.json({ ...existing, stockWarnings: [] }, { status: 200 });
+          }
+        }
+        if (error instanceof CreditLimitExceededError) {
+          return NextResponse.json({
+            error: `This invoice would take ${customer.name}'s outstanding balance to ₹${error.check.projectedOutstanding.toFixed(2)}, over their ₹${error.check.creditLimit.toFixed(2)} credit limit.`,
+            code: "CREDIT_LIMIT_EXCEEDED",
+            creditLimitCheck: error.check,
+          }, { status: 422 });
         }
         throw error;
       }
     }
-    const { invoice, stockWarnings } = result!;
+    const { invoice, stockWarnings, creditCheck } = result!;
 
     const creditOverrideNote = creditCheck?.exceeded && overrideCreditLimit === true
       ? ` | Credit limit override: proceeded past ₹${creditCheck.creditLimit.toFixed(2)} limit (projected outstanding ₹${creditCheck.projectedOutstanding.toFixed(2)})`

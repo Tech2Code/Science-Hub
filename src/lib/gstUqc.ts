@@ -17,7 +17,9 @@ const FALLBACK_UQC = "OTH-OTHERS";
 // Best-effort mapping from this app's free-text product/rate-list unit strings (Nos, Kg,
 // 500 GM, Ltr, ...) to the fixed GST UQC vocabulary above — product units here are never
 // required to be a UQC code (see UnitCombo), so this is a lossy guess, not a real link.
-const UNIT_ALIASES: Record<string, string> = {
+type GstUqcCode = (typeof GST_UQC_CODES)[number];
+
+const UNIT_ALIASES: Record<string, GstUqcCode> = {
   nos: "NOS-NUMBERS", no: "NOS-NUMBERS", number: "NOS-NUMBERS", numbers: "NOS-NUMBERS", pc: "PCS-PIECES",
   pcs: "PCS-PIECES", piece: "PCS-PIECES", pieces: "PCS-PIECES", unit: "UNT-UNITS", units: "UNT-UNITS",
   kg: "KGS-KILOGRAMS", kgs: "KGS-KILOGRAMS", kilogram: "KGS-KILOGRAMS", kilograms: "KGS-KILOGRAMS",
@@ -39,7 +41,7 @@ const UNIT_ALIASES: Record<string, string> = {
 };
 
 export interface UqcMatch {
-  code: string;
+  code: GstUqcCode;
   matched: boolean;
 }
 

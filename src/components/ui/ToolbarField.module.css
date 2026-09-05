@@ -25,7 +25,9 @@
        ~57px for 7 characters while the actual widest label ("Sorting") only renders ~41px,
        so calc(Nch + gap) overshot badly. Measured with Playwright against the real font
        instead: Search 39.6px, Sorting 41.4px, Period 35.9px — 3.25rem (52px) covers the
-       widest ("Sorting") plus a small buffer. */
-    width: 3.25rem;
+       widest ("Sorting") plus a small buffer. `min-width` (not `width`) so a longer label
+       reused on this class outside those three (e.g. GST Filing's "Financial Year") still
+       grows to fit its own content instead of being clipped into the same fixed box. */
+    min-width: 3.25rem;
   }
 }

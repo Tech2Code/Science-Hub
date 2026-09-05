@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/apiAuth";
+import { istDayStartUtc, istDayEndUtc } from "@/lib/validation";
 import { EWAY_BILL_THRESHOLD } from "@/lib/ewayBill";
 
 // Same all-or-nothing gate as /api/gst-filing — this report merges sales + purchase data.
@@ -30,9 +31,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const fromStr = searchParams.get("from");
     const toStr = searchParams.get("to");
-    const from = fromStr ? new Date(`${fromStr}T00:00:00.000Z`) : undefined;
-    const to = toStr ? new Date(`${toStr}T23:59:59.999Z`) : undefined;
+    const from = fromStr ? istDayStartUtc(fromStr) : undefined;
+    const to = toStr ? istDayEndUtc(toStr) : undefined;
     if ((from && isNaN(from.getTime())) || (to && isNaN(to.getTime()))) {
+      return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
+    }
+    if (from && to && from.getTime() > to.getTime()) {
       return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
     }
     const dateFilter = from || to ? { ...(from && { gte: from }), ...(to && { lte: to }) } : undefined;

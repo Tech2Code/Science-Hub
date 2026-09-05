@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/apiAuth";
 import { getAllActiveNotificationIds, type NotificationCategoryKey } from "@/lib/notifications";
@@ -18,6 +19,7 @@ export async function POST() {
       await prisma.notificationDismissal.createMany({ data, skipDuplicates: true });
     }
 
+    revalidateTag("notifications", { expire: 0 });
     return NextResponse.json({ ok: true, cleared: data.length });
   } catch (error) {
     console.error("POST /api/notifications/clear-all error:", error);

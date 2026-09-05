@@ -335,7 +335,7 @@ export default function CustomerStatementPage() {
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>Account Statement{statement ? ` — ${statement.customer.name}` : ""}</h2>
           <div className={styles.toolbarActions}>
-            <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" onClick={handleRegeneratePdf} disabled={loading}>
+            <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" aria-label="Regenerate PDF" onClick={handleRegeneratePdf} disabled={loading}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>
             </Button>
             <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={viewingPdf} disabled={loading}>
@@ -461,8 +461,8 @@ export default function CustomerStatementPage() {
                 <TableSkeleton columns={ROW_COLUMNS} rows={5} />
               ) : statement!.rows.length === 0 ? (
                 <tr><td colSpan={5} className={styles.emptyCell}>No transactions in this period.</td></tr>
-              ) : visibleRows.map((r, idx) => (
-                <tr key={`${r.date}-${idx}`}>
+              ) : visibleRows.map((r) => (
+                <tr key={`${r.type}-${r.refId}`}>
                   <td data-mobile-full>{new Date(r.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</td>
                   <td data-label="Particulars">{r.label}</td>
                   <td data-label="Debit" className="table-td-right">{r.debit ? fmt(r.debit) : "—"}</td>

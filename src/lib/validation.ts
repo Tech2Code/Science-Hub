@@ -18,6 +18,18 @@ export function toIstDateStr(date: Date): string {
   return new Date(date.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
+// The UTC instant boundaries of an IST calendar day ("YYYY-MM-DD") — use these (not a naive
+// `new Date(dateStr + "T00:00:00.000Z")`) whenever a client-sent date-range filter is compared
+// against a full IST-timezone timestamp (Invoice.date, PurchaseBill.billDate, Payment.date, ...),
+// same reasoning as toIstDateStr()/isFutureIstDate() above — a raw UTC-midnight parse sits ~5.5
+// hours before the actual IST day boundary, silently misclassifying anything created in that gap.
+export function istDayStartUtc(dateStr: string): Date {
+  return new Date(Date.parse(`${dateStr}T00:00:00.000Z`) - IST_OFFSET_MS);
+}
+export function istDayEndUtc(dateStr: string): Date {
+  return new Date(Date.parse(`${dateStr}T23:59:59.999Z`) - IST_OFFSET_MS);
+}
+
 export const rules = {
   required: (msg = "This field is required."): Validator =>
     (v) => v.trim() ? null : msg,

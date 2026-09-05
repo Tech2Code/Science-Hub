@@ -14,7 +14,15 @@ class InvoiceConflictError extends Error {}
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
-import { checkCustomerCreditLimit } from "@/lib/creditLimit";
+import { checkCustomerCreditLimit, type CreditLimitCheck } from "@/lib/creditLimit";
+
+// Thrown from inside the update transaction so the credit-limit check can be re-validated
+// atomically alongside the invoice update, the same shape as before it moved inside the transaction.
+class CreditLimitExceededError extends Error {
+  constructor(public check: CreditLimitCheck) {
+    super("Credit limit exceeded");
+  }
+}
 
 export async function GET(
   request: NextRequest,
@@ -229,18 +237,17 @@ export async function PUT(
     if (paidAmount >= total) newStatus = "paid";
     else if (paidAmount > 0) newStatus = "partial";
 
-    // Excludes this invoice's own (pre-edit) balance from "current outstanding", then adds back its
-    // post-edit balance — an edit that only rearranges this invoice's own items shouldn't double-count it.
-    const creditCheck = await checkCustomerCreditLimit(resolvedCustomerId, total - paidAmount, id);
-    if (creditCheck?.exceeded && overrideCreditLimit !== true) {
-      return NextResponse.json({
-        error: `This change would take the customer's outstanding balance to ₹${creditCheck.projectedOutstanding.toFixed(2)}, over their ₹${creditCheck.creditLimit.toFixed(2)} credit limit.`,
-        code: "CREDIT_LIMIT_EXCEEDED",
-        creditLimitCheck: creditCheck,
-      }, { status: 422 });
-    }
+    const { invoice, stockWarnings, creditCheck } = await prisma.$transaction(async (tx) => {
+      // Excludes this invoice's own (pre-edit) balance from "current outstanding", then adds back
+      // its post-edit balance — an edit that only rearranges this invoice's own items shouldn't
+      // double-count it. Checked inside this same transaction (not before it) so a concurrent edit/
+      // create for the same customer can't each read the same outstanding balance and jointly
+      // breach the limit with neither seeing the other's change.
+      const creditCheck = await checkCustomerCreditLimit(tx, resolvedCustomerId, total - paidAmount, id);
+      if (creditCheck?.exceeded && overrideCreditLimit !== true) {
+        throw new CreditLimitExceededError(creditCheck);
+      }
 
-    const { invoice, stockWarnings } = await prisma.$transaction(async (tx) => {
       // Re-check the optimistic-lock atomically under the row lock — the earlier check ran as a separate query, leaving a race window for concurrent edits.
       if (expectedUpdatedAt) {
         const guard = await tx.invoice.updateMany({
@@ -313,7 +320,7 @@ export async function PUT(
         .filter((p) => p.stock < 0)
         .map((p) => `${p.name} (stock: ${p.stock})`);
 
-      return { invoice: inv, stockWarnings: warnings };
+      return { invoice: inv, stockWarnings: warnings, creditCheck };
     }, { timeout: 20000, maxWait: 10000 });
 
     revalidateTag("invoices", { expire: 0 });
@@ -332,6 +339,13 @@ export async function PUT(
     }
     if (error instanceof InvoiceConflictError) {
       return NextResponse.json({ error: "This invoice was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
+    }
+    if (error instanceof CreditLimitExceededError) {
+      return NextResponse.json({
+        error: `This change would take the customer's outstanding balance to ₹${error.check.projectedOutstanding.toFixed(2)}, over their ₹${error.check.creditLimit.toFixed(2)} credit limit.`,
+        code: "CREDIT_LIMIT_EXCEEDED",
+        creditLimitCheck: error.check,
+      }, { status: 422 });
     }
     console.error(error);
     if (error instanceof ProductNotFoundError) {

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/apiAuth";
+import { requireSectionAccess } from "@/lib/apiAuth";
+import { istDayStartUtc, istDayEndUtc } from "@/lib/validation";
 import { buildLedger, fetchCustomerLedgerEntries } from "@/lib/statementQuery";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireSession();
+    const auth = await requireSectionAccess("payments_received");
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
@@ -18,11 +19,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { searchParams } = new URL(request.url);
     const fromStr = searchParams.get("from");
     const toStr = searchParams.get("to");
-    const from = fromStr ? new Date(`${fromStr}T00:00:00.000Z`) : undefined;
-    const to = toStr ? new Date(`${toStr}T23:59:59.999Z`) : undefined;
+    const from = fromStr ? istDayStartUtc(fromStr) : undefined;
+    const to = toStr ? istDayEndUtc(toStr) : undefined;
+    if ((from && isNaN(from.getTime())) || (to && isNaN(to.getTime()))) {
+      return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
+    }
+    if (from && to && from.getTime() > to.getTime()) {
+      return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
+    }
 
-    const entries = await fetchCustomerLedgerEntries(id);
-    const ledger = buildLedger(entries, from, to);
+    const { entries, openingBalanceSeed } = await fetchCustomerLedgerEntries(id, from, to);
+    const ledger = buildLedger(entries, from, to, openingBalanceSeed);
 
     return NextResponse.json({ customer, ...ledger });
   } catch (error) {

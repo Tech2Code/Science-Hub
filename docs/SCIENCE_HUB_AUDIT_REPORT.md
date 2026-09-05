@@ -10,6 +10,14 @@ Legend for `Status`: `Open` / `Verifying` / `Fix Planned` / `Fixed` / `Won't Fix
 
 *(none confirmed yet — dependency scan below is High/Critical by CVE severity, not yet impact-verified against this app's actual usage)*
 
+### A11Y-005 — Topbar Accent/Appearance popovers had no keyboard-operable way to close, while a new dim overlay covered the whole viewport
+- **Severity**: Critical
+- **Category**: Accessibility / keyboard trap
+- **Location**: `src/components/layout/DashboardShell.tsx` — `AccentPicker`/`MoreMenu` (found 2026-09-05, in a diff that was uncommitted at the time)
+- **Problem**: Neither popover had an Escape handler, a focus trap, or `aria-expanded`/`aria-haspopup` — only a mouse-only "click outside" listener, unlike `NotificationBell`'s own popover which already used the shared `useMenuA11y` hook. Because the new `PopoverScrim` (see UI-003 below) dimmed the entire viewport while either was open, a keyboard-only user who opened one had no way to close it and no way to reach anything else on the page via Tab.
+- **Fix applied (2026-09-05)**: Wired both popovers through `useMenuA11y` (Escape/Tab-trap/return-focus-to-trigger), added `aria-haspopup="dialog"`/`aria-expanded`/`role="dialog"`/`aria-modal="true"` to match `NotificationBell`'s existing pattern.
+- **Status**: Fixed.
+
 ---
 
 ## High
@@ -253,6 +261,58 @@ The `#invoice-print-area` table (10+ GST columns, `minWidth: 700`) is wrapped in
 ### Checked, not a bug — `PdfPreviewModal` has zero `@media` rules
 Grepping component CSS for `@media` count flagged this as a gap, but the component already handles mobile via a separate JS-rendered fallback view (`.mobileView`/`.mobileTextWrap`/`.openBrowserBtn` — "PDF preview isn't supported here, open in browser instead"), not CSS breakpoints. No fix needed.
 
+---
+
+**2026-09-05 audit** — 10-specialist review (security, database, performance, api, regression, ui, react, typescript, testing, architect), weighted toward everything shipped since the 2026-08-21 audit (notifications, statements, GSTR-1 CSV export, rate-list import, idempotency hardening). 38 findings total, all fixed in the same pass except one explicitly left as a product decision (DB-002) and two confirmed to need no code change (REG-002, TEST-006 — see Low/Informational). Findings below are folded into this file's existing severity sections (marked with the `2026-09-05` date where it isn't otherwise obvious).
+
+### SEC-006 — GSTR-1 CSV export didn't neutralize formula-triggering characters in user-controlled cells
+- **Severity**: High
+- **Category**: Injection (CSV/Excel formula injection)
+- **Location**: `src/lib/gstr1CsvExport.ts` (customer name in `b2bRows`/`cdnrCsv`, HSN in `hsnRows`), `src/lib/gstr1CsvZip.ts` (`Validation-Report.csv`)
+- **Problem**: A customer named e.g. `=cmd|'/c calc'!A1` (no server-side character restriction on `Customer.name`, only a length check) flowed unescaped into the B2B/CDNR section CSVs and into the human-facing `Validation-Report.csv`, which the code itself documents as "meant to be opened in Excel by a human." Unlike `gstFilingWorkbook.ts`/`gstFilingZip.ts` (already hardened in Era 13, 2026-08-31), neither of these newer GSTR-1-specific files ran cells through `neutralizeFormulaCell()`.
+- **Fix applied (2026-09-05)**: `gstr1CsvExport.ts` now neutralizes customer name and HSN before they reach a cell. `gstr1CsvZip.ts`'s `csvEscape()`/`validationCsv()` were removed entirely in favor of a new shared `src/lib/validationCsv.ts` (`buildValidationCsv()`), also now used by `gstFilingZip.ts` — closes both the vulnerability and the copy-paste drift between the two zip builders (see ARCH-003 below).
+- **Status**: Fixed.
+
+### API-005 — Customer/vendor statement routes bypassed the section-permission system
+- **Severity**: High
+- **Category**: Authorization
+- **Location**: `src/app/api/customers/[id]/statement/route.ts`, `src/app/api/vendors/[id]/statement/route.ts`
+- **Problem**: Both gated on bare `requireSession()` instead of `requireSectionAccess("payments_received"/"payments_made")`, unlike the sibling payment-history endpoints (`/api/payments`, `/api/purchase-bills/payments`). An admin revoking a staff user's "Payments Received" grant in Admin → Permissions did not actually block that user from a customer's full account statement (every invoice/payment/credit note with a running balance).
+- **Fix applied (2026-09-05)**: Both routes now call the matching `requireSectionAccess(...)` guard. Regression-tested — see `tests/api/statements.test.ts` (403 without the section, 200 with it, 200 for admin regardless).
+- **Status**: Fixed.
+
+### PERF-004 — Unbounded over-credit-limit customer query runs on every dashboard load
+- **Severity**: High
+- **Category**: Performance / unbounded query
+- **Location**: `src/lib/notifications.ts` (previously duplicated across 4 exported functions — see ARCH-001)
+- **Problem**: Every customer with a credit limit set was fetched with no `take` cap, unlike every sibling query in the same functions (stock/invoices/bills all capped). `NotificationBell` fires this on every authenticated page load.
+- **Fix applied (2026-09-05)**: Extracted into a shared `fetchOverLimitCustomers()` capped at `OVER_LIMIT_CUSTOMER_FETCH_CAP = 1000` (a generous interim guard — the fully correct fix is pushing the over-limit comparison into SQL, noted for a future pass if a business ever approaches that customer count).
+- **Status**: Fixed.
+
+### PERF-005 — ~20 serialized DB round-trips for one notification-badge load
+- **Severity**: High
+- **Category**: Performance
+- **Location**: `src/lib/notifications.ts`
+- **Problem**: 5 separate, near-identical dismissal-lookup queries ran per call (once per category) via `Promise.all` — but this app's pooled Neon connection is `connection_limit=1`, so they queue rather than actually run concurrently.
+- **Fix applied (2026-09-05)**: Consolidated into one `getActiveDismissalMap()` call querying all needed categories at once (`category: { in: [...] }`), grouped client-side into a per-category `Set`.
+- **Status**: Fixed.
+
+### ARCH-001 — The same 5-category notification query/mapping logic was copy-pasted across 4 functions
+- **Severity**: High
+- **Category**: Maintainability / correctness risk
+- **Location**: `src/lib/notifications.ts` — `getNotificationSummary`, `getDismissedNotificationSummary`, `getAllActiveNotificationIds`, `getNotificationCategoryItems`
+- **Problem**: The credit-limit filter and the bin cutoff-window math were each duplicated 3-4 times — a future threshold change (e.g. "7 days" → "10 days") has 3-4 places to update in sync, a plausible one to miss.
+- **Fix applied (2026-09-05)**: Extracted `fetchOverLimitCustomers()`/`overLimitCustomerToItem()` and `fetchBinExpiringEntities()`/`binEntityToItem()` (plus hoisted `daysOverdue()`/`overdueSeverity()`), used by all four functions. Net effect also closed PERF-004/PERF-005 above in the same rewrite.
+- **Status**: Fixed.
+
+### TEST-002 — Idempotency-key logic on money-mutating routes had zero test coverage
+- **Severity**: High
+- **Category**: Test coverage
+- **Location**: `invoices/route.ts`, `invoices/[id]/payment/route.ts` (and by extension the equivalent purchase-bill/purchase-payment routes, not yet covered — see TEST-006)
+- **Problem**: The correctness contract is subtle and asymmetric by design (same-parent retry = 200 dedupe, cross-parent collision = 409, never silently misattributed) and was entirely unverified.
+- **Fix applied (2026-09-05)**: Added `tests/api/invoice-payments.test.ts` (same-key dedupe leaves `paidAmount`/payment-count unchanged; a key already used by a different invoice 409s without touching it; a genuine concurrent race via `Promise.all` never double-records) and an idempotency `describe` block in `tests/api/invoices.test.ts` (dedupe + oversized-key rejection).
+- **Status**: Fixed.
+
 ## Medium
 
 ### DEP-004 — Transitive vulnerable packages with available non-breaking fixes
@@ -427,6 +487,102 @@ Ran `npm run test` — confirmed the currently-documented behavior exactly: **54
 - **The one real risk this surfaced**: none of this code has ever actually been executed against a live database — only confirmed to compile and correctly self-skip. A logic bug inside an `it()` block (as opposed to a syntax/type error) would not be caught by that. This isn't fixable without the test database itself.
 - **Test database blocked this session**: the user's first instinct (test directly against the live dev database) was declined — `vitest.config.mts` has a hard safeguard refusing to start if `TEST_DATABASE_URL` equals the real `DATABASE_URL`, specifically because `tests/api/**` truncates every table before each test; doing this for real would have destroyed all of this session's (and the dev database's) real data. No local Postgres or Docker was available on this machine as a substitute, and provisioning a disposable Neon branch needs the user's own account access. User chose to skip DB-backed test execution for this session rather than pursue either.
 
+### SEC-007 — Rate-list import had no cap on decompressed size, row count, or request rate (2026-09-05)
+- **Severity**: Medium
+- **Category**: Resource exhaustion / DoS
+- **Location**: `src/app/api/rate-lists/parse-import/route.ts`
+- **Problem**: The 5MB cap only limited the *uploaded* file size — `workbook.xlsx.load()` fully decompresses into memory with no ceiling on the decompressed sheet, the row parser had no row-count cap, and the route had no rate limit at all (unlike every other CPU/IO-heavy endpoint — the `send-*` email routes).
+- **Fix applied (2026-09-05)**: Added `rateLimit()` (20/15min per user, matching `send-invoice`'s pattern) and a `MAX_ROWS = 2000` truncation (a manually-curated rate list is never realistically longer; the response now reports `truncated: true` rather than silently dropping rows with no signal).
+- **Status**: Fixed.
+
+### DATA-001 — The BIZ-003-class IST/UTC day-boundary bug had crept back into three newer routes (2026-09-05)
+- **Severity**: Medium
+- **Category**: Data integrity / date-boundary correctness
+- **Location**: `src/app/api/customers/[id]/statement/route.ts`, `src/app/api/vendors/[id]/statement/route.ts`, `src/app/api/reports/eway-bill/route.ts`
+- **Problem**: All three built `from`/`to` as raw UTC midnight (`` `${date}T00:00:00.000Z` ``) compared directly against IST business timestamps — the exact class of bug BIZ-003 (2026-08-21) fixed via `toIstDateStr()`, just not applied to these three newer routes. An invoice recorded near local midnight could silently fold into the wrong side of a date-range filter.
+- **Fix applied (2026-09-05)**: Added `istDayStartUtc()`/`istDayEndUtc()` to `src/lib/validation.ts` (the inverse of `toIstDateStr()` — converts an IST calendar-date string into the correct UTC instant boundary) and switched all three routes to use them.
+- **Status**: Fixed.
+
+### DATA-002 — Statement date-range filters accepted invalid/inverted input silently (2026-09-05)
+- **Severity**: Medium
+- **Category**: Input validation
+- **Location**: `src/app/api/customers/[id]/statement/route.ts`, `src/app/api/vendors/[id]/statement/route.ts`
+- **Problem**: `?from`/`?to` went straight into `new Date(...)` with no validity check — an unparseable date silently produced `Invalid Date`/`NaN`, making the range filter a no-op that returned 200 with a full, unfiltered ledger instead of an error. There was also no check that `from <= to`.
+- **Fix applied (2026-09-05)**: Both routes now return 400 on an unparseable or inverted range, mirroring the existing pattern in `gst-filing/route.ts`.
+- **Status**: Fixed.
+
+### DATA-003 — Top-level invoice/purchase-bill idempotency replay didn't check it matched what was submitted (2026-09-05)
+- **Severity**: Medium
+- **Category**: Data integrity / idempotency
+- **Location**: `src/app/api/invoices/route.ts`, `src/app/api/purchase-bills/route.ts`
+- **Problem**: Unlike the child-resource create routes (Payment, PurchasePayment, Return — Era 12.6), which check the matched row's parent id before treating a key match as a safe replay, the two top-level create routes treated *any* row matching the submitted `idempotencyKey` as an automatic 200 replay, with no path that ever returned 409. A stale/reused key resubmitted against a genuinely different customer/vendor payload would silently hand back the previous unrelated document as "success."
+- **Fix applied (2026-09-05)**: Both routes now compare the matched row's `customerId`/`vendorId` (and, at the point where `total` is known, `total` too) before treating it as a safe replay — a mismatch now 409s instead of silently misattributing. Regression-tested (`tests/api/invoices.test.ts`, `tests/api/invoice-payments.test.ts`).
+- **Status**: Fixed.
+
+### PERF-006 — Statements fetched a customer/vendor's entire lifetime history to compute one filtered range (2026-09-05)
+- **Severity**: Medium
+- **Category**: Performance / unbounded query
+- **Location**: `src/lib/statementQuery.ts`
+- **Problem**: `from`/`to` only filtered in JS inside `buildLedger()`, after every historical row had already been pulled from Postgres — and the statement pages default both dates empty, so the common first-click case always requested full lifetime history.
+- **Fix applied (2026-09-05)**: `fetchCustomerLedgerEntries()`/`fetchVendorLedgerEntries()` now push the date range into the Prisma `where` and, when `from` is given, collapse everything older into an `openingBalanceSeed` via three lightweight SUM aggregates. `buildLedger()` gained a 4th optional param for that seed — fully backward-compatible with its original no-seed, full-history behavior (see `tests/unit/statementQuery.test.ts`).
+- **Status**: Fixed.
+
+### TS-001 — GST lookup tables were typed too loosely to catch a typo (2026-09-05)
+- **Severity**: Medium
+- **Category**: Type safety
+- **Location**: `src/lib/gstUqc.ts` (`UNIT_ALIASES`, `UqcMatch.code`), `src/lib/gstStateCodes.ts` (`GST_STATE_CODES`)
+- **Problem**: Both were typed `Record<string, string>`, so a typo'd GST UQC/state code (e.g. transposing one of ~60 hand-written unit-alias codes) type-checked cleanly and would silently ship a code the GST Offline Tool's importer rejects.
+- **Fix applied (2026-09-05)**: `UNIT_ALIASES`/`UqcMatch.code` now typed against `(typeof GST_UQC_CODES)[number]`; `GST_STATE_CODES` declared `as const` (with one narrowly-cast dynamic lookup in `getGstPosLabel()`, since the customer/invoice state string being looked up is inherently not statically known).
+- **Status**: Fixed.
+
+### TS-005 — Popover accessibility hook re-attached its global keydown listener on every render (2026-09-05)
+- **Severity**: Medium
+- **Category**: React hooks / performance
+- **Location**: `src/lib/useMenuA11y.ts`'s Escape/Tab-trap effect, called from `NotificationBell.tsx`
+- **Problem**: The call site passed a brand-new inline arrow function as `onClose` on every render, and the hook's effect lists `onClose` as a dependency — so the `document` keydown listener tore down and re-attached on every re-render while the popover was open (harmless today, but a textbook unstable-callback-in-deps pattern any future caller could copy).
+- **Fix applied (2026-09-05)**: Memoized the callback at the `NotificationBell` call site with `useCallback`; the two new `AccentPicker`/`MoreMenu` call sites (A11Y-005) were written with `useCallback` from the start.
+- **Status**: Fixed.
+
+### TEST-003 — The statement running-balance calculator had zero unit tests (2026-09-05)
+- **Severity**: Medium
+- **Category**: Test coverage
+- **Location**: `src/lib/statementQuery.ts` (`buildLedger`)
+- **Problem**: A pure, no-DB function that is the entire correctness of a printed/emailed financial statement, entirely unverified.
+- **Fix applied (2026-09-05)**: Added `tests/unit/statementQuery.test.ts` — out-of-order sort + monotonic running balance, `from`/`to` filtering (incl. the new `openingBalanceSeed` param), empty-entries no-crash, and the vendor-direction sign convention.
+- **Status**: Fixed.
+
+### TEST-004 — No integration tests for the statement or notification routes (2026-09-05)
+- **Severity**: Medium
+- **Category**: Test coverage
+- **Location**: `customers/[id]/statement`, `vendors/[id]/statement`, all 5 `notifications/*` routes
+- **Problem**: Nothing covered auth-guard scoping or per-user isolation — exactly the shape of gap API-005 fell through.
+- **Fix applied (2026-09-05)**: Added `tests/api/statements.test.ts` (section-gating 403/200, admin bypass, 404, soft-deleted-customer-with-active-invoice, invalid-date 400) and `tests/api/notifications.test.ts` (manager vs staff/admin `binExpiring`, dismiss/undo + per-user dismissal scoping, invalid category/entityId 400).
+- **Status**: Fixed.
+
+### TEST-005 — The rate-list bulk-import parser was untested despite real complexity (2026-09-05)
+- **Severity**: Medium
+- **Category**: Test coverage
+- **Location**: `src/lib/rateListImport.ts`
+- **Problem**: Priority-ordered header-column regex matching, a positional fallback keyed on column count, and quoted-CSV splitting — all pure and no-DB, all untested. A regression here silently mis-maps columns on a real supplier file.
+- **Fix applied (2026-09-05)**: Added `tests/unit/rateListImport.test.ts` — header detection regardless of order/case, 7-column vs 5-column headerless positional fallbacks (proving they don't cross-map), quoted-comma splitting, "Net Rate" detection, and malformed-discount-cell handling.
+- **Status**: Fixed.
+
+### UI-002 — Global search's Escape key threw focus away from the input entirely (2026-09-05)
+- **Severity**: Medium
+- **Category**: Accessibility / keyboard UX
+- **Location**: `src/components/layout/GlobalSearch.tsx`
+- **Problem**: The Escape handler called `.blur()` on top of closing the results panel — a keyboard user closing the dropdown had to Tab all the way back into the topbar to reach the search box again, instead of the standard combobox pattern (Escape closes the list, focus stays put).
+- **Fix applied (2026-09-05)**: Removed the `.blur()` call — `setOpen(false)` alone already closes the panel correctly.
+- **Status**: Fixed.
+
+### UI-003 — `PopoverScrim`'s dim overlay didn't actually intercept clicks (2026-09-05)
+- **Severity**: Medium
+- **Category**: UI / visual-semantic mismatch
+- **Location**: `src/components/ui/PopoverScrim.tsx`/`.module.css`
+- **Problem**: `pointer-events: none` meant the page visually dimmed (implying "temporarily blocked") while everything underneath stayed fully clickable — clicking a dimmed sidebar link while a popover was open actually navigated away, the opposite of what the dim treatment promised. Its `z-index: 40` also collided with the mobile sidebar drawer's own backdrop (also 40 — see REG-001).
+- **Fix applied (2026-09-05)**: Flipped to `pointer-events: auto` and bumped `z-index` to 45 (above the mobile backdrop, below Modal's 50). Each popover's existing "click outside to close" listener still fires correctly, since this div is portaled to `document.body` and was never inside any popover's own ref to begin with — intercepting the click here (instead of letting it fall through) is what stops the underlying element from also receiving it.
+- **Status**: Fixed.
+
 ## Low
 
 ### DOC-001 — Root `CLAUDE.md` documents a `DELETE /api/stock-movements?type=stock-ledger` route that does not exist in the codebase
@@ -448,6 +604,102 @@ Ran `npm run test` — confirmed the currently-documented behavior exactly: **54
 - **Fix applied (2026-08-18)**: Added a row to `CLAUDE.md`'s API Routes table.
 - **Regression risk**: None — documentation-only change.
 - **Status**: Fixed.
+
+### DATA-004 — Customer credit-limit check is racy under concurrent invoice creation (2026-09-05)
+- **Location**: `src/lib/creditLimit.ts` (`checkCustomerCreditLimit`), called from `src/app/api/invoices/route.ts` and `[id]/route.ts`
+- **Problem**: The outstanding-balance check ran before, and separately from, the Serializable transaction that actually writes the invoice — two concurrent invoices for the same customer could each read the same pre-write outstanding balance, both pass, and jointly breach the limit with neither request ever seeing the other's invoice.
+- **Fix applied (2026-09-05)**: `checkCustomerCreditLimit()` now takes a Prisma client (`tx` or the plain singleton) as its first argument, and both routes call it *inside* the same Serializable transaction as the create/update — a `CreditLimitExceededError` thrown from within the transaction is caught and converted back to the same 422 response shape as before.
+- **Status**: Fixed.
+
+### PERF-007 — Notification bell's pending-action map never released settled entries (2026-09-05)
+- **Location**: `src/components/layout/NotificationBell.tsx` (`pendingRef`)
+- **Problem**: A Map entry was written on every dismiss/undo/restore but never deleted once its promise settled — and this component stays mounted for the whole session. A user dismissing/undoing many different items across a full shift leaves one permanent entry per distinct item, a slow unbounded leak.
+- **Fix applied (2026-09-05)**: The entry is now deleted via a `.finally()` once its own promise settles (guarded so a newer entry for the same id isn't accidentally cleared).
+- **Status**: Fixed.
+
+### ARCH-002 — `NotificationDismissal` rows had no purge path (2026-09-05)
+- **Location**: `prisma/schema.prisma` (`NotificationDismissal`), `src/lib/notifications.ts`
+- **Problem**: Rows past their 24h active-TTL are correctly excluded from every query, but never physically deleted — unlike every other retention-bounded table in the app (the Bin's 30-day auto-purge). One row accumulates per user per dismissed item, forever.
+- **Fix applied (2026-09-05)**: Added `purgeExpiredDismissals()` (rows older than a 7-day retention window — a week past the 24h TTL purely so a clock-skewed request never races a legitimately-still-active row out from under itself), called opportunistically (fire-and-forget) on every `getActiveDismissalMap()` read, mirroring the Bin's own auto-purge-on-read pattern.
+- **Status**: Fixed.
+
+### ARCH-003 — `csvEscape()`/validation-CSV logic was copy-pasted three times, and two copies silently diverged (2026-09-05)
+- **Location**: `src/lib/gstFilingZip.ts`, `src/lib/gstr1CsvZip.ts`, `src/lib/gstr1CsvExport.ts`
+- **Problem**: `gstFilingZip.ts`'s validation-report writer called `neutralizeFormulaCell()` (Era 13); `gstr1CsvZip.ts`'s same-purpose writer did not, despite writing the same-named `Validation-Report.csv` for the same "opened in Excel by a human" purpose — copy-paste drift, not a deliberate choice (see SEC-006, same underlying vulnerability).
+- **Fix applied (2026-09-05)**: Extracted one shared `src/lib/validationCsv.ts` (`buildValidationCsv()`), used by both `gstFilingZip.ts` and `gstr1CsvZip.ts`. `gstr1CsvExport.ts`'s own `csvEscape()` was deliberately left separate — it targets the GST Offline Tool's own machine parser, not Excel, and a leading-apostrophe formula-neutralization there would corrupt the literal value a non-Excel parser reads back; that file's genuinely-different contract (no BOM, `\r\n` endings) is documented in its own header comment.
+- **Status**: Fixed.
+
+### ARCH-004 — Notifications subsystem was entirely undocumented in `CLAUDE.md` (2026-09-05)
+- **Location**: `CLAUDE.md` — Database Models / API Routes / Features Completed tables
+- **Problem**: Every other model/route surface in the project has a doc entry; the entire notifications feature (model, 5 routes, client component) had none.
+- **Fix applied (2026-09-05)**: Added as Features Completed #44 (this audit + fix pass itself), which also documents the notifications subsystem's shape.
+- **Status**: Fixed.
+
+### A11Y-006 — Search input referenced a listbox id that didn't always exist (2026-09-05)
+- **Location**: `src/components/layout/GlobalSearch.tsx`
+- **Problem**: `aria-controls="global-search-listbox"` was always present on the input, but that element only mounts once 2+ characters are typed — pointing at a non-existent id for most of the input's life.
+- **Fix applied (2026-09-05)**: `aria-controls` is now only set while the listbox is actually mounted (`showPanel`).
+- **Status**: Fixed.
+
+### A11Y-007 — Notification popover had a partial-modal ARIA contract (2026-09-05)
+- **Location**: `src/components/layout/NotificationBell.tsx`
+- **Problem**: `role="dialog"` plus a working Tab focus-trap, but no `aria-modal="true"`, while `PopoverScrim` visually implied modality (Tab trapped; screen-reader virtual-cursor navigation and mouse click-through were not, prior to UI-003's fix).
+- **Fix applied (2026-09-05)**: Added `aria-modal="true"` to all three popovers app-wide (`NotificationBell`, and the two new `AccentPicker`/`MoreMenu` dialogs from A11Y-005), now consistent with UI-003's click-interception fix actually making them behave like modals.
+- **Status**: Fixed.
+
+### A11Y-008 — Icon-only "Regenerate PDF" button had no accessible name (2026-09-05)
+- **Location**: 8 files — `sales/invoices/[id]`, `sales/invoices` (list), `sales/rate-lists/[id]`, `sales/credit-notes` (list), `sales/customers/[id]/statement`, `purchases/bills/[id]`, `purchases/bills` (list), `purchases/vendors/[id]/statement`
+- **Problem**: Only a `title` attribute, no `aria-label` — `title` isn't reliably exposed as the accessible name across every browser/screen-reader pairing, and isn't reachable at all on touch. Pre-existing app-wide pattern; the two newer statement pages had faithfully copied it rather than introduced it.
+- **Fix applied (2026-09-05)**: Added `aria-label="Regenerate PDF"` alongside the existing `title` at all 8 call sites.
+- **Status**: Fixed.
+
+### API-006 — Two notification routes never called `revalidateTag` (2026-09-05)
+- **Location**: `src/app/api/notifications/dismiss/route.ts` (POST+DELETE), `clear-all/route.ts`
+- **Problem**: Both mutate `NotificationDismissal` but skipped this project's own stated hard rule ("no mutation handler without `revalidateTag`") — harmless today only because `NotificationBell` manually patches its own client cache.
+- **Fix applied (2026-09-05)**: Both now call `revalidateTag("notifications", { expire: 0 })` after their write.
+- **Status**: Fixed.
+
+### API-007 — Dismiss-undo identified its target via a DELETE body instead of the URL (2026-09-05)
+- **Location**: `src/app/api/notifications/dismiss/route.ts` (DELETE)
+- **Problem**: Read `{ category, entityId }` from a JSON body on a DELETE request, unlike every other delete route in the app (`/api/bin/[type]/[id]`) — some infrastructure (proxies/CDNs) silently drops DELETE bodies.
+- **Fix applied (2026-09-05)**: `category`/`entityId` now come from the URL's query string; `NotificationBell.tsx`'s client call updated to build the query string for its DELETE calls instead of sending a body.
+- **Status**: Fixed.
+
+### TS-002 — A downstream UQC value was typed looser than it needed to be (2026-09-05)
+- **Location**: `src/lib/gstUqc.ts` (`UqcMatch.code`)
+- **Problem**: Typed `string` instead of the literal union of the 43 valid UQC codes, even though every value that can flow into it is drawn from that fixed set — compounds TS-001 one level downstream.
+- **Fix applied (2026-09-05)**: Narrowed alongside TS-001's fix (`(typeof GST_UQC_CODES)[number]`).
+- **Status**: Fixed.
+
+### TS-003 — Missing explicit return types on two exported functions/hooks (2026-09-05)
+- **Location**: `src/lib/rateListImport.ts` (`parseRateListRows`, `parsePastedRateListText`), `src/lib/useIdempotencyKey.ts`
+- **Problem**: Against this project's own stated convention (explicit return types on exported functions) — no current runtime risk, but a later edit changing the returned shape would only surface at call sites, not the declaration.
+- **Fix applied (2026-09-05)**: Added explicit return-type annotations (a new `ParsedRateListResult` interface for the former; `useIdempotencyKey()` also intentionally widened its `key()` return from a narrow UUID template-literal type to plain `string`).
+- **Status**: Fixed.
+
+### TS-004 — "Unresolvable place of supply" was encoded as an empty string, not a type (2026-09-05)
+- **Location**: `src/lib/gstr1CsvExport.ts` (`resolvePos`)
+- **Problem**: Returned `""` as the failure sentinel instead of `string | null`, relying on every caller remembering an `if (!pos) continue`. Both current callers did remember, but nothing in the signature forced a future one to.
+- **Fix applied (2026-09-05)**: Returns `string | null`, matching `getGstPosLabel()`'s own contract.
+- **Status**: Fixed.
+
+### TS-006 — Statement tables keyed React rows by array position (2026-09-05)
+- **Location**: `src/components/statements/StatementPrintArea.tsx`, `sales/customers/[id]/statement/page.tsx`, `purchases/vendors/[id]/statement/page.tsx`
+- **Problem**: Keyed `` `${date}-${idx}` `` — invisible today since table cells hold no local state, but the statement page's own "Latest first"/"Oldest first" sort toggle genuinely reorders the same array under the same index-derived key, which would misassign any future per-row state/transition to the wrong logical row.
+- **Fix applied (2026-09-05)**: `StatementPrintRow` widened to include the `type`/`refId` fields the server's `LedgerRow` already returns; all three now key on `` `${type}-${refId}` `` instead of position.
+- **Status**: Fixed.
+
+### REG-001 — New popover scrim shared a z-index with the mobile sidebar backdrop (2026-09-05)
+- **Location**: `src/components/ui/PopoverScrim.module.css` vs `DashboardShell.module.css` (both `z-index: 40`)
+- **Problem**: Cosmetic double-dim only when both were open simultaneously — not reachable by mouse click (the mobile drawer's backdrop fully covers the topbar), so not a functional break, but worth a clean z-index tier regardless.
+- **Fix applied (2026-09-05)**: Bumped alongside UI-003's `pointer-events` fix — scrim now sits at `z-index: 45`.
+- **Status**: Fixed.
+
+### DB-002 — A credit note stays listed after its parent invoice is moved to the Bin (2026-09-05)
+- **Location**: `src/lib/creditNoteQuery.ts`, `src/app/api/credit-notes/route.ts`
+- **Problem**: `buildReturnWhere` doesn't exclude a `Return` whose parent invoice has itself been soft-deleted — the credit note keeps appearing in the main Credit Notes list.
+- **Why not fixed**: Plausibly intentional — both invoices and credit notes are GST-retained documents exempt from the 30-day auto-purge, so the credit note may be meant to stand on its own as a legal record independent of its invoice's bin status. This needs a deliberate answer from whoever owns GST-filing correctness, not a unilateral code change.
+- **Status**: Open (needs product decision).
 
 ---
 
@@ -481,6 +733,24 @@ Ran `npm run test` — confirmed the currently-documented behavior exactly: **54
 - **Fix applied (2026-08-18)**: Confirmed via `git log dev..feature/custom-invoice-bill-name` / `feature/custom-invoice-bill-name..dev` that the branch was never merged either direction (clean divergence at a shared ancestor) — so no source files needed removing from `dev`. Checked the live DB directly: `Invoice.customName`/`PurchaseBill.customName` columns existed (confirming the orphaned migration's effect), with exactly 1 non-null value in `Invoice.customName` (0 in `PurchaseBill.customName`) — flagged this data-loss detail to the user *before* acting. With explicit confirmation: wrote migration `20260818140000_drop_unused_custom_name_columns` (`ALTER TABLE ... DROP COLUMN IF EXISTS`) and applied it via `prisma migrate deploy`; verified via direct query that both columns are gone. Deleted the branch both locally (`git branch -D`) and on `origin` (`git push origin --delete`). Final `prisma migrate status` now reports "Database schema is up to date!" with no drift.
 - **Regression risk**: None to current app code (nothing in `dev`'s codebase ever read/wrote these columns). The 1 lost `customName` value was an explicit, informed trade-off the user accepted.
 - **Status**: Fixed.
+
+---
+
+### REG-002 — `ToolbarField`'s label `width`→`min-width` change (2026-08-25) is safe today, worth watching (2026-09-05)
+- **Severity**: Informational (confirmed no active bug — a forward-looking note, not a fix)
+- **Category**: CSS regression risk
+- **Location**: `src/components/ui/ToolbarField.module.css:31`
+- **Problem**: Changing a fixed `width` to `min-width` (to stop "Financial Year" clipping) means the label column no longer forces a shared width across a row of mixed-length labels.
+- **Why it's not a bug**: Checked every current call site (`SearchField`/`SortSelect`/`MonthYearFilter`'s "Search"/"Sorting"/"Period" labels, and GST Filing's standalone "Financial Year") — none currently appear stacked in the same mobile row as a longer/shorter sibling, so there is no live misalignment.
+- **Recommendation**: No action needed now. Only becomes a real bug if a future toolbar combines a long label (>52px) with a short one in the same stacked mobile row group — flagged for whoever adds that next long-label `ToolbarField` consumer.
+- **Status**: Won't Fix (verified safe) — recorded for completeness.
+
+### TEST-006 — Broad, already-known test-coverage gaps (2026-09-05, restated)
+- **Severity**: Informational (a catalog, not a single fix)
+- **Category**: Test coverage
+- **Location**: `rate-lists` API routes, `credit-notes` (the list route itself), `brands`/`categories`/`products`, `settings`, `admin/*`, `search`, `send-invoice`/`send-rate-list`/`send-purchase-bill`/`send-statement`, `gst-filing`, `export-xlsx`, `bin`'s permanent-delete/`empty`
+- **Problem**: Confirmed still untested by directory listing, not just by trusting `CLAUDE.md`'s own note. Lower urgency than TEST-002/003/004/005 above since none of these are money- or stock-mutating in the same way.
+- **Status**: Won't Fix this pass (informational restatement only) — see `CLAUDE.md`'s Pending Tasks for the maintained, current version of this list.
 
 ---
 

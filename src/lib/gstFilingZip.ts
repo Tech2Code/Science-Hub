@@ -2,24 +2,7 @@
 import JSZip from "jszip";
 import { buildGstFilingWorkbook } from "@/lib/gstFilingWorkbook";
 import type { GstFilingReport } from "@/lib/gstFiling";
-import { neutralizeFormulaCell } from "@/lib/formulaSafety";
-
-function csvEscape(v: string | number): string {
-  // CSV carries no per-cell type metadata, so unlike the .xlsx sheets, Excel really does
-  // evaluate a leading =/+/-/@ as a formula the moment this file is opened — neutralize first.
-  const s = String(neutralizeFormulaCell(v));
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-function validationCsv(report: GstFilingReport): string {
-  const header = ["Severity", "Category", "Reference", "Issue"];
-  const rows = report.validation.issues.length > 0
-    ? report.validation.issues.map((i) => [i.severity.toUpperCase(), i.category, i.reference ?? "", i.message])
-    : [["OK", "-", "", "No issues detected for this period."]];
-  // Leading BOM tells Excel the file is UTF-8 — without it, Excel assumes
-  // Windows-1252 and multi-byte characters (₹, —, etc.) render as mojibake.
-  return "﻿" + [header, ...rows].map((r) => r.map(csvEscape).join(",")).join("\n");
-}
+import { buildValidationCsv } from "@/lib/validationCsv";
 
 export async function buildGstFilingZip(report: GstFilingReport): Promise<Buffer> {
   const workbook = buildGstFilingWorkbook(report);
@@ -28,7 +11,7 @@ export async function buildGstFilingZip(report: GstFilingReport): Promise<Buffer
   const zip = new JSZip();
   const fileLabel = `${report.period.startDate}_to_${report.period.endDate}`;
   zip.file(`GST-Filing-${fileLabel}.xlsx`, workbookBuffer);
-  zip.file("Validation-Report.csv", validationCsv(report));
+  zip.file("Validation-Report.csv", buildValidationCsv(report.validation.issues, "No issues detected for this period."));
 
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }

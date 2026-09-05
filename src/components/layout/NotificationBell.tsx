@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useFetch, patchCacheIfPresent, bustCache } from "@/lib/useCache";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useMenuA11y } from "@/lib/useMenuA11y";
+import { PopoverScrim } from "@/components/ui/PopoverScrim";
 import { formatDateTime } from "@/lib/formatDate";
 import {
   withoutItem, withItem, withoutItemFlat, withItemFlat,
@@ -69,7 +70,8 @@ export function NotificationBell() {
     fn();
     setTimeout(() => busyRef.current.delete(key), 400);
   }
-  useMenuA11y(open, () => setOpen(false), popoverRef);
+  const closePopover = useCallback(() => setOpen(false), []);
+  useMenuA11y(open, closePopover, popoverRef);
 
   // Only fetched once the dropdown is actually opened — no point loading the full aggregation for a
   // badge nobody's looked at yet; the badge count alone is worth a lightweight background poll. Both
@@ -146,14 +148,25 @@ export function NotificationBell() {
     // once the undo's own refetch caught up. Only the request itself is chained (so a dismiss and a
     // fast undo still hit the server in click order); no read-back afterward.
     const prior = pendingRef.current.get(entityId) ?? Promise.resolve();
+    // DELETE addresses its target via the URL (query string), not a body — matching every other
+    // delete route in the app, and avoiding infrastructure that silently drops DELETE bodies.
+    const url = method === "DELETE"
+      ? `/api/notifications/dismiss?category=${encodeURIComponent(category)}&entityId=${encodeURIComponent(entityId)}`
+      : "/api/notifications/dismiss";
     const next = prior.then(() =>
-      fetch("/api/notifications/dismiss", {
+      fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category, entityId }),
+        ...(method === "POST" ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category, entityId }) } : {}),
       }).catch(() => {})
     );
     pendingRef.current.set(entityId, next);
+    // Release the entry once this chain settles — the Map only exists to serialize a dismiss/undo
+    // pair for the SAME item in click order; keeping a settled entry around forever (this component
+    // stays mounted for the whole session) is a slow unbounded leak across a long day of dismissing
+    // many different items. Only clear it if nothing newer has since replaced it for this id.
+    next.finally(() => {
+      if (pendingRef.current.get(entityId) === next) pendingRef.current.delete(entityId);
+    });
     return next;
   }
 
@@ -324,8 +337,10 @@ export function NotificationBell() {
         {totalCount > 0 && <span className={styles.badge}>{totalCount > 99 ? "99+" : totalCount}</span>}
       </button>
 
+      {open && <PopoverScrim />}
+
       {open && (
-        <div className={styles.popover} ref={popoverRef} role="dialog" aria-label="Notifications" tabIndex={-1}>
+        <div className={styles.popover} ref={popoverRef} role="dialog" aria-modal="true" aria-label="Notifications" tabIndex={-1}>
           <div className={styles.popoverTitle}>
             {showDismissed ? (
               <button type="button" className={styles.backBtn} onClick={() => setShowDismissed(false)}>

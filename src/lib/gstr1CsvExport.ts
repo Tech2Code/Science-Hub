@@ -13,6 +13,7 @@ import type { GstFilingReport, SalesRateRow, CreditNoteRow, HsnSummaryRow } from
 import { getGstPosLabel } from "@/lib/gstStateCodes";
 import { mapUnitToUqc } from "@/lib/gstUqc";
 import { issue, type ValidationIssue } from "@/lib/gstValidation";
+import { neutralizeFormulaCell } from "@/lib/formulaSafety";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -52,7 +53,7 @@ export function buildGstr1CsvFiles(report: GstFilingReport): Gstr1CsvResult {
   const issues: ValidationIssue[] = [];
   const invoiceTotalByNumber = new Map(report.salesRegister.map((r) => [r.invoiceNumber, r]));
 
-  function resolvePos(stateName: string, reference: string): string {
+  function resolvePos(stateName: string, reference: string): string | null {
     const label = getGstPosLabel(stateName);
     if (!label) {
       issues.push(issue(
@@ -61,7 +62,7 @@ export function buildGstr1CsvFiles(report: GstFilingReport): Gstr1CsvResult {
         reference,
       ));
     }
-    return label ?? "";
+    return label;
   }
 
   // ── b2b,sez,de.csv ──────────────────────────────────────────────────────
@@ -71,7 +72,7 @@ export function buildGstr1CsvFiles(report: GstFilingReport): Gstr1CsvResult {
     if (!pos) continue;
     const invoiceTotal = invoiceTotalByNumber.get(r.invoiceNumber)?.total ?? r.total;
     b2bRows.push([
-      r.customerGstin, r.customerName, r.invoiceNumber, formatGstDate(r.date), round2(invoiceTotal),
+      r.customerGstin, neutralizeFormulaCell(r.customerName), r.invoiceNumber, formatGstDate(r.date), round2(invoiceTotal),
       pos, r.reverseCharge ? "Y" : "N", "", "Regular B2B", "", r.gstRate, round2(r.taxableValue), "",
     ]);
   }
@@ -122,7 +123,7 @@ export function buildGstr1CsvFiles(report: GstFilingReport): Gstr1CsvResult {
     Array.from(cdnrMap.values()).map(({ row, rate, taxableValue, pos }) => {
       const invoiceRow = invoiceTotalByNumber.get(row.invoiceNumber);
       return [
-        row.customerGstin, row.customerName, row.creditNoteNumber, formatGstDate(row.date), "C", pos,
+        row.customerGstin, neutralizeFormulaCell(row.customerName), row.creditNoteNumber, formatGstDate(row.date), "C", pos,
         invoiceRow?.reverseCharge ? "Y" : "N", "Regular B2B",
         round2(creditNoteTotals.get(row.creditNoteNumber) ?? 0), "", rate, round2(taxableValue), "",
       ];
@@ -141,7 +142,7 @@ export function buildGstr1CsvFiles(report: GstFilingReport): Gstr1CsvResult {
         ));
       }
       return [
-        h.hsn, "", uqc.code, h.totalQuantity, round2(h.total), round2(h.taxableValue),
+        neutralizeFormulaCell(h.hsn), "", uqc.code, h.totalQuantity, round2(h.total), round2(h.taxableValue),
         round2(h.igst), round2(h.cgst), round2(h.sgst), "", h.gstRate,
       ];
     });

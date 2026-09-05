@@ -3,7 +3,7 @@
 // "NN-State Name" strings the tool's Place Of Supply field expects on CSV import.
 // Keyed by src/lib/states.ts's INDIA_STATES_FULL spelling so callers can look up by
 // whatever state string the app already normalized a customer/invoice to.
-export const GST_STATE_CODES: Record<string, string> = {
+export const GST_STATE_CODES = {
   "Jammu and Kashmir": "01-Jammu & Kashmir",
   "Himachal Pradesh": "02-Himachal Pradesh",
   "Punjab": "03-Punjab",
@@ -39,11 +39,15 @@ export const GST_STATE_CODES: Record<string, string> = {
   "Telangana": "36-Telangana",
   "Andhra Pradesh": "37-Andhra Pradesh",
   "Ladakh": "38-Ladakh",
-};
+} as const;
 
 // Returns the exact GSTN "NN-State Name" label for a given state string, or null if
 // it doesn't resolve — callers should surface that as a validation issue rather than
 // export a row the offline tool's Place Of Supply dropdown will reject.
 export function getGstPosLabel(stateName: string): string | null {
-  return GST_STATE_CODES[stateName.trim()] ?? null;
+  // GST_STATE_CODES is typed with its exact literal keys/values (`as const`) so a direct access
+  // like GST_STATE_CODES.Delhi is typo-checked at compile time; this one lookup site is
+  // necessarily dynamic (an arbitrary customer/invoice state string), so it's cast narrowly here
+  // rather than widening the table's own declared type back to Record<string, string>.
+  return (GST_STATE_CODES as Record<string, string>)[stateName.trim()] ?? null;
 }

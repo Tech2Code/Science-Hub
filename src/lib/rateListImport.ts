@@ -10,6 +10,11 @@ export interface ParsedRateListRow {
   listRate: string;
 }
 
+export interface ParsedRateListResult {
+  items: ParsedRateListRow[];
+  skipped: number;
+}
+
 type ColumnKey = "serial" | "name" | "brand" | "unit" | "discount" | "listRate" | "amount";
 
 // Order matters — first match wins, so "List Rate" is tried before the looser "amount"/"rate" catch-alls.
@@ -72,7 +77,7 @@ const cellAt = (row: string[], idx: number | undefined): string => (idx !== unde
 
 /** Parses a rows/columns grid into Rate List items, detecting a header by column-name matching or
  *  falling back to a positional guess (either this app's item order or a supplier's printed-table shape). */
-export function parseRateListRows(rows: string[][]): { items: ParsedRateListRow[]; skipped: number } {
+export function parseRateListRows(rows: string[][]): ParsedRateListResult {
   if (rows.length === 0) return { items: [], skipped: 0 };
 
   let dataRows = rows;
@@ -109,7 +114,7 @@ export function parseRateListRows(rows: string[][]): { items: ParsedRateListRow[
 }
 
 /** Excel copy places a tab between columns — falls back to comma-split for a plain CSV snippet pasted instead of a spreadsheet range. */
-export function parsePastedRateListText(text: string): { items: ParsedRateListRow[]; skipped: number } {
+export function parsePastedRateListText(text: string): ParsedRateListResult {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   const rows = lines.map((line) => (line.includes("\t") ? line.split("\t") : parseCsvLine(line)));
   return parseRateListRows(rows);

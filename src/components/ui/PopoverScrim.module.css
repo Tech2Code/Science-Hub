@@ -1,0 +1,20 @@
+/* Same light-dim treatment as Spinner.module.css's .floatingSpinner (kept as a separate class
+   since this has no spinner icon of its own) — dims the page behind an open topbar popover AND
+   intercepts the click (pointer-events: auto) so the dim isn't just decorative: without this, a
+   click on a dimmed element underneath (e.g. a sidebar link) still activated it while the popover
+   also closed, which is the opposite of what the dim visually promises. Each popover's own
+   existing "click outside to close" listener still fires correctly — this div is portaled to
+   document.body, so it was never inside any popover's own ref to begin with, and intercepting the
+   click here (rather than letting it fall through) is what actually stops the underlying element
+   from also receiving it. z-index sits above the mobile sidebar's own backdrop (40) so the two
+   never stack, and below Modal/ConfirmDialog (50). */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  pointer-events: auto;
+  background: rgba(248, 250, 252, 0.6);
+}
+:global(.dark) .scrim {
+  background: rgba(2, 6, 23, 0.6);
+}

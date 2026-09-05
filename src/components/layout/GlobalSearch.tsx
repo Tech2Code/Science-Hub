@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PopoverScrim } from "@/components/ui/PopoverScrim";
 import styles from "./GlobalSearch.module.css";
 
 interface ResultItem {
@@ -85,7 +86,9 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
       if (e.key === "Escape") {
         setOpen(false);
         setMobileExpanded(false);
-        (document.activeElement as HTMLElement)?.blur();
+        // Deliberately no .blur() here — the standard combobox pattern is Escape closes the
+        // listbox but leaves focus in the input, so a keyboard user isn't forced to Tab all the
+        // way back into the topbar just to reach the search box again.
       }
     }
     document.addEventListener("mousedown", onClickOutside);
@@ -199,7 +202,7 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
             role="combobox"
             aria-label="Search everything"
             aria-expanded={showPanel}
-            aria-controls="global-search-listbox"
+            aria-controls={showPanel ? "global-search-listbox" : undefined}
             aria-autocomplete="list"
             aria-activedescendant={activeIndex >= 0 ? `global-search-option-${activeIndex}` : undefined}
             placeholder="Search invoices, customers, products, settings…"
@@ -219,6 +222,8 @@ export function GlobalSearch({ mobile = false }: GlobalSearchProps) {
           {loading && <span className={styles.spinner} />}
         </div>
       </div>
+
+      {showPanel && <PopoverScrim />}
 
       {showPanel && (
         <div className={styles.panel} id="global-search-listbox" role="listbox">

@@ -69,7 +69,9 @@
   border: 1px solid var(--c-border-md);
   border-radius: var(--c-radius-sm);
   box-shadow: var(--c-shadow-lg);
-  z-index: 30;
+  /* Matches NotificationBell/AccentPicker's popover tier (50) — must clear PopoverScrim's
+     z-index (40), or the dim layer would render on top of this panel instead of behind it. */
+  z-index: 50;
 }
 
 .empty {

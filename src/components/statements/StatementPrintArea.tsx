@@ -2,6 +2,8 @@ const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2,
 
 export interface StatementPrintRow {
   date: string;
+  type: string;
+  refId: string;
   label: string;
   debit: number;
   credit: number;
@@ -102,7 +104,7 @@ export function StatementPrintArea({ party, periodLabel, openingBalance, closing
                 <td style={{ border: `1px solid var(--sp-bd)`, padding: "6px 4px", textAlign: align, background: rowBg }}>{content}</td>
               );
               return (
-                <tr key={`${r.date}-${idx}`}>
+                <tr key={`${r.type}-${r.refId}`}>
                   {td(new Date(r.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }))}
                   {td(r.label)}
                   {td(r.debit ? fmt(r.debit) : "—", "right")}

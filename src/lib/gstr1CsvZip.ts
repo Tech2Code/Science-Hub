@@ -1,21 +1,7 @@
 import JSZip from "jszip";
 import type { GstFilingReport } from "@/lib/gstFiling";
 import { buildGstr1CsvFiles } from "@/lib/gstr1CsvExport";
-import type { ValidationIssue } from "@/lib/gstValidation";
-
-function csvEscape(v: string | number): string {
-  const s = String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-function validationCsv(issues: ValidationIssue[]): string {
-  const header = ["Severity", "Category", "Reference", "Issue"];
-  const rows = issues.length > 0
-    ? issues.map((i) => [i.severity.toUpperCase(), i.category, i.reference ?? "", i.message])
-    : [["OK", "-", "", "No issues detected in this export."]];
-  // Leading BOM — this one IS meant to be opened in Excel by a human, unlike the section CSVs.
-  return "﻿" + [header, ...rows].map((r) => r.map(csvEscape).join(",")).join("\n");
-}
+import { buildValidationCsv } from "@/lib/validationCsv";
 
 const README = `GSTR-1 SECTION-WISE CSV FILES — HOW TO USE
 ============================================
@@ -62,7 +48,7 @@ export async function buildGstr1CsvZip(report: GstFilingReport): Promise<Buffer>
 
   const zip = new JSZip();
   zip.file("README.txt", README);
-  zip.file("Validation-Report.csv", validationCsv(allIssues));
+  zip.file("Validation-Report.csv", buildValidationCsv(allIssues, "No issues detected in this export."));
   for (const f of files) zip.file(f.name, f.content);
 
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });

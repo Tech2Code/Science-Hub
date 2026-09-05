@@ -3,6 +3,8 @@
 > Read this file FIRST at the start of every session. Then read `SCIENCE_HUB_AUDIT_REPORT.md`.
 > Do NOT restart the audit. Continue from "Next Exact Action" at the bottom.
 
+> **2026-09-05 update**: a second, separate full-app audit ran after this file's own 14-phase plan completed (2026-08-21) — 10 parallel specialists (security/database/performance/api/regression/ui/react/typescript/testing/architect) instead of sequential phases, scoped to everything shipped since 2026-08-21. All 38 findings from that round were fixed in the same pass (one left as an open product decision, two confirmed to need no code change) — see the `2026-09-05` entries in `SCIENCE_HUB_AUDIT_REPORT.md` (folded into its existing severity sections) and `DEVELOPMENT_LOG.md`'s Era 15. This file's own phase tracker below still reflects the 2026-08-21 round only — nothing below needed to change as a result of the newer audit, since that one didn't use this file's phase structure.
+
 ## AUDIT STATUS
 
 ```

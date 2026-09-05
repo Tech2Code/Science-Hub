@@ -119,4 +119,37 @@ describe.skipIf(!hasTestDatabase)("POST /api/invoices", () => {
     }));
     expect(res.status).toBe(401);
   });
+
+  describe("idempotencyKey", () => {
+    it("returns the same invoice (200) on a retried key instead of creating a second one", async () => {
+      const customer = await makeCustomer();
+      const { POST } = await import("@/app/api/invoices/route");
+      const key = "idem-invoice-key-1";
+
+      const first = await POST(jsonRequest("http://localhost/api/invoices", "POST", {
+        customerId: customer.id, placeOfSupply: "Delhi", items: [baseItem], idempotencyKey: key,
+      }));
+      expect(first.status).toBe(201);
+      const firstBody = await first.json();
+
+      const second = await POST(jsonRequest("http://localhost/api/invoices", "POST", {
+        customerId: customer.id, placeOfSupply: "Delhi", items: [baseItem], idempotencyKey: key,
+      }));
+      expect(second.status).toBe(200);
+      const secondBody = await second.json();
+      expect(secondBody.id).toBe(firstBody.id);
+
+      const count = await testPrisma.invoice.count({ where: { idempotencyKey: key } });
+      expect(count).toBe(1);
+    });
+
+    it("rejects an idempotency key longer than 200 characters", async () => {
+      const customer = await makeCustomer();
+      const { POST } = await import("@/app/api/invoices/route");
+      const res = await POST(jsonRequest("http://localhost/api/invoices", "POST", {
+        customerId: customer.id, placeOfSupply: "Delhi", items: [baseItem], idempotencyKey: "x".repeat(201),
+      }));
+      expect(res.status).toBe(400);
+    });
+  });
 });
