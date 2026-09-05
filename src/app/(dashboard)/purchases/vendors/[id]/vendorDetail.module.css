@@ -4,7 +4,7 @@
 
 .cardPad { padding: 1.5rem; }
 
-.skStatCard { padding: 1rem; display: flex; flex-direction: column; gap: 8px; }
+.skStatCard { padding: 1rem; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 
 .headerTop {
   display: flex;
@@ -153,6 +153,12 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
 }
+/* Fixed 3 equal columns rather than auto-fit, but the same underlying risk
+   applies: each column narrows continuously as the viewport shrinks (tablet
+   widths, sidebar docked) with no font-size step until the 640px full-stack
+   collapse below, so a large Indian-grouped rupee amount (Total Spend/Paid/
+   Balance) could overflow a column right before that collapse. */
+@media (max-width: 1024px) { .statValue { font-size: 1.05rem; } }
 @media (max-width: 640px) { .statsGrid { grid-template-columns: 1fr; } }
 
 .statLabel {
@@ -167,6 +173,7 @@
 .statValue {
   font-size: 1.25rem;
   font-weight: 700;
+  overflow-wrap: break-word;
 }
 
 .statSub {

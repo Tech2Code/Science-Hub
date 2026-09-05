@@ -585,12 +585,13 @@ select::-moz-focus-inner {
 /* ── Summary stat banners (reports page) ─── */
 .stat-banners {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
   gap: 1rem;
 }
 .stat-banner {
   padding: 1.25rem;
   border-radius: var(--c-radius);
+  min-width: 0;
 }
 .stat-banner-amber {
   background: var(--c-amber-bg);
@@ -625,18 +626,31 @@ select::-moz-focus-inner {
 .stat-banner-green .stat-banner-label { color: var(--c-green-text); }
 .stat-banner-purple .stat-banner-label { color: var(--c-purple); }
 .stat-banner-value {
-  font-size: 1.875rem;
+  font-size: 1.775rem;
   font-weight: 700;
   color: var(--c-text);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: break-word;
 }
 .stat-banner-sub {
   font-size: 0.75rem;
   color: var(--c-text-3);
   margin-top: 0.25rem;
 }
+/* Intermediate step — auto-fit/minmax means the actual rendered card width
+   depends on the container's width AND how many cards fit per row, not
+   viewport width alone, so a card can already be squeezed down near the
+   14rem minmax floor well above the 640px breakpoint below (e.g. 4 cards in
+   the ~768-1024px tablet range where the sidebar is still docked). Without
+   this step, a large Indian-grouped rupee amount overflowed the card at
+   those in-between widths even though nothing overflowed above 1024px or
+   below 640px. */
+@media (max-width: 1024px) {
+  .stat-banners { grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.875rem; }
+  .stat-banner { padding: 1.1rem; }
+  .stat-banner-value { font-size: 1.5rem; }
+}
 @media (max-width: 640px) {
-  .stat-banners { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.75rem; }
   .stat-banner { padding: 1rem; }
   .stat-banner-value { font-size: 1.25rem; }
 }

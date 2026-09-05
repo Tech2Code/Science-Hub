@@ -90,6 +90,15 @@
   border: 1px solid var(--c-border);
 }
 
+/* Subtotal/GST/Discount/Total/Paid/Balance Due — up to 6 flex-wrap cards with
+   an 8rem min-width floor and a static 1.25rem value font; between 480px
+   (where the floor is dropped below) and roughly 1024px (tablet widths, the
+   sidebar still docked) a card can sit right at that 8rem/128px floor with
+   the full-size font, overflowing a large Indian-grouped rupee amount. */
+@media (max-width: 1024px) {
+  .statCard { min-width: 6.5rem; padding: 0.875rem 1rem; }
+  .statValue { font-size: 1.05rem; }
+}
 @media (max-width: 480px) {
   .statCard { flex-basis: calc(50% - 0.375rem); min-width: 0; }
 }
@@ -106,6 +115,7 @@
 .statValue {
   font-size: 1.25rem;
   font-weight: 700;
+  overflow-wrap: break-word;
 }
 
 .statSub {

@@ -31,9 +31,15 @@
 
 /* ---- Stat cards ---- */
 .statGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; }
-.statCard { padding: 0.875rem 1rem; border-radius: 0.625rem; background: var(--c-bg-sub); border: 1px solid var(--c-border); }
+.statCard { padding: 0.875rem 1rem; border-radius: 0.625rem; background: var(--c-bg-sub); border: 1px solid var(--c-border); min-width: 0; }
 .statLabel { font-size: 0.7rem; font-weight: 600; color: var(--c-text-4); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.25rem; }
-.statValue { font-size: 1.0625rem; font-weight: 700; color: var(--c-text-2); }
+.statValue { font-size: 1.0625rem; font-weight: 700; color: var(--c-text-2); overflow-wrap: break-word; }
 .statSub { font-size: 0.72rem; color: var(--c-text-4); margin-top: 0.125rem; }
+
+/* Only two cards (Paid/Outstanding) here so auto-fit naturally stacks to one
+   column before a track would get squeezed hard against the 130px floor —
+   lower risk than the other instances in this sweep, but this file had zero
+   responsive rules at all, so add the same defensive step for consistency. */
+@media (max-width: 480px) { .statValue { font-size: 0.95rem; } }
 
 

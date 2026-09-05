@@ -134,28 +134,43 @@
   width: 100%;
 }
 
+/* colExpires/colActions hold content that can never wrap (the pill and the two
+   action buttons both force white-space: nowrap) — as percentages, their share
+   of the table's width shrank below that content's real pixel size whenever the
+   table itself got narrower (sidebar docking in, tablet padding, etc.), and the
+   overflowing content visually overlapped whatever sat next to it. Fixed to px
+   floors below so they never get squeezed; colDetails is left unset to absorb
+   whatever width remains, and this min-width keeps the whole row from being
+   squeezed below what those floors need — .table-wrap's overflow-x: auto takes
+   over (horizontal scroll) once the container itself is narrower than this. */
+@media (min-width: 641px) {
+  .binTable {
+    min-width: 1080px;
+  }
+}
+
 .colName {
-  width: 14%;
+  width: 150px;
 }
 
 .colDetails {
-  width: 28%;
+  /* intentionally unset — absorbs whatever width the fixed columns don't use */
 }
 
 .colDeletedOn {
-  width: 13%;
+  width: 110px;
 }
 
 .colDeletedBy {
-  width: 13%;
+  width: 110px;
 }
 
 .colExpires {
-  width: 10%;
+  width: 150px;
 }
 
 .colActions {
-  width: 22%;
+  width: 300px;
 }
 
 .nameCell {

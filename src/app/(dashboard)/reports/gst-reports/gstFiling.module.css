@@ -144,6 +144,7 @@
   border-radius: var(--radius);
   border: 1px solid var(--c-border);
   background: var(--c-bg-sub);
+  min-width: 0;
 }
 
 .summaryCardLabel {
@@ -159,6 +160,7 @@
   font-size: 1.125rem;
   font-weight: 700;
   color: var(--c-text);
+  overflow-wrap: break-word;
 }
 
 .summaryCardValueRefund {
@@ -182,6 +184,20 @@
   margin: 0;
   font-size: 0.8125rem;
   color: var(--c-text-3);
+}
+
+/* This 9-tile summary grid (Sales Invoices/Purchase Bills/HSN Codes/Output
+   Tax/Net GST Payable/etc.) had no intermediate scaling at all — the rupee
+   values sat at a fixed 1.125rem regardless of viewport, so a tile squeezed
+   toward the 160px minmax floor (tablet widths, sidebar docked) could
+   overflow a large Indian-grouped amount. */
+@media (max-width: 768px) {
+  .summaryGrid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; padding: 0.75rem 1rem; }
+  .summaryCard { padding: 0.875rem 1rem; }
+  .summaryCardValue { font-size: 0.95rem; }
+}
+@media (max-width: 480px) {
+  .summaryCardValue { font-size: 0.875rem; }
 }
 
 @media screen and (max-width: 540px) {
