@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
+import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { Modal } from "@/components/dialogs/Modal";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Input, FormField } from "@/components/ui/Input";
@@ -223,7 +224,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
               <div className={styles.dropdownEmpty}>
                 No product found.{" "}
                 <button type="button" className={styles.dropdownEmptyLink} onMouseDown={(e) => e.preventDefault()} onClick={() => openQuickAddProduct()}>
-                  Add new product →
+                  Add new product <ArrowIcon />
                 </button>
               </div>
             )}

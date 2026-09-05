@@ -52,7 +52,7 @@ const COLUMNS: Column[] = [
   { label: "Email",   mobile: "label" },
   { label: "Bills",   cls: "table-th-right", mobile: "label" },
   { label: "Status",  mobile: "label" },
-  { label: "Actions", mobile: "full+label" },
+  { label: "Actions", cls: styles.stickyActions, mobile: "full+label" },
 ];
 
 export default function VendorsPage() {
@@ -181,7 +181,7 @@ export default function VendorsPage() {
                       {v.isActive ? "Active" : "Inactive"}
                     </span>
                   </Cell>
-                  <Cell col={COLUMNS[6]}>
+                  <Cell col={COLUMNS[6]} className={styles.stickyActions}>
                     <div className="table-actions">
                       <Button variant="viewOutline" size="sm" href={`/purchases/vendors/${v.id}`}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
+import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { rules, validate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
@@ -383,7 +384,7 @@ export default function NewPurchaseBillPage() {
                 <InfoBanner
                   message={`This is your first purchase bill — it will be numbered "${firstBillPreviewNumber}" by default. Want a different prefix or starting number?`}
                   actionHref="/settings#numbering"
-                  actionLabel="Customize in Settings →"
+                  actionLabel={<>Customize in Settings <ArrowIcon /></>}
                   onDismiss={dismissFirstBillNudge}
                 />
               )}

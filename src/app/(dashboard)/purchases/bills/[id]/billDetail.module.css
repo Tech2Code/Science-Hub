@@ -396,6 +396,9 @@
 }
 
 .linkButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   background: none;
   border: none;
   color: var(--c-blue);

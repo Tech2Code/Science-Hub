@@ -6,7 +6,7 @@ import styles from "./InfoBanner.module.css";
 interface Props {
   message: React.ReactNode;
   actionHref?: string;
-  actionLabel?: string;
+  actionLabel?: React.ReactNode;
   onAction?: () => void;
   onDismiss: () => void;
 }

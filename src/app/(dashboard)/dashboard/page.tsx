@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
+import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import styles from "./dashboardHome.module.css";
@@ -227,7 +228,7 @@ export default function DashboardPage() {
         <div className="card">
           <div className={styles.cardHeader}>
             <h2 className={styles.cardHeaderTitle}>Recent Invoices</h2>
-            <Link href="/sales/invoices" className={styles.viewAllLink}>View all →</Link>
+            <Link href="/sales/invoices" className={styles.viewAllLink}>View all <ArrowIcon /></Link>
           </div>
           <div className={styles.tableScroll}>
             <table className="table-base">
@@ -236,7 +237,7 @@ export default function DashboardPage() {
                 {loading ? [...Array(5)].map((_, i) => (
                   <tr key={i}><td colSpan={4}><div className={`${styles.rowSkeleton} ${styles.skeletonPulse}`} /></td></tr>
                 )) : (data?.sales?.recentInvoices ?? []).length === 0 ? (
-                  <tr><td colSpan={4} className="table-empty-cell">No invoices yet. <Link href="/sales/invoices/new" className={styles.emptyLink}>Create one →</Link></td></tr>
+                  <tr><td colSpan={4} className="table-empty-cell">No invoices yet. <Link href="/sales/invoices/new" className={styles.emptyLink}>Create one <ArrowIcon /></Link></td></tr>
                 ) : (data?.sales?.recentInvoices ?? []).map((inv) => (
                   <tr key={inv.id}>
                     <td data-mobile-full><Link href={`/sales/invoices/${inv.id}`} className={styles.linkCell}>{inv.invoiceNumber}</Link></td>
@@ -253,7 +254,7 @@ export default function DashboardPage() {
         <div className="card">
           <div className={styles.cardHeader}>
             <h2 className={styles.cardHeaderTitle}>Recent Purchase Bills</h2>
-            <Link href="/purchases/bills" className={styles.viewAllLink}>View all →</Link>
+            <Link href="/purchases/bills" className={styles.viewAllLink}>View all <ArrowIcon /></Link>
           </div>
           <div className={styles.tableScroll}>
             <table className="table-base">
@@ -262,7 +263,7 @@ export default function DashboardPage() {
                 {loading ? [...Array(5)].map((_, i) => (
                   <tr key={i}><td colSpan={4}><div className={`${styles.rowSkeleton} ${styles.skeletonPulse}`} /></td></tr>
                 )) : (data?.purchases?.recentBills ?? []).length === 0 ? (
-                  <tr><td colSpan={4} className="table-empty-cell">No bills yet. <Link href="/purchases/bills/new" className={styles.emptyLink}>Create one →</Link></td></tr>
+                  <tr><td colSpan={4} className="table-empty-cell">No bills yet. <Link href="/purchases/bills/new" className={styles.emptyLink}>Create one <ArrowIcon /></Link></td></tr>
                 ) : (data?.purchases?.recentBills ?? []).map((b) => (
                   <tr key={b.id}>
                     <td data-mobile-full><Link href={`/purchases/bills/${b.id}`} className={styles.linkCell}>{b.billNumber}</Link></td>
@@ -300,7 +301,7 @@ export default function DashboardPage() {
                   </div>
                   <div className={styles.lowStockSub}>Review and restock to avoid stockouts</div>
                 </div>
-                <Button variant="secondary" size="sm" href="/products?filter=low">View Products →</Button>
+                <Button variant="secondary" size="sm" href="/products?filter=low">View Products <ArrowIcon /></Button>
               </div>
             )}
             {(data?.outOfStockCount ?? 0) > 0 && (
@@ -311,7 +312,7 @@ export default function DashboardPage() {
                   </div>
                   <div className={styles.lowStockSub}>Restock as soon as possible</div>
                 </div>
-                <Button variant="secondary" size="sm" href="/products?filter=out">View Products →</Button>
+                <Button variant="secondary" size="sm" href="/products?filter=out">View Products <ArrowIcon /></Button>
               </div>
             )}
           </div>

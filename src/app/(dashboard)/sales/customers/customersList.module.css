@@ -35,3 +35,20 @@
 .actionsWrap {
   flex-wrap: wrap;
 }
+
+/* At tablet widths (641-1024px, table-wrap's own horizontal scroll kicks in before the
+   ≤640px card layout does) this table has enough columns that Actions can scroll fully
+   out of view with no visible hint anything's cut off. Pinning it to the right edge keeps
+   View/Edit/Delete always reachable regardless of how far the row scrolls. */
+.stickyActions {
+  position: sticky;
+  right: 0;
+  background: var(--c-bg-card);
+  box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.12);
+}
+@media (max-width: 640px) {
+  .stickyActions {
+    position: static;
+    box-shadow: none;
+  }
+}

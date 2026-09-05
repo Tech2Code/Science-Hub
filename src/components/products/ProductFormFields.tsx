@@ -80,6 +80,7 @@ export function ProductFormFields({ form, onChange, onUnitChange, fieldErrors, b
         </FormField>
         <FormField
           label="Minimum Stock"
+          required
           hint={minStockAutoSuggested
             ? "Alert triggers when stock drops to or below this. Suggested from the unit above — adjust for this product."
             : "Alert triggers when stock drops to or below this."}

@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
+import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
@@ -151,7 +152,7 @@ export default function SalesDashboardPage() {
         <div className="card">
           <div className={styles.panelHeader}>
             <h2 className={styles.panelTitle}>Recent Invoices</h2>
-            <Link href="/sales/invoices" className={styles.viewAllLink}>View all →</Link>
+            <Link href="/sales/invoices" className={styles.viewAllLink}>View all <ArrowIcon /></Link>
           </div>
           <div className={styles.tableScroll}>
             <table className="table-base">
@@ -187,7 +188,7 @@ export default function SalesDashboardPage() {
         <div className="card">
           <div className={styles.panelHeader}>
             <h2 className={styles.panelTitle}>Top 5 Customers</h2>
-            <Link href="/sales/customers" className={styles.viewAllLink}>View all →</Link>
+            <Link href="/sales/customers" className={styles.viewAllLink}>View all <ArrowIcon /></Link>
           </div>
           <div className={styles.tableScroll}>
             <table className="table-base">

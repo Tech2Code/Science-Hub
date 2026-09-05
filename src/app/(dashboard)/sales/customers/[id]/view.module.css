@@ -62,7 +62,7 @@
   border: 1px solid var(--c-border);
 }
 
-.headerActions { display: flex; gap: 0.5rem; }
+.headerActions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
 .addressBlock {
   margin-top: 1rem;

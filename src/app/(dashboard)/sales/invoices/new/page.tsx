@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
+import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
@@ -509,7 +510,7 @@ export default function NewInvoicePage() {
               <InfoBanner
                 message={`This is your first invoice — it will be numbered "${firstInvoicePreviewNumber}" by default. Want a different prefix or starting number?`}
                 actionHref="/settings#numbering"
-                actionLabel="Customize in Settings →"
+                actionLabel={<>Customize in Settings <ArrowIcon /></>}
                 onDismiss={dismissFirstInvoiceNudge}
               />
             )}
@@ -545,7 +546,7 @@ export default function NewInvoicePage() {
                     )) : (
                       <div className={styles.dropdownEmpty}>
                         No customer found.{" "}
-                        <Link href="/sales/customers/new" className={styles.dropdownEmptyLink}>Add new →</Link>
+                        <Link href="/sales/customers/new" className={styles.dropdownEmptyLink}>Add new <ArrowIcon /></Link>
                       </div>
                     )}
                   </div>

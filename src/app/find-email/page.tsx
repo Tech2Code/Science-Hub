@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { useRouter } from "next/navigation";
 import { useBranding } from "@/lib/businessBranding";
 import { Input, FormField } from "@/components/ui/Input";
@@ -115,7 +116,7 @@ export default function FindEmailPage() {
                         <div className={styles.resultEmail}>{r.maskedEmail}</div>
                       </div>
                       <button className={styles.useBtn} onClick={() => handleUse(r.maskedEmail)}>
-                        Use this →
+                        Use this <ArrowIcon />
                       </button>
                     </div>
                   ))}

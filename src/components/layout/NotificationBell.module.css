@@ -24,7 +24,9 @@
   width: 340px;
   max-width: calc(100vw - 1rem);
   max-height: 70vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--c-bg-card);
   border: 1px solid var(--c-border);
   border-radius: var(--c-radius);
@@ -32,7 +34,9 @@
   padding: 0.75rem;
 }
 
+/* Header stays put — only .popoverBody below it scrolls. */
 .popoverTitle {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -40,6 +44,12 @@
   font-weight: 600;
   color: var(--c-text-2);
   margin-bottom: 0.5rem;
+}
+
+.popoverBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .popoverTitleActions { display: flex; align-items: center; gap: 0.75rem; }
@@ -241,6 +251,13 @@
     right: 0.5rem;
     width: auto;
     max-width: none;
+    /* max-height only (not a fixed height) — a short list (few alerts, or the
+       "Dismissed" panel when empty) shrinks to fit instead of always opening
+       full-height with empty space at the bottom. 100vh includes the area a
+       mobile browser's collapsible address bar can cover, so capping with dvh
+       (falls back to vh on browsers that don't support it) keeps the box from
+       extending past what's actually visible when it DOES need to grow. */
     max-height: calc(100vh - 4rem);
+    max-height: calc(100dvh - 4rem);
   }
 }

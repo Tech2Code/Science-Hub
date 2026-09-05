@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
+import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
@@ -150,7 +151,7 @@ export default function PurchaseDashboardPage() {
         <div className="card">
           <div className={styles.panelHeader}>
             <h2 className={styles.panelTitle}>Recent Bills</h2>
-            <Link href="/purchases/bills" className={styles.viewAllLink}>View all →</Link>
+            <Link href="/purchases/bills" className={styles.viewAllLink}>View all <ArrowIcon /></Link>
           </div>
           <div className={styles.tableScroll}>
             <table className="table-base">
@@ -185,7 +186,7 @@ export default function PurchaseDashboardPage() {
         <div className="card">
           <div className={styles.panelHeader}>
             <h2 className={styles.panelTitle}>Top 5 Vendors</h2>
-            <Link href="/purchases/vendors" className={styles.viewAllLink}>View all →</Link>
+            <Link href="/purchases/vendors" className={styles.viewAllLink}>View all <ArrowIcon /></Link>
           </div>
           <div className={styles.tableScroll}>
             <table className="table-base">

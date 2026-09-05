@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
+import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { FillMaxButton } from "@/components/ui/FillMaxButton";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -1170,7 +1171,7 @@ export default function PurchaseBillDetailPage() {
                   onClick={() => setShowPayForm(true)}
                   className={styles.linkButton}
                 >
-                  Record a payment →
+                  Record a payment <ArrowIcon />
                 </button>
               </div>
             )}

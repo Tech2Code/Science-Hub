@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
 import { DateRangeFilter } from "@/components/ui/DateRangeFilter";
+import { HeaderActionsRow } from "@/components/ui/HeaderActionsRow";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { downloadXlsx } from "@/lib/downloadXlsx";
 import { useToast } from "@/components/ui/Toast";
@@ -88,6 +89,12 @@ export default function EwayBillReportPage() {
   if (startDate) qs.set("from", startDate);
   if (endDate) qs.set("to", endDate);
   const { data: report, loading, error } = useFetch<EwayBillReport>(`/api/reports/eway-bill?${qs.toString()}`);
+  // Pagination's `loading` prop means "already have data, refetching a page/filter change" (shows
+  // a small dimming spinner) — passing the raw `loading` instead made it also fire during the very
+  // first load, before `report` exists, when the table skeleton is already showing: Pagination's
+  // FloatingSpinner (portaled to the viewport) then appeared as an unwanted full-page overlay on
+  // top of the skeleton. See products/page.tsx's isRefetching for the reference pattern.
+  const isRefetching = loading && !!report;
 
   // Reset each table back to page 1 whenever its own sort (or the shared date filter) changes —
   // adjusted during render (React's documented pattern for this) rather than in an effect, so it
@@ -138,20 +145,18 @@ export default function EwayBillReportPage() {
               Invoices/bills ≥ {fmt(report?.threshold ?? 50000)} — may need an E-way Bill. Rules vary by state; verify before relying on this list.
             </p>
           </div>
-          <div className={styles.toolbarActions}>
+          <HeaderActionsRow>
             <Button variant="secondary" size="sm" onClick={handleExportExcel} loading={exporting} disabled={loading}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="17"/><line x1="15" y1="13" x2="9" y2="17"/></svg>
               Export Excel
             </Button>
-          </div>
+          </HeaderActionsRow>
         </div>
-        <div className={styles.filterRow}>
-          <DateRangeFilter
-            startDate={startDate} endDate={endDate} todayStr={todayS}
-            onStartChange={setStartDate} onEndChange={setEndDate}
-            onClear={() => { setStartDate(""); setEndDate(""); }}
-          />
-        </div>
+        <DateRangeFilter
+          startDate={startDate} endDate={endDate} todayStr={todayS}
+          onStartChange={setStartDate} onEndChange={setEndDate}
+          onClear={() => { setStartDate(""); setEndDate(""); }}
+        />
       </div>
 
       {error && (
@@ -191,7 +196,7 @@ export default function EwayBillReportPage() {
             </tbody>
           </table>
         </div>
-        <Pagination total={report?.sales.length ?? 0} page={salesPage} showAll={salesShowAll} onPage={setSalesPage} label="invoices" loading={loading} />
+        <Pagination total={report?.sales.length ?? 0} page={salesPage} showAll={salesShowAll} onPage={setSalesPage} label="invoices" loading={isRefetching} />
       </div>
 
       <div {...animateSection(2, "card")}>
@@ -227,7 +232,7 @@ export default function EwayBillReportPage() {
             </tbody>
           </table>
         </div>
-        <Pagination total={report?.purchases.length ?? 0} page={purchasesPage} showAll={purchasesShowAll} onPage={setPurchasesPage} label="bills" loading={loading} />
+        <Pagination total={report?.purchases.length ?? 0} page={purchasesPage} showAll={purchasesShowAll} onPage={setPurchasesPage} label="bills" loading={isRefetching} />
       </div>
     </div>
   );

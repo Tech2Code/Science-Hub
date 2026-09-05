@@ -209,8 +209,14 @@
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--c-text);
-  overflow-wrap: break-word;
-  word-break: break-word;
+  /* The actual permanent fix: never let this line-wrap, on any container width now or in the
+     future — no breakpoint to maintain. If a card is ever too narrow for the full amount (was
+     possible with word-break: break-word above, which forced a mid-character 2-line break
+     instead), it truncates with an ellipsis instead of breaking. min-width:0 on .kpiBody
+     (the flex parent) is what lets this shrink below its content size in the first place. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kpiCard[data-tone="blue"]  .kpiValue { color: var(--c-blue); }
@@ -339,6 +345,18 @@
   .kpiGrid { grid-template-columns: 1fr 1fr; }
 }
 
+/* Below this, 2 columns squeezes each kpiCard narrow enough to look cramped —
+   collapse to one full-width tile. Deliberately abuts the 460px rule above with
+   no gap (auto-fit's own natural 2-up would otherwise still kick in for
+   ~400-460px containers, common real phone widths like 433px). Not what
+   actually stops the amount from wrapping any more — .kpiValue's own
+   white-space:nowrap + ellipsis (above) is the permanent guarantee of that,
+   regardless of how narrow this ever gets — this rule is just about not
+   looking unnecessarily cramped. */
+@container (max-width: 459px) {
+  .kpiGrid { grid-template-columns: 1fr; }
+}
+
 .recentGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
@@ -360,6 +378,9 @@
 }
 
 .viewAllLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   font-size: 0.75rem;
   color: var(--c-blue);
   text-decoration: none;
@@ -392,6 +413,9 @@
 }
 
 .emptyLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
   color: var(--c-blue);
 }
 

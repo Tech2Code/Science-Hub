@@ -14,7 +14,7 @@
   flex-wrap: wrap;
 }
 
-.headerLeft { display: flex; gap: 1rem; }
+.headerLeft { display: flex; gap: 1rem; min-width: 0; }
 
 .avatarActive {
   width: 3rem;
@@ -117,7 +117,11 @@
   border: 1px solid var(--c-border);
 }
 
-.headerActions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+/* flex-shrink:0 here used to fight flex-wrap: it told this box never to shrink
+   below its full unwrapped content width, so wrapping never actually triggered
+   (the last button — Delete — just got pushed past the viewport edge instead
+   of dropping to a second row). Drop the shrink-resistance and let it wrap. */
+.headerActions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
 .detailsBlock {
   margin-top: 1rem;

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { FloatingSpinner, OverlayLoader } from "./Spinner";
+import { ArrowIcon } from "./ArrowIcon";
 import styles from "./Pagination.module.css";
 
 export const PAGE_SIZE = 10;
@@ -76,7 +77,7 @@ export function Pagination({ total, page, showAll, onPage, label = "items", load
           onClick={(e) => goToPage(page - 1, e)}
           disabled={page <= 1 || loading}
         >
-          ← Prev
+          <ArrowIcon className={styles.prevIcon} /> Prev
         </button>
         <span className={styles.pages}>{page} / {totalPages}</span>
         <button
@@ -84,7 +85,7 @@ export function Pagination({ total, page, showAll, onPage, label = "items", load
           onClick={(e) => goToPage(page + 1, e)}
           disabled={page >= totalPages || loading}
         >
-          Next →
+          Next <ArrowIcon />
         </button>
       </div>
     </div>

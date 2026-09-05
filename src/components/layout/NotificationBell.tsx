@@ -350,69 +350,71 @@ export function NotificationBell() {
             </div>
           </div>
 
-          {showDismissed ? (
-            dismissedLoading && !dismissedSummary ? (
+          <div className={styles.popoverBody}>
+            {showDismissed ? (
+              dismissedLoading && !dismissedSummary ? (
+                <div className={styles.emptyState}>Loading…</div>
+              ) : dismissedSections.length === 0 ? (
+                <div className={styles.emptyState}>Nothing dismissed right now.</div>
+              ) : (
+                <div className={styles.sectionList}>
+                  {dismissedSections.map((section) => (
+                    <div key={section.key} className={styles.section}>
+                      <div className={styles.sectionHeader}>
+                        <span className={styles.sectionTitle}>{section.title}</span>
+                        <span className={styles.sectionCount}>{section.count}</span>
+                      </div>
+                      <div className={styles.list}>
+                        {section.items.map((item) => renderRestoreRow(section.key, item))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : loading && !summary ? (
               <div className={styles.emptyState}>Loading…</div>
-            ) : dismissedSections.length === 0 ? (
-              <div className={styles.emptyState}>Nothing dismissed right now.</div>
+            ) : sections.length === 0 ? (
+              <div className={styles.emptyState}>You&apos;re all caught up.</div>
             ) : (
               <div className={styles.sectionList}>
-                {dismissedSections.map((section) => (
-                  <div key={section.key} className={styles.section}>
-                    <div className={styles.sectionHeader}>
-                      <span className={styles.sectionTitle}>{section.title}</span>
-                      <span className={styles.sectionCount}>{section.count}</span>
-                    </div>
-                    <div className={styles.list}>
-                      {section.items.map((item) => renderRestoreRow(section.key, item))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )
-          ) : loading && !summary ? (
-            <div className={styles.emptyState}>Loading…</div>
-          ) : sections.length === 0 ? (
-            <div className={styles.emptyState}>You&apos;re all caught up.</div>
-          ) : (
-            <div className={styles.sectionList}>
-              {sections.map((section) => {
-                const isExpanded = expanded.has(section.key);
-                const expandState = expandHooks[section.key];
-                // section.items is always the top-5 (server-capped) preview regardless of expand
-                // state, so this stays a reliable "is there more than what's shown" check.
-                const canExpand = section.count > section.items.length;
-                const visibleItems = isExpanded ? (expandState.data?.items ?? []) : section.items;
-                return (
-                  <div key={section.key} className={styles.section}>
-                    <div className={styles.sectionHeader}>
-                      <span className={styles.sectionTitle}>{section.title}</span>
-                      <span className={styles.sectionCount}>{section.count}</span>
-                    </div>
-                    <div className={styles.list}>
-                      {isExpanded && expandState.loading && !expandState.data ? (
-                        <div className={styles.emptyState}>Loading…</div>
-                      ) : (
-                        visibleItems.map((item) => renderDismissRow(section.key, item))
+                {sections.map((section) => {
+                  const isExpanded = expanded.has(section.key);
+                  const expandState = expandHooks[section.key];
+                  // section.items is always the top-5 (server-capped) preview regardless of expand
+                  // state, so this stays a reliable "is there more than what's shown" check.
+                  const canExpand = section.count > section.items.length;
+                  const visibleItems = isExpanded ? (expandState.data?.items ?? []) : section.items;
+                  return (
+                    <div key={section.key} className={styles.section}>
+                      <div className={styles.sectionHeader}>
+                        <span className={styles.sectionTitle}>{section.title}</span>
+                        <span className={styles.sectionCount}>{section.count}</span>
+                      </div>
+                      <div className={styles.list}>
+                        {isExpanded && expandState.loading && !expandState.data ? (
+                          <div className={styles.emptyState}>Loading…</div>
+                        ) : (
+                          visibleItems.map((item) => renderDismissRow(section.key, item))
+                        )}
+                      </div>
+                      {(canExpand || section.links.length > 0) && (
+                        <div className={styles.sectionFooter}>
+                          {canExpand && (
+                            <button type="button" className={styles.footerLink} onClick={() => toggleExpand(section.key)}>
+                              {isExpanded ? "Show less" : `Show all (${section.count})`}
+                            </button>
+                          )}
+                          {section.links.map((l) => (
+                            <Link key={l.href} href={l.href} className={styles.footerLink} onClick={() => setOpen(false)}>{l.label}</Link>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    {(canExpand || section.links.length > 0) && (
-                      <div className={styles.sectionFooter}>
-                        {canExpand && (
-                          <button type="button" className={styles.footerLink} onClick={() => toggleExpand(section.key)}>
-                            {isExpanded ? "Show less" : `Show all (${section.count})`}
-                          </button>
-                        )}
-                        {section.links.map((l) => (
-                          <Link key={l.href} href={l.href} className={styles.footerLink} onClick={() => setOpen(false)}>{l.label}</Link>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

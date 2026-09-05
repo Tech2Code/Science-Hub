@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { Switch } from "@/components/ui/Switch";
@@ -245,7 +246,7 @@ export function BillDetailsCard({
                 )) : (
                   <div className={styles.dropdownEmpty}>
                     No vendor found.{" "}
-                    <button type="button" onClick={() => { setShowVendorDropdown(false); openVendorCreate(); }} className={styles.dropdownEmptyLink}>Add new →</button>
+                    <button type="button" onClick={() => { setShowVendorDropdown(false); openVendorCreate(); }} className={styles.dropdownEmptyLink}>Add new <ArrowIcon /></button>
                   </div>
                 )}
               </div>
