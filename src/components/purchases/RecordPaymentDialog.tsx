@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { FillMaxButton } from "@/components/ui/FillMaxButton";
 import { toNum, fmtCurrency } from "@/lib/purchaseBillForm";
+import { PAYMENT_METHODS, methodSelectValue, methodCustomText, resolvePaymentMethod } from "@/lib/paymentMethods";
 import styles from "./RecordPaymentDialog.module.css";
-
-const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
 
 export interface PaymentDraft {
   amount: string;
@@ -30,10 +29,11 @@ const FOCUSABLE_SELECTOR =
 
 export function RecordPaymentDialog({ open, billDate, grandTotal, initial, onCancel, onSave }: Props) {
   const [amount, setAmount] = useState(initial.amount);
-  const [method, setMethod] = useState(initial.method);
+  const [method, setMethod] = useState(methodSelectValue(initial.method));
+  const [otherMethod, setOtherMethod] = useState(methodCustomText(initial.method));
   const [reference, setReference] = useState(initial.reference);
   const [date, setDate] = useState(initial.date);
-  const [fieldErrors, setFieldErrors] = useState<{ amount?: string; date?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ amount?: string; date?: string; otherMethod?: string }>({});
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
 
@@ -43,7 +43,8 @@ export function RecordPaymentDialog({ open, billDate, grandTotal, initial, onCan
     setPrevOpen(open);
     if (open) {
       setAmount(initial.amount);
-      setMethod(initial.method);
+      setMethod(methodSelectValue(initial.method));
+      setOtherMethod(methodCustomText(initial.method));
       setReference(initial.reference);
       setDate(initial.date);
       setFieldErrors({});
@@ -100,12 +101,23 @@ export function RecordPaymentDialog({ open, billDate, grandTotal, initial, onCan
 
   function handleSave() {
     const amt = toNum(amount);
-    if (amt <= 0) { setFieldErrors({ amount: "Enter a valid payment amount." }); return; }
-    if (amt > grandTotal) { setFieldErrors({ amount: `Amount cannot exceed the bill total (₹${fmtCurrency(grandTotal)}).` }); return; }
-    if (date < billDate) { setFieldErrors({ date: "Payment date cannot be before the bill date." }); return; }
-    if (date > today) { setFieldErrors({ date: "Payment date cannot be in the future." }); return; }
-    setFieldErrors({});
-    onSave({ amount, method, reference, date });
+    // Collected together (not sequential early-returns) so every invalid field shows its red
+    // border/hint on the same submit attempt, instead of revealing them one at a time across
+    // repeated clicks as each earlier field gets fixed.
+    const amountErr = amt <= 0
+      ? "Enter a valid payment amount."
+      : amt > grandTotal
+        ? `Amount cannot exceed the bill total (₹${fmtCurrency(grandTotal)}).`
+        : undefined;
+    const dateErr = date < billDate
+      ? "Payment date cannot be before the bill date."
+      : date > today
+        ? "Payment date cannot be in the future."
+        : undefined;
+    const otherMethodErr = method === "Other" && !otherMethod.trim() ? "Please specify the payment method." : undefined;
+    setFieldErrors({ amount: amountErr, date: dateErr, otherMethod: otherMethodErr });
+    if (amountErr || dateErr || otherMethodErr) return;
+    onSave({ amount, method: resolvePaymentMethod(method, otherMethod), reference, date });
   }
 
   return (
@@ -118,7 +130,7 @@ export function RecordPaymentDialog({ open, billDate, grandTotal, initial, onCan
             <p className={styles.subtitle}>Log a payment made against this bill right away.</p>
 
             <div className={styles.grid}>
-              <FormField label="Amount (₹)" error={fieldErrors.amount}>
+              <FormField label="Amount (₹)" error={fieldErrors.amount} required>
                 <div className={styles.amountRow}>
                   <Input type="number" min="0" step="0.01" max={grandTotal} value={amount} onChange={(e) => { setAmount(e.target.value); setFieldErrors((p) => ({ ...p, amount: undefined })); }} placeholder={`Max ₹${fmtCurrency(grandTotal)}`} className={styles.amountInput} />
                   <FillMaxButton onClick={() => { setAmount(grandTotal.toFixed(2)); setFieldErrors((p) => ({ ...p, amount: undefined })); }} title="Fill full bill amount" label="Pay Full" />
@@ -128,13 +140,20 @@ export function RecordPaymentDialog({ open, billDate, grandTotal, initial, onCan
                 <Input type="date" value={date} onChange={(e) => { setDate(e.target.value); setFieldErrors((p) => ({ ...p, date: undefined })); }} min={billDate} max={today} />
               </FormField>
               <FormField label="Method">
-                <Select value={method} onChange={(e) => setMethod(e.target.value)}>
+                <Select value={method} onChange={(e) => { setMethod(e.target.value); setFieldErrors((p) => ({ ...p, otherMethod: undefined })); }}>
                   {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
                 </Select>
               </FormField>
               <FormField label="Reference / UTR">
                 <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. cheque no., UTR…" maxLength={500} />
               </FormField>
+              {method === "Other" && (
+                <div className={styles.fullRow}>
+                  <FormField label="Specify Method" error={fieldErrors.otherMethod} required>
+                    <Input value={otherMethod} onChange={(e) => { setOtherMethod(e.target.value); setFieldErrors((p) => ({ ...p, otherMethod: undefined })); }} placeholder="e.g. PayTM Wallet" maxLength={100} />
+                  </FormField>
+                </div>
+              )}
             </div>
           </div>
 

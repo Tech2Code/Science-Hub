@@ -28,6 +28,7 @@ import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { useMenuA11y } from "@/lib/useMenuA11y";
+import { PAYMENT_METHODS, resolvePaymentMethod } from "@/lib/paymentMethods";
 import styles from "./billDetail.module.css";
 
 interface PurchaseBillItem {
@@ -58,7 +59,6 @@ interface BusinessSettings {
   updatedAt?: string;
 }
 
-const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
 const fmt     = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtShort = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
@@ -121,6 +121,8 @@ export default function PurchaseBillDetailPage() {
   const [payAmount,   setPayAmount]     = useState("");
   const [payAmountError, setPayAmountError] = useState<string | undefined>(undefined);
   const [payMethod,   setPayMethod]     = useState("Cash");
+  const [payOtherMethod, setPayOtherMethod] = useState("");
+  const [payOtherMethodError, setPayOtherMethodError] = useState<string | undefined>(undefined);
   const [payRef,      setPayRef]        = useState("");
   const [payDate,     setPayDate]       = useState(() => new Date().toISOString().slice(0, 10));
   const [submitting,  setSubmitting]    = useState(false);
@@ -129,6 +131,8 @@ export default function PurchaseBillDetailPage() {
     setPayAmount("");
     setPayAmountError(undefined);
     setPayMethod("Cash");
+    setPayOtherMethod("");
+    setPayOtherMethodError(undefined);
     setPayRef("");
     setPayDate(new Date().toISOString().slice(0, 10));
   }
@@ -306,17 +310,27 @@ export default function PurchaseBillDetailPage() {
     if (!bill) return;
     const amount  = parseFloat(payAmount);
     const balance = bill.total - bill.paidAmount;
-    if (!payAmount || isNaN(amount) || amount <= 0) { setPayAmountError("Enter a valid amount."); return; }
-    if (amount > balance + 0.01) { setPayAmountError(`Amount exceeds outstanding balance of ₹${fmt(balance)}.`); return; }
-    setPayAmountError(undefined);
+    // Collected together (not sequential early-returns) so every invalid field shows its red
+    // border/hint on the same submit attempt, instead of revealing them one at a time across
+    // repeated clicks as each earlier field gets fixed.
+    const amountErr = !payAmount || isNaN(amount) || amount <= 0
+      ? "Enter a valid amount."
+      : amount > balance + 0.01
+        ? `Amount exceeds outstanding balance of ₹${fmt(balance)}.`
+        : undefined;
+    const otherMethodErr = payMethod === "Other" && !payOtherMethod.trim() ? "Please specify the payment method." : undefined;
+    setPayAmountError(amountErr);
+    setPayOtherMethodError(otherMethodErr);
+    if (amountErr || otherMethodErr) return;
     if (payDate < bill.billDate.slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be before the bill date." }); return; }
     if (payDate > new Date().toISOString().slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be in the future." }); return; }
+    const method = resolvePaymentMethod(payMethod, payOtherMethod);
     setSubmitting(true);
     try {
       const res = await fetch(`/api/purchase-bills/${id}/payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount, method: payMethod, reference: payRef.trim() || null, date: payDate, idempotencyKey: paymentIdempotency.key() }),
+        body: JSON.stringify({ amount, method, reference: payRef.trim() || null, date: payDate, idempotencyKey: paymentIdempotency.key() }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -325,7 +339,7 @@ export default function PurchaseBillDetailPage() {
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");
         invalidateCachedPdf("purchase-bill", id);
-        toast({ type: "success", title: "Payment recorded", message: `₹${fmt(amount)} via ${payMethod}.` });
+        toast({ type: "success", title: "Payment recorded", message: `₹${fmt(amount)} via ${method}.` });
         setShowPayForm(false);
         resetPaymentForm();
         load();
@@ -931,7 +945,7 @@ export default function PurchaseBillDetailPage() {
           <h3 className={styles.paymentFormTitle}>Record Payment</h3>
           <form onSubmit={handlePayment} noValidate>
             <div className={styles.paymentFormRow}>
-              <FormField label="Amount (₹)" error={payAmountError}>
+              <FormField label="Amount (₹)" error={payAmountError} required>
                 <div className={styles.paymentAmountRow}>
                   <Input
                     type="number" min="0.01" step="0.01" max={balance}
@@ -952,11 +966,25 @@ export default function PurchaseBillDetailPage() {
               </div>
               <div className={styles.paymentMethodField}>
                 <FormField label="Method">
-                  <Select value={payMethod} onChange={e => setPayMethod(e.target.value)} sz="sm">
+                  <Select value={payMethod} onChange={e => { setPayMethod(e.target.value); setPayOtherMethodError(undefined); }} sz="sm">
                     {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
                   </Select>
                 </FormField>
               </div>
+              {payMethod === "Other" && (
+                <div className={styles.paymentOtherMethodField}>
+                  <FormField label="Specify Method" error={payOtherMethodError} required>
+                    <Input
+                      type="text"
+                      value={payOtherMethod}
+                      onChange={e => { setPayOtherMethod(e.target.value); setPayOtherMethodError(undefined); }}
+                      placeholder="e.g. PayTM Wallet"
+                      sz="sm"
+                      maxLength={100}
+                    />
+                  </FormField>
+                </div>
+              )}
               <FormField label="Reference / UTR">
                 <Input
                   type="text"

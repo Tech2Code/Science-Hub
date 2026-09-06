@@ -64,6 +64,8 @@
   .grid { grid-template-columns: 1fr; }
 }
 
+.fullRow { grid-column: 1 / -1; }
+
 .amountRow {
   display: flex;
   gap: 0.5rem;

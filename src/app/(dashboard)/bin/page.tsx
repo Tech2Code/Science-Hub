@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
-import { useFetch, bustCachePrefix } from "@/lib/useCache";
+import { useFetch, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -51,6 +51,16 @@ const TYPE_META: Record<BinType, { plural: string; pillCls: string }> = {
 };
 
 const TYPE_ORDER: BinType[] = ["invoice", "customer", "product", "brand", "category", "vendor", "purchase_bill", "return", "rate_list"];
+
+// A restore/permanent-delete/empty-bin can change which rows fetchBinExpiringEntities() (see
+// src/lib/notifications.ts) still sees, so the Notification Bell's cached summary — computed
+// live server-side but cached client-side for up to 2 minutes — must be busted here too, or the
+// bell keeps showing a "days left before auto-purge" entry for an item that's just been restored
+// or no longer exists at all.
+const NOTIFICATION_CACHE_URLS = ["/api/notifications", "/api/notifications/dismissed", "/api/notifications/category/binExpiring"];
+function bustNotificationCaches() {
+  NOTIFICATION_CACHE_URLS.forEach(bustCache);
+}
 
 // A restore/permanent-delete only busts the bin page's own "/api/bin" cache — the entity's
 // own list page (e.g. Credit Notes) can still be holding a stale cached copy from an earlier
@@ -257,6 +267,7 @@ export default function BinPage() {
           if (res.ok) {
             mutate();
             TYPE_CACHE_PREFIXES[item.type].forEach(bustCachePrefix);
+            bustNotificationCaches();
             toast({ type: "success", title: "Restored", message: `"${item.name}" restored successfully.` });
           } else {
             toast({ type: "error", title: "Restore failed", message: d.error ?? "Could not restore item." });
@@ -295,6 +306,7 @@ export default function BinPage() {
           if (res.ok) {
             mutate();
             TYPE_CACHE_PREFIXES[item.type].forEach(bustCachePrefix);
+            bustNotificationCaches();
             toast({ type: "success", title: "Permanently deleted", message: `"${item.name}" has been permanently deleted.` });
           } else {
             toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not permanently delete item." });
@@ -324,6 +336,7 @@ export default function BinPage() {
       if (res.ok) {
         mutate();
         Object.values(TYPE_CACHE_PREFIXES).flat().forEach(bustCachePrefix);
+        bustNotificationCaches();
         toast({
           type: "success",
           title: "Bin emptied",

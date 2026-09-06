@@ -51,6 +51,7 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 const METHOD_CLASS: Record<string, string> = {
   Cash: "methodCash",
   UPI: "methodUpi",
+  IMPS: "methodNeft",
   NEFT: "methodNeft",
   RTGS: "methodRtgs",
   Cheque: "methodCheque",

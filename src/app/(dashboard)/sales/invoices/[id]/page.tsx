@@ -24,6 +24,7 @@ import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { useMenuA11y } from "@/lib/useMenuA11y";
+import { PAYMENT_METHODS, resolvePaymentMethod } from "@/lib/paymentMethods";
 import styles from "./invoiceDetail.module.css";
 
 interface InvoiceItem {
@@ -65,7 +66,6 @@ interface BusinessSettings {
   updatedAt?: string;
 }
 
-const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
 const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // A returned line's own `price` is the original invoice line's List Price (gross, pre-discount) —
 // this derives the actual net rate charged/refunded, same as the main item table's Rate (₹) column.
@@ -208,8 +208,10 @@ export default function InvoiceDetailPage() {
   const [error, setError] = useState("");
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentForm, setPaymentForm] = useState({ amount: "", method: "Cash", reference: "", date: new Date().toISOString().slice(0, 10) });
+  const [paymentOtherMethod, setPaymentOtherMethod] = useState("");
   const [paymentAmountError, setPaymentAmountError] = useState<string | undefined>(undefined);
   const [paymentDateError, setPaymentDateError] = useState<string | undefined>(undefined);
+  const [paymentOtherMethodError, setPaymentOtherMethodError] = useState<string | undefined>(undefined);
   const [addingPayment, setAddingPayment] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
@@ -303,33 +305,44 @@ export default function InvoiceDetailPage() {
 
   async function handleAddPayment(e: React.FormEvent) {
     e.preventDefault();
-    const amtErr = validate(paymentForm.amount, rules.required("Amount is required."), rules.positiveNumber("Enter a valid amount greater than 0."));
-    if (amtErr) { setPaymentAmountError(amtErr); return; }
     const amt = parseFloat(paymentForm.amount);
-    if (amt > balance) { setPaymentAmountError(`Amount cannot exceed balance due (₹${fmt(balance)}).`); return; }
-    if (invoice && paymentForm.date < invoice.date.slice(0, 10)) { setPaymentDateError("Payment date cannot be before the invoice date."); return; }
-    if (paymentForm.date > new Date().toISOString().slice(0, 10)) { setPaymentDateError("Payment date cannot be in the future."); return; }
-    setPaymentAmountError(undefined);
-    setPaymentDateError(undefined);
+    // Collected together (not sequential early-returns) so every invalid field shows its red
+    // border/hint on the same submit attempt, instead of revealing them one at a time across
+    // repeated clicks as each earlier field gets fixed.
+    const amtErr = validate(paymentForm.amount, rules.required("Amount is required."), rules.positiveNumber("Enter a valid amount greater than 0."))
+      ?? (amt > balance ? `Amount cannot exceed balance due (₹${fmt(balance)}).` : undefined);
+    const dateErr = invoice && paymentForm.date < invoice.date.slice(0, 10)
+      ? "Payment date cannot be before the invoice date."
+      : paymentForm.date > new Date().toISOString().slice(0, 10)
+        ? "Payment date cannot be in the future."
+        : undefined;
+    const otherMethodErr = paymentForm.method === "Other" && !paymentOtherMethod.trim() ? "Please specify the payment method." : undefined;
+    setPaymentAmountError(amtErr);
+    setPaymentDateError(dateErr);
+    setPaymentOtherMethodError(otherMethodErr);
+    if (amtErr || dateErr || otherMethodErr) return;
+    const method = resolvePaymentMethod(paymentForm.method, paymentOtherMethod);
     setAddingPayment(true);
     const res = await fetch(`/api/invoices/${id}/payment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: amt, method: paymentForm.method, reference: paymentForm.reference, date: paymentForm.date, idempotencyKey: paymentIdempotency.key() }),
+      body: JSON.stringify({ amount: amt, method, reference: paymentForm.reference, date: paymentForm.date, idempotencyKey: paymentIdempotency.key() }),
     });
     setAddingPayment(false);
     if (res.ok) {
       paymentIdempotency.renew(); // this dialog can be reopened for another payment — a fresh key must back the next submit
       setShowPaymentForm(false);
       setPaymentForm({ amount: "", method: "Cash", reference: "", date: new Date().toISOString().slice(0, 10) });
+      setPaymentOtherMethod("");
       setPaymentAmountError(undefined);
       setPaymentDateError(undefined);
+      setPaymentOtherMethodError(undefined);
       bustCache(`/api/invoices/${id}`);
       bustCachePrefix("/api/invoices");
       bustCachePrefix("/api/payments");
       bustCachePrefix("/api/reports");
       load(true);
-      toast({ type: "success", title: "Payment recorded", message: `₹${parseFloat(paymentForm.amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via ${paymentForm.method}` });
+      toast({ type: "success", title: "Payment recorded", message: `₹${parseFloat(paymentForm.amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via ${method}` });
     } else {
       const d = await res.json().catch(() => ({}));
       toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to record payment." });
@@ -901,8 +914,10 @@ export default function InvoiceDetailPage() {
                     const next = !v;
                     if (next) {
                       setPaymentForm({ amount: "", method: "Cash", reference: "", date: new Date().toISOString().slice(0, 10) });
+                      setPaymentOtherMethod("");
                       setPaymentAmountError(undefined);
                       setPaymentDateError(undefined);
+                      setPaymentOtherMethodError(undefined);
                     }
                     return next;
                   });
@@ -1016,7 +1031,7 @@ export default function InvoiceDetailPage() {
             <h3 className={styles.paymentFormTitle}>Record Payment</h3>
             <form onSubmit={handleAddPayment} noValidate>
               <div className={styles.paymentFormRow}>
-                <FormField label="Amount (₹)" error={paymentAmountError}>
+                <FormField label="Amount (₹)" error={paymentAmountError} required>
                   <div className={styles.paymentAmountRow}>
                     <Input
                       type="text"
@@ -1051,13 +1066,27 @@ export default function InvoiceDetailPage() {
                   <FormField label="Method">
                     <Select
                       value={paymentForm.method}
-                      onChange={(e) => setPaymentForm((p) => ({ ...p, method: e.target.value }))}
+                      onChange={(e) => { setPaymentForm((p) => ({ ...p, method: e.target.value })); setPaymentOtherMethodError(undefined); }}
                       sz="sm"
                     >
                       {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
                     </Select>
                   </FormField>
                 </div>
+                {paymentForm.method === "Other" && (
+                  <div className={styles.paymentOtherMethodField}>
+                    <FormField label="Specify Method" error={paymentOtherMethodError} required>
+                      <Input
+                        type="text"
+                        value={paymentOtherMethod}
+                        onChange={(e) => { setPaymentOtherMethod(e.target.value); setPaymentOtherMethodError(undefined); }}
+                        placeholder="e.g. PayTM Wallet"
+                        sz="sm"
+                        maxLength={100}
+                      />
+                    </FormField>
+                  </div>
+                )}
                 <FormField label="Reference / UTR">
                   <Input
                     type="text"
@@ -1952,6 +1981,7 @@ export default function InvoiceDetailPage() {
           const METHOD_STYLE: Record<string, { bg: string; color: string; border: string }> = {
             Cash: { bg: "var(--c-green-bg)", color: "var(--c-green-text)", border: "var(--c-green-border)" },
             UPI: { bg: "#f3e8ff", color: "#7c3aed", border: "#ddd6fe" },
+            IMPS: { bg: "var(--c-blue-bg)", color: "var(--c-blue)", border: "var(--c-blue-border)" },
             NEFT: { bg: "var(--c-blue-bg)", color: "var(--c-blue)", border: "var(--c-blue-border)" },
             RTGS: { bg: "var(--c-blue-bg)", color: "var(--c-blue)", border: "var(--c-blue-border)" },
             Cheque: { bg: "var(--c-amber-bg)", color: "var(--c-amber)", border: "var(--c-amber-border)" },
