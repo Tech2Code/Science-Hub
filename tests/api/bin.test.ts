@@ -76,7 +76,7 @@ describe.skipIf(!hasTestDatabase)("POST /api/bin/[type]/[id] — invoice restore
       data: { name: "Test Customer", address: "x", city: "x", state: "x", pincode: "110001" },
     });
     const user = await testPrisma.user.findFirstOrThrow();
-    const product = await testPrisma.product.create({ data: { name: "Beaker", price: 100, stock: 20, minStock: 2 } });
+    const product = await testPrisma.product.create({ data: { name: "Beaker", price: 100, listPrice: 100, stock: 20, minStock: 2 } });
     const invoice = await testPrisma.invoice.create({
       data: {
         invoiceNumber: "SH-2026-0099", customerId: customer.id, userId: user.id,
@@ -118,7 +118,7 @@ describe.skipIf(!hasTestDatabase)("POST /api/bin/[type]/[id] — purchase bill r
       data: { name: "Acme Supplies", address: "x", city: "x", state: "x", pincode: "110001" },
     });
     const user = await testPrisma.user.findFirstOrThrow();
-    const product = await testPrisma.product.create({ data: { name: "Beaker", price: 100, stock: 20, minStock: 2 } });
+    const product = await testPrisma.product.create({ data: { name: "Beaker", price: 100, listPrice: 100, stock: 20, minStock: 2 } });
     const bill = await testPrisma.purchaseBill.create({
       data: {
         billNumber: "PB-2026-0099", vendorId: vendor.id, subtotal: 500, taxAmount: 0, total: 500,
@@ -151,7 +151,7 @@ describe.skipIf(!hasTestDatabase)("POST /api/bin/[type]/[id] — purchase bill r
       data: { name: "Acme Supplies", address: "x", city: "x", state: "x", pincode: "110001" },
     });
     const user = await testPrisma.user.findFirstOrThrow();
-    const product = await testPrisma.product.create({ data: { name: "Beaker", price: 100, stock: 20, minStock: 2 } });
+    const product = await testPrisma.product.create({ data: { name: "Beaker", price: 100, listPrice: 100, stock: 20, minStock: 2 } });
     const bill = await testPrisma.purchaseBill.create({
       data: {
         billNumber: "PB-2026-0098", vendorId: vendor.id, subtotal: 500, taxAmount: 0, total: 500,

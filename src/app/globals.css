@@ -41,7 +41,7 @@
   --c-red:         #dc2626;
   --c-red-h:       #b91c1c;
   --c-red-bg:      #fef2f2;
-  --c-red-border:  #fca5a5;
+  --c-red-border:  #f87171;
   --c-red-text:    #991b1b;
 
   /* Amber */
@@ -127,7 +127,7 @@
   --c-red:         #f87171;
   --c-red-h:       #ef4444;
   --c-red-bg:      rgba(248,113,113,0.1);
-  --c-red-border:  rgba(248,113,113,0.3);
+  --c-red-border:  rgba(248,113,113,0.6);
   --c-red-text:    #fca5a5;
 
   --c-amber:        #fbbf24;

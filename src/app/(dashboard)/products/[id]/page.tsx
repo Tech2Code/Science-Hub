@@ -56,6 +56,8 @@ interface Product {
   unit: string;
   price: number;
   purchasePrice: number | null;
+  listPrice: number | null;
+  discountPercent: number;
   gstRate: number;
   stock: number;
   minStock: number;
@@ -175,6 +177,12 @@ export default function ProductViewPage() {
   const movements = product?.stockMovements ?? [];
   // Unlike the Products list's separate Low/Out tabs, this single indicator covers both out-of-stock and low-stock.
   const isLow = !!product && needsRestock(product.stock, product.minStock);
+  // Selling Price defaults to Purchase Price when never explicitly set (see resolveSellingPrice()
+  // in productForm.ts) — flagged here so the two cards showing an identical number doesn't read
+  // as a data bug. There's no stored flag distinguishing "left blank, defaulted" from "deliberately
+  // priced at cost" (e.g. a break-even/pass-through item), so the copy below is worded to describe
+  // the number rather than assert intent either way.
+  const sellingPriceAtCost = !!product && product.purchasePrice != null && product.price === product.purchasePrice;
   const marginAmount = product?.purchasePrice != null ? product.price - product.purchasePrice : null;
   const marginPct = product?.purchasePrice != null && product.purchasePrice > 0
     ? (marginAmount! / product.purchasePrice) * 100
@@ -320,15 +328,30 @@ export default function ProductViewPage() {
       {/* Stats */}
       <div {...animateSection(1, styles.statsGrid)}>
         {[
-          { label: "List Price", value: product ? fmt(product.price) : "" },
-          { label: "Purchase Price", value: product?.purchasePrice != null ? fmt(product.purchasePrice) : "—" },
+          {
+            label: "List Price",
+            value: product?.listPrice != null ? fmt(product.listPrice) : "—",
+            sub: product?.listPrice != null && product.discountPercent > 0 ? `${product.discountPercent}% discount` : undefined,
+          },
+          {
+            label: "Purchase Price",
+            value: product?.purchasePrice != null ? fmt(product.purchasePrice) : "—",
+            sub: product?.purchasePrice != null ? `+${product.gstRate}% GST = ${fmt(product.purchasePrice * (1 + product.gstRate / 100))}` : undefined,
+          },
+          {
+            label: "Selling Price",
+            value: product ? fmt(product.price) : "",
+            sub: sellingPriceAtCost
+              ? "Same as Purchase Price — 0% margin"
+              : product ? `+${product.gstRate}% GST = ${fmt(product.price * (1 + product.gstRate / 100))}` : undefined,
+            tone: sellingPriceAtCost ? "warning" as const : undefined,
+          },
           {
             label: "Margin",
             value: marginAmount != null ? fmt(marginAmount) : "—",
             sub: marginPct != null ? `${marginPct.toFixed(1)}% over cost` : undefined,
             tone: marginAmount != null ? (marginAmount > 0 ? "positive" as const : marginAmount < 0 ? "negative" as const : undefined) : undefined,
           },
-          { label: "GST Rate", value: product ? `${product.gstRate}%` : "" },
           {
             label: "Stock",
             value: product ? `${product.stock} ${product.unit}` : "",
@@ -338,7 +361,7 @@ export default function ProductViewPage() {
         ].map((s) => (
           <div key={s.label} className={`card ${styles.cardPadSm}`}>
             <div className={styles.statLabel}>{s.label}</div>
-            <div className={`${styles.statValue} ${!loading && s.tone === "positive" ? styles.positive : !loading && s.tone === "negative" ? styles.negative : ""}`}>
+            <div className={`${styles.statValue} ${!loading && s.tone === "positive" ? styles.positive : !loading && s.tone === "negative" ? styles.negative : !loading && s.tone === "warning" ? styles.warning : ""}`}>
               <SkeletonSwap loading={loading} w={100} h={22}>{s.value}</SkeletonSwap>
             </div>
             {!loading && s.sub && <div className={styles.statSub}>{s.sub}</div>}

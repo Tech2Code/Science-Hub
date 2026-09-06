@@ -308,8 +308,10 @@ export default function EditPurchaseBillPage() {
     function flagItemsError(message: string) { setItemsError(message); setItemsErrorFor(items); }
     if (items.length === 0)                                             { flagItemsError("Add at least one item."); return; }
     if (items.some(i => validate(i.name, rules.required())))            { flagItemsError("All items must have a name."); return; }
+    if (items.some(i => validate(i.unit, rules.required())))            { flagItemsError("All items must have a unit."); return; }
     if (items.some(i => validate(i.quantity, rules.required(), rules.positiveNumber())))      { flagItemsError("All quantities must be greater than 0."); return; }
     if (items.some(i => validate(i.purchasePrice, rules.required(), rules.positiveNumber()))) { flagItemsError("All item prices must be greater than 0."); return; }
+    if (items.some(i => validate(i.gstRate, rules.required(), rules.percentRange(100))))       { flagItemsError("All items must have a GST rate between 0 and 100%."); return; }
     setItemsError(undefined);
     if (dueDate && dueDate < billDate) { setDueDateError("Due date cannot be before the bill date."); return; }
     setDueDateError(undefined);
@@ -366,6 +368,7 @@ export default function EditPurchaseBillPage() {
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");
+        bustCache("/api/units");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Bill updated", message: "Changes saved successfully." });
         router.push(`/purchases/bills/${id}`);

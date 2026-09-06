@@ -135,6 +135,15 @@ model Product {
   hsn               String?
   unit              String             @default("Nos")
   price             Float
+  // Vendor's quoted price before their trade discount, and that discount % (default 0 — a
+  // discount isn't guaranteed). listPrice is mandatory (since 2026-09-06, second pass) so
+  // purchasePrice below is always purely computed (listPrice × (1 − discountPercent/100)), never
+  // a separate manually-typed/overridable field — see ProductFormFields.tsx. The one exception is
+  // bulk import, which never collects a real List Price and instead submits listPrice ==
+  // purchasePrice (0% discount assumed) — same backfill rule applied to legacy rows that predate
+  // this pair, see migration 20260906140000_require_product_list_price.
+  listPrice         Float
+  discountPercent   Float              @default(0)
   purchasePrice     Float?
   gstRate           Float              @default(18)
   stock             Int                @default(0)
@@ -285,17 +294,19 @@ model Return {
 }
 
 model ReturnItem {
-  id        String   @id @default(cuid())
-  returnId  String
-  return    Return   @relation(fields: [returnId], references: [id], onDelete: Cascade)
-  productId String?
-  product   Product? @relation(fields: [productId], references: [id])
-  name      String
-  quantity  Float
-  price     Float
-  gstRate   Float    @default(0)
-  gstAmount Float    @default(0)
-  total     Float
+  id              String   @id @default(cuid())
+  returnId        String
+  return          Return   @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  productId       String?
+  product         Product? @relation(fields: [productId], references: [id])
+  name            String
+  quantity        Float
+  price           Float
+  discountPercent Float    @default(0)
+  discountAmount  Float    @default(0)
+  gstRate         Float    @default(0)
+  gstAmount       Float    @default(0)
+  total           Float
 }
 
 model BusinessSettings {

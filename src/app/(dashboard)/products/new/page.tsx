@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ProductFormFields } from "@/components/products/ProductFormFields";
-import { validateProductForm, hasProductFieldErrors, suggestMinStockForUnit, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
-import { bustCachePrefix } from "@/lib/useCache";
+import { validateProductForm, hasProductFieldErrors, suggestMinStockForUnit, resolveSellingPrice, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
+import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
@@ -21,6 +21,7 @@ interface Category { id: string; name: string; }
 
 const BLANK_FORM: ProductFormData = {
   name: "", sku: "", hsn: "", description: "", unit: "Nos",
+  listPrice: "", discountPercent: "",
   price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: String(suggestMinStockForUnit("Nos")),
   brandId: "", categoryId: "",
 };
@@ -109,9 +110,11 @@ export default function NewProductPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...form,
-        price: parseFloat(form.price),
+        price: resolveSellingPrice(form.price, form.purchasePrice),
         purchasePrice: form.purchasePrice.trim() ? parseFloat(form.purchasePrice) : null,
-        gstRate: parseInt(form.gstRate),
+        listPrice: form.listPrice.trim() ? parseFloat(form.listPrice) : null,
+        discountPercent: form.discountPercent.trim() ? parseFloat(form.discountPercent) : 0,
+        gstRate: parseFloat(form.gstRate),
         stock: parseInt(form.stock),
         minStock: parseInt(form.minStock),
         brandId: form.brandId || undefined,
@@ -123,6 +126,7 @@ export default function NewProductPage() {
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/products");
       bustCachePrefix("/api/reports");
+      bustCache("/api/units");
       toast({ type: "success", title: "Product created", message: "New product added to catalog." });
       // Deliberately not resetting `saving` here — it must stay locked until
       // navigation actually replaces this page.

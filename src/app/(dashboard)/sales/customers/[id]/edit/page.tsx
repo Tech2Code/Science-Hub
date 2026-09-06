@@ -134,7 +134,9 @@ export default function EditCustomerPage() {
         onConfirm={doSave}
         onCancel={() => setConfirmOpen(false)}
       />
-      <Breadcrumb items={[{ label: "Customers", href: "/sales/customers" }, { label: "Edit Customer" }]} />
+      <Breadcrumb items={loading
+        ? [{ label: "Customers", href: "/sales/customers" }, { label: "Edit" }]
+        : [{ label: "Customers", href: "/sales/customers" }, { label: form.name, href: `/sales/customers/${id}` }, { label: "Edit" }]} />
 
       <div className={styles.headerRow}>
         <div>

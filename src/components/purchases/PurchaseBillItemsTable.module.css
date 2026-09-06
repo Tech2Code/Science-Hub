@@ -95,31 +95,7 @@
   cursor: pointer;
 }
 
-/* ── Quick-add item form (rendered inside a Modal) ───────────────────── */
-/* Matches the app-wide .form-grid-2/.form-grid-3 gap — wide enough for FormField's
-   absolutely-positioned error text to not overlap the next row. */
-.customForm {
-  display: flex;
-  flex-direction: column;
-  gap: 1.325rem;
-}
-
-/* This grid lives inside a fixed-width Modal, not the full page, so a viewport
-   media query would keep forcing cramped columns — 2 columns fits its ~34rem width. */
-.grid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.325rem 1rem; }
-@media (max-width: 480px) {
-  .grid4 { grid-template-columns: 1fr; }
-}
-
-.skipCatalogLabel {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.78rem;
-  color: var(--c-text-3);
-  cursor: pointer;
-}
-.skipCatalogCheckbox { width: 0.9rem; height: 0.9rem; accent-color: var(--c-blue); cursor: pointer; }
+/* Quick-add item form now lives in the shared QuickAddProductModal.module.css. */
 
 .formActions { display: flex; justify-content: flex-end; gap: 0.625rem; }
 @media (max-width: 480px) {
@@ -133,16 +109,18 @@
   border: 1px solid var(--c-border);
 }
 
-.colIndex    { width: 2.25rem; }
-.colName     { width: 18%; }
-.colHsn      { width: 12%; }
-.colUnit     { width: 12%; }
-.colQty      { width: 10%; }
-.colRate     { width: 10%; }
-.colDiscount { width: 8%; }
-.colGst      { width: 10%; }
-.colAmount   { width: 14%; }
-.colAction   { width: 2.75rem; }
+.colIndex     { width: 2.25rem; }
+.colName      { width: 16%; }
+.colHsn       { width: 11%; }
+.colUnit      { width: 11%; }
+.colQty       { width: 10%; }
+.colListPrice { width: 10%; }
+.colDiscount  { width: 8%; }
+.colRate      { width: 10%; }
+.colGst       { width: 9%; }
+.colGstAmt    { width: 10%; }
+.colAmount    { width: 12%; }
+.colAction    { width: 2.75rem; }
 
 .itemsTable {
   width: 100%;
@@ -150,7 +128,7 @@
   font-size: 0.73rem;
   /* Keeps columns at desktop width instead of squeezing on narrow screens;
      .itemsTableWrap's overflow-x:auto lets the row scroll sideways on mobile. */
-  min-width: 780px;
+  min-width: 950px;
 }
 
 .itemsTable thead tr { background: var(--c-bg-sub); }
@@ -174,26 +152,17 @@
 .itemRow { border-bottom: 1px solid var(--c-border); }
 
 .tdIndex { padding: 0.32rem 0.4rem; width: 2.25rem; color: var(--c-text-4); font-size: 0.65rem; font-weight: 500; text-align: center; }
-.tdName { padding: 0.32rem 0.4rem; width: 18%; max-width: 11rem; }
+.tdName { padding: 0.32rem 0.4rem; width: 16%; max-width: 11rem; }
 .tdNameInner { font-weight: 600; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tdHsn { padding: 0.32rem 0.4rem; width: 12%; text-align: center; }
-.tdUnit { padding: 0.32rem 0.4rem; width: 12%; text-align: center; }
-
-.unitBadge {
-  display: inline-block;
-  padding: 0.125rem 0.5rem;
-  border-radius: 0.375rem;
-  background: var(--c-bg-sub);
-  border: 1px solid var(--c-border);
-  font-size: 0.65rem;
-  color: var(--c-text-2);
-  font-weight: 500;
-}
+.tdHsn { padding: 0.32rem 0.4rem; width: 11%; text-align: center; }
+.tdUnit { padding: 0.32rem 0.4rem; width: 11%; text-align: center; }
 .tdQty { padding: 0.32rem 0.4rem; width: 10%; text-align: center; }
-.tdRate { padding: 0.32rem 0.4rem; width: 10%; text-align: right; }
+.tdListPrice { padding: 0.32rem 0.4rem; width: 10%; text-align: right; }
 .tdDiscount { padding: 0.32rem 0.4rem; width: 8%; text-align: center; }
-.tdGst { padding: 0.32rem 0.4rem; width: 10%; text-align: center; }
-.tdAmount { padding: 0.32rem 0.4rem; text-align: right; font-weight: 500; white-space: nowrap; width: 14%; }
+.tdRate { padding: 0.32rem 0.4rem; width: 10%; text-align: right; font-weight: 500; color: var(--c-text-2); white-space: nowrap; }
+.tdGst { padding: 0.32rem 0.4rem; width: 9%; text-align: center; }
+.tdGstAmt { padding: 0.32rem 0.4rem; width: 10%; text-align: right; font-size: 0.7rem; color: var(--c-text-3); }
+.tdAmount { padding: 0.32rem 0.4rem; text-align: right; font-weight: 500; white-space: nowrap; width: 12%; }
 .tdAction { padding: 0.32rem 0.2rem; width: 2.75rem; }
 
 /* ── Reorder mode ──────────────────────────────── */

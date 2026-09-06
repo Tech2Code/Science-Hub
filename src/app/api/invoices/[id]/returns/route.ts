@@ -5,7 +5,7 @@ import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
-import { isFutureIstDate, toIstDateStr } from "@/lib/validation";
+import { isFutureIstDate, toIstDateStr, MAX_MONEY_VALUE } from "@/lib/validation";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { computeRoundOff } from "@/lib/roundOff";
 import { getBusinessSettings } from "@/lib/db";
@@ -43,7 +43,7 @@ export async function POST(
     const { id } = await params;
     const body = await request.json();
     const { items, notes, date, idempotencyKey } = body as {
-      items: { productId: string; name: string; quantity: number; price: number }[];
+      items: { productId: string; name: string; quantity: number; price: number; discountPercent?: number }[];
       notes?: string;
       date?: string;
       idempotencyKey?: string;
@@ -74,8 +74,11 @@ export async function POST(
       if (!item.quantity || item.quantity <= 0) {
         return NextResponse.json({ error: `Invalid quantity for ${item.name}` }, { status: 400 });
       }
-      if (typeof item.price !== "number" || !Number.isFinite(item.price) || item.price < 0) {
+      if (typeof item.price !== "number" || !Number.isFinite(item.price) || item.price < 0 || item.price > MAX_MONEY_VALUE) {
         return NextResponse.json({ error: `Invalid price for ${item.name}` }, { status: 400 });
+      }
+      if (item.discountPercent !== undefined && (typeof item.discountPercent !== "number" || !Number.isFinite(item.discountPercent) || item.discountPercent < 0 || item.discountPercent > 100)) {
+        return NextResponse.json({ error: `Invalid discount for ${item.name}` }, { status: 400 });
       }
     }
 
@@ -110,10 +113,23 @@ export async function POST(
     const rateByProduct = new Map(invoice.items.map((it) => [it.productId, it.gstRate]));
     const effectiveRate = invoice.subtotal > 0 ? ((invoice.cgst + invoice.sgst + invoice.igst) / invoice.subtotal) * 100 : 0;
 
+    // Discount % is inherited from the matching invoice line the same way GST rate is above — a
+    // credit note can't be allowed to invent its own discount, or a client-supplied value (however
+    // range-clamped) could zero out a real return's taxable value, or understate a discount and
+    // let a return silently consume more of the paid-amount cap than it should. Only a custom
+    // (non-catalog) item, which has no productId to trace back to an invoice line, falls back to
+    // the client-supplied value.
+    const discountByProduct = new Map(invoice.items.map((it) => [it.productId, it.discountPercent]));
+
+    // The original invoice line's discount % is carried forward so a return's taxable value is
+    // computed net of it — otherwise the credit note would refund the pre-discount gross price.
     const computedItems = items.map((item) => {
       const gstRate = (item.productId ? rateByProduct.get(item.productId) : undefined) ?? effectiveRate;
-      const { taxable, gstAmt, total } = lineBreakdown({ qty: item.quantity, price: item.price, gstRate, discountPercent: 0 });
-      return { ...item, gstRate, taxable, gstAmt, total };
+      const discountPercent = item.productId && discountByProduct.has(item.productId)
+        ? discountByProduct.get(item.productId)!
+        : Math.min(100, Math.max(0, item.discountPercent ?? 0));
+      const { discountAmount, taxable, gstAmt, total } = lineBreakdown({ qty: item.quantity, price: item.price, gstRate, discountPercent });
+      return { ...item, gstRate, discountPercent, discountAmount, taxable, gstAmt, total };
     });
 
     const subtotal = computedItems.reduce((s, i) => s + i.taxable, 0);
@@ -198,6 +214,8 @@ export async function POST(
                 name: item.name,
                 quantity: item.quantity,
                 price: item.price,
+                discountPercent: item.discountPercent,
+                discountAmount: item.discountAmount,
                 gstRate: item.gstRate,
                 gstAmount: item.gstAmt,
                 total: item.total,

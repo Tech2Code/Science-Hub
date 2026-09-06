@@ -474,7 +474,7 @@ export default function PurchaseBillDetailPage() {
         </div>
       </div>
 
-      {/* Items table — mirrors the #/Item/Qty/Rate/Discount/GST %/GST Amt/Total columns below.
+      {/* Items table — mirrors the #/Item/Qty/List Price/Discount/GST %/GST Amt/Total columns below.
           Header uses the real sectionHeaderRow (1rem/1.25rem padding + divider); rows use the
           same 0.75rem/1rem padding as the real table's <td>, so nothing sits flush on the card edge. */}
       <div className="card">
@@ -1086,7 +1086,7 @@ export default function PurchaseBillDetailPage() {
                 <th>Item</th>
                 <th>HSN/SAC</th>
                 <th className={styles.textRight}>Qty</th>
-                <th className={styles.textRight}>Rate</th>
+                <th className={styles.textRight}>List Price</th>
                 <th className={styles.textRight}>Discount</th>
                 <th className={styles.textRight}>GST %</th>
                 <th className={styles.textRight}>GST Amt</th>
@@ -1103,7 +1103,7 @@ export default function PurchaseBillDetailPage() {
                   </td>
                   <td data-label="HSN/SAC" className={styles.textMuted}>{item.hsn || "—"}</td>
                   <td data-label="Qty" className={styles.qtyCell}>{item.quantity}</td>
-                  <td data-label="Rate" className={styles.textRight}>₹{fmt(item.purchasePrice)}</td>
+                  <td data-label="List Price" className={styles.textRight}>₹{fmt(item.purchasePrice)}</td>
                   <td data-label="Discount" className={`${styles.textRight} ${styles.textMuted}`}>{item.discountPercent > 0 ? `${item.discountPercent}% (−₹${fmt(item.discountAmount)})` : "—"}</td>
                   <td data-label="GST %" className={`${styles.textRight} ${styles.textMuted}`}>{item.gstRate}%</td>
                   <td data-label="GST Amt" className={styles.gstAmtCell}>₹{fmt(item.gstAmount)}</td>

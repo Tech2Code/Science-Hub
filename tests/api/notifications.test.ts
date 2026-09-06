@@ -49,7 +49,7 @@ describe.skipIf(!hasTestDatabase)("POST/DELETE /api/notifications/dismiss", () =
     userId = user.id;
     mockSession({ id: user.id, role: "staff" });
     const product = await testPrisma.product.create({
-      data: { name: "Out Of Stock Widget", price: 100, stock: 0, minStock: 5 },
+      data: { name: "Out Of Stock Widget", price: 100, listPrice: 100, stock: 0, minStock: 5 },
     });
     productId = product.id;
   });

@@ -1,21 +1,17 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
 import { ArrowIcon } from "@/components/ui/ArrowIcon";
-import { Modal } from "@/components/dialogs/Modal";
-import { OverlayLoader } from "@/components/ui/Spinner";
-import { Input, Select, FormField } from "@/components/ui/Input";
-import { UnitCombo } from "@/components/ui/UnitCombo";
+import { Input } from "@/components/ui/Input";
 import { RequiredStar } from "@/components/ui/RequiredStar";
-import { useToast } from "@/components/ui/Toast";
-import { bustCachePrefix } from "@/lib/useCache";
-import { rules, validate } from "@/lib/validation";
-import { animateSection } from "@/lib/animateSection";
+import { QuickAddProductModal, type QuickAddOutcome } from "@/components/products/QuickAddProductModal";
 import { useDropUp } from "@/lib/useDropUp";
+import { animateSection } from "@/lib/animateSection";
 import {
-  PURCHASE_BILL_UNITS, PURCHASE_BILL_GST_RATES,
+  PURCHASE_BILL_UNITS,
   makePurchaseBillLineItemKey, toNum, fmtCurrency, calcPurchaseBillItem,
+  computeQuickAddNetRate, resolvePurchaseBillLineRate, resolveQuickAddLineRate,
   type PurchaseBillLineItem, type PurchaseBillProduct,
 } from "@/lib/purchaseBillForm";
 import styles from "./PurchaseBillItemsTable.module.css";
@@ -30,20 +26,14 @@ interface PurchaseBillItemsTableProps {
   itemsError?: string;
 }
 
-type QuickAddErrors = Partial<Record<"name" | "purchasePrice" | "unit" | "gstRate" | "quantity", string>>;
-
 // Search-and-add product flow shared by New/Edit Purchase Bill pages. "Add custom item" can save to the catalog or, via "just for this bill", add a one-off non-stock line (e.g. freight).
 export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, items, setItems, itemsError }: PurchaseBillItemsTableProps) {
-  const toast = useToast();
   const productSearchWrapRef = useRef<HTMLDivElement>(null);
   const [productSearch, setProductSearch] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const { dropUp, measure } = useDropUp(showProductDropdown);
   const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
-  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "", quantity: "1", purchasePrice: "", salePrice: "", gstRate: "18", hsn: "", skipCatalog: false });
-  const [quickAddErrors, setQuickAddErrors] = useState<QuickAddErrors>({});
-  const [quickAddSaving, setQuickAddSaving] = useState(false);
-  const unitFieldId = useId();
+  const [quickAddInitialName, setQuickAddInitialName] = useState("");
 
   const filteredProducts = products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase()));
 
@@ -53,72 +43,42 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
       if (existingIdx !== -1) {
         return prev.map((item, i) => (i === existingIdx ? { ...item, quantity: String(toNum(item.quantity) + toNum(quantity)) } : item));
       }
-      const rate = p.purchasePrice ?? p.price;
+      const { rate, discountPercent } = resolvePurchaseBillLineRate(p);
       return [...prev, {
         key: makePurchaseBillLineItemKey(), productId: p.id, name: p.name, hsn: p.hsn ?? "", unit: p.unit,
-        quantity, purchasePrice: rate != null ? String(rate) : "", gstRate: String(p.gstRate), discountPercent: "0",
+        quantity, purchasePrice: rate != null ? String(rate) : "", gstRate: String(p.gstRate), discountPercent,
       }];
     });
     setProductSearch(""); setShowProductDropdown(false);
   }
 
   function openQuickAddProduct(name = productSearch) {
-    setQuickAddProduct({ name, unit: "", quantity: "1", purchasePrice: "", salePrice: "", gstRate: "18", hsn: "", skipCatalog: false });
-    setQuickAddErrors({});
+    setQuickAddInitialName(name);
     setShowQuickAddProduct(true);
     setShowProductDropdown(false);
   }
 
-  async function handleQuickAddProduct() {
-    const errs: QuickAddErrors = {
-      name: validate(quickAddProduct.name, rules.required("Item name is required."), rules.minLength(2), rules.maxLength(200)) ?? undefined,
-      quantity: validate(quickAddProduct.quantity, rules.required("Quantity is required."), rules.positiveNumber()) ?? undefined,
-      purchasePrice: validate(quickAddProduct.purchasePrice, rules.required("Price is required."), rules.nonNegativeNumber()) ?? undefined,
-      unit: validate(quickAddProduct.unit, rules.required("Unit is required.")) ?? undefined,
-      gstRate: validate(quickAddProduct.gstRate, rules.required("GST rate is required."), rules.nonNegativeNumber()) ?? undefined,
-    };
-    if (Object.values(errs).some(Boolean)) { setQuickAddErrors(errs); return; }
-    setQuickAddErrors({});
-
-    if (quickAddProduct.skipCatalog) {
+  // The quick-add modal always resolves Purchase Price to List Price × Discount % (no manual
+  // override field), so this always takes the "carry the discount forward" branch — kept via the
+  // shared helper so the item's own Discount % column still reflects it, same as
+  // resolvePurchaseBillLineRate above.
+  function handleQuickAddOutcome(outcome: QuickAddOutcome) {
+    const { rate: rateValue, discountPercent } = resolveQuickAddLineRate(
+      outcome.listPrice, outcome.discountPercent, String(outcome.purchasePriceNum)
+    );
+    if (outcome.skipCatalog) {
       setItems((prev) => [...prev, {
-        key: makePurchaseBillLineItemKey(), productId: "", name: quickAddProduct.name.trim(), hsn: quickAddProduct.hsn.trim(),
-        unit: quickAddProduct.unit, quantity: quickAddProduct.quantity, purchasePrice: quickAddProduct.purchasePrice, gstRate: quickAddProduct.gstRate, discountPercent: "0",
+        key: makePurchaseBillLineItemKey(), productId: "", name: outcome.name, hsn: outcome.hsn,
+        unit: outcome.unit, quantity: outcome.quantity, purchasePrice: rateValue, gstRate: outcome.gstRate, discountPercent,
       }]);
-      setShowQuickAddProduct(false);
-      setShowProductDropdown(false);
-      toast({ type: "success", title: "Item added", message: `"${quickAddProduct.name.trim()}" added to this bill only.` });
       return;
     }
-
-    setQuickAddSaving(true);
-    try {
-      const res = await fetch("/api/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: quickAddProduct.name.trim(),
-          unit: quickAddProduct.unit.trim() || "Pcs",
-          price: quickAddProduct.salePrice.trim() || quickAddProduct.purchasePrice,
-          purchasePrice: quickAddProduct.purchasePrice,
-          gstRate: quickAddProduct.gstRate,
-          hsn: quickAddProduct.hsn.trim() || undefined,
-          stock: 0,
-        }),
-      });
-      const d = await res.json().catch(() => ({}));
-      setQuickAddSaving(false);
-      if (!res.ok) { toast({ type: "error", title: "Failed", message: d?.error ?? "Could not add product." }); return; }
-      bustCachePrefix("/api/products");
-      setProducts((prev) => [...prev, d]);
-      addProduct(d, quickAddProduct.quantity);
-      setShowQuickAddProduct(false);
-      setShowProductDropdown(false);
-      toast({ type: "success", title: "Product added", message: `"${d.name}" was created and added to this bill.` });
-    } catch {
-      setQuickAddSaving(false);
-      toast({ type: "error", title: "Failed", message: "Network error." });
-    }
+    const d = outcome.product;
+    setProducts((prev) => [...prev, d]);
+    setItems((prev) => [...prev, {
+      key: makePurchaseBillLineItemKey(), productId: d.id, name: d.name, hsn: d.hsn ?? "", unit: d.unit,
+      quantity: outcome.quantity, purchasePrice: rateValue, gstRate: outcome.gstRate, discountPercent,
+    }]);
   }
 
   function removeItem(idx: number) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
@@ -200,9 +160,29 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
     });
   }
 
+  // Same reject-outright-then-clamp pattern as handleDiscountPercentChange — GST rate is also a percentage, capped at 100.
+  const [gstRateDrafts, setGstRateDrafts] = useState<Record<string, string>>({});
+
+  function handleGstRateChange(idx: number, key: string, raw: string) {
+    const cleaned = raw.replace(/%/g, "");
+    if (!/^(100(\.\d{0,2})?|\d{0,2}(\.\d{0,2})?)$/.test(cleaned)) return;
+    setGstRateDrafts((prev) => ({ ...prev, [key]: raw }));
+    const parsed = parseFloat(cleaned);
+    const clamped = isNaN(parsed) ? 0 : Math.min(100, Math.max(0, parsed));
+    updateItem(idx, "gstRate", String(clamped));
+  }
+
+  function clearGstRateDraft(key: string) {
+    setGstRateDrafts((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
+
   return (
     <>
-    {quickAddSaving && <OverlayLoader text="Adding…" />}
     <div {...animateSection(sectionIndex, "form-card")}>
       <h2 className="form-section-title">Line Items</h2>
       {itemsError && <p className={styles.itemsErrorMsg} role="alert">{itemsError}</p>}
@@ -250,90 +230,16 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
         )}
       </div>
 
-      <Modal
-        open={showQuickAddProduct}
-        onClose={() => { if (!quickAddSaving) setShowQuickAddProduct(false); }}
-        title="Add Custom Item"
-        variant="fullscreen"
-        footer={
-          <>
-            <Button type="button" variant="secondary" size="md" onClick={() => setShowQuickAddProduct(false)} disabled={quickAddSaving}>
-              Cancel
-            </Button>
-            <Button type="button" variant="primary" size="md" onClick={handleQuickAddProduct} disabled={quickAddSaving}>
-              {quickAddSaving ? "Adding…" : quickAddProduct.skipCatalog ? "Add to bill" : "Save & use product"}
-            </Button>
-          </>
-        }
-      >
-        <div className={styles.customForm}>
-          <FormField label="Item Name" required error={quickAddErrors.name}>
-            <Input
-              type="text" placeholder="e.g. Beaker 250ml Borosilicate"
-              autoFocus
-              value={quickAddProduct.name}
-              onChange={(e) => { setQuickAddProduct((p) => ({ ...p, name: e.target.value })); setQuickAddErrors((p) => ({ ...p, name: undefined })); }}
-              maxLength={200}
-            />
-          </FormField>
-          <div className={styles.grid4}>
-            <FormField label="Quantity" required error={quickAddErrors.quantity}>
-              <Input
-                type="text" inputMode="decimal" placeholder="1"
-                value={quickAddProduct.quantity}
-                onChange={(e) => { setQuickAddProduct((p) => ({ ...p, quantity: e.target.value })); setQuickAddErrors((p) => ({ ...p, quantity: undefined })); }}
-              />
-            </FormField>
-            <FormField label="Unit" required error={quickAddErrors.unit} id={unitFieldId}>
-              <UnitCombo
-                id={unitFieldId}
-                value={quickAddProduct.unit}
-                onChange={(v) => { setQuickAddProduct((p) => ({ ...p, unit: v })); setQuickAddErrors((p) => ({ ...p, unit: undefined })); }}
-                suggestions={PURCHASE_BILL_UNITS}
-              />
-            </FormField>
-            <FormField label="Purchase Price (₹)" required error={quickAddErrors.purchasePrice}>
-              <Input
-                type="text" inputMode="decimal" placeholder="0.00"
-                value={quickAddProduct.purchasePrice}
-                onChange={(e) => { setQuickAddProduct((p) => ({ ...p, purchasePrice: e.target.value })); setQuickAddErrors((p) => ({ ...p, purchasePrice: undefined })); }}
-              />
-            </FormField>
-            {!quickAddProduct.skipCatalog && (
-              <FormField label="Sale Price (₹)" hint="Defaults to purchase price if left blank">
-                <Input
-                  type="text" inputMode="decimal" placeholder="0.00"
-                  value={quickAddProduct.salePrice}
-                  onChange={(e) => setQuickAddProduct((p) => ({ ...p, salePrice: e.target.value }))}
-                />
-              </FormField>
-            )}
-            <FormField label="GST %" required error={quickAddErrors.gstRate}>
-              <Input
-                type="text" inputMode="decimal" placeholder="18"
-                value={quickAddProduct.gstRate}
-                onChange={(e) => { setQuickAddProduct((p) => ({ ...p, gstRate: e.target.value })); setQuickAddErrors((p) => ({ ...p, gstRate: undefined })); }}
-              />
-            </FormField>
-            <FormField label="HSN/SAC" hint="Optional">
-              <Input
-                type="text" placeholder="e.g. 3822" maxLength={8}
-                value={quickAddProduct.hsn}
-                onChange={(e) => setQuickAddProduct((p) => ({ ...p, hsn: e.target.value.replace(/\D/g, "").slice(0, 8) }))}
-              />
-            </FormField>
-          </div>
-          <label className={styles.skipCatalogLabel}>
-            <input
-              type="checkbox"
-              checked={quickAddProduct.skipCatalog}
-              onChange={(e) => setQuickAddProduct((p) => ({ ...p, skipCatalog: e.target.checked }))}
-              className={styles.skipCatalogCheckbox}
-            />
-            Just for this bill — don&apos;t save to catalog
-          </label>
-        </div>
-      </Modal>
+      {showQuickAddProduct && (
+        <QuickAddProductModal
+          onClose={() => setShowQuickAddProduct(false)}
+          onAdd={handleQuickAddOutcome}
+          entityLabel="bill"
+          defaultUnit="Pcs"
+          baseUnits={PURCHASE_BILL_UNITS}
+          initialName={quickAddInitialName}
+        />
+      )}
 
       {items.length > 0 ? (
         <>
@@ -357,32 +263,34 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
               <col className={styles.colHsn} />
               <col className={styles.colUnit} />
               <col className={styles.colQty} />
-              <col className={styles.colRate} />
+              <col className={styles.colListPrice} />
               <col className={styles.colDiscount} />
+              <col className={styles.colRate} />
               <col className={styles.colGst} />
+              <col className={styles.colGstAmt} />
               <col className={styles.colAmount} />
               <col className={styles.colAction} />
             </colgroup>
             <thead>
               <tr>
-                {["#", "Item", "HSN/SAC", "Unit", "Qty", "Rate (₹)", "Discount %", "GST %", "Amount", ""].map((h) => (
+                {["#", "Item", "HSN/SAC", "Unit", "Qty", "List Price (₹)", "Discount %", "Rate (₹)", "GST %", "GST Amt", "Amount", ""].map((h) => (
                   <th
                     key={h}
                     className={
-                      h === "Rate (₹)" || h === "Amount" ? styles.thRight
+                      h === "List Price (₹)" || h === "Rate (₹)" || h === "GST Amt" || h === "Amount" ? styles.thRight
                         : ["HSN/SAC", "Unit", "Qty", "Discount %", "GST %"].includes(h) ? styles.thCenter
                         : styles.th
                     }
                   >
                     {h}
-                    {["Item", "Qty", "Rate (₹)"].includes(h) && <RequiredStar />}
+                    {["Item", "Unit", "Qty", "List Price (₹)", "GST %"].includes(h) && <RequiredStar />}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {items.map((item, idx) => {
-                const { total } = calcPurchaseBillItem(item);
+                const { total, gstAmount } = calcPurchaseBillItem(item);
                 return (
                   <tr
                     key={item.key}
@@ -394,21 +302,22 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
                       <div className={styles.tdNameInner} title={item.name}>{item.name}</div>
                     </td>
                     <td className={styles.tdHsn}>
-                      <Input sz="sm" value={item.hsn} maxLength={8} onChange={(e) => updateItem(idx, "hsn", e.target.value.replace(/\D/g, "").slice(0, 8))} placeholder="HSN/SAC" />
+                      <Input sz="sm" aria-label={`HSN/SAC for ${item.name}`} value={item.hsn} maxLength={8} onChange={(e) => updateItem(idx, "hsn", e.target.value.replace(/\D/g, "").slice(0, 8))} placeholder="HSN/SAC" />
                     </td>
                     <td className={styles.tdUnit}>
-                      <span className={styles.unitBadge}>{item.unit}</span>
+                      <Input sz="sm" aria-label={`Unit for ${item.name}`} value={item.unit} onChange={(e) => updateItem(idx, "unit", e.target.value)} placeholder="Unit" className={styles.numInputCenter} />
                     </td>
                     <td className={styles.tdQty}>
-                      <Input sz="sm" type="number" min="1" step="1" value={item.quantity} onChange={(e) => updateItem(idx, "quantity", e.target.value)} className={styles.numInputCenter} />
+                      <Input sz="sm" aria-label={`Quantity for ${item.name}`} type="number" min="1" step="1" value={item.quantity} onChange={(e) => updateItem(idx, "quantity", e.target.value)} className={styles.numInputCenter} />
                     </td>
-                    <td className={styles.tdRate}>
-                      <Input sz="sm" type="text" inputMode="decimal" value={item.purchasePrice} onChange={(e) => updateItem(idx, "purchasePrice", e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" className={styles.numInputRight} />
+                    <td className={styles.tdListPrice}>
+                      <Input sz="sm" aria-label={`List price for ${item.name}`} type="text" inputMode="decimal" value={item.purchasePrice} onChange={(e) => updateItem(idx, "purchasePrice", e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" className={styles.numInputRight} />
                     </td>
                     <td className={styles.tdDiscount}>
                       <div className={styles.discountStack}>
                         <Input
                           sz="sm" type="text" inputMode="decimal"
+                          aria-label={`Discount percent for ${item.name}`}
                           value={
                             discountDrafts[item.key] ??
                             (toNum(item.discountPercent) > 0 ? Math.round(toNum(item.discountPercent) * 100) / 100 : "")
@@ -426,11 +335,21 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
                         })()}
                       </div>
                     </td>
-                    <td className={styles.tdGst}>
-                      <Select sz="sm" value={item.gstRate} onChange={(e) => updateItem(idx, "gstRate", e.target.value)}>
-                        {PURCHASE_BILL_GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
-                      </Select>
+                    <td className={styles.tdRate}>
+                      ₹{fmtCurrency(computeQuickAddNetRate(item.purchasePrice, item.discountPercent))}
                     </td>
+                    <td className={styles.tdGst}>
+                      <Input
+                        sz="sm" type="text" inputMode="decimal"
+                        aria-label={`GST rate for ${item.name}`}
+                        value={gstRateDrafts[item.key] ?? item.gstRate}
+                        onChange={(e) => handleGstRateChange(idx, item.key, e.target.value)}
+                        onBlur={() => clearGstRateDraft(item.key)}
+                        placeholder="18"
+                        className={styles.numInputCenter}
+                      />
+                    </td>
+                    <td className={styles.tdGstAmt}>₹{fmtCurrency(gstAmount)}</td>
                     <td className={styles.tdAmount}>₹{fmtCurrency(total)}</td>
                     <td className={styles.tdAction}>
                       <div className={styles.actionCellStack}>

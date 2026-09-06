@@ -1,16 +1,11 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
 import { ArrowIcon } from "@/components/ui/ArrowIcon";
-import { Modal } from "@/components/dialogs/Modal";
-import { OverlayLoader } from "@/components/ui/Spinner";
-import { Input, FormField } from "@/components/ui/Input";
-import { UnitCombo } from "@/components/ui/UnitCombo";
+import { Input } from "@/components/ui/Input";
 import { RequiredStar } from "@/components/ui/RequiredStar";
-import { bustCachePrefix } from "@/lib/useCache";
-import { useToast } from "@/components/ui/Toast";
-import { rules, validate } from "@/lib/validation";
+import { QuickAddProductModal, type QuickAddOutcome } from "@/components/products/QuickAddProductModal";
 import { animateSection } from "@/lib/animateSection";
 import { useDropUp } from "@/lib/useDropUp";
 import { lineBreakdown, makeInvoiceLineItemKey, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
@@ -28,86 +23,62 @@ interface InvoiceLineItemsCardProps {
 
 // Product search + line-items table, shared by New/Edit Invoice pages so the two forms can't drift apart.
 export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, items, setItems }: InvoiceLineItemsCardProps) {
-  const toast = useToast();
   const productSearchWrapRef = useRef<HTMLDivElement>(null);
   const [productSearch, setProductSearch] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const { dropUp, measure } = useDropUp(showProductDropdown);
   const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
-  const [quickAddProduct, setQuickAddProduct] = useState({ name: "", unit: "", price: "", gstRate: "18", hsn: "", skipCatalog: false });
-  const [quickAddErrors, setQuickAddErrors] = useState<Partial<Record<"name" | "price" | "unit" | "gstRate", string>>>({});
-  const [quickAddSaving, setQuickAddSaving] = useState(false);
-  const unitFieldId = useId();
+  const [quickAddInitialName, setQuickAddInitialName] = useState("");
 
   const filteredProducts = products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase()));
 
-  function addProduct(p: InvoiceProduct) {
+  function addProduct(p: InvoiceProduct, qty = 1) {
     setItems((prev) => {
       const existingIdx = prev.findIndex((i) => i.productId === p.id);
       if (existingIdx !== -1) {
-        return prev.map((item, i) => (i === existingIdx ? { ...item, qty: item.qty + 1 } : item));
+        return prev.map((item, i) => (i === existingIdx ? { ...item, qty: item.qty + qty } : item));
       }
-      return [...prev, { key: makeInvoiceLineItemKey(), productId: p.id, productName: p.name, unit: p.unit, qty: 1, price: p.price, gstRate: p.gstRate, hsn: p.hsn ?? "", discountPercent: 0 }];
+      // Selling Price still equalling Purchase Price means it was never deliberately set away from
+      // cost (no stored flag distinguishing "defaulted" from "priced at cost on purpose" — see
+      // ProductFormFields.tsx) — in that case prefill List Price/Discount % (the vendor's own
+      // terms) instead of the flat Selling Price, same as the quick-add modal, so "List Price (₹)"
+      // shows the product's real List Price and "Rate (₹)" auto-computes the net. Once Selling
+      // Price is genuinely set apart from cost, it's trusted as the deliberate customer-facing rate.
+      const looksDefaulted = p.purchasePrice != null && Math.abs(p.price - p.purchasePrice) < 0.01;
+      const useListPrice = looksDefaulted && p.listPrice != null;
+      const price = useListPrice ? p.listPrice! : p.price;
+      const discountPercent = useListPrice ? (p.discountPercent ?? 0) : 0;
+      return [...prev, { key: makeInvoiceLineItemKey(), productId: p.id, productName: p.name, unit: p.unit, qty, price, gstRate: p.gstRate, hsn: p.hsn ?? "", discountPercent }];
     });
     setProductSearch(""); setShowProductDropdown(false);
   }
 
   function openQuickAddProduct(name = productSearch) {
-    setQuickAddProduct({ name, unit: "", price: "", gstRate: "18", hsn: "", skipCatalog: false });
-    setQuickAddErrors({});
+    setQuickAddInitialName(name);
     setShowQuickAddProduct(true);
     setShowProductDropdown(false);
   }
 
-  async function handleQuickAddProduct() {
-    const errs: Partial<Record<"name" | "price" | "unit" | "gstRate", string>> = {
-      name: validate(quickAddProduct.name, rules.required("Item name is required."), rules.minLength(2), rules.maxLength(200)) ?? undefined,
-      price: validate(quickAddProduct.price, rules.required("Price is required."), rules.nonNegativeNumber()) ?? undefined,
-      unit: validate(quickAddProduct.unit, rules.required("Unit is required.")) ?? undefined,
-      gstRate: validate(quickAddProduct.gstRate, rules.required("GST rate is required."), rules.nonNegativeNumber()) ?? undefined,
-    };
-    if (Object.values(errs).some(Boolean)) { setQuickAddErrors(errs); return; }
-    setQuickAddErrors({});
-
-    if (quickAddProduct.skipCatalog) {
+  // A custom "just for this invoice" item has no product record to carry a Selling Price on, so its
+  // line is priced straight off the popup's List Price/Discount % (there's no other rate to use).
+  // But a newly-created CATALOG product goes through the same divergence-aware pricing as picking
+  // an existing product (addProduct() above) — the popup lets the user type a Selling Price
+  // distinct from the vendor's List Price/Discount terms, and that must reach this invoice's line,
+  // not just sit unused on the new product's own catalog record.
+  function handleQuickAddOutcome(outcome: QuickAddOutcome) {
+    if (outcome.skipCatalog) {
+      const listPriceNum = parseFloat(outcome.listPrice) || 0;
+      const discountPercentNum = Math.min(100, Math.max(0, parseFloat(outcome.discountPercent) || 0));
       setItems((prev) => [...prev, {
-        key: makeInvoiceLineItemKey(), productId: "", productName: quickAddProduct.name.trim(),
-        unit: quickAddProduct.unit.trim() || "Nos", qty: 1, price: parseFloat(quickAddProduct.price) || 0,
-        gstRate: parseFloat(quickAddProduct.gstRate) || 0, hsn: quickAddProduct.hsn.trim(), discountPercent: 0,
+        key: makeInvoiceLineItemKey(), productId: "", productName: outcome.name,
+        unit: outcome.unit, qty: outcome.qty, price: listPriceNum,
+        gstRate: parseFloat(outcome.gstRate) || 0, hsn: outcome.hsn, discountPercent: discountPercentNum,
       }]);
-      setShowQuickAddProduct(false);
-      setShowProductDropdown(false);
-      toast({ type: "success", title: "Item added", message: `"${quickAddProduct.name.trim()}" added to this invoice only.` });
       return;
     }
-
-    setQuickAddSaving(true);
-    try {
-      const res = await fetch("/api/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: quickAddProduct.name.trim(),
-          unit: quickAddProduct.unit.trim() || "Nos",
-          price: quickAddProduct.price,
-          gstRate: quickAddProduct.gstRate,
-          hsn: quickAddProduct.hsn.trim() || undefined,
-          stock: 0,
-        }),
-      });
-      const d = await res.json().catch(() => ({}));
-      setQuickAddSaving(false);
-      if (!res.ok) { toast({ type: "error", title: "Failed", message: d?.error ?? "Could not add product." }); return; }
-      bustCachePrefix("/api/products");
-      setProducts((prev) => [...prev, d]);
-      addProduct(d);
-      setShowQuickAddProduct(false);
-      setShowProductDropdown(false);
-      toast({ type: "success", title: "Product added", message: `"${d.name}" was created and added to this invoice.` });
-    } catch {
-      setQuickAddSaving(false);
-      toast({ type: "error", title: "Failed", message: "Network error." });
-    }
+    const d = outcome.product;
+    setProducts((prev) => [...prev, d]);
+    addProduct(d, outcome.qty);
   }
 
   function removeItem(idx: number) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
@@ -189,11 +160,75 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
     });
   }
 
+  // Same reject-outright-then-clamp pattern as handleDiscountPercentChange — GST rate is also a
+  // percentage, capped at 100 (mirrors PurchaseBillItemsTable's own handleGstRateChange exactly).
+  const [gstRateDrafts, setGstRateDrafts] = useState<Record<string, string>>({});
+
+  function handleGstRateChange(idx: number, key: string, raw: string) {
+    const cleaned = raw.replace(/%/g, "");
+    if (!/^(100(\.\d{0,2})?|\d{0,2}(\.\d{0,2})?)$/.test(cleaned)) return;
+    setGstRateDrafts((prev) => ({ ...prev, [key]: raw }));
+    const parsed = parseFloat(cleaned);
+    const clamped = isNaN(parsed) ? 0 : Math.min(100, Math.max(0, parsed));
+    updateItem(idx, "gstRate", clamped);
+  }
+
+  function clearGstRateDraft(key: string) {
+    setGstRateDrafts((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
+
+  // Price/Qty are stored as numbers on the item itself (unlike Purchase Bill's string-typed line
+  // items), so a naive `value={item.price}` + `parseFloat` on every keystroke re-renders the input
+  // back to the parsed number immediately — typing "125.50" collapses to "125" the instant "." is
+  // typed (parseFloat("125.") === 125), silently corrupting the next keystroke into "1255". Same
+  // draft-buffer pattern as discountDrafts above: hold the raw typed string until blur, only commit
+  // the parsed number to item state (which the actual GST/total math reads) alongside it.
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
+  const [qtyDrafts, setQtyDrafts] = useState<Record<string, string>>({});
+
+  function handlePriceChange(idx: number, key: string, raw: string) {
+    const cleaned = raw.replace(/[^\d.]/g, "");
+    if ((cleaned.match(/\./g) ?? []).length > 1) return;
+    setPriceDrafts((prev) => ({ ...prev, [key]: raw }));
+    const parsed = parseFloat(cleaned);
+    updateItem(idx, "price", isNaN(parsed) ? 0 : parsed);
+  }
+
+  function clearPriceDraft(key: string) {
+    setPriceDrafts((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
+
+  function handleQtyChange(idx: number, key: string, raw: string) {
+    const cleaned = raw.replace(/[^\d.]/g, "");
+    if ((cleaned.match(/\./g) ?? []).length > 1) return;
+    setQtyDrafts((prev) => ({ ...prev, [key]: raw }));
+    const parsed = parseFloat(cleaned);
+    updateItem(idx, "qty", isNaN(parsed) || parsed <= 0 ? 1 : parsed);
+  }
+
+  function clearQtyDraft(key: string) {
+    setQtyDrafts((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
+
   const section = animateSection(sectionIndex, `card ${styles.cardPad}`);
 
   return (
     <>
-    {quickAddSaving && <OverlayLoader text="Adding…" />}
     <div
       className={section.className}
       style={{ ...section.style, position: "relative", zIndex: showProductDropdown ? 5 : "auto" }}
@@ -242,74 +277,16 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
         )}
       </div>
 
-      <Modal
-        open={showQuickAddProduct}
-        onClose={() => { if (!quickAddSaving) setShowQuickAddProduct(false); }}
-        title="Add Custom Item"
-        variant="fullscreen"
-        footer={
-          <>
-            <Button type="button" variant="secondary" size="md" onClick={() => setShowQuickAddProduct(false)} disabled={quickAddSaving}>
-              Cancel
-            </Button>
-            <Button type="button" variant="primary" size="md" onClick={handleQuickAddProduct} disabled={quickAddSaving}>
-              {quickAddSaving ? "Adding…" : quickAddProduct.skipCatalog ? "Add to invoice" : "Save & use product"}
-            </Button>
-          </>
-        }
-      >
-        <div className={styles.customForm}>
-          <FormField label="Item Name" required error={quickAddErrors.name}>
-            <Input
-              type="text" placeholder="e.g. Beaker 250ml Borosilicate"
-              autoFocus
-              value={quickAddProduct.name}
-              onChange={(e) => { setQuickAddProduct((p) => ({ ...p, name: e.target.value })); setQuickAddErrors((p) => ({ ...p, name: undefined })); }}
-              maxLength={200}
-            />
-          </FormField>
-          <div className={styles.grid2}>
-            <FormField label="Unit" required error={quickAddErrors.unit} id={unitFieldId}>
-              <UnitCombo
-                id={unitFieldId}
-                value={quickAddProduct.unit}
-                onChange={(v) => { setQuickAddProduct((p) => ({ ...p, unit: v })); setQuickAddErrors((p) => ({ ...p, unit: undefined })); }}
-                suggestions={QUICK_ADD_UNITS}
-              />
-            </FormField>
-            <FormField label="Price (₹)" required error={quickAddErrors.price}>
-              <Input
-                type="text" inputMode="decimal" placeholder="0.00"
-                value={quickAddProduct.price}
-                onChange={(e) => { setQuickAddProduct((p) => ({ ...p, price: e.target.value })); setQuickAddErrors((p) => ({ ...p, price: undefined })); }}
-              />
-            </FormField>
-            <FormField label="GST %" required error={quickAddErrors.gstRate}>
-              <Input
-                type="text" inputMode="decimal" placeholder="18"
-                value={quickAddProduct.gstRate}
-                onChange={(e) => { setQuickAddProduct((p) => ({ ...p, gstRate: e.target.value })); setQuickAddErrors((p) => ({ ...p, gstRate: undefined })); }}
-              />
-            </FormField>
-            <FormField label="HSN/SAC" hint="Optional">
-              <Input
-                type="text" placeholder="e.g. 3822" maxLength={8}
-                value={quickAddProduct.hsn}
-                onChange={(e) => setQuickAddProduct((p) => ({ ...p, hsn: e.target.value.replace(/\D/g, "").slice(0, 8) }))}
-              />
-            </FormField>
-          </div>
-          <label className={styles.skipCatalogLabel}>
-            <input
-              type="checkbox"
-              checked={quickAddProduct.skipCatalog}
-              onChange={(e) => setQuickAddProduct((p) => ({ ...p, skipCatalog: e.target.checked }))}
-              className={styles.skipCatalogCheckbox}
-            />
-            Just for this invoice — don&apos;t save to catalog
-          </label>
-        </div>
-      </Modal>
+      {showQuickAddProduct && (
+        <QuickAddProductModal
+          onClose={() => setShowQuickAddProduct(false)}
+          onAdd={handleQuickAddOutcome}
+          entityLabel="invoice"
+          defaultUnit="Nos"
+          baseUnits={QUICK_ADD_UNITS}
+          initialName={quickAddInitialName}
+        />
+      )}
 
       {items.length > 0 ? (
         <>
@@ -337,11 +314,12 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
                 <th className={styles.th}>#</th>
                 <th className={styles.th}>Item<RequiredStar /></th>
                 <th className={styles.thCenter}>HSN/SAC</th>
-                <th className={styles.thCenter}>Unit</th>
+                <th className={styles.thCenter}>Unit<RequiredStar /></th>
                 <th className={styles.thCenter}>Qty<RequiredStar /></th>
                 <th className={styles.thCenter}>List Price (₹)<RequiredStar /></th>
                 <th className={styles.thCenter}>Discount %</th>
-                <th className={styles.thCenter}>GST %</th>
+                <th className={styles.thRight}>Rate (₹)</th>
+                <th className={styles.thCenter}>GST %<RequiredStar /></th>
                 <th className={styles.thRight}>GST Amt</th>
                 <th className={styles.thRight}>Total (₹)</th>
                 <th className={styles.thAction} />
@@ -365,41 +343,64 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
                     </td>
                     <td className={styles.tdCenter}>
                       <Input
-                        type="text" value={item.hsn} maxLength={8}
+                        sz="sm" type="text" value={item.hsn} maxLength={8}
                         onChange={(e) => updateItem(idx, "hsn", e.target.value.replace(/\D/g, "").slice(0, 8))}
+                        aria-label={`HSN/SAC for ${item.productName}`}
                         placeholder="HSN/SAC"
                         className={styles.hsnInput}
                       />
                     </td>
                     <td className={styles.tdCenter}>
-                      <span className={styles.unitBadge}>
-                        {item.unit}
-                      </span>
+                      <Input
+                        sz="sm" type="text" value={item.unit}
+                        onChange={(e) => updateItem(idx, "unit", e.target.value)}
+                        aria-label={`Unit for ${item.productName}`}
+                        placeholder="Unit"
+                        className={styles.unitInput}
+                      />
                     </td>
                     <td className={styles.tdCenter}>
                       <Input
-                        type="number" min="1" value={item.qty}
-                        onChange={(e) => updateItem(idx, "qty", parseFloat(e.target.value) || 1)}
+                        sz="sm" type="text" inputMode="decimal" min="1"
+                        value={qtyDrafts[item.key] ?? String(item.qty)}
+                        onChange={(e) => handleQtyChange(idx, item.key, e.target.value)}
+                        onBlur={() => clearQtyDraft(item.key)}
+                        aria-label={`Quantity for ${item.productName}`}
                         className={styles.qtyInput}
                       />
                     </td>
                     <td className={styles.tdRight}>
-                      <Input
-                        type="text" inputMode="decimal" value={item.price}
-                        onChange={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
-                        className={styles.priceInput}
-                      />
+                      <div className={styles.priceStack}>
+                        <Input
+                          sz="sm" type="text" inputMode="decimal"
+                          value={priceDrafts[item.key] ?? String(item.price)}
+                          onChange={(e) => handlePriceChange(idx, item.key, e.target.value)}
+                          onBlur={() => clearPriceDraft(item.key)}
+                          aria-label={`List price for ${item.productName}`}
+                          className={styles.priceInput}
+                        />
+                        {(() => {
+                          const product = products.find((p) => p.id === item.productId);
+                          // Compare against the net rate (post-discount), not the raw List Price —
+                          // a line prefilled from List Price/Discount % is usually gross-higher than
+                          // purchasePrice even when its actual net rate is at/below cost.
+                          const netRate = item.price * (1 - item.discountPercent / 100);
+                          const atOrBelowCost = product?.purchasePrice != null && product.purchasePrice > 0 && netRate <= product.purchasePrice;
+                          return atOrBelowCost ? <span className={styles.costWarningHint}>⚠ At/below cost</span> : null;
+                        })()}
+                      </div>
                     </td>
                     <td className={styles.discountCell}>
                       <div className={styles.discountStack}>
                         <Input
-                          type="text" inputMode="decimal"
+                          sz="sm" type="text" inputMode="decimal"
                           value={
                             discountDrafts[item.key] ??
                             (item.discountPercent > 0 ? Math.round(item.discountPercent * 100) / 100 : "")
                           }
                           onChange={(e) => handleDiscountPercentChange(idx, item.key, e.target.value)}
                           onBlur={() => clearDiscountDraft(item.key)}
+                          aria-label={`Discount percent for ${item.productName}`}
                           placeholder="0%"
                           className={styles.discountPercentInput}
                         />
@@ -410,10 +411,19 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
                         )}
                       </div>
                     </td>
+                    <td className={styles.tdRate}>
+                      ₹{(item.price * (1 - item.discountPercent / 100)).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
                     <td className={styles.tdCenter}>
-                      <span className={styles.gstBadge}>
-                        {item.gstRate}%
-                      </span>
+                      <Input
+                        sz="sm" type="text" inputMode="decimal"
+                        value={gstRateDrafts[item.key] ?? item.gstRate}
+                        onChange={(e) => handleGstRateChange(idx, item.key, e.target.value)}
+                        onBlur={() => clearGstRateDraft(item.key)}
+                        aria-label={`GST rate for ${item.productName}`}
+                        placeholder="18"
+                        className={styles.gstInput}
+                      />
                     </td>
                     <td className={styles.tdGstAmt}>
                       ₹{lineGst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

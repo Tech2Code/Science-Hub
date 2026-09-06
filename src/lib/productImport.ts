@@ -8,8 +8,12 @@ export interface ParsedProductRow {
   sku: string;
   hsn: string;
   unit: string;
+  // List Price/Discount % mirror the New Product form exactly — Purchase Price is never collected
+  // directly, it's always List Price × (1 − Discount %/100), same as ProductFormFields.tsx.
+  listPrice: string;
+  discountPercent: string;
+  // Selling Price — optional, defaults to Purchase Price at submit time (resolveSellingPrice()) same as the New Product form.
   price: string;
-  purchasePrice: string;
   gstRate: string;
   stock: string;
   minStock: string;
@@ -17,20 +21,21 @@ export interface ParsedProductRow {
   category: string;
 }
 
-type ColumnKey = "name" | "sku" | "hsn" | "unit" | "purchasePrice" | "price" | "gstRate" | "stock" | "minStock" | "brand" | "category";
+type ColumnKey = "name" | "sku" | "hsn" | "unit" | "listPrice" | "discountPercent" | "price" | "gstRate" | "stock" | "minStock" | "brand" | "category";
 
-// Order matters — first match wins, so "Purchase Price"/"Min Stock" are tried before the looser generic "price"/"stock" patterns.
+// Order matters — first match wins, so "List Price"/"Discount"/"Min Stock" are tried before the looser generic "price"/"stock" patterns.
 const COLUMN_PATTERNS: { key: ColumnKey; pattern: RegExp }[] = [
   { key: "sku", pattern: /^sku$|item\s*code|product\s*code/i },
   { key: "hsn", pattern: /hsn/i },
-  { key: "purchasePrice", pattern: /purchase\s*price|cost\s*price|^cost$/i },
+  { key: "listPrice", pattern: /list\s*price/i },
+  { key: "discountPercent", pattern: /discount/i },
   { key: "gstRate", pattern: /gst|tax\s*rate/i },
   { key: "minStock", pattern: /min(imum)?\s*stock|reorder/i },
   { key: "stock", pattern: /stock|qty|quantity/i },
   { key: "unit", pattern: /unit/i },
   { key: "brand", pattern: /brand/i },
   { key: "category", pattern: /category/i },
-  { key: "price", pattern: /price|rate/i },
+  { key: "price", pattern: /sell(ing)?\s*price|price|rate/i },
   { key: "name", pattern: /name|item|product|description/i },
 ];
 
@@ -86,10 +91,10 @@ export function parseProductRows(rows: string[][]): { items: ParsedProductRow[];
     dataRows = rows.slice(1);
   } else {
     const width = rows[0].length;
-    if (width >= 9) cols = { name: 0, sku: 1, hsn: 2, unit: 3, price: 4, purchasePrice: 5, gstRate: 6, stock: 7, minStock: 8 };
-    else if (width >= 6) cols = { name: 0, unit: 1, price: 2, gstRate: 3, stock: 4, minStock: 5 };
-    else if (width >= 4) cols = { name: 0, unit: 1, price: 2, stock: 3 };
-    else if (width >= 2) cols = { name: 0, price: 1 };
+    if (width >= 10) cols = { name: 0, sku: 1, hsn: 2, unit: 3, listPrice: 4, discountPercent: 5, price: 6, gstRate: 7, stock: 8, minStock: 9 };
+    else if (width >= 7) cols = { name: 0, unit: 1, listPrice: 2, discountPercent: 3, price: 4, gstRate: 5, stock: 6 };
+    else if (width >= 5) cols = { name: 0, unit: 1, listPrice: 2, price: 3, stock: 4 };
+    else if (width >= 2) cols = { name: 0, listPrice: 1 };
     else cols = { name: 0 };
   }
 
@@ -98,16 +103,19 @@ export function parseProductRows(rows: string[][]): { items: ParsedProductRow[];
   for (const row of dataRows) {
     if (row.every((c) => !c.trim())) continue;
     const name = cellAt(row, cols.name);
-    const price = numCellAt(row, cols.price);
-    if (!name || !price) { skipped++; continue; }
+    // List Price is the mandatory field (mirrors the New Product form) — Selling Price is optional
+    // and defaults to Purchase Price at submit time if left blank.
+    const listPrice = numCellAt(row, cols.listPrice);
+    if (!name || !listPrice) { skipped++; continue; }
     const unit = cellAt(row, cols.unit) || "Nos";
     items.push({
       name,
       sku: cellAt(row, cols.sku),
       hsn: cellAt(row, cols.hsn),
       unit,
-      price,
-      purchasePrice: numCellAt(row, cols.purchasePrice),
+      listPrice,
+      discountPercent: numCellAt(row, cols.discountPercent),
+      price: numCellAt(row, cols.price),
       gstRate: numCellAt(row, cols.gstRate) || "18",
       stock: numCellAt(row, cols.stock) || "0",
       // No Min Stock column in the sheet — suggest from the row's own unit rather than a flat "5",

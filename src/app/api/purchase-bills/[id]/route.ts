@@ -9,7 +9,7 @@ import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { purchaseBillLineBreakdown, normalizeCategoryInput } from "@/lib/purchaseBillForm";
 import { getBusinessSettings } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
-import { isFutureIstDate } from "@/lib/validation";
+import { isFutureIstDate, MAX_MONEY_VALUE } from "@/lib/validation";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
 
 class BillConflictError extends Error {}
@@ -103,12 +103,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       if (!Array.isArray(items) || items.length === 0) {
         return NextResponse.json({ error: "At least one item is required." }, { status: 400 });
       }
-      for (const item of items as { productId?: string; quantity: number; purchasePrice: number; discountPercent?: number; name?: string; hsn?: string; unit?: string }[]) {
+      for (const item of items as { productId?: string; quantity: number; purchasePrice: number; gstRate?: number; discountPercent?: number; name?: string; hsn?: string; unit?: string }[]) {
         const quantity = parseFloat(String(item.quantity));
         const purchasePrice = parseFloat(String(item.purchasePrice));
+        const gstRate = parseFloat(String(item.gstRate ?? 0));
         const discountPercent = parseFloat(String(item.discountPercent ?? 0));
         if (!(quantity > 0)) return NextResponse.json({ error: "Item quantity must be greater than 0" }, { status: 400 });
-        if (!(purchasePrice >= 0)) return NextResponse.json({ error: "Item price cannot be negative" }, { status: 400 });
+        if (!(purchasePrice >= 0 && purchasePrice <= MAX_MONEY_VALUE)) return NextResponse.json({ error: "Item price must be a valid, reasonable amount" }, { status: 400 });
+        if (!(gstRate >= 0 && gstRate <= 100)) return NextResponse.json({ error: "Item GST rate must be between 0 and 100%" }, { status: 400 });
         if (Number.isNaN(discountPercent) || discountPercent < 0 || discountPercent > 100) {
           return NextResponse.json({ error: "Item discount must be between 0 and 100%" }, { status: 400 });
         }
@@ -120,6 +122,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         }
         if (String(item.hsn ?? "").length > 50) {
           return NextResponse.json({ error: "Item HSN/SAC is too long (max 50 characters)." }, { status: 400 });
+        }
+        if (!String(item.unit ?? "").trim()) {
+          return NextResponse.json({ error: "Item unit is required." }, { status: 400 });
         }
         if (String(item.unit ?? "").length > 100) {
           return NextResponse.json({ error: "Item unit is too long (max 100 characters)." }, { status: 400 });

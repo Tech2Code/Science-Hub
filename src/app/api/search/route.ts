@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       prisma.invoice.findMany({
         where: {
           deletedAt: null,
-          OR: [{ invoiceNumber: ci }, { customer: { name: ci } }],
+          OR: [{ invoiceNumber: ci }, { customer: { name: ci } }, { items: { some: { name: ci } } }],
         },
         select: { id: true, invoiceNumber: true, total: true, status: true, customer: { select: { name: true } } },
         orderBy: { createdAt: "desc" },
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
       prisma.purchaseBill.findMany({
         where: {
           deletedAt: null,
-          OR: [{ billNumber: ci }, { vendor: { name: ci } }],
+          OR: [{ billNumber: ci }, { vendor: { name: ci } }, { items: { some: { name: ci } } }],
         },
         select: { id: true, billNumber: true, total: true, status: true, vendor: { select: { name: true } } },
         orderBy: { createdAt: "desc" },

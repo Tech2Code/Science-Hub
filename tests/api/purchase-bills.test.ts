@@ -13,7 +13,7 @@ async function makeVendor(overrides: Partial<{ state: string }> = {}) {
 
 async function makeProduct(overrides: Partial<{ stock: number; minStock: number }> = {}) {
   return testPrisma.product.create({
-    data: { name: "Beaker", price: 100, stock: overrides.stock ?? 10, minStock: overrides.minStock ?? 2 },
+    data: { name: "Beaker", price: 100, listPrice: 100, stock: overrides.stock ?? 10, minStock: overrides.minStock ?? 2 },
   });
 }
 
@@ -65,6 +65,62 @@ describe.skipIf(!hasTestDatabase)("POST /api/purchase-bills", () => {
       vendorId: vendor.id, items: [],
     }));
     expect(res.status).toBe(400);
+  });
+
+  it("rejects an item with no unit", async () => {
+    const vendor = await makeVendor();
+    const { POST } = await import("@/app/api/purchase-bills/route");
+    const res = await POST(jsonRequest("http://localhost/api/purchase-bills", "POST", {
+      vendorId: vendor.id, items: [{ ...baseItem, unit: "" }],
+    }));
+    expect(res.status).toBe(400);
+    const err = await res.json();
+    expect(err.error).toMatch(/unit/i);
+  });
+
+  it("rejects an item with a whitespace-only unit", async () => {
+    const vendor = await makeVendor();
+    const { POST } = await import("@/app/api/purchase-bills/route");
+    const res = await POST(jsonRequest("http://localhost/api/purchase-bills", "POST", {
+      vendorId: vendor.id, items: [{ ...baseItem, unit: "   " }],
+    }));
+    expect(res.status).toBe(400);
+    const err = await res.json();
+    expect(err.error).toMatch(/unit/i);
+  });
+
+  it("rejects an item with a GST rate over 100", async () => {
+    const vendor = await makeVendor();
+    const { POST } = await import("@/app/api/purchase-bills/route");
+    const res = await POST(jsonRequest("http://localhost/api/purchase-bills", "POST", {
+      vendorId: vendor.id, items: [{ ...baseItem, gstRate: 150 }],
+    }));
+    expect(res.status).toBe(400);
+    const err = await res.json();
+    expect(err.error).toMatch(/gst rate/i);
+  });
+
+  it("rejects an item with a negative GST rate", async () => {
+    const vendor = await makeVendor();
+    const { POST } = await import("@/app/api/purchase-bills/route");
+    const res = await POST(jsonRequest("http://localhost/api/purchase-bills", "POST", {
+      vendorId: vendor.id, items: [{ ...baseItem, gstRate: -5 }],
+    }));
+    expect(res.status).toBe(400);
+    const err = await res.json();
+    expect(err.error).toMatch(/gst rate/i);
+  });
+
+  it("persists a valid non-default GST rate onto the created line item", async () => {
+    const vendor = await makeVendor();
+    const { POST } = await import("@/app/api/purchase-bills/route");
+    const res = await POST(jsonRequest("http://localhost/api/purchase-bills", "POST", {
+      vendorId: vendor.id, items: [{ ...baseItem, gstRate: 12 }],
+    }));
+    expect(res.status).toBe(201);
+    const created = await res.json();
+    const item = await testPrisma.purchaseBillItem.findFirst({ where: { purchaseBillId: created.id } });
+    expect(item?.gstRate).toBe(12);
   });
 
   it("rejects a negative bill-level discount", async () => {
@@ -206,6 +262,63 @@ describe.skipIf(!hasTestDatabase)("PUT /api/purchase-bills/[id]", () => {
     expect(res.status).toBe(400);
     const err = await res.json();
     expect(err.error).toMatch(/cancelled/i);
+  });
+
+  it("rejects an item with a GST rate over 100 on edit", async () => {
+    const vendor = await makeVendor();
+    const user = await testPrisma.user.findFirstOrThrow();
+    const bill = await testPrisma.purchaseBill.create({
+      data: {
+        billNumber: "PB-2026-0007", vendorId: vendor.id, subtotal: 100, taxAmount: 18,
+        total: 118, paidAmount: 0, status: "unpaid", createdByUserId: user.id,
+      },
+    });
+    const { PUT } = await import("@/app/api/purchase-bills/[id]/route");
+    const res = await PUT(
+      jsonRequest(`http://localhost/api/purchase-bills/${bill.id}`, "PUT", { items: [{ ...baseItem, gstRate: 150 }] }),
+      paramsOf(bill.id)
+    );
+    expect(res.status).toBe(400);
+    const err = await res.json();
+    expect(err.error).toMatch(/gst rate/i);
+  });
+
+  it("rejects an item with a negative GST rate on edit", async () => {
+    const vendor = await makeVendor();
+    const user = await testPrisma.user.findFirstOrThrow();
+    const bill = await testPrisma.purchaseBill.create({
+      data: {
+        billNumber: "PB-2026-0008", vendorId: vendor.id, subtotal: 100, taxAmount: 18,
+        total: 118, paidAmount: 0, status: "unpaid", createdByUserId: user.id,
+      },
+    });
+    const { PUT } = await import("@/app/api/purchase-bills/[id]/route");
+    const res = await PUT(
+      jsonRequest(`http://localhost/api/purchase-bills/${bill.id}`, "PUT", { items: [{ ...baseItem, gstRate: -5 }] }),
+      paramsOf(bill.id)
+    );
+    expect(res.status).toBe(400);
+    const err = await res.json();
+    expect(err.error).toMatch(/gst rate/i);
+  });
+
+  it("rejects an item with no unit on edit", async () => {
+    const vendor = await makeVendor();
+    const user = await testPrisma.user.findFirstOrThrow();
+    const bill = await testPrisma.purchaseBill.create({
+      data: {
+        billNumber: "PB-2026-0009", vendorId: vendor.id, subtotal: 100, taxAmount: 18,
+        total: 118, paidAmount: 0, status: "unpaid", createdByUserId: user.id,
+      },
+    });
+    const { PUT } = await import("@/app/api/purchase-bills/[id]/route");
+    const res = await PUT(
+      jsonRequest(`http://localhost/api/purchase-bills/${bill.id}`, "PUT", { items: [{ ...baseItem, unit: "" }] }),
+      paramsOf(bill.id)
+    );
+    expect(res.status).toBe(400);
+    const err = await res.json();
+    expect(err.error).toMatch(/unit/i);
   });
 
   it("rejects a negative discount value", async () => {

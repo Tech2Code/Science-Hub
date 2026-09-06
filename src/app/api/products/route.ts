@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getProducts, type ProductSort, type ProductStockFilter } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
-import { validateProductInput, validateNumericField } from "@/lib/validation";
+import { validateProductInput, validateNumericField, MAX_MONEY_VALUE } from "@/lib/validation";
 import { parsePageParams } from "@/lib/listQuery";
 
 export async function GET(request: NextRequest) {
@@ -41,22 +41,29 @@ export async function POST(request: NextRequest) {
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
-    const { name, description, sku, hsn, unit, price, purchasePrice, gstRate, stock, minStock, categoryId, brandId } = body;
+    const { name, description, sku, hsn, unit, price, purchasePrice, listPrice, discountPercent, gstRate, stock, minStock, categoryId, brandId } = body;
     const coreErr = validateProductInput({ name, price, sku, hsn, description }, true);
     if (coreErr) return NextResponse.json({ error: coreErr }, { status: 400 });
     const trimmedName = (name as string).trim();
 
     const parsedPrice = parseFloat(price);
     const parsedPurchasePrice = purchasePrice !== undefined && purchasePrice !== null && purchasePrice !== "" ? parseFloat(purchasePrice) : null;
+    const parsedListPrice = listPrice !== undefined && listPrice !== null && listPrice !== "" ? parseFloat(listPrice) : null;
+    const parsedDiscountPercent = discountPercent !== undefined && discountPercent !== null && discountPercent !== "" ? parseFloat(discountPercent) : 0;
     const parsedGstRate = gstRate !== undefined ? parseFloat(gstRate) : 18;
     const parsedStock = stock !== undefined ? parseFloat(stock) : 0;
     const parsedMinStock = minStock !== undefined ? parseFloat(minStock) : 5;
+    if (parsedListPrice === null) {
+      return NextResponse.json({ error: "List price is required." }, { status: 400 });
+    }
     const numericErr =
-      validateNumericField("price", parsedPrice, { min: 0 }) ||
+      validateNumericField("price", parsedPrice, { min: 0, max: MAX_MONEY_VALUE }) ||
       validateNumericField("gstRate", parsedGstRate, { min: 0, max: 100 }) ||
       validateNumericField("stock", parsedStock, { min: 0, integer: true }) ||
       validateNumericField("minStock", parsedMinStock, { min: 0, integer: true }) ||
-      (parsedPurchasePrice !== null ? validateNumericField("purchasePrice", parsedPurchasePrice, { min: 0 }) : null);
+      validateNumericField("discountPercent", parsedDiscountPercent, { min: 0, max: 100 }) ||
+      (parsedPurchasePrice !== null ? validateNumericField("purchasePrice", parsedPurchasePrice, { min: 0, max: MAX_MONEY_VALUE }) : "Purchase price is required.") ||
+      validateNumericField("listPrice", parsedListPrice, { min: 0, max: MAX_MONEY_VALUE });
     if (numericErr) return NextResponse.json({ error: numericErr }, { status: 400 });
 
     const trimmedSku = typeof sku === "string" ? sku.trim() || null : null;
@@ -75,6 +82,8 @@ export async function POST(request: NextRequest) {
         name: trimmedName, description, sku: trimmedSku, hsn: trimmedHsn, unit,
         price: parsedPrice,
         purchasePrice: parsedPurchasePrice,
+        listPrice: parsedListPrice,
+        discountPercent: parsedDiscountPercent,
         gstRate: parsedGstRate,
         stock: parsedStock,
         minStock: parsedMinStock,

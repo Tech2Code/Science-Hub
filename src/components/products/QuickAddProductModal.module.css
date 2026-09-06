@@ -1,0 +1,25 @@
+/* ── Quick-add item form (rendered inside a Modal) ───────────────────── */
+/* Matches the app-wide .form-grid-2/.form-grid-3 gap — wide enough for FormField's
+   absolutely-positioned error text to not overlap the next row. */
+.customForm {
+  display: flex;
+  flex-direction: column;
+  gap: 1.325rem;
+}
+
+/* This grid lives inside a fixed-width Modal, not the full page, so a viewport
+   media query would keep forcing cramped columns — 2 columns fits its ~34rem width. */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.325rem 1rem; }
+@media (max-width: 480px) {
+  .grid2 { grid-template-columns: 1fr; }
+}
+
+.skipCatalogLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--c-text-3);
+  cursor: pointer;
+}
+.skipCatalogCheckbox { width: 0.9rem; height: 0.9rem; accent-color: var(--c-blue); cursor: pointer; }

@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     for (const p of productData) {
       const prod = await prisma.product.create({
         data: {
-          name: p.name, sku: p.sku, unit: p.unit, price: p.price, gstRate: p.gstRate,
+          name: p.name, sku: p.sku, unit: p.unit, price: p.price, listPrice: p.price, gstRate: p.gstRate,
           stock: p.stock, minStock: p.minStock, categoryId: cats[p.cat], brandId: brands[p.brand],
         },
       });

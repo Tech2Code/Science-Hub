@@ -95,6 +95,9 @@
 .hintSuccess {
   color: var(--c-green-text);
 }
+.hintWarning {
+  color: var(--c-amber-text);
+}
 
 /* ── Error state — auto-applied via [data-error] on the field wrapper ── */
 [data-error] .input,

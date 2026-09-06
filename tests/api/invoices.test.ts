@@ -94,10 +94,35 @@ describe.skipIf(!hasTestDatabase)("POST /api/invoices", () => {
     expect(res.status).toBe(400);
   });
 
+  // GST rate moved from a fixed dropdown (0/5/12/18/28) to free-text — server must still cap it at 100.
+  it("rejects an item gstRate over 100 even though the client UI would normally prevent it", async () => {
+    const customer = await makeCustomer();
+    const { POST } = await import("@/app/api/invoices/route");
+    const res = await POST(jsonRequest("http://localhost/api/invoices", "POST", {
+      customerId: customer.id, placeOfSupply: "Delhi",
+      items: [{ ...baseItem, gstRate: 150 }],
+    }));
+    expect(res.status).toBe(400);
+    const err = await res.json();
+    expect(err.error).toMatch(/gst rate/i);
+  });
+
+  it("rejects a negative item gstRate", async () => {
+    const customer = await makeCustomer();
+    const { POST } = await import("@/app/api/invoices/route");
+    const res = await POST(jsonRequest("http://localhost/api/invoices", "POST", {
+      customerId: customer.id, placeOfSupply: "Delhi",
+      items: [{ ...baseItem, gstRate: -5 }],
+    }));
+    expect(res.status).toBe(400);
+    const err = await res.json();
+    expect(err.error).toMatch(/gst rate/i);
+  });
+
   it("decrements stock for a catalog product line item", async () => {
     const customer = await makeCustomer();
     const product = await testPrisma.product.create({
-      data: { name: "Beaker", price: 100, stock: 10, minStock: 2 },
+      data: { name: "Beaker", price: 100, listPrice: 100, stock: 10, minStock: 2 },
     });
     const { POST } = await import("@/app/api/invoices/route");
     const res = await POST(jsonRequest("http://localhost/api/invoices", "POST", {

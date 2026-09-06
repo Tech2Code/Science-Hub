@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
-import { validateProductInput, validateNumericField } from "@/lib/validation";
+import { validateProductInput, validateNumericField, MAX_MONEY_VALUE } from "@/lib/validation";
 
 export async function GET(
   request: NextRequest,
@@ -56,7 +56,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { name, description, sku, hsn, unit, price, purchasePrice, gstRate, minStock, categoryId, brandId, expectedUpdatedAt } = body;
+    const { name, description, sku, hsn, unit, price, purchasePrice, listPrice, discountPercent, gstRate, minStock, categoryId, brandId, expectedUpdatedAt } = body;
 
     const existing = await prisma.product.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existing) return NextResponse.json({ error: "Product not found" }, { status: 404 });
@@ -87,19 +87,28 @@ export async function PUT(
     if (unit !== undefined) data.unit = unit;
     if (purchasePrice !== undefined) {
       if (purchasePrice === null || purchasePrice === "") {
-        data.purchasePrice = null;
-      } else {
-        const parsed = parseFloat(purchasePrice as string);
-        const err = validateNumericField("purchasePrice", parsed, { min: 0 });
-        if (err) return NextResponse.json({ error: err }, { status: 400 });
-        data.purchasePrice = parsed;
+        return NextResponse.json({ error: "Purchase price is required." }, { status: 400 });
       }
+      const parsed = parseFloat(purchasePrice as string);
+      const err = validateNumericField("purchasePrice", parsed, { min: 0, max: MAX_MONEY_VALUE });
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
+      data.purchasePrice = parsed;
+    }
+    if (listPrice !== undefined) {
+      if (listPrice === null || listPrice === "") {
+        return NextResponse.json({ error: "List price is required." }, { status: 400 });
+      }
+      const parsed = parseFloat(listPrice as string);
+      const err = validateNumericField("listPrice", parsed, { min: 0, max: MAX_MONEY_VALUE });
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
+      data.listPrice = parsed;
     }
     // `stock` is deliberately not accepted here — changes must go through /api/products/[id]/adjust-stock so the ledger stays authoritative.
     const numericFields: [string, unknown, number, number, boolean][] = [
-      ["price", price, 0, Infinity, false],
+      ["price", price, 0, MAX_MONEY_VALUE, false],
       ["gstRate", gstRate, 0, 100, false],
       ["minStock", minStock, 0, Infinity, true],
+      ["discountPercent", discountPercent, 0, 100, false],
     ];
     for (const [key, value, min, max, mustBeInteger] of numericFields) {
       if (value === undefined) continue;

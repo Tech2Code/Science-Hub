@@ -41,12 +41,13 @@ interface FieldProps {
   required?: boolean;
   hint?: string;
   hintSuccess?: boolean;
+  hintWarning?: boolean;
   error?: string;
   children: React.ReactNode;
   // When children isn't a single cloneable element, auto-id injection can't find a control — pass the same id here and on the actual control instead.
   id?: string;
 }
-export function FormField({ label, required, hint, hintSuccess, error, children, id }: FieldProps) {
+export function FormField({ label, required, hint, hintSuccess, hintWarning, error, children, id }: FieldProps) {
   const generatedId = useId();
   const child = !id && React.isValidElement(children)
     ? (children as React.ReactElement<{ id?: string; "aria-describedby"?: string }>)
@@ -73,7 +74,11 @@ export function FormField({ label, required, hint, hintSuccess, error, children,
           {error}
         </p>
       )}
-      {!error && hint && <p id={`${fieldId}-hint`} className={`${styles.hint} ${hintSuccess ? styles.hintSuccess : ""}`}>{hint}</p>}
+      {!error && hint && (
+        <p id={`${fieldId}-hint`} className={`${styles.hint} ${hintSuccess ? styles.hintSuccess : ""} ${hintWarning ? styles.hintWarning : ""}`}>
+          {hint}
+        </p>
+      )}
     </div>
   );
 }

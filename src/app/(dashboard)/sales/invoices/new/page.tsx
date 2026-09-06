@@ -19,7 +19,7 @@ import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
 import { computeInvoiceTotals, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
 import styles from "./new.module.css";
-import { bustCachePrefix } from "@/lib/useCache";
+import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate, validateForm, hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -402,6 +402,7 @@ export default function NewInvoicePage() {
       bustCachePrefix("/api/invoices");
       bustCachePrefix("/api/reports");
       bustCachePrefix("/api/products");
+      bustCache("/api/units");
       toast({ type: "success", title: "Invoice created", message: "Invoice saved successfully." });
       if (d.stockWarnings?.length > 0) {
         toast({ type: "warning", title: "Stock went negative", message: d.stockWarnings.join(", ") });

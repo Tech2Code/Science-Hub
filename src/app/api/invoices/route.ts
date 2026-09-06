@@ -10,6 +10,7 @@ import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
+import { MAX_MONEY_VALUE } from "@/lib/validation";
 import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
 import { checkCustomerCreditLimit, type CreditLimitCheck } from "@/lib/creditLimit";
 
@@ -105,11 +106,11 @@ export async function POST(request: NextRequest) {
       if (!(quantity > 0)) {
         return NextResponse.json({ error: "Item quantity must be greater than 0" }, { status: 400 });
       }
-      if (!(price >= 0)) {
-        return NextResponse.json({ error: "Item price cannot be negative" }, { status: 400 });
+      if (!(price >= 0 && price <= MAX_MONEY_VALUE)) {
+        return NextResponse.json({ error: "Item price must be a valid, reasonable amount" }, { status: 400 });
       }
-      if (!(gstRate >= 0)) {
-        return NextResponse.json({ error: "Item GST rate cannot be negative" }, { status: 400 });
+      if (!(gstRate >= 0 && gstRate <= 100)) {
+        return NextResponse.json({ error: "Item GST rate must be between 0 and 100%" }, { status: 400 });
       }
       if (!(discountPercent >= 0 && discountPercent <= 100)) {
         return NextResponse.json({ error: "Item discount must be between 0 and 100%" }, { status: 400 });
@@ -137,6 +138,9 @@ export async function POST(request: NextRequest) {
       }
       if (String(item.hsn ?? "").length > 50) {
         return NextResponse.json({ error: "Item HSN/SAC is too long (max 50 characters)." }, { status: 400 });
+      }
+      if (!String(item.unit ?? "").trim()) {
+        return NextResponse.json({ error: "Item unit is required." }, { status: 400 });
       }
       if (String(item.unit ?? "").length > 100) {
         return NextResponse.json({ error: "Item unit is too long (max 100 characters)." }, { status: 400 });
@@ -197,7 +201,7 @@ export async function POST(request: NextRequest) {
         name: product?.name || (item.name ?? "").trim() || "Unknown Product",
         hsn: (item.hsn ?? product?.hsn ?? "").trim(),
         quantity,
-        unit: product?.unit || item.unit || "Nos",
+        unit: item.unit || product?.unit || "Nos",
         price,
         discountPercent,
         discountAmount,

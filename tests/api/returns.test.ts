@@ -13,7 +13,7 @@ async function makeCustomer() {
 
 async function makeProduct(overrides: Partial<{ stock: number }> = {}) {
   return testPrisma.product.create({
-    data: { name: "Beaker", price: 100, stock: overrides.stock ?? 100, minStock: 2 },
+    data: { name: "Beaker", price: 100, listPrice: 100, stock: overrides.stock ?? 100, minStock: 2 },
   });
 }
 
@@ -22,19 +22,22 @@ async function makeProduct(overrides: Partial<{ stock: number }> = {}) {
 // quantity/price/gstRate/paidAmount, so the return route's own math and
 // guard-rails are what's actually exercised.
 async function makeInvoice(opts: {
-  productId: string; quantity: number; price: number; gstRate: number; paidAmount: number;
+  productId: string; quantity: number; price: number; gstRate: number; paidAmount: number; discountPercent?: number;
 }) {
   const customer = await makeCustomer();
   const user = await testPrisma.user.findFirstOrThrow();
+  const discountPercent = opts.discountPercent ?? 0;
   const gross = opts.quantity * opts.price;
-  const gstAmount = (gross * opts.gstRate) / 100;
-  const total = gross + gstAmount;
+  const discountAmount = (gross * discountPercent) / 100;
+  const taxable = gross - discountAmount;
+  const gstAmount = (taxable * opts.gstRate) / 100;
+  const total = taxable + gstAmount;
   const invoice = await testPrisma.invoice.create({
     data: {
       invoiceNumber: `SH-2026-${Math.floor(Math.random() * 100000).toString().padStart(5, "0")}`,
       customerId: customer.id,
       userId: user.id,
-      subtotal: gross,
+      subtotal: taxable,
       cgst: gstAmount / 2,
       sgst: gstAmount / 2,
       igst: 0,
@@ -46,7 +49,7 @@ async function makeInvoice(opts: {
       items: {
         create: [{
           productId: opts.productId, name: "Beaker", hsn: "", quantity: opts.quantity, unit: "Nos",
-          price: opts.price, gstRate: opts.gstRate, gstAmount, total: opts.price * opts.quantity + gstAmount,
+          price: opts.price, discountPercent, discountAmount, gstRate: opts.gstRate, gstAmount, total,
         }],
       },
     },
@@ -142,6 +145,29 @@ describe.skipIf(!hasTestDatabase)("POST /api/invoices/[id]/returns", () => {
     expect(data.subtotal).toBe(400);
     expect(data.cgst + data.sgst + data.igst).toBe(72);
     expect(data.total).toBe(472);
+  });
+
+  it("computes the return net of the original invoice line's discount percent", async () => {
+    const product = await makeProduct();
+    // 10 units @ 100 with a 20% line discount, GST-free for simplicity: taxable 800.
+    const invoice = await makeInvoice({ productId: product.id, quantity: 10, price: 100, gstRate: 0, paidAmount: 800, discountPercent: 20 });
+
+    const { POST } = await import("@/app/api/invoices/[id]/returns/route");
+    // Return 4 of the 10 units at the same List Price/discount as the original line.
+    const res = await POST(
+      jsonRequest(`http://localhost/api/invoices/${invoice.id}/returns`, "POST", {
+        items: [{ productId: product.id, name: "Beaker", quantity: 4, price: 100, discountPercent: 20 }],
+      }),
+      paramsOf(invoice.id)
+    );
+    expect(res.status).toBe(201);
+    const data = await res.json();
+    // 4 * 100 = 400 gross, less 20% discount (80) = 320 net — not 400, which would over-credit
+    // the customer by refunding the pre-discount price.
+    expect(data.subtotal).toBe(320);
+    expect(data.total).toBe(320);
+    expect(data.items[0].discountPercent).toBe(20);
+    expect(data.items[0].discountAmount).toBe(80);
   });
 
   it("restores stock when a return is created", async () => {

@@ -38,10 +38,10 @@ interface ReturnRecord {
   id: string; date: string; notes: string | null; createdAt: string;
   creditNoteNumber: string | null;
   subtotal: number; cgst: number; sgst: number; igst: number; roundOff: number; total: number;
-  items: { id: string; name: string; quantity: number; price: number; gstRate: number; gstAmount: number; total: number; productId: string | null }[];
+  items: { id: string; name: string; quantity: number; price: number; discountPercent?: number; gstRate: number; gstAmount: number; total: number; productId: string | null }[];
 }
 interface ReturnFormItem {
-  productId: string; name: string; price: number; selected: boolean; qty: number; maxQty: number; qtyText: string;
+  productId: string; name: string; price: number; discountPercent: number; selected: boolean; qty: number; maxQty: number; qtyText: string;
 }
 interface Invoice {
   id: string; invoiceNumber: string; date: string; dueDate?: string; createdAt: string;
@@ -67,6 +67,9 @@ interface BusinessSettings {
 
 const PAYMENT_METHODS = ["Cash", "UPI", "NEFT", "RTGS", "Cheque", "Card", "Other"];
 const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// A returned line's own `price` is the original invoice line's List Price (gross, pre-discount) —
+// this derives the actual net rate charged/refunded, same as the main item table's Rate (₹) column.
+const returnItemRate = (ri: { price: number; discountPercent?: number }) => ri.price * (1 - (ri.discountPercent ?? 0) / 100);
 // Use createdAt (always a full server timestamp) for display rather than date
 // (which is a user-picked date-only value stored as UTC midnight).
 function parseDate(d: string) {
@@ -345,6 +348,7 @@ export default function InvoiceDetailPage() {
       productId: item.productId,
       name: item.name,
       price: item.price,
+      discountPercent: item.discountPercent ?? 0,
       selected: false,
       qty: 1,
       maxQty: item.quantity - (alreadyReturned[item.productId] ?? 0),
@@ -381,7 +385,7 @@ export default function InvoiceDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: selected.map(ri => ({ productId: ri.productId, name: ri.name, quantity: ri.qty, price: ri.price })),
+          items: selected.map(ri => ({ productId: ri.productId, name: ri.name, quantity: ri.qty, price: ri.price, discountPercent: ri.discountPercent })),
           notes: returnNotes || undefined,
           date: returnDate || undefined,
           idempotencyKey: returnIdempotency.key(),
@@ -1745,7 +1749,7 @@ export default function InvoiceDetailPage() {
                     <tr>
                       <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date</td>
                       <td colSpan={itemCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Item</td>
-                      <td colSpan={qtyRateCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Qty × List Price</td>
+                      <td colSpan={qtyRateCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Qty × Rate</td>
                       <td colSpan={gstCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>GST</td>
                       <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
                     </tr>
@@ -1760,7 +1764,7 @@ export default function InvoiceDetailPage() {
                             </td>
                           )}
                           <td colSpan={itemCols} style={{ ...bd, color: "var(--inv-tx2)" }}>{ri.name}</td>
-                          <td colSpan={qtyRateCols} style={{ ...bd, color: "var(--inv-tx3)" }}>{ri.quantity} × ₹{fmt(ri.price)}</td>
+                          <td colSpan={qtyRateCols} style={{ ...bd, color: "var(--inv-tx3)" }}>{ri.quantity} × ₹{fmt(returnItemRate(ri))}</td>
                           <td colSpan={gstCols} style={{ ...bd, textAlign: "right", color: "var(--inv-tx3)" }}>{ri.gstRate}% ({fmt(ri.gstAmount)})</td>
                           <td colSpan={amountCols} style={{ ...bd, textAlign: "right", color: "var(--inv-red)", fontWeight: 600 }}>−{fmt(ri.total)}</td>
                         </tr>
@@ -1888,7 +1892,7 @@ export default function InvoiceDetailPage() {
                   <tr key={ri.id}>
                     <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)" }}>{ri.name}</td>
                     <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{ri.quantity}</td>
-                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{fmt(ri.price)}</td>
+                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{fmt(returnItemRate(ri))}</td>
                     <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{ri.gstRate}%</td>
                     <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{fmt(ri.gstAmount)}</td>
                     <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{fmt(ri.total)}</td>
@@ -2150,7 +2154,7 @@ export default function InvoiceDetailPage() {
                           <span className={styles.returnLineItemName}>
                             {ri.name}
                             <span className={styles.returnLineItemQty}> ×{ri.quantity}</span>
-                            <span className={styles.returnLineItemPrice}> @ ₹{fmt(ri.price)}</span>
+                            <span className={styles.returnLineItemPrice}> @ ₹{fmt(returnItemRate(ri))}</span>
                             {ri.gstRate > 0 && <span className={styles.returnLineItemPrice}> + {ri.gstRate}% GST</span>}
                           </span>
                           <span className={styles.returnLineItemTotal}>₹{fmt(ri.total)}</span>

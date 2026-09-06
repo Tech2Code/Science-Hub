@@ -16,6 +16,15 @@ export function makeInvoiceLineItemKey() {
 
 export interface InvoiceProduct {
   id: string; name: string; unit: string; price: number; gstRate: number; stock: number; hsn?: string | null;
+  // Purchase Price — used both to flag a line priced at/below cost, and (with listPrice/
+  // discountPercent below) to decide what InvoiceLineItemsCard.tsx's addProduct() prefills a new
+  // line with. There's no stored flag distinguishing "Selling Price was left at its auto-default"
+  // from "deliberately priced at cost" (see ProductFormFields.tsx's resolveSellingPrice()) — a
+  // Selling Price that still equals Purchase Price is treated as the former, and List Price/
+  // Discount % (the vendor's own terms) is prefilled instead when available.
+  purchasePrice?: number | null;
+  listPrice?: number | null;
+  discountPercent?: number | null;
 }
 
 // Subset of InvoiceLineItem needed for GST math — lets route handlers (plain request-body shapes) reuse this.

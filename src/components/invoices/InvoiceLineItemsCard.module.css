@@ -95,30 +95,7 @@
   cursor: pointer;
 }
 
-/* ── Quick-add product form (rendered inside a Modal) ───────────────────── */
-/* Matches the app-wide .form-grid-2/.form-grid-3 gap — wide enough for FormField's
-   absolutely-positioned error text to not overlap the next row. */
-.customForm {
-  display: flex;
-  flex-direction: column;
-  gap: 1.325rem;
-}
-
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.325rem 1rem; }
-
-@media (max-width: 480px) {
-  .grid2 { grid-template-columns: 1fr; }
-}
-
-.skipCatalogLabel {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.78rem;
-  color: var(--c-text-3);
-  cursor: pointer;
-}
-.skipCatalogCheckbox { width: 0.9rem; height: 0.9rem; accent-color: var(--c-blue); cursor: pointer; }
+/* Quick-add product form now lives in the shared QuickAddProductModal.module.css. */
 
 .formActions { display: flex; justify-content: flex-end; gap: 0.625rem; }
 
@@ -159,50 +136,25 @@
 .itemRow { border-bottom: 1px solid var(--c-border); }
 .itemRowAlt { composes: itemRow; background: var(--c-bg-sub); }
 
-.tdIndex { padding: 0.45rem 0.625rem; color: var(--c-text-4); font-size: 0.65rem; font-weight: 500; }
-.tdProduct { padding: 0.45rem 0.625rem; font-weight: 600; color: var(--c-text); max-width: 10.8rem; min-width: 6rem; }
+.tdIndex { padding: 0.32rem 0.4rem; color: var(--c-text-4); font-size: 0.65rem; font-weight: 500; }
+.tdProduct { padding: 0.32rem 0.4rem; font-weight: 600; color: var(--c-text); max-width: 10.8rem; min-width: 6rem; }
 .tdProductInner { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tdCenter { padding: 0.45rem 0.625rem; text-align: center; }
-.tdRight { padding: 0.45rem 0.625rem; text-align: right; }
-.tdGstAmt { padding: 0.45rem 0.625rem; text-align: right; font-size: 0.7rem; color: var(--c-text-3); }
-.tdTotal { padding: 0.45rem 0.625rem; text-align: right; font-weight: 700; font-size: 0.75rem; color: var(--c-text); }
-.tdActionCell { padding: 0.45rem 0.375rem; text-align: center; }
+.tdCenter { padding: 0.32rem 0.4rem; text-align: center; }
+.tdRight { padding: 0.32rem 0.4rem; text-align: right; }
+.tdGstAmt { padding: 0.32rem 0.4rem; text-align: right; font-size: 0.7rem; color: var(--c-text-3); }
+.tdRate { padding: 0.32rem 0.4rem; text-align: right; font-weight: 500; color: var(--c-text-2); white-space: nowrap; }
+.tdTotal { padding: 0.32rem 0.4rem; text-align: right; font-weight: 700; font-size: 0.75rem; color: var(--c-text); }
+.tdActionCell { padding: 0.32rem 0.2rem; text-align: center; }
 
-.unitBadge {
-  display: inline-block;
-  padding: 0.125rem 0.5rem;
-  border-radius: 0.375rem;
-  background: var(--c-bg-sub);
-  border: 1px solid var(--c-border);
-  font-size: 0.65rem;
-  color: var(--c-text-2);
-  font-weight: 500;
-}
-
-.gstBadge {
-  display: inline-block;
-  padding: 0.125rem 0.5rem;
-  border-radius: 0.375rem;
-  background: var(--c-green-bg);
-  border: 1px solid var(--c-green-border);
-  font-size: 0.65rem;
-  color: var(--c-green-text);
-  font-weight: 600;
-}
-
+/* Sizing/chrome for every editable cell input comes from the shared Input component's own
+   sz="sm" variant (Input.module.css's .sm, guaranteed to win the cascade since it's defined in
+   the same stylesheet as the base .input it overrides) — these classes only handle per-column
+   width/alignment, mirroring PurchaseBillItemsTable's numInputCenter/numInputRight exactly. */
 .qtyInput {
   width: 100%;
   min-width: 3.5rem;
   box-sizing: border-box;
-  padding: 0.375rem 0.5rem;
-  border-radius: 0.375rem;
-  border: 1px solid var(--c-blue-border);
-  background: var(--c-bg-input);
-  color: var(--c-text);
-  font-size: 0.7rem;
-  font-weight: 600;
   text-align: center;
-  outline: none;
 }
 
 .priceInput {
@@ -215,7 +167,16 @@
   composes: qtyInput;
   min-width: 5.5rem;
   text-align: left;
-  font-weight: 500;
+}
+
+.unitInput {
+  composes: qtyInput;
+  min-width: 4rem;
+}
+
+.gstInput {
+  composes: qtyInput;
+  min-width: 3.25rem;
 }
 
 .discountCell {
@@ -244,6 +205,27 @@
   font-weight: 600;
   line-height: 1.4;
   color: var(--c-text-3);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.priceStack {
+  position: relative;
+}
+
+.costWarningHint {
+  position: absolute;
+  top: -0.7rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: var(--c-amber-bg);
+  border: 1px solid var(--c-amber-border);
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--c-amber-text);
   white-space: nowrap;
   pointer-events: none;
 }

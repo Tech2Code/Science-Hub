@@ -149,7 +149,7 @@ async function main() {
   const prods: Record<string, { id: string; price: number; gstRate: number; unit: string; name: string; hsn: string }> = {};
   for (const p of productData) {
     const prod = await prisma.product.create({
-      data: { name: p.name, sku: p.sku, hsn: p.hsn, unit: p.unit, price: p.price, purchasePrice: Math.round(p.price * 0.72), gstRate: p.gstRate, stock: p.stock, minStock: p.minStock, categoryId: cats[p.cat], brandId: brands[p.brand] },
+      data: { name: p.name, sku: p.sku, hsn: p.hsn, unit: p.unit, price: p.price, listPrice: Math.round(p.price * 0.72), purchasePrice: Math.round(p.price * 0.72), gstRate: p.gstRate, stock: p.stock, minStock: p.minStock, categoryId: cats[p.cat], brandId: brands[p.brand] },
     });
     prods[p.sku] = { id: prod.id, price: p.price, gstRate: p.gstRate, unit: p.unit, name: p.name, hsn: p.hsn };
   }

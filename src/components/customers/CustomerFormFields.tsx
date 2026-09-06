@@ -38,6 +38,10 @@ export function CustomerFormFields({ form, onChange, errors, disabled, phoneRequ
     else pincodeLookup.reset();
   }
 
+  function handleCreditLimitChange(e: React.ChangeEvent<HTMLInputElement>) {
+    fireChange(onChange, "creditLimit", e.target.value.replace(/[^\d.]/g, ""));
+  }
+
   return (
     <>
       <FormField label="Customer Name" required error={errors.name}>
@@ -85,7 +89,7 @@ export function CustomerFormFields({ form, onChange, errors, disabled, phoneRequ
       </div>
 
       <FormField label="Credit Limit" hint="Leave blank for no limit. Staff are warned before an invoice would push this customer's outstanding balance over it." error={errors.creditLimit}>
-        <Input name="creditLimit" inputMode="decimal" value={form.creditLimit} onChange={onChange} placeholder="e.g. 50000" disabled={disabled} maxLength={12} />
+        <Input name="creditLimit" inputMode="decimal" value={form.creditLimit} onChange={handleCreditLimitChange} placeholder="e.g. 50000" disabled={disabled} maxLength={12} />
       </FormField>
     </>
   );

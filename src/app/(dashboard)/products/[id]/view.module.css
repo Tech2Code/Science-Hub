@@ -181,6 +181,7 @@
 
 .positive { color: var(--c-green); }
 .negative { color: var(--c-red); }
+.warning { color: var(--c-amber-text); }
 
 @media screen and (max-width: 480px) {
   .adjustPreview { flex-direction: column; gap: 0.625rem; }

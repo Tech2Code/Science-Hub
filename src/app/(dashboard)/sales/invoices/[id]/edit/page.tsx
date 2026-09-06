@@ -452,6 +452,7 @@ export default function EditInvoicePage() {
       bustCachePrefix("/api/invoices");
       bustCachePrefix("/api/products");
       bustCachePrefix("/api/reports");
+      bustCache("/api/units");
       invalidateCachedPdf("invoice", id);
       toast({ type: "success", title: "Invoice updated", message: "Changes saved." });
       if (d.stockWarnings?.length > 0) {

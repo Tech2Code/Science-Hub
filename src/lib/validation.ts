@@ -67,6 +67,9 @@ export const rules = {
   nonNegativeNumber: (msg = "Value must be 0 or more."): Validator =>
     (v) => !v.trim() || (parseFloat(v) >= 0) ? null : msg,
 
+  percentRange: (max = 100, msg?: string): Validator =>
+    (v) => !v.trim() || (parseFloat(v) >= 0 && parseFloat(v) <= max) ? null : (msg ?? `Value must be between 0 and ${max}.`),
+
   passwordMatch: (other: string, msg = "Passwords do not match."): Validator =>
     (v) => v === other ? null : msg,
 
@@ -143,6 +146,12 @@ export function parseCreditLimit(value: string | number | null | undefined): num
   const n = parseFloat(str);
   return Number.isFinite(n) ? n : null;
 }
+
+// Sane upper bound for a single money value (price/rate/amount) — no real product/line-item price
+// is anywhere near this, but "Infinity" (or another huge finite garbage value) parses as a valid
+// JS number and would otherwise sail through a bare `min: 0` check, then corrupt every downstream
+// sum (invoice/bill totals, GENERATED columns like balanceDue, GST reports) with Infinity/NaN.
+export const MAX_MONEY_VALUE = 100_000_000; // ₹10 crore
 
 // Generic numeric field check shared by product create/update routes — like a `rules.*` validator but for an already-parsed number.
 export function validateNumericField(

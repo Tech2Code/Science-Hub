@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     const { items, skipped } = parseProductRows(rows);
     if (items.length === 0) {
-      return NextResponse.json({ error: "No usable rows found. Each row needs at least a name and a price." }, { status: 400 });
+      return NextResponse.json({ error: "No usable rows found. Each row needs at least a name and a List Price." }, { status: 400 });
     }
 
     return NextResponse.json({ items, skipped });

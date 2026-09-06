@@ -8,7 +8,8 @@ import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import { useToast } from "@/components/ui/Toast";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { InfoBanner } from "@/components/ui/InfoBanner";
-import { validateProductForm, hasProductFieldErrors, suggestMinStockForUnit, PRODUCT_GST_RATES, type ProductFieldErrors } from "@/lib/productForm";
+import { validateProductForm, hasProductFieldErrors, suggestMinStockForUnit, resolveSellingPrice, type ProductFieldErrors } from "@/lib/productForm";
+import { computeQuickAddNetRate } from "@/lib/purchaseBillForm";
 import { parsePastedProductText, type ParsedProductRow } from "@/lib/productImport";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import styles from "./ProductBulkImportModal.module.css";
@@ -19,11 +20,21 @@ interface Category { id: string; name: string; }
 interface ReviewRow {
   key: string;
   name: string; sku: string; hsn: string; unit: string;
-  price: string; purchasePrice: string; gstRate: string; stock: string; minStock: string;
+  // Purchase Price is never stored here — it's always List Price × (1 − Discount %/100), computed
+  // on render (see purchasePriceOf() below), same as ProductFormFields.tsx.
+  listPrice: string; discountPercent: string;
+  price: string; gstRate: string; stock: string; minStock: string;
   brandId: string; categoryId: string;
   errors: ProductFieldErrors;
   status: "pending" | "saving" | "done" | "error";
   errorMsg?: string;
+}
+
+// List Price is mandatory (blank listPrice parses to 0, which resolves to "0.00" — Purchase Price
+// then shows accurately as ₹0.00 rather than blank, since a genuinely-invalid row is caught by
+// validateRow's own required check before submit).
+function purchasePriceOf(row: Pick<ReviewRow, "listPrice" | "discountPercent">): string {
+  return String(computeQuickAddNetRate(row.listPrice, row.discountPercent));
 }
 
 // crypto.randomUUID() stays unique across reloads/restores, unlike a plain counter that could collide with a restored draft's existing keys.
@@ -42,7 +53,11 @@ function toReviewRow(row: ParsedProductRow, brands: Brand[], categories: Categor
   return {
     key: nextKey(),
     name: row.name, sku: row.sku, hsn: row.hsn, unit,
-    price: row.price, purchasePrice: row.purchasePrice, gstRate: row.gstRate || "18",
+    listPrice: row.listPrice, discountPercent: row.discountPercent,
+    // Selling Price is optional — left blank, it defaults to Purchase Price at submit time
+    // (resolveSellingPrice()), same as the New Product form.
+    price: row.price,
+    gstRate: row.gstRate || "18",
     stock: row.stock || "0", minStock: row.minStock || String(suggestMinStockForUnit(unit)),
     brandId: resolveId(row.brand, brands), categoryId: resolveId(row.category, categories),
     errors: {}, status: "pending",
@@ -52,7 +67,8 @@ function toReviewRow(row: ParsedProductRow, brands: Brand[], categories: Categor
 function validateRow(row: ReviewRow): ProductFieldErrors {
   return validateProductForm({
     name: row.name, sku: row.sku, hsn: row.hsn, description: "", unit: row.unit,
-    price: row.price, purchasePrice: row.purchasePrice, gstRate: row.gstRate,
+    listPrice: row.listPrice, discountPercent: row.discountPercent,
+    price: row.price, purchasePrice: purchasePriceOf(row), gstRate: row.gstRate,
     stock: row.stock, minStock: row.minStock, brandId: row.brandId, categoryId: row.categoryId,
   });
 }
@@ -60,8 +76,8 @@ function validateRow(row: ReviewRow): ProductFieldErrors {
 const errorBorderStyle = { borderColor: "var(--c-red-border, #fecaca)" } as const;
 
 // A <textarea> placeholder can't distinguish a header line from an example line visually, so the column order is shown as a real numbered legend above it instead.
-const PASTE_COLUMN_HEADERS = ["Name", "SKU", "HSN", "Unit", "Price", "Purchase Price", "GST %", "Stock", "Min Stock", "Brand", "Category"];
-const PASTE_PLACEHOLDER_EXAMPLE = ["Sodium Nitrate", "SN-001", "28151100", "Kg", "450", "380", "18", "100", "10", "QUALIGENS", "Chemicals"];
+const PASTE_COLUMN_HEADERS = ["Name", "SKU", "HSN", "Unit", "List Price", "Discount %", "Selling Price", "GST %", "Stock", "Min Stock", "Brand", "Category"];
+const PASTE_PLACEHOLDER_EXAMPLE = ["Sodium Nitrate", "SN-001", "28151100", "Kg", "450", "15", "400", "18", "100", "10", "QUALIGENS", "Chemicals"];
 const PASTE_PLACEHOLDER = PASTE_PLACEHOLDER_EXAMPLE.join("\t");
 
 // Mirrors MAX_BYTES in src/app/api/products/parse-import/route.ts — checked client-side to reject a huge file instantly instead of after a full upload.
@@ -176,14 +192,14 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
     setStep("review");
     setShowDraftBanner(false);
     if (skipped > 0) {
-      toast({ type: "warning", title: "Some rows skipped", message: `${skipped} row${skipped === 1 ? "" : "s"} skipped — missing name or price.` });
+      toast({ type: "warning", title: "Some rows skipped", message: `${skipped} row${skipped === 1 ? "" : "s"} skipped — missing name or List Price.` });
     }
   }
 
   // Appends to what's already in the table rather than replacing it, so re-pasting/uploading after Back doesn't wipe out rows already reviewed.
   function loadRows(parsed: ParsedProductRow[], skipped: number) {
     if (parsed.length === 0) {
-      toast({ type: "error", title: "Nothing to import", message: "Couldn't find any usable rows — each needs at least a name and a price." });
+      toast({ type: "error", title: "Nothing to import", message: "Couldn't find any usable rows — each needs at least a name and a List Price." });
       return;
     }
     // A saved draft exists but was ignored (Resume Draft banner) — ask which one the user actually wants before it's silently overwritten.
@@ -283,9 +299,11 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
             sku: next[i].sku || undefined,
             hsn: next[i].hsn || undefined,
             unit: next[i].unit,
-            price: parseFloat(next[i].price),
-            purchasePrice: next[i].purchasePrice.trim() ? parseFloat(next[i].purchasePrice) : null,
-            gstRate: parseInt(next[i].gstRate),
+            price: resolveSellingPrice(next[i].price, purchasePriceOf(next[i])),
+            purchasePrice: parseFloat(purchasePriceOf(next[i])),
+            listPrice: parseFloat(next[i].listPrice),
+            discountPercent: next[i].discountPercent.trim() ? parseFloat(next[i].discountPercent) : 0,
+            gstRate: parseFloat(next[i].gstRate),
             stock: parseInt(next[i].stock),
             minStock: parseInt(next[i].minStock),
             brandId: next[i].brandId || undefined,
@@ -422,8 +440,10 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
               <col className={styles.colHsn} />
               <col className={styles.colUnit} />
               <col className={styles.colPrice} />
+              <col className={styles.colGst} />
               <col className={styles.colPrice} />
               <col className={styles.colGst} />
+              <col className={styles.colPrice} />
               <col className={styles.colStock} />
               <col className={styles.colStock} />
               <col className={styles.colBrand} />
@@ -432,7 +452,7 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
             </colgroup>
             <thead>
               <tr>
-                {["#", "Name", "SKU", "HSN", "Unit", "List Price (₹)", "Purch. Price (₹)", "GST %", "Stock", "Min Stock", "Brand", "Category", ""].map((h) => (
+                {["#", "Name", "SKU", "HSN", "Unit", "List Price (₹)", "Discount %", "Purch. Price (₹)", "GST %", "Selling Price (₹)", "Stock", "Min Stock", "Brand", "Category", ""].map((h) => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -446,13 +466,11 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
                     <td><Input sz="sm" value={row.sku} onChange={(e) => updateRow(idx, "sku", e.target.value)} disabled={importing} /></td>
                     <td><Input sz="sm" value={row.hsn} onChange={(e) => updateRow(idx, "hsn", e.target.value)} disabled={importing} /></td>
                     <td><Input sz="sm" value={row.unit} onChange={(e) => updateRow(idx, "unit", e.target.value)} style={row.errors.unit ? errorBorderStyle : undefined} disabled={importing} /></td>
+                    <td><Input sz="sm" type="text" inputMode="decimal" value={row.listPrice} onChange={(e) => updateRow(idx, "listPrice", e.target.value.replace(/[^\d.]/g, ""))} style={row.errors.listPrice ? errorBorderStyle : undefined} disabled={importing} /></td>
+                    <td><Input sz="sm" type="text" inputMode="decimal" value={row.discountPercent} onChange={(e) => updateRow(idx, "discountPercent", e.target.value.replace(/[^\d.]/g, ""))} style={row.errors.discountPercent ? errorBorderStyle : undefined} disabled={importing} /></td>
+                    <td><Input sz="sm" type="text" value={purchasePriceOf(row)} disabled readOnly /></td>
+                    <td><Input sz="sm" type="text" inputMode="decimal" value={row.gstRate} onChange={(e) => updateRow(idx, "gstRate", e.target.value.replace(/[^\d.]/g, ""))} style={row.errors.gstRate ? errorBorderStyle : undefined} disabled={importing} /></td>
                     <td><Input sz="sm" type="text" inputMode="decimal" value={row.price} onChange={(e) => updateRow(idx, "price", e.target.value.replace(/[^\d.]/g, ""))} style={row.errors.price ? errorBorderStyle : undefined} disabled={importing} /></td>
-                    <td><Input sz="sm" type="text" inputMode="decimal" value={row.purchasePrice} onChange={(e) => updateRow(idx, "purchasePrice", e.target.value.replace(/[^\d.]/g, ""))} style={row.errors.purchasePrice ? errorBorderStyle : undefined} disabled={importing} /></td>
-                    <td>
-                      <Select sz="sm" value={row.gstRate} onChange={(e) => updateRow(idx, "gstRate", e.target.value)} disabled={importing}>
-                        {PRODUCT_GST_RATES.map((g) => <option key={g} value={g}>{g}%</option>)}
-                      </Select>
-                    </td>
                     <td><Input sz="sm" type="text" inputMode="numeric" value={row.stock} onChange={(e) => updateRow(idx, "stock", e.target.value.replace(/[^\d]/g, ""))} style={row.errors.stock ? errorBorderStyle : undefined} disabled={importing} /></td>
                     <td><Input sz="sm" type="text" inputMode="numeric" value={row.minStock} onChange={(e) => updateRow(idx, "minStock", e.target.value.replace(/[^\d]/g, ""))} style={row.errors.minStock ? errorBorderStyle : undefined} disabled={importing} /></td>
                     <td>
@@ -473,7 +491,7 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
                   </tr>
                   {row.status === "error" && (
                     <tr className={styles.errorDetailRow}>
-                      <td colSpan={13} className={styles.errorDetailCell}>
+                      <td colSpan={15} className={styles.errorDetailCell}>
                         ⚠ <strong>{row.name || `Row ${idx + 1}`}</strong>: {row.errorMsg}
                       </td>
                     </tr>

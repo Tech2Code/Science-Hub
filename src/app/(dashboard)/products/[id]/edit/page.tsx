@@ -10,7 +10,7 @@ import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ProductFormFields } from "@/components/products/ProductFormFields";
 import { Sk, SkeletonSwap } from "@/components/ui/Skeleton";
-import { validateProductForm, hasProductFieldErrors, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
+import { validateProductForm, hasProductFieldErrors, resolveSellingPrice, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
@@ -31,6 +31,7 @@ export default function EditProductPage() {
   }, [session, router]);
   const [form, setForm] = useState<ProductFormData>({
     name: "", sku: "", hsn: "", description: "", unit: "Nos",
+    listPrice: "", discountPercent: "",
     price: "", purchasePrice: "", gstRate: "18", stock: "0", minStock: "0",
     brandId: "", categoryId: "",
   });
@@ -76,6 +77,8 @@ export default function EditProductPage() {
         const loaded: ProductFormData = {
           name: product.name ?? "", sku: product.sku ?? "", hsn: product.hsn ?? "",
           description: product.description ?? "", unit: product.unit ?? "Nos",
+          listPrice: product.listPrice != null ? product.listPrice.toString() : "",
+          discountPercent: product.discountPercent ? product.discountPercent.toString() : "",
           price: product.price?.toString() ?? "", purchasePrice: product.purchasePrice != null ? product.purchasePrice.toString() : "",
           gstRate: product.gstRate?.toString() ?? "18",
           stock: product.stock?.toString() ?? "0", minStock: product.minStock?.toString() ?? "0",
@@ -105,8 +108,10 @@ export default function EditProductPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: form.name, sku: form.sku, hsn: form.hsn, description: form.description, unit: form.unit,
-        price: parseFloat(form.price), purchasePrice: form.purchasePrice.trim() ? parseFloat(form.purchasePrice) : null,
-        gstRate: parseInt(form.gstRate),
+        price: resolveSellingPrice(form.price, form.purchasePrice), purchasePrice: form.purchasePrice.trim() ? parseFloat(form.purchasePrice) : null,
+        listPrice: form.listPrice.trim() ? parseFloat(form.listPrice) : null,
+        discountPercent: form.discountPercent.trim() ? parseFloat(form.discountPercent) : 0,
+        gstRate: parseFloat(form.gstRate),
         minStock: parseInt(form.minStock),
         brandId: form.brandId || null, categoryId: form.categoryId || null,
         expectedUpdatedAt: loadedUpdatedAt,
@@ -116,6 +121,7 @@ export default function EditProductPage() {
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/products");
       bustCachePrefix("/api/reports");
+      bustCache("/api/units");
       toast({ type: "success", title: "Product updated", message: "Changes saved." });
       router.push(`/products/${id}`);
       // No setSaving(false) here — page is navigating away; resetting it first would briefly
@@ -157,7 +163,9 @@ export default function EditProductPage() {
         onCancel={() => setConfirmOpen(false)}
       />
       <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
-      <Breadcrumb items={[{ label: "Products", href: "/products" }, { label: "Edit Product" }]} />
+      <Breadcrumb items={loading
+        ? [{ label: "Products", href: "/products" }, { label: "Edit" }]
+        : [{ label: "Products", href: "/products" }, { label: form.name, href: `/products/${id}` }, { label: "Edit" }]} />
 
       <div className={styles.headerRow}>
         <div>
@@ -212,7 +220,7 @@ export default function EditProductPage() {
 
           <div className="form-actions-wrap">
             <div className="form-actions">
-              <Button type="submit" variant="primary" disabled={disabled || noChanges || !form.name.trim() || !form.price.trim()}>
+              <Button type="submit" variant="primary" disabled={disabled || noChanges || !form.name.trim() || !form.purchasePrice.trim() || !form.listPrice.trim()}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Update Product
               </Button>
               <Button variant="secondary" href={`/products/${id}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel</Button>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rules, validate, validateCustomerInput, validateVendorInput, isFutureIstDate } from "@/lib/validation";
+import { rules, validate, validateCustomerInput, validateVendorInput, isFutureIstDate, validateNumericField, MAX_MONEY_VALUE } from "@/lib/validation";
 
 describe("rules", () => {
   it("phone10 accepts empty (phone is optional everywhere it's used)", () => {
@@ -24,6 +24,58 @@ describe("rules", () => {
     expect(rules.required()("")).not.toBeNull();
     expect(rules.required()("   ")).not.toBeNull();
     expect(rules.required()("x")).toBeNull();
+  });
+
+  it("percentRange accepts empty (optional unless paired with required)", () => {
+    expect(rules.percentRange(100)("")).toBeNull();
+  });
+
+  it("percentRange accepts the boundaries 0 and max", () => {
+    expect(rules.percentRange(100)("0")).toBeNull();
+    expect(rules.percentRange(100)("100")).toBeNull();
+  });
+
+  it("percentRange rejects a negative value", () => {
+    expect(rules.percentRange(100)("-1")).not.toBeNull();
+  });
+
+  it("percentRange rejects a value over max", () => {
+    expect(rules.percentRange(100)("101")).not.toBeNull();
+  });
+
+  it("percentRange rejects a non-numeric string", () => {
+    expect(rules.percentRange(100)("abc")).not.toBeNull();
+  });
+
+  it("percentRange honors a custom max", () => {
+    expect(rules.percentRange(50)("50")).toBeNull();
+    expect(rules.percentRange(50)("60")).not.toBeNull();
+  });
+
+  it("percentRange uses the default message when none is supplied", () => {
+    expect(rules.percentRange(50)("60")).toBe("Value must be between 0 and 50.");
+  });
+
+  it("percentRange uses a custom message when supplied", () => {
+    expect(rules.percentRange(100, "custom message")("150")).toBe("custom message");
+  });
+});
+
+describe("validateNumericField", () => {
+  it("rejects Infinity when a finite max is supplied, even though Infinity > 0", () => {
+    expect(validateNumericField("price", Infinity, { min: 0, max: MAX_MONEY_VALUE })).not.toBeNull();
+  });
+
+  it("rejects a value above MAX_MONEY_VALUE", () => {
+    expect(validateNumericField("price", MAX_MONEY_VALUE + 1, { min: 0, max: MAX_MONEY_VALUE })).not.toBeNull();
+  });
+
+  it("accepts a real-world price well within MAX_MONEY_VALUE", () => {
+    expect(validateNumericField("price", 12500, { min: 0, max: MAX_MONEY_VALUE })).toBeNull();
+  });
+
+  it("rejects NaN", () => {
+    expect(validateNumericField("price", NaN, { min: 0, max: MAX_MONEY_VALUE })).not.toBeNull();
   });
 });
 

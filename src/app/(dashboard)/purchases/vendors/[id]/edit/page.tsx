@@ -143,7 +143,9 @@ export default function EditVendorPage() {
         onConfirm={doSave}
         onCancel={() => setConfirmOpen(false)}
       />
-      <Breadcrumb items={[{ label: "Vendors", href: "/purchases/vendors" }, { label: "Edit Vendor" }]} />
+      <Breadcrumb items={loading
+        ? [{ label: "Vendors", href: "/purchases/vendors" }, { label: "Edit" }]
+        : [{ label: "Vendors", href: "/purchases/vendors" }, { label: form.name, href: `/purchases/vendors/${id}` }, { label: "Edit" }]} />
       <h1 className="page-title">Edit Vendor</h1>
 
       <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
