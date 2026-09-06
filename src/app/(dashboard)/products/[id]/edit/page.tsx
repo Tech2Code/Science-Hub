@@ -11,6 +11,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ProductFormFields } from "@/components/products/ProductFormFields";
 import { Sk, SkeletonSwap } from "@/components/ui/Skeleton";
 import { validateProductForm, hasProductFieldErrors, resolveSellingPrice, type ProductFormData, type ProductFieldErrors } from "@/lib/productForm";
+import { computeQuickAddNetRate } from "@/lib/purchaseBillForm";
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
@@ -74,12 +75,22 @@ export default function EditProductPage() {
       fetch("/api/categories?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => d.data ?? []).catch(() => []),
     ])
       .then(([product, b, c]) => {
+        const listPriceStr = product.listPrice != null ? product.listPrice.toString() : "";
+        const discountPercentStr = product.discountPercent ? product.discountPercent.toString() : "";
         const loaded: ProductFormData = {
           name: product.name ?? "", sku: product.sku ?? "", hsn: product.hsn ?? "",
           description: product.description ?? "", unit: product.unit ?? "Nos",
-          listPrice: product.listPrice != null ? product.listPrice.toString() : "",
-          discountPercent: product.discountPercent ? product.discountPercent.toString() : "",
-          price: product.price?.toString() ?? "", purchasePrice: product.purchasePrice != null ? product.purchasePrice.toString() : "",
+          listPrice: listPriceStr,
+          discountPercent: discountPercentStr,
+          price: product.price?.toString() ?? "",
+          // Purchase Price is purely computed from List Price/Discount % — trust the stored value
+          // when present, but a handful of legacy rows (predating that pair) still have it null.
+          // Recompute from List Price/Discount % (both mandatory/always-present now) rather than
+          // leaving the field permanently blank, which would lock the Update button forever since
+          // it's read-only and only ever gets a value via editing List Price/Discount %.
+          purchasePrice: product.purchasePrice != null
+            ? product.purchasePrice.toString()
+            : String(computeQuickAddNetRate(listPriceStr, discountPercentStr)),
           gstRate: product.gstRate?.toString() ?? "18",
           stock: product.stock?.toString() ?? "0", minStock: product.minStock?.toString() ?? "0",
           brandId: product.brandId ?? "", categoryId: product.categoryId ?? "",

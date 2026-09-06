@@ -143,7 +143,7 @@ describe.skipIf(!hasTestDatabase)("PUT /api/products/[id]", () => {
     expect(res.status).toBe(400);
   });
 
-  it("clears listPrice back to null when sent as an empty string", async () => {
+  it("rejects clearing listPrice to an empty string (now mandatory)", async () => {
     const product = await testPrisma.product.create({
       data: { name: "Beaker", price: 100, stock: 10, minStock: 2, listPrice: 100, discountPercent: 10 },
     });
@@ -152,9 +152,9 @@ describe.skipIf(!hasTestDatabase)("PUT /api/products/[id]", () => {
       jsonRequest(`http://localhost/api/products/${product.id}`, "PUT", { listPrice: "" }),
       paramsOf(product.id)
     );
-    expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(data.listPrice).toBeNull();
+    expect(res.status).toBe(400);
+    const err = await res.json();
+    expect(err.error).toMatch(/list price/i);
   });
 
   it("persists an updated listPrice/discountPercent pair", async () => {
