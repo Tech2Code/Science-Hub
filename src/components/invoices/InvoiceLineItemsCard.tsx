@@ -361,7 +361,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
                     </td>
                     <td className={styles.tdCenter}>
                       <Input
-                        sz="sm" type="text" inputMode="decimal" min="1"
+                        sz="sm" type="number" min="1" step="1"
                         value={qtyDrafts[item.key] ?? String(item.qty)}
                         onChange={(e) => handleQtyChange(idx, item.key, e.target.value)}
                         onBlur={() => clearQtyDraft(item.key)}

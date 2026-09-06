@@ -401,7 +401,8 @@ export default function EditInvoicePage() {
     for (const item of items) {
       const qtyErr   = validate(String(item.qty),   rules.positiveNumber("Item quantity must be greater than 0."));
       const priceErr = validate(String(item.price), rules.nonNegativeNumber("Item price cannot be negative."));
-      if (qtyErr || priceErr) { toast({ type: "error", title: "Check form", message: qtyErr ?? priceErr ?? "" }); return; }
+      const unitErr  = validate(item.unit, rules.required("Every item must have a unit."));
+      if (qtyErr || priceErr || unitErr) { toast({ type: "error", title: "Check form", message: qtyErr ?? priceErr ?? unitErr ?? "" }); return; }
     }
 
     // product.stock already has this invoice's old qty deducted, so effective available = stock + original qty.

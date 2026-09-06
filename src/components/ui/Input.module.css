@@ -23,6 +23,18 @@
   -webkit-appearance: none;
 }
 
+/* Hide the native up/down spinner widget on number inputs — the arrow-key
+   increment/decrement still works with focus, this only removes the visible
+   icon so it matches every other input's flat styling. */
+.input[type="number"] {
+  -moz-appearance: textfield;
+}
+.input[type="number"]::-webkit-outer-spin-button,
+.input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 /* Keep inputs compact below this width — the desktop size bump wastes
    too much vertical space on a scrolling phone-sized form. .input gets a
    fixed height here (mobile only) so it matches Select/DatePicker/
