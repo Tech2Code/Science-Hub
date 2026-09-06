@@ -208,9 +208,10 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
     });
   }
 
+  // Capped at 3 decimals — an out-of-range keystroke is rejected outright, not truncated later.
   function handleQtyChange(idx: number, key: string, raw: string) {
     const cleaned = raw.replace(/[^\d.]/g, "");
-    if ((cleaned.match(/\./g) ?? []).length > 1) return;
+    if (!/^\d*(\.\d{0,3})?$/.test(cleaned)) return;
     setQtyDrafts((prev) => ({ ...prev, [key]: raw }));
     const parsed = parseFloat(cleaned);
     updateItem(idx, "qty", isNaN(parsed) || parsed <= 0 ? 1 : parsed);

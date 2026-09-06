@@ -139,6 +139,13 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
   }, [draggedKey, setItems]);
 
   // Holds exactly what's been typed per line item so a trailing "." or "%" isn't stripped mid-keystroke; cleared on blur.
+  // Same reject-outright pattern as the percent fields below, capped at 3 decimals instead of clamped to a max.
+  function handleQuantityChange(idx: number, raw: string) {
+    const cleaned = raw.replace(/[^\d.]/g, "");
+    if (!/^\d*(\.\d{0,3})?$/.test(cleaned)) return;
+    updateItem(idx, "quantity", cleaned);
+  }
+
   const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
 
   // Accepts a trailing "%"; capped at 2 decimals and 100 overall — an out-of-range keystroke is rejected outright, not truncated later.
@@ -308,7 +315,7 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
                       <Input sz="sm" aria-label={`Unit for ${item.name}`} value={item.unit} onChange={(e) => updateItem(idx, "unit", e.target.value)} placeholder="Unit" className={styles.numInputCenter} />
                     </td>
                     <td className={styles.tdQty}>
-                      <Input sz="sm" aria-label={`Quantity for ${item.name}`} type="number" min="1" step="1" value={item.quantity} onChange={(e) => updateItem(idx, "quantity", e.target.value)} className={styles.numInputCenter} />
+                      <Input sz="sm" aria-label={`Quantity for ${item.name}`} type="number" min="1" step="1" value={item.quantity} onChange={(e) => handleQuantityChange(idx, e.target.value)} className={styles.numInputCenter} />
                     </td>
                     <td className={styles.tdListPrice}>
                       <Input sz="sm" aria-label={`List price for ${item.name}`} type="text" inputMode="decimal" value={item.purchasePrice} onChange={(e) => updateItem(idx, "purchasePrice", e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" className={styles.numInputRight} />
