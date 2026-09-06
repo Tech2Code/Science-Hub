@@ -6,6 +6,7 @@ import styles from "./UnitCombo.module.css";
 
 interface UnitComboProps {
   id?: string;
+  "aria-describedby"?: string;
   value: string;
   onChange: (value: string) => void;
   suggestions: string[];
@@ -15,7 +16,7 @@ interface UnitComboProps {
 }
 
 // Typeable unit field (e.g. "500 GM") with a filtered suggestion dropdown — free text always allowed, dropdown is just a shortcut.
-export function UnitCombo({ id, value, onChange, suggestions, placeholder = "e.g. Nos, Kg, Box", sz, className }: UnitComboProps) {
+export function UnitCombo({ id, "aria-describedby": ariaDescribedBy, value, onChange, suggestions, placeholder = "e.g. Nos, Kg, Box", sz, className }: UnitComboProps) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const listboxId = useId();
@@ -49,6 +50,7 @@ export function UnitCombo({ id, value, onChange, suggestions, placeholder = "e.g
     <div className={styles.unitCombo}>
       <Input
         id={id}
+        aria-describedby={ariaDescribedBy}
         sz={sz}
         type="text"
         placeholder={placeholder}

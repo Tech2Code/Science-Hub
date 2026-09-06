@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
 import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { Input } from "@/components/ui/Input";
@@ -35,7 +35,11 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
   const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
   const [quickAddInitialName, setQuickAddInitialName] = useState("");
 
-  const filteredProducts = products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase()));
+  // Memoized — see the identical note in InvoiceLineItemsCard.tsx.
+  const filteredProducts = useMemo(
+    () => products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase())),
+    [products, productSearch]
+  );
 
   function addProduct(p: PurchaseBillProduct, quantity = "1") {
     setItems((prev) => {

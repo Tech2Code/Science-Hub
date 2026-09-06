@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireWriteAccess } from "@/lib/apiAuth";
-import { isFutureIstDate, toIstDateStr } from "@/lib/validation";
+import { isFutureIstDate, toIstDateStr, istDayStartUtc } from "@/lib/validation";
 
 class PaymentExceedsBalanceError extends Error {}
 
@@ -63,8 +63,8 @@ export async function POST(
 
     let paymentDate: Date | undefined;
     if (date) {
-      paymentDate = new Date(date);
-      if (isNaN(paymentDate.getTime())) {
+      const parsedDate = new Date(date);
+      if (isNaN(parsedDate.getTime())) {
         return NextResponse.json({ error: "Invalid payment date" }, { status: 400 });
       }
       if (date < toIstDateStr(invoiceCheck.date)) {
@@ -73,6 +73,9 @@ export async function POST(
       if (isFutureIstDate(date)) {
         return NextResponse.json({ error: "Payment date cannot be in the future" }, { status: 400 });
       }
+      // Normalized to exact IST midnight — see the same note in returns/route.ts — so a "newest
+      // first" payments list sort can never be defeated by a stray time-of-day component.
+      paymentDate = istDayStartUtc(toIstDateStr(parsedDate));
     }
 
     // Re-read and re-validate balance inside a Serializable transaction so concurrent/duplicate submissions can't both overpay the invoice; retry on conflict (P2034).

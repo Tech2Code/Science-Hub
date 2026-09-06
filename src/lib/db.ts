@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { safeDecrypt } from "@/lib/crypto";
+import { istDayStartUtc, istDayEndUtc, istMonthStartUtc, istNextMonthStartUtc } from "@/lib/validation";
 
 export async function getBusinessSettings() {
   // Hot path (every server-rendered page). Prisma's upsert can still hit a real unique-constraint
@@ -272,8 +273,8 @@ export async function getProductStats() {
 
 export async function getReportSummary() {
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const monthStart = istMonthStartUtc(now);
+  const monthEnd = istNextMonthStartUtc(now);
 
   // These 6 queries are independent — fire together instead of 6 sequential round-trips.
   const [invoicesThisMonth, revenueAgg, unpaidAgg, allTimeAgg, lowStockCount, recent] = await Promise.all([
@@ -330,8 +331,8 @@ export async function getReportSummary() {
 
 export async function getReportOutstanding(startDate: string | undefined, endDate: string | undefined, skip: number, take: number) {
   const dateFilter: { gte?: Date; lte?: Date } = {};
-  if (startDate) dateFilter.gte = new Date(startDate);
-  if (endDate) dateFilter.lte = new Date(endDate);
+  if (startDate) dateFilter.gte = istDayStartUtc(startDate);
+  if (endDate) dateFilter.lte = istDayEndUtc(endDate);
 
   const where = {
     deletedAt: null,

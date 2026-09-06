@@ -209,8 +209,9 @@
   pointer-events: none;
 }
 
-.priceStack {
+.rateStack {
   position: relative;
+  display: inline-block;
 }
 
 .costWarningHint {

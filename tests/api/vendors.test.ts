@@ -39,6 +39,27 @@ describe.skipIf(!hasTestDatabase)("POST /api/vendors", () => {
     const row = await testPrisma.vendor.findUnique({ where: { id: data.id } });
     expect(row?.deletedAt).not.toBeNull();
   });
+
+  // Regression: vendor create had no idempotency-key protection at all — a double-click or
+  // retried submission could silently create two identical vendor rows.
+  it("a retried submission with the same idempotency key returns the original vendor instead of creating a duplicate", async () => {
+    const { POST } = await import("@/app/api/vendors/route");
+    const body = {
+      name: "Dedupe Supplies", address: "1 Main St", city: "Delhi", state: "Delhi", pincode: "110001",
+      idempotencyKey: "key-dedupe-1",
+    };
+    const first = await POST(jsonRequest("http://localhost/api/vendors", "POST", body));
+    expect(first.status).toBe(201);
+    const firstData = await first.json();
+
+    const second = await POST(jsonRequest("http://localhost/api/vendors", "POST", body));
+    expect(second.status).toBe(200);
+    const secondData = await second.json();
+    expect(secondData.id).toBe(firstData.id);
+
+    const count = await testPrisma.vendor.count({ where: { name: "Dedupe Supplies" } });
+    expect(count).toBe(1);
+  });
 });
 
 describe.skipIf(!hasTestDatabase)("PUT /api/vendors/[id]", () => {

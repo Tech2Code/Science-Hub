@@ -3,10 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/apiAuth";
 import { monthYearToDateRange } from "@/lib/listQuery";
 import { buildReturnWhere } from "@/lib/creditNoteQuery";
+import { istMonthStartUtc, istNextMonthStartUtc } from "@/lib/validation";
 
 function currentMonthRange(): { gte: Date; lt: Date } {
   const now = new Date();
-  return { gte: new Date(now.getFullYear(), now.getMonth(), 1), lt: new Date(now.getFullYear(), now.getMonth() + 1, 1) };
+  return { gte: istMonthStartUtc(now), lt: istNextMonthStartUtc(now) };
 }
 
 // "Total" figures are always all-time; "period" figures follow the active month/year filter,

@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { RateListFormBody } from "@/components/rateLists/RateListFormBody";
 import { toNum, calcRateListItem, makeRateListLineItemKey, type RateListLineItem } from "@/lib/rateListForm";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { InfoBanner } from "@/components/ui/InfoBanner";
 import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import styles from "./rateListNew.module.css";
@@ -31,6 +32,7 @@ export default function NewRateListPage() {
   const [itemsError, setItemsError] = useState<string | undefined>(undefined);
   const [itemsErrorFor, setItemsErrorFor] = useState<RateListLineItem[] | null>(null);
   const [saving, setSaving] = useState(false);
+  const idempotency = useIdempotencyKey();
 
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
@@ -94,6 +96,7 @@ export default function NewRateListPage() {
     const payload = {
       title: title.trim(),
       note: note.trim() || null,
+      idempotencyKey: idempotency.key(),
       items: nonEmptyItems.map((i) => ({
         name: i.name.trim(),
         brand: i.brand.trim() || null,

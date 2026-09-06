@@ -1,3 +1,5 @@
+import { formatDate } from "@/lib/formatDate";
+
 const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export interface StatementPrintRow {
@@ -105,7 +107,7 @@ export function StatementPrintArea({ party, periodLabel, openingBalance, closing
               );
               return (
                 <tr key={`${r.type}-${r.refId}`}>
-                  {td(new Date(r.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }))}
+                  {td(formatDate(r.date))}
                   {td(r.label)}
                   {td(r.debit ? fmt(r.debit) : "—", "right")}
                   {td(r.credit ? fmt(r.credit) : "—", "right")}

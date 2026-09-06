@@ -13,8 +13,24 @@ import { rules, validate } from "@/lib/validation";
 import { computeQuickAddNetRate, computeQuickAddTaxInclusivePrice, fmtCurrency, toNum } from "@/lib/purchaseBillForm";
 import styles from "./QuickAddProductModal.module.css";
 
-export interface QuickAddOutcome {
-  skipCatalog: boolean;
+// Shape actually used by callers off the POST /api/products response — a superset of both
+// InvoiceProduct (invoiceCalc.ts) and PurchaseBillProduct (purchaseBillForm.ts), the two distinct
+// shapes callers push this into, so it's structurally assignable to either.
+export interface QuickAddCreatedProduct {
+  id: string;
+  name: string;
+  sku: string | null;
+  hsn: string | null;
+  unit: string;
+  price: number;
+  purchasePrice: number | null;
+  listPrice: number | null;
+  discountPercent: number | null;
+  gstRate: number;
+  stock: number;
+}
+
+interface QuickAddOutcomeBase {
   name: string;
   quantity: string;
   qty: number;
@@ -25,10 +41,14 @@ export interface QuickAddOutcome {
   discountPercent: string;
   /** List Price × Discount % — the derived net rate. */
   purchasePriceNum: number;
-  /** Present only when a new catalog product was created (skipCatalog === false). Loosely typed —
-   *  matches this flow's existing untyped `res.json()` response, not a new relaxation. */
-  product?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
+
+// Discriminated on skipCatalog so `product` is only reachable (and required) in the branch where
+// it actually exists — a caller that narrows via `if (outcome.skipCatalog) { ...; return; }` gets
+// `outcome.product` fully typed afterward instead of `any`.
+export type QuickAddOutcome =
+  | (QuickAddOutcomeBase & { skipCatalog: true })
+  | (QuickAddOutcomeBase & { skipCatalog: false; product: QuickAddCreatedProduct });
 
 interface QuickAddProductModalProps {
   onClose: () => void;
@@ -177,7 +197,15 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
               <Input
                 type="text" inputMode="decimal" placeholder="1"
                 value={form.quantity}
-                onChange={(e) => { setForm((p) => ({ ...p, quantity: e.target.value.replace(/[^\d.]/g, "") })); setErrors((p) => ({ ...p, quantity: undefined })); }}
+                onChange={(e) => {
+                  // Capped at 3 decimals — matches the item table's own Quantity validation
+                  // (InvoiceLineItemsCard/PurchaseBillItemsTable) so a value typed here never
+                  // arrives already too precise to accept a later edit in the table.
+                  const cleaned = e.target.value.replace(/[^\d.]/g, "");
+                  if (!/^\d*(\.\d{0,3})?$/.test(cleaned)) return;
+                  setForm((p) => ({ ...p, quantity: cleaned }));
+                  setErrors((p) => ({ ...p, quantity: undefined }));
+                }}
               />
             </FormField>
             <FormField label="Unit" required error={errors.unit} id={unitFieldId}>

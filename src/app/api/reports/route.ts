@@ -3,13 +3,15 @@ import { getReportSummary, getReportOutstanding, getReportStock } from "@/lib/db
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireSectionAccess } from "@/lib/apiAuth";
 import { parsePageParams } from "@/lib/listQuery";
+import { istDayStartUtc, istDayEndUtc, istMonthStartUtc, istNextMonthStartUtc, istTodayStartUtc, istMonthBoundsUtc } from "@/lib/validation";
+import { getIndianFinancialYear } from "@/lib/documentNumbering";
 import { Prisma } from "@prisma/client";
 
 async function getSalesDashboard() {
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const monthStart = istMonthStartUtc(now);
+  const monthEnd = istNextMonthStartUtc(now);
+  const todayStart = istTodayStartUtc(now);
 
   const [revenueAgg, collectedAgg, outstandingAgg, overdueCount, recentInvoices, topCustomerAggs] = await Promise.all([
     prisma.invoice.aggregate({
@@ -58,21 +60,23 @@ async function getSalesDashboard() {
     totalPaid: c._sum.paidAmount ?? 0,
   }));
 
-  // Financial year monthly revenue (Apr–Mar)
-  const fyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
-  const fyStart = new Date(fyYear, 3, 1);
+  // Financial year monthly revenue (Apr–Mar) — IST-aware (see istMonthBoundsUtc), so a document
+  // created in the ~5.5-hour IST-vs-server-UTC gap around a month boundary lands in the right bucket.
+  const fyYear = getIndianFinancialYear(now);
   const fyLabel = `FY ${fyYear}-${String(fyYear + 1).slice(2)}`;
+  const fyStart = istMonthBoundsUtc(fyYear, 3).start;
+  const fyEnd = istMonthBoundsUtc(fyYear + 1, 3).start;
   // One query for the whole FY, grouped in JS — 12 "parallel" per-month aggregates would still serialize through the pooled connection_limit=1 DB anyway.
-  const fyEnd = new Date(fyStart.getFullYear() + 1, fyStart.getMonth(), 1);
   const fyInvoices = await prisma.invoice.findMany({
     where: { deletedAt: null, date: { gte: fyStart, lt: fyEnd } },
     select: { date: true, total: true },
   });
   const monthlyRevenue: { month: string; total: number }[] = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date(fyStart.getFullYear(), fyStart.getMonth() + i, 1);
-    const label = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
+    const monthIndex0 = (3 + i) % 12;
+    const year = fyYear + Math.floor((3 + i) / 12);
+    const { start: d, end } = istMonthBoundsUtc(year, monthIndex0);
+    const label = d.toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
     if (d > now) return { month: label, total: 0 };
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
     const total = fyInvoices
       .filter((inv) => inv.date >= d && inv.date < end)
       .reduce((sum, inv) => sum + inv.total, 0);
@@ -96,9 +100,9 @@ async function getSalesDashboard() {
 
 async function getPurchaseDashboard() {
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const monthStart = istMonthStartUtc(now);
+  const monthEnd = istNextMonthStartUtc(now);
+  const todayStart = istTodayStartUtc(now);
 
   const [spendAgg, paidAgg, payableAgg, overdueCount, recentBills, topVendorAggs] = await Promise.all([
     prisma.purchaseBill.aggregate({
@@ -147,21 +151,22 @@ async function getPurchaseDashboard() {
     totalPaid: v._sum.paidAmount ?? 0,
   }));
 
-  // Financial year monthly spend (Apr–Mar)
-  const fyYearP = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
-  const fyStartP = new Date(fyYearP, 3, 1);
+  // Financial year monthly spend (Apr–Mar) — IST-aware, same reasoning as monthlyRevenue above.
+  const fyYearP = getIndianFinancialYear(now);
   const fyLabelP = `FY ${fyYearP}-${String(fyYearP + 1).slice(2)}`;
+  const fyStartP = istMonthBoundsUtc(fyYearP, 3).start;
+  const fyEndP = istMonthBoundsUtc(fyYearP + 1, 3).start;
   // Same fix as monthlyRevenue — one query for the whole FY, grouped in JS.
-  const fyEndP = new Date(fyStartP.getFullYear() + 1, fyStartP.getMonth(), 1);
   const fyBills = await prisma.purchaseBill.findMany({
     where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: fyStartP, lt: fyEndP } },
     select: { billDate: true, total: true },
   });
   const monthlySpend: { month: string; total: number }[] = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date(fyStartP.getFullYear(), fyStartP.getMonth() + i, 1);
-    const label = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
+    const monthIndex0 = (3 + i) % 12;
+    const year = fyYearP + Math.floor((3 + i) / 12);
+    const { start: d, end } = istMonthBoundsUtc(year, monthIndex0);
+    const label = d.toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
     if (d > now) return { month: label, total: 0 };
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
     const total = fyBills
       .filter((b) => b.billDate >= d && b.billDate < end)
       .reduce((sum, b) => sum + b.total, 0);
@@ -185,9 +190,9 @@ async function getPurchaseDashboard() {
 
 async function getCombinedDashboard(canSeeSales: boolean, canSeePurchases: boolean) {
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const monthStart = istMonthStartUtc(now);
+  const monthEnd = istNextMonthStartUtc(now);
+  const todayStart = istTodayStartUtc(now);
   const todayEnd = new Date(todayStart.getTime() + 86400000);
 
   const [
@@ -243,11 +248,15 @@ async function getGstSummary(startDate?: string, endDate?: string) {
   // Stays scoped to "all invoices" when no range is picked (matches the Sales Reports page's own
   // label) — the aggregation itself is pushed into Postgres via date_trunc/groupBy so this never
   // has to load every invoice row into Node to bucket by month, regardless of table size.
-  const gte = startDate ? new Date(startDate) : undefined;
-  const lte = endDate ? new Date(endDate) : undefined;
+  const gte = startDate ? istDayStartUtc(startDate) : undefined;
+  const lte = endDate ? istDayEndUtc(endDate) : undefined;
 
+  // "date" is stored as a naive UTC instant (Prisma's default DateTime mapping, no column-level
+  // timezone) — bucketing with a bare date_trunc('month', "date") groups by UTC month, which
+  // silently reassigns anything created IST 00:00-05:29 to the previous month's bucket. Shift by
+  // the IST offset before truncating so the grouping matches the IST calendar month instead.
   const rows = await prisma.$queryRaw<Array<{ month: Date; taxableValue: number; cgst: number; sgst: number; igst: number }>>`
-    SELECT date_trunc('month', "date") AS month,
+    SELECT date_trunc('month', "date" + interval '330 minutes') AS month,
            COALESCE(SUM("subtotal"), 0) AS "taxableValue",
            COALESCE(SUM("cgst"), 0) AS cgst,
            COALESCE(SUM("sgst"), 0) AS sgst,
@@ -260,8 +269,10 @@ async function getGstSummary(startDate?: string, endDate?: string) {
     ORDER BY month ASC
   `;
 
+  // r.month already carries the IST-shifted instant used for grouping, so format it as UTC fields
+  // (not the server's local timezone) to read back the correct IST month/year label.
   return rows.map((r) => ({
-    month: new Date(r.month).toLocaleString("en-IN", { month: "short", year: "numeric" }),
+    month: new Date(r.month).toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" }),
     taxableValue: Number(r.taxableValue) || 0,
     cgst: Number(r.cgst) || 0,
     sgst: Number(r.sgst) || 0,

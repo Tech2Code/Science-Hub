@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
@@ -42,7 +43,21 @@ export async function POST(request: NextRequest) {
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
-    const { title, note, items } = body;
+    const { title, note, items, idempotencyKey } = body;
+
+    if (idempotencyKey !== undefined && (typeof idempotencyKey !== "string" || idempotencyKey.length > 200)) {
+      return NextResponse.json({ error: "Invalid idempotency key" }, { status: 400 });
+    }
+    // A retried/duplicated create submission (double-click, network retry) of the same
+    // client-generated key is a no-op — return the rate list that submission already created
+    // rather than creating a second row.
+    if (idempotencyKey) {
+      const existing = await prisma.rateList.findUnique({
+        where: { idempotencyKey },
+        include: { items: true, createdBy: { select: { name: true } } },
+      });
+      if (existing) return NextResponse.json(existing, { status: 200 });
+    }
 
     const validationError = validateRateListInput({ title, note });
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
@@ -50,15 +65,31 @@ export async function POST(request: NextRequest) {
     const itemsResult = validateAndBuildRateListItems(items);
     if ("error" in itemsResult) return NextResponse.json({ error: itemsResult.error }, { status: 400 });
 
-    const rateList = await prisma.rateList.create({
-      data: {
-        title: (title as string).trim(),
-        note: typeof note === "string" ? note.trim() || null : null,
-        createdByUserId: auth.session.user.id,
-        items: { create: itemsResult.items },
-      },
-      include: { items: true, createdBy: { select: { name: true } } },
-    });
+    let rateList;
+    try {
+      rateList = await prisma.rateList.create({
+        data: {
+          title: (title as string).trim(),
+          note: typeof note === "string" ? note.trim() || null : null,
+          createdByUserId: auth.session.user.id,
+          idempotencyKey: idempotencyKey || null,
+          items: { create: itemsResult.items },
+        },
+        include: { items: true, createdBy: { select: { name: true } } },
+      });
+    } catch (error) {
+      // Two near-simultaneous requests carrying the same idempotency key can both pass the
+      // pre-check above and race to insert — the loser hits the unique constraint here.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+        && Array.isArray((error.meta as { target?: unknown })?.target)
+        && (error.meta as { target: string[] }).target.includes("idempotencyKey")) {
+        const racing = idempotencyKey
+          ? await prisma.rateList.findUnique({ where: { idempotencyKey }, include: { items: true, createdBy: { select: { name: true } } } })
+          : null;
+        if (racing) return NextResponse.json(racing, { status: 200 });
+      }
+      throw error;
+    }
 
     await logActivity(auth.session.user.id, "create_rate_list", `Created rate list "${rateList.title}" | Items: ${itemsResult.items.length}`, rateList.id, "rate_list");
     revalidateTag("rate-lists", { expire: 0 });

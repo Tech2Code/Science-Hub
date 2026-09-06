@@ -14,6 +14,7 @@ import { downloadXlsx } from "@/lib/downloadXlsx";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
+import { formatDate } from "@/lib/formatDate";
 import type { Column } from "@/components/ui/Table";
 import styles from "./ewayBill.module.css";
 
@@ -122,8 +123,8 @@ export default function EwayBillReportPage() {
     setExporting(true);
     try {
       const rows = [
-        ...sortedSales.map((r) => ["Sales", r.invoiceNumber, new Date(r.date).toLocaleDateString("en-IN"), r.customerName, r.placeOfSupply || "", r.isInterState ? "Inter-State" : "Intra-State", r.total]),
-        ...sortedPurchases.map((r) => ["Purchase", r.billNumber, new Date(r.billDate).toLocaleDateString("en-IN"), r.vendorName, r.placeOfSupply || "", r.isInterState ? "Inter-State" : "Intra-State", r.total]),
+        ...sortedSales.map((r) => ["Sales", r.invoiceNumber, formatDate(r.date), r.customerName, r.placeOfSupply || "", r.isInterState ? "Inter-State" : "Intra-State", r.total]),
+        ...sortedPurchases.map((r) => ["Purchase", r.billNumber, formatDate(r.billDate), r.vendorName, r.placeOfSupply || "", r.isInterState ? "Inter-State" : "Intra-State", r.total]),
       ];
       await downloadXlsx("Eway-Bill-Eligibility", "E-way Bill", ["Type", "Doc No.", "Date", "Party", "Place of Supply", "Movement", "Value"], rows);
     } catch {
@@ -186,7 +187,7 @@ export default function EwayBillReportPage() {
               ) : visibleSales.map((r) => (
                 <tr key={r.id}>
                   <td data-mobile-full><Link href={`/sales/invoices/${r.id}`} className={styles.docLink}>{r.invoiceNumber}</Link></td>
-                  <td data-label="Date">{new Date(r.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</td>
+                  <td data-label="Date">{formatDate(r.date)}</td>
                   <td data-label="Customer">{r.customerName}</td>
                   <td data-label="Place of Supply">{r.placeOfSupply || "—"}</td>
                   <td data-label="Movement">{r.isInterState ? "Inter-State" : "Intra-State"}</td>
@@ -222,7 +223,7 @@ export default function EwayBillReportPage() {
               ) : visiblePurchases.map((r) => (
                 <tr key={r.id}>
                   <td data-mobile-full><Link href={`/purchases/bills/${r.id}`} className={styles.docLink}>{r.billNumber}</Link></td>
-                  <td data-label="Date">{new Date(r.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</td>
+                  <td data-label="Date">{formatDate(r.billDate)}</td>
                   <td data-label="Vendor">{r.vendorName}</td>
                   <td data-label="Place of Supply">{r.placeOfSupply || "—"}</td>
                   <td data-label="Movement">{r.isInterState ? "Inter-State" : "Intra-State"}</td>

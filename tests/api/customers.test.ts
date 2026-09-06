@@ -63,6 +63,42 @@ describe.skipIf(!hasTestDatabase)("POST /api/customers", () => {
     const res = await POST(jsonRequest("http://localhost/api/customers", "POST", { name: "Nope" }));
     expect(res.status).toBe(401);
   });
+
+  // Regression: customer create had no idempotency-key protection at all (unlike invoice/purchase-bill/
+  // payment/return), so a double-click or retried submission could silently create two identical rows.
+  it("a retried submission with the same idempotency key returns the original customer instead of creating a duplicate", async () => {
+    const { POST } = await import("@/app/api/customers/route");
+    const body = {
+      name: "Dedupe Co", address: "1 Main St", city: "Delhi", state: "Delhi", pincode: "110001",
+      idempotencyKey: "key-dedupe-1",
+    };
+    const first = await POST(jsonRequest("http://localhost/api/customers", "POST", body));
+    expect(first.status).toBe(201);
+    const firstData = await first.json();
+
+    const second = await POST(jsonRequest("http://localhost/api/customers", "POST", body));
+    expect(second.status).toBe(200);
+    const secondData = await second.json();
+    expect(secondData.id).toBe(firstData.id);
+
+    const count = await testPrisma.customer.count({ where: { name: "Dedupe Co" } });
+    expect(count).toBe(1);
+  });
+
+  it("two concurrent creates with the same idempotency key still only produce one row", async () => {
+    const { POST } = await import("@/app/api/customers/route");
+    const body = {
+      name: "Race Co", address: "1 Main St", city: "Delhi", state: "Delhi", pincode: "110001",
+      idempotencyKey: "key-race-1",
+    };
+    const [r1, r2] = await Promise.all([
+      POST(jsonRequest("http://localhost/api/customers", "POST", body)),
+      POST(jsonRequest("http://localhost/api/customers", "POST", body)),
+    ]);
+    expect([r1.status, r2.status].sort()).toEqual([200, 201]);
+    const count = await testPrisma.customer.count({ where: { name: "Race Co" } });
+    expect(count).toBe(1);
+  });
 });
 
 describe.skipIf(!hasTestDatabase)("PUT /api/customers/[id]", () => {

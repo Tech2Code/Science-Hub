@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { InfoBanner } from "@/components/ui/InfoBanner";
 import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import styles from "./vendorNew.module.css";
@@ -29,6 +30,7 @@ export default function NewVendorPage() {
   const [form, setForm] = useState<VendorFormData>(BLANK_VENDOR_FORM);
   const [errors, setErrors] = useState<ReturnType<typeof validateVendorForm>>({});
   const [saving, setSaving] = useState(false);
+  const idempotency = useIdempotencyKey();
 
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
@@ -80,7 +82,7 @@ export default function NewVendorPage() {
     const res = await fetch("/api/vendors", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, idempotencyKey: idempotency.key() }),
     });
     if (res.ok) {
       const created = await res.json();

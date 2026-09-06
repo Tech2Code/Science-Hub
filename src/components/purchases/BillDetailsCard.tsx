@@ -16,6 +16,7 @@ import { animateSection } from "@/lib/animateSection";
 import { useDirty } from "@/lib/useDirty";
 import { INDIA_STATES_FULL } from "@/lib/states";
 import { usePincodeAutofill } from "@/lib/usePincodeLookup";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { PURCHASE_BILL_CATEGORIES, type PurchaseBillVendor } from "@/lib/purchaseBillForm";
 import styles from "./BillDetailsCard.module.css";
 
@@ -76,6 +77,10 @@ export function BillDetailsCard({
   const [ivError, setIvError] = useState("");
   const [ivFieldErrors, setIvFieldErrors] = useState<FormErrors<InlineVendorForm>>({});
   const [ivDontSave, setIvDontSave] = useState(false);
+  // Guards the inline vendor create path (POST, not the PUT edit path below) — this card stays
+  // mounted for the life of the New/Edit Purchase Bill page, so the key must be renewed after each
+  // successful create, or a second vendor created later in the same session would be rejected.
+  const ivIdempotency = useIdempotencyKey();
 
   const ivDirty = useDirty(ivForm);
   const selectedVendor = vendors.find((v) => v.id === vendorId);
@@ -173,7 +178,7 @@ export function BillDetailsCard({
         city:    ivForm.city.trim() || null,
         state:   ivForm.state.trim() || null,
         pincode: ivForm.pincode.trim() || null,
-        ...(ivEditId ? {} : { oneOff: ivDontSave }),
+        ...(ivEditId ? {} : { oneOff: ivDontSave, idempotencyKey: ivIdempotency.key() }),
       };
       const res = await fetch(ivEditId ? `/api/vendors/${ivEditId}` : "/api/vendors", {
         method: ivEditId ? "PUT" : "POST",
@@ -183,7 +188,7 @@ export function BillDetailsCard({
       const data = await res.json();
       if (res.ok) {
         if (ivEditId) onVendorUpdated(data);
-        else onVendorCreated(data);
+        else { ivIdempotency.renew(); onVendorCreated(data); }
         onVendorIdChange(data.id);
         setVendorSearch("");
         closeVendorCreate();

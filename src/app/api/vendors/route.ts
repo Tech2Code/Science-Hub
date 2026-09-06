@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
@@ -40,22 +41,48 @@ export async function POST(req: NextRequest) {
     if (!auth.ok) return auth.response;
 
     const body = await req.json();
-    const { name, company, gstin, phone, email, address, city, state, pincode, notes, isActive, oneOff } = body;
+    const { name, company, gstin, phone, email, address, city, state, pincode, notes, isActive, oneOff, idempotencyKey } = body;
+
+    if (idempotencyKey !== undefined && (typeof idempotencyKey !== "string" || idempotencyKey.length > 200)) {
+      return NextResponse.json({ error: "Invalid idempotency key" }, { status: 400 });
+    }
+    // A retried/duplicated create submission (double-click, network retry) of the same
+    // client-generated key is a no-op — return the vendor that submission already created
+    // rather than creating a second row.
+    if (idempotencyKey) {
+      const existing = await prisma.vendor.findUnique({ where: { idempotencyKey } });
+      if (existing) return NextResponse.json(existing, { status: 200 });
+    }
+
     const validationError = validateVendorInput({ name, company, phone, email, gstin, address, city, state, pincode, notes }, true);
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
     // "Just for this bill" vendors still need a real row (required FK) but are soft-deleted at creation to stay out of the directory/search.
     const isOneOff = oneOff === true;
-    const vendor = await prisma.vendor.create({
-      data: {
-        name: name.trim(), company: company?.trim() || null,
-        gstin: gstin?.trim() || null, phone: phone?.trim() || null,
-        email: email?.trim() || null, address: address?.trim() || null,
-        city: city?.trim() || null, state: state?.trim() || null, pincode: pincode?.trim() || null,
-        notes: notes?.trim() || null, isActive: isActive !== false,
-        ...(isOneOff ? { deletedAt: new Date() } : {}),
-      },
-    });
+    let vendor;
+    try {
+      vendor = await prisma.vendor.create({
+        data: {
+          name: name.trim(), company: company?.trim() || null,
+          gstin: gstin?.trim() || null, phone: phone?.trim() || null,
+          email: email?.trim() || null, address: address?.trim() || null,
+          city: city?.trim() || null, state: state?.trim() || null, pincode: pincode?.trim() || null,
+          notes: notes?.trim() || null, isActive: isActive !== false,
+          idempotencyKey: idempotencyKey || null,
+          ...(isOneOff ? { deletedAt: new Date() } : {}),
+        },
+      });
+    } catch (error) {
+      // Two near-simultaneous requests carrying the same idempotency key can both pass the
+      // pre-check above and race to insert — the loser hits the unique constraint here.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+        && Array.isArray((error.meta as { target?: unknown })?.target)
+        && (error.meta as { target: string[] }).target.includes("idempotencyKey")) {
+        const racing = idempotencyKey ? await prisma.vendor.findUnique({ where: { idempotencyKey } }) : null;
+        if (racing) return NextResponse.json(racing, { status: 200 });
+      }
+      throw error;
+    }
     if (isOneOff) {
       await logActivity(auth.session.user.id, "add_vendor", `Created one-off vendor "${vendor.name}" (via purchase bill, not saved to directory)`, vendor.id, "vendor");
     } else {

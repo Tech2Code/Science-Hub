@@ -5,7 +5,7 @@ import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
-import { isFutureIstDate, toIstDateStr, MAX_MONEY_VALUE } from "@/lib/validation";
+import { isFutureIstDate, toIstDateStr, istDayStartUtc, MAX_MONEY_VALUE } from "@/lib/validation";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { computeRoundOff } from "@/lib/roundOff";
 import { getBusinessSettings } from "@/lib/db";
@@ -97,8 +97,8 @@ export async function POST(
 
     let returnDate = new Date();
     if (date) {
-      returnDate = new Date(date);
-      if (isNaN(returnDate.getTime())) {
+      const parsedDate = new Date(date);
+      if (isNaN(parsedDate.getTime())) {
         return NextResponse.json({ error: "Invalid return date" }, { status: 400 });
       }
       if (date < toIstDateStr(invoice.date)) {
@@ -107,6 +107,11 @@ export async function POST(
       if (isFutureIstDate(date)) {
         return NextResponse.json({ error: "Return date cannot be in the future" }, { status: 400 });
       }
+      // Always normalized to exact IST midnight, regardless of how much time-of-day precision the
+      // client sent — a "newest first" list sorts by this field, and a stray full timestamp (e.g.
+      // from a direct API call bypassing the date-only UI picker) would otherwise outrank a
+      // same-day row created later in real time.
+      returnDate = istDayStartUtc(toIstDateStr(parsedDate));
     }
 
     // GST rate is inherited from the matching invoice line — a credit note can't invent its own rate; falls back to the invoice's blended rate defensively.

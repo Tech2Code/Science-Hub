@@ -45,6 +45,11 @@ export default function NewInvoicePage() {
   const searchParams = useSearchParams();
   const { data: session } = useSession();
   const idempotency = useIdempotencyKey();
+  // Separate from the invoice's own key — the inline "Add New Customer" form stays mounted for
+  // the life of this page (not remounted per open), so it needs its own key renewed after each
+  // successful create, or a second customer created later in the same session would be rejected
+  // as a duplicate of the first.
+  const customerIdempotency = useIdempotencyKey();
   useEffect(() => {
     if (session?.user?.role === "manager") router.replace("/dashboard");
   }, [session, router]);
@@ -290,10 +295,12 @@ export default function NewInvoicePage() {
           pincode: customCustomer.pincode.trim() || null,
           gstin: customCustomer.gstin.trim() || null,
           oneOff: dontSaveCustomer,
+          idempotencyKey: customerIdempotency.key(),
         }),
       });
       const data = await res.json();
       if (res.ok) {
+        customerIdempotency.renew();
         setCustomers((prev) => [...prev, data]);
         setCustomerId(data.id);
         setCustomerSearch(data.name);

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { istTodayStartUtc } from "@/lib/validation";
 
 // Capped per category — this powers a topbar "glance" dropdown, not a paginated list; each
 // category links through to its real list page (with existing filters) for the full picture.
@@ -210,7 +211,7 @@ function binEntityToItem(x: BinExpiringEntity): NotificationItem {
 export async function getNotificationSummary(opts: { includeBin: boolean; userId: string }): Promise<NotificationSummary> {
   const { userId, includeBin } = opts;
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayStart = istTodayStartUtc(now);
 
   const categories = includeBin ? NOTIFICATION_CATEGORY_KEYS : NOTIFICATION_CATEGORY_KEYS.filter((c) => c !== "binExpiring");
   const dismissalMap = await getActiveDismissalMap(userId, categories);
@@ -321,7 +322,7 @@ const DISMISSED_ITEM_LIMIT = 50;
 export async function getDismissedNotificationSummary(opts: { includeBin: boolean; userId: string }): Promise<NotificationSummary> {
   const { userId, includeBin } = opts;
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayStart = istTodayStartUtc(now);
 
   const categories = includeBin ? NOTIFICATION_CATEGORY_KEYS : NOTIFICATION_CATEGORY_KEYS.filter((c) => c !== "binExpiring");
   const dismissalMap = await getActiveDismissalMap(userId, categories);
@@ -438,7 +439,7 @@ export async function getDismissedNotificationSummary(opts: { includeBin: boolea
 // which must dismiss every currently-active item, not just the top few shown in the dropdown.
 export async function getAllActiveNotificationIds(userId: string, includeBin: boolean): Promise<Record<NotificationCategoryKey, string[]>> {
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayStart = istTodayStartUtc(now);
 
   const categories = includeBin ? NOTIFICATION_CATEGORY_KEYS : NOTIFICATION_CATEGORY_KEYS.filter((c) => c !== "binExpiring");
   const dismissalMap = await getActiveDismissalMap(userId, categories);
@@ -485,7 +486,7 @@ const CATEGORY_ITEM_LIMIT = 200;
 // "Show all" expand, so seeing everything doesn't require leaving the dropdown.
 export async function getNotificationCategoryItems(userId: string, category: NotificationCategoryKey): Promise<NotificationItem[]> {
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayStart = istTodayStartUtc(now);
   const dismissalMap = await getActiveDismissalMap(userId, [category]);
   const dismissed = dismissalMap.get(category) ?? new Set<string>();
   const notDismissed: IdFilter | undefined = dismissed.size ? { notIn: [...dismissed] } : undefined;

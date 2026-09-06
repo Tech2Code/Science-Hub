@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/Button";
 import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { Input } from "@/components/ui/Input";
@@ -30,7 +30,13 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
   const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
   const [quickAddInitialName, setQuickAddInitialName] = useState("");
 
-  const filteredProducts = products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase()));
+  // Memoized so typing in an unrelated line-item cell (qty/price/discount) — which re-renders this
+  // whole component since items/setItems are lifted to the parent — doesn't re-scan the full product
+  // catalog on every keystroke; only an actual products/productSearch change re-runs the filter.
+  const filteredProducts = useMemo(
+    () => products.filter((p) => p.name.toLowerCase().includes(productSearch.toLowerCase())),
+    [products, productSearch]
+  );
 
   function addProduct(p: InvoiceProduct, qty = 1) {
     setItems((prev) => {
@@ -371,25 +377,14 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
                       />
                     </td>
                     <td className={styles.tdRight}>
-                      <div className={styles.priceStack}>
-                        <Input
-                          sz="sm" type="text" inputMode="decimal"
-                          value={priceDrafts[item.key] ?? String(item.price)}
-                          onChange={(e) => handlePriceChange(idx, item.key, e.target.value)}
-                          onBlur={() => clearPriceDraft(item.key)}
-                          aria-label={`List price for ${item.productName}`}
-                          className={styles.priceInput}
-                        />
-                        {(() => {
-                          const product = products.find((p) => p.id === item.productId);
-                          // Compare against the net rate (post-discount), not the raw List Price —
-                          // a line prefilled from List Price/Discount % is usually gross-higher than
-                          // purchasePrice even when its actual net rate is at/below cost.
-                          const netRate = item.price * (1 - item.discountPercent / 100);
-                          const atOrBelowCost = product?.purchasePrice != null && product.purchasePrice > 0 && netRate <= product.purchasePrice;
-                          return atOrBelowCost ? <span className={styles.costWarningHint}>⚠ At/below cost</span> : null;
-                        })()}
-                      </div>
+                      <Input
+                        sz="sm" type="text" inputMode="decimal"
+                        value={priceDrafts[item.key] ?? String(item.price)}
+                        onChange={(e) => handlePriceChange(idx, item.key, e.target.value)}
+                        onBlur={() => clearPriceDraft(item.key)}
+                        aria-label={`List price for ${item.productName}`}
+                        className={styles.priceInput}
+                      />
                     </td>
                     <td className={styles.discountCell}>
                       <div className={styles.discountStack}>
@@ -413,7 +408,18 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
                       </div>
                     </td>
                     <td className={styles.tdRate}>
-                      ₹{(item.price * (1 - item.discountPercent / 100)).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <div className={styles.rateStack}>
+                        ₹{(item.price * (1 - item.discountPercent / 100)).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {(() => {
+                          const product = products.find((p) => p.id === item.productId);
+                          // Compare against this cell's own net rate (post-discount), not the raw
+                          // List Price column — a line prefilled from List Price/Discount % is usually
+                          // gross-higher than purchasePrice even when its net rate is at/below cost.
+                          const netRate = item.price * (1 - item.discountPercent / 100);
+                          const atOrBelowCost = product?.purchasePrice != null && product.purchasePrice > 0 && netRate <= product.purchasePrice;
+                          return atOrBelowCost ? <span className={styles.costWarningHint}>⚠ At/below cost</span> : null;
+                        })()}
+                      </div>
                     </td>
                     <td className={styles.tdCenter}>
                       <Input

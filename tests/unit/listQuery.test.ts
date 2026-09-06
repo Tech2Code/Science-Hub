@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parsePageParams, monthYearToDateRange, DEFAULT_PAGE_SIZE } from "@/lib/listQuery";
+import { istDayStartUtc } from "@/lib/validation";
 
 function params(obj: Record<string, string>) {
   return new URLSearchParams(obj);
@@ -52,19 +53,19 @@ describe("monthYearToDateRange", () => {
 
   it("returns a full-year range when only year is given", () => {
     const range = monthYearToDateRange("", "2025");
-    expect(range?.gte).toEqual(new Date(2025, 0, 1));
-    expect(range?.lt).toEqual(new Date(2026, 0, 1));
+    expect(range?.gte).toEqual(istDayStartUtc("2025-01-01"));
+    expect(range?.lt).toEqual(istDayStartUtc("2026-01-01"));
   });
 
   it("returns a single-month range when both month and year are given", () => {
     const range = monthYearToDateRange("2", "2025"); // March (0-indexed)
-    expect(range?.gte).toEqual(new Date(2025, 2, 1));
-    expect(range?.lt).toEqual(new Date(2025, 3, 1));
+    expect(range?.gte).toEqual(istDayStartUtc("2025-03-01"));
+    expect(range?.lt).toEqual(istDayStartUtc("2025-04-01"));
   });
 
   it("handles December (month index 11) rolling into the next year", () => {
     const range = monthYearToDateRange("11", "2025");
-    expect(range?.gte).toEqual(new Date(2025, 11, 1));
-    expect(range?.lt).toEqual(new Date(2026, 0, 1));
+    expect(range?.gte).toEqual(istDayStartUtc("2025-12-01"));
+    expect(range?.lt).toEqual(istDayStartUtc("2026-01-01"));
   });
 });

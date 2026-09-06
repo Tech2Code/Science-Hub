@@ -5,6 +5,7 @@ import { formatDate } from "@/lib/formatDate";
 import {
   isValidGstin, hasValidGstinStateCode, isStandardGstRate, amountsMatch, issue, type ValidationIssue,
 } from "@/lib/gstValidation";
+import { istDayStartUtc, istDayEndUtc } from "@/lib/validation";
 
 export interface SalesRegisterRow {
   invoiceNumber: string; date: Date; customerName: string; customerGstin: string;
@@ -60,8 +61,11 @@ export interface GstFilingReport {
 }
 
 export async function buildGstFilingReport(startDate: string, endDate: string): Promise<GstFilingReport> {
-  const start = new Date(startDate);
-  const end = new Date(new Date(endDate).getTime() + 86400000 - 1); // inclusive of the full end day
+  // IST-day boundaries — a bare UTC-midnight parse would clip the first ~5.5 IST hours of the
+  // start day and the last ~5.5 IST hours of the end day, silently excluding real filing-period
+  // documents from a legally-significant GST report.
+  const start = istDayStartUtc(startDate);
+  const end = istDayEndUtc(endDate);
 
   const [settings, invoices, returns, bills] = await Promise.all([
     prisma.businessSettings.findUnique({ where: { id: "singleton" } }),

@@ -49,13 +49,19 @@ interface FieldProps {
 }
 export function FormField({ label, required, hint, hintSuccess, hintWarning, error, children, id }: FieldProps) {
   const generatedId = useId();
-  const child = !id && React.isValidElement(children)
+  const child = React.isValidElement(children)
     ? (children as React.ReactElement<{ id?: string; "aria-describedby"?: string }>)
     : null;
   const fieldId = id || child?.props.id || generatedId;
   // aria-describedby announces the error/hint on focus, not just at the moment it first appears (role="alert" only covers that one moment).
   const describedById = error ? `${fieldId}-error` : hint ? `${fieldId}-hint` : undefined;
-  const content = child ? React.cloneElement(child, { id: fieldId, "aria-describedby": describedById }) : children;
+  // Still inject aria-describedby onto a cloneable child even when the caller passed an explicit
+  // `id` (that only means they're wiring `id` onto their own control directly, e.g. a wrapper
+  // component like UnitCombo that forwards it — not that describedby-injection should be skipped
+  // too, which used to silently drop the error/hint announcement for every such field).
+  const content = child
+    ? React.cloneElement(child, id ? { "aria-describedby": describedById } : { id: fieldId, "aria-describedby": describedById })
+    : children;
 
   return (
     <div className={styles.field} {...(error ? { "data-error": "" } : {})}>

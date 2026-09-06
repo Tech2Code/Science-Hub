@@ -24,6 +24,7 @@ import { computeInvoiceTotals, makeInvoiceLineItemKey, type InvoiceLineItem, typ
 import { animateSection } from "@/lib/animateSection";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { InfoBanner } from "@/components/ui/InfoBanner";
 import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import styles from "./edit.module.css";
@@ -89,6 +90,9 @@ export default function EditInvoicePage() {
   const [customerForm, setCustomerForm] = useState<CustomerForm>(BLANK_CUSTOMER_FORM);
   const [customerErrors, setCustomerErrors] = useState<FormErrors<CustomerForm>>({});
   const [customerSaving, setCustomerSaving] = useState(false);
+  // Guards the re-bill-to-a-new-customer create path (saveNewCustomer) — this form stays mounted
+  // for the life of the page, so the key must be renewed after each successful create.
+  const customerIdempotency = useIdempotencyKey();
   const { isDirty, markClean } = useDirty({ customerId, isInterState, placeOfSupply, reverseCharge, items, notes, dueDate, invoiceDate, transportChargeEnabled, transportCharge, transportChargeGstRate });
 
   const DRAFT_KEY = `invoice:edit:${id}`;
@@ -278,10 +282,12 @@ export default function EditInvoicePage() {
           pincode: customerForm.pincode.trim() || null,
           gstin: customerForm.gstin.trim() || null,
           oneOff: dontSaveCustomer,
+          idempotencyKey: customerIdempotency.key(),
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        customerIdempotency.renew();
         setCustomers((prev) => [...prev, data]);
         setCustomerId(data.id);
         setCustomerSearch(data.name);

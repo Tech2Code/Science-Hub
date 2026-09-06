@@ -29,8 +29,19 @@ export function Modal({ open, title, subtitle, onClose, maxWidth, children, vari
     if (!open) return;
     triggerRef.current = document.activeElement;
     const dialogEl = dialogRef.current;
-    const focusable = dialogEl?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
-    (focusable && focusable.length > 0 ? focusable[0] : dialogEl)?.focus();
+    // Prefer an element the caller explicitly marked autoFocus — React already focuses it during
+    // commit, but this effect runs right after and would otherwise steal focus straight back to the
+    // header's close button (always DOM-first, since the header precedes the body), silently
+    // defeating every autoFocus used inside a Modal body. Fall back to the first focusable control
+    // that isn't the close button, so a caller with no autoFocus still lands somewhere useful.
+    const autoFocusEl = dialogEl?.querySelector<HTMLElement>("[autofocus]");
+    if (autoFocusEl) {
+      autoFocusEl.focus();
+    } else {
+      const focusable = Array.from(dialogEl?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [])
+        .filter((el) => !el.classList.contains(styles.closeBtn));
+      (focusable.length > 0 ? focusable[0] : dialogEl)?.focus();
+    }
     return () => {
       if (triggerRef.current instanceof HTMLElement) {
         triggerRef.current.focus();

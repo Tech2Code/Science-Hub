@@ -14,14 +14,20 @@ import { getGstPosLabel } from "@/lib/gstStateCodes";
 import { mapUnitToUqc } from "@/lib/gstUqc";
 import { issue, type ValidationIssue } from "@/lib/gstValidation";
 import { neutralizeFormulaCell } from "@/lib/formulaSafety";
+import { toIstDateStr } from "@/lib/validation";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // Offline Tool V3.2.4's own import validator reports the expected format as "dd-mmm-yyyy"
 // (4-digit year, zero-padded day) — confirmed from a real "invalid date format" rejection,
 // which is more current than the 2-digit-year dates in the tool's bundled sample CSVs.
+// Reads the day/month/year via toIstDateStr rather than the ambient getDate()/getMonth()/
+// getFullYear() getters — those reflect the calling environment's local timezone (UTC on a
+// production Vercel server), which would misprint the calendar day for any document dated in
+// the ~5.5-hour IST-vs-UTC gap in this legally-significant GST filing export.
 function formatGstDate(d: Date): string {
-  return `${String(d.getDate()).padStart(2, "0")}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
+  const [year, month, day] = toIstDateStr(d).split("-");
+  return `${day}-${MONTHS[Number(month) - 1]}-${year}`;
 }
 
 // No BOM here (unlike the human-facing validation CSV) — these files are read by the GST

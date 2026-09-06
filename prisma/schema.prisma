@@ -87,6 +87,9 @@ model Customer {
   // Null = no limit enforced. Checked against outstanding balance (sum of Invoice.balanceDue) on
   // invoice create/edit — see src/lib/creditLimit.ts.
   creditLimit Float?
+  // Same reasoning as Invoice.idempotencyKey — blocks a retried/duplicated create POST
+  // (double-click, network retry) from creating a second customer row.
+  idempotencyKey String? @unique
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -369,6 +372,9 @@ model Vendor {
   pincode       String?
   notes         String?
   isActive      Boolean         @default(true)
+  // Same reasoning as Invoice.idempotencyKey — blocks a retried/duplicated create POST
+  // (double-click, network retry) from creating a second vendor row.
+  idempotencyKey String?        @unique
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   deletedAt     DateTime?
@@ -511,6 +517,9 @@ model RateList {
   note            String?
   createdByUserId String
   createdBy       User           @relation(fields: [createdByUserId], references: [id])
+  // Same reasoning as Invoice.idempotencyKey — blocks a retried/duplicated create POST
+  // (double-click, network retry) from creating a second rate list row.
+  idempotencyKey  String?        @unique
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   deletedAt       DateTime?

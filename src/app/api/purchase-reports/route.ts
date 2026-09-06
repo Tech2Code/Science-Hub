@@ -3,15 +3,23 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSectionAccess } from "@/lib/apiAuth";
 import { parsePageParams } from "@/lib/listQuery";
+import { toIstDateStr, istDayStartUtc, istDayEndUtc, istMonthBoundsUtc } from "@/lib/validation";
 
 async function getPurchaseSummary() {
   const now = new Date();
+  // IST-aware rolling 12-month window — a bare `new Date(now.getFullYear(), now.getMonth() - i, 1)`
+  // reads the server process's local timezone (UTC by default on Vercel), mis-bucketing anything
+  // created IST 00:00-05:29 into the previous UTC day/month.
+  const [curYStr, curMStr] = toIstDateStr(now).split("-");
+  const curY = Number(curYStr), curM0 = Number(curMStr) - 1;
 
   const months = Array.from({ length: 12 }, (_, idx) => {
     const i = 11 - idx;
-    const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
-    const label = start.toLocaleString("en-IN", { month: "short", year: "numeric" });
+    const totalMonth0 = curM0 - i;
+    const year = curY + Math.floor(totalMonth0 / 12);
+    const month0 = ((totalMonth0 % 12) + 12) % 12;
+    const { start, end } = istMonthBoundsUtc(year, month0);
+    const label = start.toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
     return { start, end, label };
   });
 
@@ -34,8 +42,8 @@ async function getPurchaseSummary() {
 async function getPurchaseOutstanding(startDate: string | undefined, endDate: string | undefined, skip: number, take: number) {
   const now = new Date();
   const dateFilter: { gte?: Date; lte?: Date } = {};
-  if (startDate) dateFilter.gte = new Date(startDate);
-  if (endDate) dateFilter.lte = new Date(endDate);
+  if (startDate) dateFilter.gte = istDayStartUtc(startDate);
+  if (endDate) dateFilter.lte = istDayEndUtc(endDate);
 
   const where = {
     deletedAt: null,

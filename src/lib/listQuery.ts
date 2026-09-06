@@ -1,5 +1,7 @@
 // Shared query-param parsing for paginated list routes, so page/pageSize clamping and month/year → date-range semantics can't drift between routes.
 
+import { toIstDateStr, istDayStartUtc, istMonthBoundsUtc } from "@/lib/validation";
+
 export const DEFAULT_PAGE_SIZE = 10;
 
 export interface PageParams {
@@ -19,12 +21,16 @@ export function parsePageParams(searchParams: URLSearchParams, maxPageSize = 200
 
 // month is JS month index "0".."11", year is "YYYY", both optional. Year-only → whole year; month-only → that month of the CURRENT year
 // (deliberate simplification vs. matching that month across every year); both set → that specific month.
+// Boundaries are computed IST-aware (istMonthBoundsUtc/istDayStartUtc) rather than via local Date
+// constructors — those read the calling environment's local timezone (UTC by default on Vercel),
+// which would mis-bucket anything created IST 00:00-05:29 into the previous UTC day/month/year.
 export function monthYearToDateRange(month: string, year: string): { gte: Date; lt: Date } | undefined {
   if (!month && !year) return undefined;
-  const y = year ? Number(year) : new Date().getFullYear();
+  const y = year ? Number(year) : Number(toIstDateStr(new Date()).slice(0, 4));
   if (month) {
     const m = Number(month);
-    return { gte: new Date(y, m, 1), lt: new Date(y, m + 1, 1) };
+    const { start, end } = istMonthBoundsUtc(y, m);
+    return { gte: start, lt: end };
   }
-  return { gte: new Date(y, 0, 1), lt: new Date(y + 1, 0, 1) };
+  return { gte: istDayStartUtc(`${y}-01-01`), lt: istDayStartUtc(`${y + 1}-01-01`) };
 }

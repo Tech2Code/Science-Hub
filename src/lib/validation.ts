@@ -30,6 +30,37 @@ export function istDayEndUtc(dateStr: string): Date {
   return new Date(Date.parse(`${dateStr}T23:59:59.999Z`) - IST_OFFSET_MS);
 }
 
+// IST-aware equivalents of a bare `new Date(now.getFullYear(), now.getMonth(), 1)` — that
+// constructor reads the calling environment's local timezone (IST on this dev machine, but UTC by
+// default on Vercel), so on a server actually running UTC it silently mis-buckets anything created
+// IST 00:00-05:29 into the previous UTC day/month. Use these for any "this month"/"today" dashboard
+// aggregate instead of local Date-field getters.
+export function istTodayStartUtc(date: Date = new Date()): Date {
+  return istDayStartUtc(toIstDateStr(date));
+}
+export function istMonthStartUtc(date: Date = new Date()): Date {
+  const [y, m] = toIstDateStr(date).split("-");
+  return istDayStartUtc(`${y}-${m}-01`);
+}
+export function istNextMonthStartUtc(date: Date = new Date()): Date {
+  const [yStr, mStr] = toIstDateStr(date).split("-");
+  const y = Number(yStr), m = Number(mStr);
+  const nextY = m === 12 ? y + 1 : y;
+  const nextM = m === 12 ? 1 : m + 1;
+  return istDayStartUtc(`${nextY}-${String(nextM).padStart(2, "0")}-01`);
+}
+
+// UTC instant bounds of an arbitrary IST calendar month, given explicit year + 0-based month —
+// unlike the "now"-relative helpers above, used for building a fixed 12-month (FY) breakdown where
+// each bucket's year/month is already known rather than derived from the current instant.
+export function istMonthBoundsUtc(year: number, month0: number): { start: Date; end: Date } {
+  const start = istDayStartUtc(`${year}-${String(month0 + 1).padStart(2, "0")}-01`);
+  const nextY = month0 === 11 ? year + 1 : year;
+  const nextM0 = month0 === 11 ? 0 : month0 + 1;
+  const end = istDayStartUtc(`${nextY}-${String(nextM0 + 1).padStart(2, "0")}-01`);
+  return { start, end };
+}
+
 export const rules = {
   required: (msg = "This field is required."): Validator =>
     (v) => v.trim() ? null : msg,

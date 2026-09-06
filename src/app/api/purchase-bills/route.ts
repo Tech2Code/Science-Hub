@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { logActivity } from "@/lib/activity";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { isPurchaseBillBlobUrl } from "@/lib/blobStorage";
-import { isFutureIstDate, MAX_MONEY_VALUE } from "@/lib/validation";
+import { isFutureIstDate, toIstDateStr, istDayStartUtc, MAX_MONEY_VALUE } from "@/lib/validation";
 import { computeRoundOff } from "@/lib/roundOff";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { purchaseBillLineBreakdown, normalizeCategoryInput } from "@/lib/purchaseBillForm";
@@ -116,16 +116,21 @@ export async function POST(req: NextRequest) {
     const effectiveBillDate = new Date(billDate ?? Date.now());
     let paymentDate: Date | undefined;
     if (payment?.date) {
-      paymentDate = new Date(payment.date);
-      if (isNaN(paymentDate.getTime())) {
+      const parsedPaymentDate = new Date(payment.date);
+      if (isNaN(parsedPaymentDate.getTime())) {
         return NextResponse.json({ error: "Invalid payment date" }, { status: 400 });
       }
-      if (paymentDate < effectiveBillDate) {
+      if (parsedPaymentDate < effectiveBillDate) {
         return NextResponse.json({ error: "Payment date cannot be before the bill date" }, { status: 400 });
       }
       if (isFutureIstDate(payment.date)) {
         return NextResponse.json({ error: "Payment date cannot be in the future" }, { status: 400 });
       }
+      // Normalized to exact IST midnight — matches purchase-bills/[id]/payment/route.ts, so a
+      // payment recorded inline at bill-creation time lands at the same instant as one recorded
+      // afterward via the standalone payment endpoint for the same calendar date (otherwise the
+      // two paths would disagree by ~5.5h and silently skew "newest first" payment-history order).
+      paymentDate = istDayStartUtc(toIstDateStr(parsedPaymentDate));
     }
 
     for (const item of items as { productId?: string; quantity: number; purchasePrice: number; gstRate?: number; discountPercent?: number; name?: string; hsn?: string; unit?: string }[]) {

@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { rules, validate, validateCustomerInput, validateVendorInput, isFutureIstDate, validateNumericField, MAX_MONEY_VALUE } from "@/lib/validation";
+import {
+  rules, validate, validateCustomerInput, validateVendorInput, isFutureIstDate, validateNumericField, MAX_MONEY_VALUE,
+  istDayStartUtc, istDayEndUtc, istTodayStartUtc, istMonthStartUtc, istNextMonthStartUtc, istMonthBoundsUtc,
+} from "@/lib/validation";
 
 describe("rules", () => {
   it("phone10 accepts empty (phone is optional everywhere it's used)", () => {
@@ -146,5 +149,56 @@ describe("isFutureIstDate", () => {
 
   it("treats a date far in the future as future", () => {
     expect(isFutureIstDate("2999-01-01")).toBe(true);
+  });
+});
+
+describe("istMonthStartUtc / istNextMonthStartUtc / istMonthBoundsUtc", () => {
+  it("istMonthStartUtc returns the IST midnight of the 1st of the given instant's IST month", () => {
+    // 2026-09-06T07:51:30Z = 2026-09-06 13:21:30 IST -> September's IST month start
+    const d = new Date("2026-09-06T07:51:30.000Z");
+    expect(istMonthStartUtc(d).toISOString()).toBe(istDayStartUtc("2026-09-01").toISOString());
+  });
+
+  it("istNextMonthStartUtc rolls over to January of the next year from December", () => {
+    // 2026-12-15 IST -> next month start is 2027-01-01 IST midnight
+    const d = new Date("2026-12-15T06:00:00.000Z");
+    expect(istNextMonthStartUtc(d).toISOString()).toBe(istDayStartUtc("2027-01-01").toISOString());
+  });
+
+  it("istMonthBoundsUtc rolls over correctly from month index 11 (December) to next January", () => {
+    const { start, end } = istMonthBoundsUtc(2026, 11);
+    expect(start.toISOString()).toBe(istDayStartUtc("2026-12-01").toISOString());
+    expect(end.toISOString()).toBe(istDayStartUtc("2027-01-01").toISOString());
+  });
+
+  it("istMonthBoundsUtc handles a normal mid-year month", () => {
+    const { start, end } = istMonthBoundsUtc(2026, 5); // June (0-based)
+    expect(start.toISOString()).toBe(istDayStartUtc("2026-06-01").toISOString());
+    expect(end.toISOString()).toBe(istDayStartUtc("2026-07-01").toISOString());
+  });
+
+  it("istTodayStartUtc matches istDayStartUtc of the same instant's IST calendar day", () => {
+    const d = new Date("2026-09-06T20:00:00.000Z"); // 2026-09-07 01:30 IST
+    expect(istTodayStartUtc(d).toISOString()).toBe(istDayStartUtc("2026-09-07").toISOString());
+  });
+});
+
+describe("istDayStartUtc / istDayEndUtc", () => {
+  it("start-of-day sits 5.5 hours before the naive UTC-midnight parse of the same date string", () => {
+    const naiveUtcMidnight = new Date("2026-09-06T00:00:00.000Z").getTime();
+    expect(istDayStartUtc("2026-09-06").getTime()).toBe(naiveUtcMidnight - 5.5 * 60 * 60 * 1000);
+  });
+
+  it("end-of-day sits 5.5 hours before the naive UTC end-of-day parse of the same date string", () => {
+    const naiveUtcEnd = new Date("2026-09-06T23:59:59.999Z").getTime();
+    expect(istDayEndUtc("2026-09-06").getTime()).toBe(naiveUtcEnd - 5.5 * 60 * 60 * 1000);
+  });
+
+  it("a timestamp created just after IST midnight falls within that IST day's bounds, not the previous UTC day's", () => {
+    // 2026-09-05T19:00:00Z = 2026-09-06 00:30 IST — a real invoice/payment timestamp that a bare
+    // UTC-midnight boundary would wrongly exclude from "2026-09-06"'s range.
+    const t = new Date("2026-09-05T19:00:00.000Z").getTime();
+    expect(t).toBeGreaterThanOrEqual(istDayStartUtc("2026-09-06").getTime());
+    expect(t).toBeLessThanOrEqual(istDayEndUtc("2026-09-06").getTime());
   });
 });

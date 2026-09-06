@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { requireAdmin } from "@/lib/apiAuth";
 import { prisma } from "@/lib/prisma";
 import { PROTECTED_SECTIONS, ProtectedSection } from "@/lib/sections";
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
       update: { enabled },
     });
 
+    revalidateTag("permissions", { expire: 0 });
     return NextResponse.json({ ok: true, permission });
   } catch (error) {
     console.error("POST /api/admin/permissions error:", error);

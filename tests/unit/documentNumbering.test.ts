@@ -48,6 +48,21 @@ describe("getIndianFinancialYear", () => {
   it("puts a December date in the FY starting that same year", () => {
     expect(getIndianFinancialYear(new Date(2026, 11, 31))).toBe(2026);
   });
+
+  // Regression test: on a server whose process runs UTC (Vercel's default, unlike this IST dev
+  // machine), an instant landing in the ~5.5-hour IST-vs-UTC gap used to read as the wrong calendar
+  // day via bare getFullYear()/getMonth() — e.g. the very first half-hour of the new FY (00:30 IST
+  // on 1 April) is still 31 March in UTC. Built from an explicit UTC ISO string so the test result
+  // can't depend on the machine's own local timezone.
+  it("correctly resolves the new FY for an instant just after IST midnight on 1 April", () => {
+    const istApril1_0030 = new Date("2026-03-31T19:00:00.000Z"); // = 2026-04-01T00:30:00+05:30
+    expect(getIndianFinancialYear(istApril1_0030)).toBe(2026);
+  });
+
+  it("correctly keeps the old FY for an instant just before IST midnight on 1 April", () => {
+    const istMarch31_2330 = new Date("2026-03-31T18:00:00.000Z"); // = 2026-03-31T23:30:00+05:30
+    expect(getIndianFinancialYear(istMarch31_2330)).toBe(2025);
+  });
 });
 
 describe("formatFinancialYearLabel", () => {

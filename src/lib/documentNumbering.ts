@@ -1,6 +1,8 @@
 // Shared by /api/invoices and /api/purchase-bills. Pure functions (no Prisma import) so they're
 // usable from client components (Settings page preview) as well as route handlers.
 
+import { toIstDateStr } from "@/lib/validation";
+
 // Falls back to the business name's initials when no prefix is configured (e.g. "Science Hub" -> "SH").
 export function deriveDefaultPrefix(businessName: string): string {
   const words = businessName.trim().split(/\s+/).filter(Boolean);
@@ -10,10 +12,16 @@ export function deriveDefaultPrefix(businessName: string): string {
 }
 
 // Indian financial year runs 1 April - 31 March, not the calendar year — GST filing periods and
-// document numbering both reset on this boundary (a 15 Jan 2027 bill belongs to FY "2026").
+// document numbering both reset on this boundary (a 15 Jan 2027 bill belongs to FY "2026"). Reads
+// the year/month via toIstDateStr rather than the ambient getFullYear()/getMonth() getters — those
+// reflect the calling environment's local timezone (IST on this dev machine, but UTC by default on
+// Vercel), so a document dated in the ~5.5-hour IST-vs-UTC gap around the Apr 1 boundary (e.g.
+// created 00:00-05:29 IST on April 1st) would otherwise still read as March 31 in server-local
+// (UTC) terms and get silently numbered into the wrong financial year.
 export function getIndianFinancialYear(date: Date): number {
-  const year = date.getFullYear();
-  const month = date.getMonth(); // 0 = January ... 3 = April
+  const [yearStr, monthStr] = toIstDateStr(date).split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr) - 1; // 0 = January ... 3 = April
   return month >= 3 ? year : year - 1;
 }
 

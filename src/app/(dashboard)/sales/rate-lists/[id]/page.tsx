@@ -18,6 +18,7 @@ import { RateListPrintArea } from "@/components/rateLists/RateListPrintArea";
 import { downloadXlsx } from "@/lib/downloadXlsx";
 import { fmtCurrency } from "@/lib/rateListForm";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { bustCachePrefix } from "@/lib/useCache";
 import { formatDate } from "@/lib/formatDate";
 import { useMenuA11y } from "@/lib/useMenuA11y";
 import styles from "./rateListDetail.module.css";
@@ -266,6 +267,7 @@ export default function RateListDetailPage() {
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
         await invalidateCachedPdf("rate-list", rateList.id);
+        bustCachePrefix("/api/rate-lists");
         toast({ type: "success", title: "Moved to bin", message: `"${rateList.title}" moved to bin. You can restore it within 30 days.` });
         router.push("/sales/rate-lists");
       } else {
