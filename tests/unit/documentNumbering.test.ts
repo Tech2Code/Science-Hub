@@ -84,7 +84,7 @@ describe("NUMBER_FORMATS", () => {
     expect(m?.[1]).toBe("0007");
   });
 
-  it("seq_fy renders without a prefix or zero-padding", () => {
+  it("seq_fy renders without a prefix, 2-digit zero-padded", () => {
     const f = NUMBER_FORMATS.seq_fy;
     const rendered = f.render("SH", "2026-27", 18);
     expect(rendered).toBe("18/2026-27");
@@ -92,12 +92,38 @@ describe("NUMBER_FORMATS", () => {
     expect(m?.[1]).toBe("18");
   });
 
-  it("prefix_seq_fy renders with a prefix but no zero-padding", () => {
+  it("seq_fy zero-pads a single-digit sequence to 2 digits", () => {
+    const f = NUMBER_FORMATS.seq_fy;
+    const rendered = f.render("SH", "2026-27", 5);
+    expect(rendered).toBe("05/2026-27");
+    // The matcher/parseInt path must still read the padded value back as 5, not treat
+    // the leading zero as octal or otherwise misparse it.
+    const m = rendered.match(f.matcher("SH", "2026-27"));
+    expect(Number(m?.[1])).toBe(5);
+  });
+
+  it("prefix_seq_fy renders with a prefix, 2-digit zero-padded", () => {
     const f = NUMBER_FORMATS.prefix_seq_fy;
     const rendered = f.render("PB", "2026-27", 5);
-    expect(rendered).toBe("PB-5/2026-27");
+    expect(rendered).toBe("PB-05/2026-27");
     const m = rendered.match(f.matcher("PB", "2026-27"));
-    expect(m?.[1]).toBe("5");
+    expect(Number(m?.[1])).toBe(5);
+  });
+
+  // padStart only guarantees a *minimum* width — once the sequence itself is already 2+ digits,
+  // it grows past the padded width with no cap and no separate code path (100, 1000, ... all just
+  // render as their own digit count), matching how prefix_fy_seq's 4-digit padding already behaves
+  // past 9999.
+  it("seq_fy and prefix_seq_fy grow past 2 digits with no padding cap", () => {
+    expect(NUMBER_FORMATS.seq_fy.render("SH", "2026-27", 100)).toBe("100/2026-27");
+    expect(NUMBER_FORMATS.seq_fy.render("SH", "2026-27", 1000)).toBe("1000/2026-27");
+    expect(NUMBER_FORMATS.prefix_seq_fy.render("PB", "2026-27", 100)).toBe("PB-100/2026-27");
+
+    // findMaxSequence must keep comparing these as integers, not strings, once mixed-width
+    // numbers coexist in the same FY (e.g. after crossing from 99 to 100) — a lexicographic
+    // compare would rank "100" below "20".
+    const matcher = NUMBER_FORMATS.seq_fy.matcher("SH", "2026-27");
+    expect(findMaxSequence(["05/2026-27", "20/2026-27", "100/2026-27"], matcher)).toBe(100);
   });
 
   it("a format's matcher does not match a different prefix or FY", () => {

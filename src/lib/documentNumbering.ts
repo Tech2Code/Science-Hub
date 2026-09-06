@@ -52,7 +52,8 @@ interface NumberFormatDef {
   dbFilter: (prefix: string, yearLabel: string) => { startsWith?: string; endsWith?: string };
 }
 
-// Three layouts: this app's own convention plus the common "sequence/FY" style (no zero-padding) many businesses already used.
+// Three layouts: this app's own convention plus the common "sequence/FY" style (2-digit zero-padded,
+// grows past 2 digits once the sequence needs more) many businesses already used, with or without a prefix.
 export const NUMBER_FORMATS: Record<NumberFormatId, NumberFormatDef> = {
   prefix_fy_seq: {
     id: "prefix_fy_seq",
@@ -66,18 +67,18 @@ export const NUMBER_FORMATS: Record<NumberFormatId, NumberFormatDef> = {
   seq_fy: {
     id: "seq_fy",
     label: "Number / Year",
-    hint: "No prefix, no zero-padding — matches many pre-existing manual numbering schemes.",
-    example: () => "18/2026-27",
-    render: (_prefix, yearLabel, seq) => `${seq}/${yearLabel}`,
+    hint: "No prefix, 2-digit zero-padded sequence — e.g. \"02/2026-27\".",
+    example: () => "02/2026-27",
+    render: (_prefix, yearLabel, seq) => `${String(seq).padStart(2, "0")}/${yearLabel}`,
     matcher: (_prefix, yearLabel) => new RegExp(`^(\\d+)/${escapeRegex(yearLabel)}$`),
     dbFilter: (_prefix, yearLabel) => ({ endsWith: `/${yearLabel}` }),
   },
   prefix_seq_fy: {
     id: "prefix_seq_fy",
     label: "Prefix - Number / Year",
-    hint: "Keeps a prefix, no zero-padding.",
-    example: (prefix) => `${prefix}-18/2026-27`,
-    render: (prefix, yearLabel, seq) => `${prefix}-${seq}/${yearLabel}`,
+    hint: "Keeps a prefix, 2-digit zero-padded sequence — e.g. \"SH-02/2026-27\".",
+    example: (prefix) => `${prefix}-02/2026-27`,
+    render: (prefix, yearLabel, seq) => `${prefix}-${String(seq).padStart(2, "0")}/${yearLabel}`,
     matcher: (prefix, yearLabel) => new RegExp(`^${escapeRegex(prefix)}-(\\d+)/${escapeRegex(yearLabel)}$`),
     dbFilter: (prefix, yearLabel) => ({ startsWith: `${prefix}-`, endsWith: `/${yearLabel}` }),
   },
