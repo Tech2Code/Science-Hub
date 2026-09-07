@@ -6,6 +6,8 @@
   margin: 2rem;
 }
 
+.formCol { display: flex; flex-direction: column; gap: 1.325rem; }
+
 /* ── Toolbar / header row ── */
 .toolbarRow {
   display: flex;
@@ -444,6 +446,15 @@
   font-weight: 700;
   color: var(--c-green-text);
 }
+
+.paymentActionsCell { display: flex; gap: 0.25rem; justify-content: flex-end; }
+.paymentEditBtn, .paymentDeleteBtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: var(--c-radius-xs); border: none;
+  background: transparent; color: var(--c-text-4); cursor: pointer;
+}
+.paymentEditBtn:hover { background: var(--c-blue-bg); color: var(--c-blue); }
+.paymentDeleteBtn:hover { background: var(--c-red-bg); color: var(--c-red); }
 
 .tfootPaidValueCell {
   text-align: right;

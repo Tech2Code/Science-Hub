@@ -146,3 +146,93 @@ describe.skipIf(!hasTestDatabase)("POST /api/purchase-bills/[id]/payment", () =>
     expect(res.status).toBe(401);
   });
 });
+
+// Regression coverage for the gap the user reported: there was previously no way to correct a
+// mistaken vendor payment (wrong amount/method/date) or remove a duplicate entry at all — not
+// even a backend route existed for it, unlike the sales-invoice payment PUT.
+describe.skipIf(!hasTestDatabase)("PUT/DELETE /api/purchase-bills/[id]/payment/[paymentId]", () => {
+  beforeEach(async () => {
+    await resetDb();
+    const user = await seedUser();
+    mockSession({ id: user.id, role: "staff" });
+  });
+
+  it("edits amount/method/reference and recomputes paidAmount/status", async () => {
+    const bill = await makeBill({ total: 1000, paidAmount: 400, status: "partial" });
+    const payment = await testPrisma.purchasePayment.create({ data: { purchaseBillId: bill.id, amount: 400, method: "Cash", date: new Date() } });
+
+    const { PUT } = await import("@/app/api/purchase-bills/[id]/payment/[paymentId]/route");
+    const res = await PUT(
+      jsonRequest(`http://localhost/api/purchase-bills/${bill.id}/payment/${payment.id}`, "PUT", { amount: 1000, method: "NEFT", reference: "utr-9" }),
+      paramsOf(bill.id, { paymentId: payment.id })
+    );
+    expect(res.status).toBe(200);
+
+    const updatedPayment = await testPrisma.purchasePayment.findUnique({ where: { id: payment.id } });
+    expect(updatedPayment?.amount).toBe(1000);
+    expect(updatedPayment?.method).toBe("NEFT");
+    const updatedBill = await testPrisma.purchaseBill.findUnique({ where: { id: bill.id } });
+    expect(updatedBill?.paidAmount).toBe(1000);
+    expect(updatedBill?.status).toBe("paid");
+  });
+
+  it("rejects an edit that would exceed the bill total", async () => {
+    const bill = await makeBill({ total: 1000, paidAmount: 400, status: "partial" });
+    const payment = await testPrisma.purchasePayment.create({ data: { purchaseBillId: bill.id, amount: 400, method: "Cash", date: new Date() } });
+
+    const { PUT } = await import("@/app/api/purchase-bills/[id]/payment/[paymentId]/route");
+    const res = await PUT(
+      jsonRequest(`http://localhost/api/purchase-bills/${bill.id}/payment/${payment.id}`, "PUT", { amount: 1500 }),
+      paramsOf(bill.id, { paymentId: payment.id })
+    );
+    expect(res.status).toBe(400);
+    const unchanged = await testPrisma.purchasePayment.findUnique({ where: { id: payment.id } });
+    expect(unchanged?.amount).toBe(400);
+  });
+
+  it("deletes a payment and recomputes paidAmount/status back down", async () => {
+    const bill = await makeBill({ total: 1000, paidAmount: 400, status: "partial" });
+    const payment = await testPrisma.purchasePayment.create({ data: { purchaseBillId: bill.id, amount: 400, method: "Cash", date: new Date() } });
+
+    const { DELETE } = await import("@/app/api/purchase-bills/[id]/payment/[paymentId]/route");
+    const res = await DELETE(
+      jsonRequest(`http://localhost/api/purchase-bills/${bill.id}/payment/${payment.id}`, "DELETE"),
+      paramsOf(bill.id, { paymentId: payment.id })
+    );
+    expect(res.status).toBe(200);
+
+    const updatedBill = await testPrisma.purchaseBill.findUnique({ where: { id: bill.id } });
+    expect(updatedBill?.paidAmount).toBe(0);
+    expect(updatedBill?.status).toBe("unpaid");
+    const remaining = await testPrisma.purchasePayment.count({ where: { purchaseBillId: bill.id } });
+    expect(remaining).toBe(0);
+  });
+
+  // A cancelled bill's status is a deliberate, directly-set value (see the create route's own
+  // guard) — editing/deleting one of its existing payments must not silently flip it back to
+  // unpaid/partial/paid just because paidAmount was recomputed.
+  it("preserves a cancelled bill's status across a payment edit and delete", async () => {
+    const bill = await makeBill({ total: 1000, paidAmount: 400, status: "cancelled" });
+    const payment = await testPrisma.purchasePayment.create({ data: { purchaseBillId: bill.id, amount: 400, method: "Cash", date: new Date() } });
+
+    const { PUT } = await import("@/app/api/purchase-bills/[id]/payment/[paymentId]/route");
+    const editRes = await PUT(
+      jsonRequest(`http://localhost/api/purchase-bills/${bill.id}/payment/${payment.id}`, "PUT", { amount: 300 }),
+      paramsOf(bill.id, { paymentId: payment.id })
+    );
+    expect(editRes.status).toBe(200);
+    let updatedBill = await testPrisma.purchaseBill.findUnique({ where: { id: bill.id } });
+    expect(updatedBill?.status).toBe("cancelled");
+    expect(updatedBill?.paidAmount).toBe(300);
+
+    const { DELETE } = await import("@/app/api/purchase-bills/[id]/payment/[paymentId]/route");
+    const deleteRes = await DELETE(
+      jsonRequest(`http://localhost/api/purchase-bills/${bill.id}/payment/${payment.id}`, "DELETE"),
+      paramsOf(bill.id, { paymentId: payment.id })
+    );
+    expect(deleteRes.status).toBe(200);
+    updatedBill = await testPrisma.purchaseBill.findUnique({ where: { id: bill.id } });
+    expect(updatedBill?.status).toBe("cancelled");
+    expect(updatedBill?.paidAmount).toBe(0);
+  });
+});

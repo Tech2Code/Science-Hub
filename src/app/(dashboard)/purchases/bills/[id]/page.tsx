@@ -28,8 +28,9 @@ import { AttachmentIcon } from "@/components/purchases/AttachmentIcon";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
+import { useDirty } from "@/lib/useDirty";
 import { useMenuA11y } from "@/lib/useMenuA11y";
-import { PAYMENT_METHODS, resolvePaymentMethod } from "@/lib/paymentMethods";
+import { PAYMENT_METHODS, resolvePaymentMethod, methodSelectValue, methodCustomText } from "@/lib/paymentMethods";
 import styles from "./billDetail.module.css";
 
 interface PurchaseBillItem {
@@ -122,17 +123,27 @@ export default function PurchaseBillDetailPage() {
   const [showPayForm, setShowPayForm]   = useState(false);
   const [payAmount,   setPayAmount]     = useState("");
   const [payAmountError, setPayAmountError] = useState<string | undefined>(undefined);
-  const [payMethod,   setPayMethod]     = useState("Cash");
+  const [payMethod,   setPayMethod]     = useState("IMPS");
   const [payOtherMethod, setPayOtherMethod] = useState("");
   const [payOtherMethodError, setPayOtherMethodError] = useState<string | undefined>(undefined);
   const [payRef,      setPayRef]        = useState("");
   const [payDate,     setPayDate]       = useState(() => toIstDateStr(new Date()));
   const [submitting,  setSubmitting]    = useState(false);
 
+  const [editingPayment, setEditingPayment] = useState<PurchasePayment | null>(null);
+  const [editPaymentForm, setEditPaymentForm] = useState({ amount: "", method: "IMPS", reference: "", date: "" });
+  const [editPaymentOtherMethod, setEditPaymentOtherMethod] = useState("");
+  const [editPaymentAmountError, setEditPaymentAmountError] = useState<string | undefined>(undefined);
+  const [editPaymentOtherMethodError, setEditPaymentOtherMethodError] = useState<string | undefined>(undefined);
+  const [savingPaymentEdit, setSavingPaymentEdit] = useState(false);
+  const editPaymentDirty = useDirty({ ...editPaymentForm, otherMethod: editPaymentOtherMethod });
+  const [paymentDeleteConfirm, setPaymentDeleteConfirm] = useState<PurchasePayment | null>(null);
+  const [deletingPayment, setDeletingPayment] = useState(false);
+
   function resetPaymentForm() {
     setPayAmount("");
     setPayAmountError(undefined);
-    setPayMethod("Cash");
+    setPayMethod("IMPS");
     setPayOtherMethod("");
     setPayOtherMethodError(undefined);
     setPayRef("");
@@ -354,6 +365,83 @@ export default function PurchaseBillDetailPage() {
     setSubmitting(false);
   }
 
+  function openEditPayment(p: PurchasePayment) {
+    const initial = { amount: String(p.amount), method: methodSelectValue(p.method), reference: p.reference || "", date: toIstDateStr(new Date(p.date)) };
+    const initialOtherMethod = methodCustomText(p.method);
+    setEditingPayment(p);
+    setEditPaymentForm(initial);
+    setEditPaymentOtherMethod(initialOtherMethod);
+    setEditPaymentAmountError(undefined);
+    setEditPaymentOtherMethodError(undefined);
+    editPaymentDirty.markClean({ ...initial, otherMethod: initialOtherMethod });
+  }
+
+  async function handleEditPaymentSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingPayment || !bill || !editPaymentDirty.isDirty) return;
+    const amount = parseFloat(editPaymentForm.amount);
+    const balance = bill.total - bill.paidAmount + editingPayment.amount;
+    const amountErr = !editPaymentForm.amount || isNaN(amount) || amount <= 0
+      ? "Enter a valid amount."
+      : amount > balance + 0.01
+        ? `Amount exceeds outstanding balance of ₹${fmt(balance)}.`
+        : undefined;
+    const otherMethodErr = editPaymentForm.method === "Other" && !editPaymentOtherMethod.trim() ? "Please specify the payment method." : undefined;
+    setEditPaymentAmountError(amountErr);
+    setEditPaymentOtherMethodError(otherMethodErr);
+    if (amountErr || otherMethodErr) return;
+    if (editPaymentForm.date < toIstDateStr(new Date(bill.billDate))) { toast({ type: "error", title: "Check form", message: "Payment date cannot be before the bill date." }); return; }
+    if (isFutureIstDate(editPaymentForm.date)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be in the future." }); return; }
+
+    const method = resolvePaymentMethod(editPaymentForm.method, editPaymentOtherMethod);
+    setSavingPaymentEdit(true);
+    try {
+      const res = await fetch(`/api/purchase-bills/${id}/payment/${editingPayment.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount, method, reference: editPaymentForm.reference.trim() || null, date: editPaymentForm.date }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        bustCachePrefix("/api/purchase-bills");
+        bustCachePrefix("/api/reports");
+        bustCachePrefix("/api/purchase-reports");
+        invalidateCachedPdf("purchase-bill", id);
+        toast({ type: "success", title: "Payment updated" });
+        setEditingPayment(null);
+        load();
+      } else {
+        toast({ type: "error", title: "Failed", message: data.error ?? "Failed to update payment." });
+      }
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Please try again." });
+    }
+    setSavingPaymentEdit(false);
+  }
+
+  async function handleDeletePayment() {
+    if (!paymentDeleteConfirm) return;
+    setDeletingPayment(true);
+    try {
+      const res = await fetch(`/api/purchase-bills/${id}/payment/${paymentDeleteConfirm.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        bustCachePrefix("/api/purchase-bills");
+        bustCachePrefix("/api/reports");
+        bustCachePrefix("/api/purchase-reports");
+        invalidateCachedPdf("purchase-bill", id);
+        toast({ type: "success", title: "Payment deleted" });
+        setPaymentDeleteConfirm(null);
+        load();
+      } else {
+        toast({ type: "error", title: "Failed", message: data.error ?? "Failed to delete payment." });
+      }
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Please try again." });
+    }
+    setDeletingPayment(false);
+  }
+
   async function handleCancel() {
     setCancelling(true);
     try {
@@ -537,6 +625,8 @@ export default function PurchaseBillDetailPage() {
     <>
     {(submitting || updatingStatus || cancelling || uncancelling) && <OverlayLoader text="Saving…" />}
     {deleting && <OverlayLoader text="Deleting…" />}
+    {savingPaymentEdit && <OverlayLoader text="Updating payment…" />}
+    {deletingPayment && <OverlayLoader text="Deleting payment…" />}
     {openingEdit && <OverlayLoader text="Opening editor…" />}
     {pdfDownloading && <OverlayLoader text="Generating PDF…" />}
     {pdfViewing && <OverlayLoader text="Preparing PDF…" />}
@@ -793,6 +883,80 @@ export default function PurchaseBillDetailPage() {
       onConfirm={handleDelete}
       onCancel={() => { if (!deleting) setConfirmDelete(false); }}
     />
+
+    <ConfirmDialog
+      open={paymentDeleteConfirm !== null}
+      title="Delete Payment"
+      message={`Delete this ₹${paymentDeleteConfirm ? fmt(paymentDeleteConfirm.amount) : ""} payment via ${paymentDeleteConfirm?.method ?? ""}? The bill's paid amount and status will be recalculated.`}
+      confirmLabel="Delete"
+      variant="danger"
+      loading={deletingPayment}
+      onConfirm={handleDeletePayment}
+      onCancel={() => { if (!deletingPayment) setPaymentDeleteConfirm(null); }}
+    />
+
+    <Modal
+      open={editingPayment !== null}
+      title="Edit Payment"
+      onClose={() => { if (!savingPaymentEdit) setEditingPayment(null); }}
+      variant="fullscreen"
+      maxWidth="26rem"
+      footer={
+        <>
+          <Button type="button" variant="secondary" disabled={savingPaymentEdit} onClick={() => setEditingPayment(null)}>Cancel</Button>
+          <Button type="submit" form="edit-purchase-payment-form" variant="primary" loading={savingPaymentEdit} disabled={savingPaymentEdit || !editPaymentDirty.isDirty}>Save</Button>
+        </>
+      }
+    >
+      <form id="edit-purchase-payment-form" className={styles.formCol} onSubmit={handleEditPaymentSubmit} noValidate>
+        <FormField label="Amount (₹)" error={editPaymentAmountError} required>
+          <Input
+            type="text"
+            inputMode="decimal"
+            value={editPaymentForm.amount}
+            onChange={(e) => { setEditPaymentForm((p) => ({ ...p, amount: e.target.value.replace(/[^\d.]/g, "") })); setEditPaymentAmountError(undefined); }}
+            autoFocus
+            disabled={savingPaymentEdit}
+          />
+        </FormField>
+        <FormField label="Date">
+          <Input
+            type="date"
+            value={editPaymentForm.date}
+            onChange={(e) => setEditPaymentForm((p) => ({ ...p, date: e.target.value }))}
+            disabled={savingPaymentEdit}
+          />
+        </FormField>
+        <FormField label="Method">
+          <Select
+            value={editPaymentForm.method}
+            onChange={(e) => { setEditPaymentForm((p) => ({ ...p, method: e.target.value })); setEditPaymentOtherMethodError(undefined); }}
+            disabled={savingPaymentEdit}
+          >
+            {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+          </Select>
+        </FormField>
+        {editPaymentForm.method === "Other" && (
+          <FormField label="Specify Method" error={editPaymentOtherMethodError} required>
+            <Input
+              type="text"
+              value={editPaymentOtherMethod}
+              onChange={(e) => { setEditPaymentOtherMethod(e.target.value); setEditPaymentOtherMethodError(undefined); }}
+              disabled={savingPaymentEdit}
+            />
+          </FormField>
+        )}
+        <FormField label="Reference (optional)">
+          <Input
+            type="text"
+            value={editPaymentForm.reference}
+            onChange={(e) => setEditPaymentForm((p) => ({ ...p, reference: e.target.value }))}
+            maxLength={500}
+            disabled={savingPaymentEdit}
+          />
+        </FormField>
+      </form>
+    </Modal>
 
     <Modal
       open={emailModalOpen}
@@ -1220,6 +1384,7 @@ export default function PurchaseBillDetailPage() {
                   <th>Method</th>
                   <th>Reference</th>
                   <th className={styles.textRight}>Amount</th>
+                  {canWrite && <th className={styles.textRight}>Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -1233,6 +1398,30 @@ export default function PurchaseBillDetailPage() {
                     </td>
                     <td data-label="Reference" className={styles.referenceCell}>{p.reference || "—"}</td>
                     <td data-label="Amount" className={styles.paymentAmountCell}>₹{fmt(p.amount)}</td>
+                    {canWrite && (
+                      <td data-label="Actions" className={styles.textRight}>
+                        <div className={styles.paymentActionsCell}>
+                          <button
+                            type="button"
+                            className={styles.paymentEditBtn}
+                            title="Edit payment"
+                            aria-label="Edit payment"
+                            onClick={() => openEditPayment(p)}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.paymentDeleteBtn}
+                            title="Delete payment"
+                            aria-label="Delete payment"
+                            onClick={() => setPaymentDeleteConfirm(p)}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -1240,6 +1429,7 @@ export default function PurchaseBillDetailPage() {
                 <tr className={styles.tfootRow}>
                   <td colSpan={3} className={styles.tfootLabelCell}>Total Paid</td>
                   <td className={styles.tfootPaidValueCell}>₹{fmt(bill.paidAmount)}</td>
+                  {canWrite && <td />}
                 </tr>
               </tfoot>
             </table>

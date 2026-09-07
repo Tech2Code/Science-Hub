@@ -3,6 +3,7 @@
 
 .errorText { color: var(--c-red); }
 .shareIconMargin { margin-right: 0.375rem; }
+.formCol { display: flex; flex-direction: column; gap: 1.325rem; }
 
 /* ---------- Skeleton ---------- */
 .skToolbarRow {
@@ -311,6 +312,15 @@
 .payDateCell { white-space: nowrap; color: var(--c-text-2); }
 .payReferenceCell { color: var(--c-text-4); font-family: var(--font-mono); font-size: 0.75rem; }
 .payAmountCell { font-weight: 600; color: var(--c-green); white-space: nowrap; }
+
+.paymentActionsCell { display: flex; gap: 0.25rem; justify-content: flex-end; }
+.paymentEditBtn, .paymentDeleteBtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: var(--c-radius-xs); border: none;
+  background: transparent; color: var(--c-text-4); cursor: pointer;
+}
+.paymentEditBtn:hover { background: var(--c-blue-bg); color: var(--c-blue); }
+.paymentDeleteBtn:hover { background: var(--c-red-bg); color: var(--c-red); }
 
 .methodBadge {
   display: inline-block;

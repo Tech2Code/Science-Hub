@@ -12,6 +12,6 @@ export function jsonRequest(url: string, method: string, body?: unknown): NextRe
   });
 }
 
-export function paramsOf(id: string) {
-  return { params: Promise.resolve({ id }) };
+export function paramsOf<E extends Record<string, string> = Record<string, never>>(id: string, extra: E = {} as E) {
+  return { params: Promise.resolve({ id, ...extra }) };
 }

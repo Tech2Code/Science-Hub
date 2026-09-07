@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
-import { requireWriteAccess } from "@/lib/apiAuth";
+import { logActivity } from "@/lib/activity";
 import { isFutureIstDate, toIstDateStr, istDayStartUtc } from "@/lib/validation";
+import { requireWriteAccess } from "@/lib/apiAuth";
 
 class PaymentExceedsBalanceError extends Error {}
 class PaymentConflictError extends Error {}
-class PaymentBelowReturnedError extends Error {}
 
 export async function PUT(
   request: NextRequest,
@@ -30,20 +29,12 @@ export async function PUT(
       return NextResponse.json({ error: "Reference is too long (max 500 characters)." }, { status: 400 });
     }
 
-    // Pre-checks outside the transaction — cheap, and let us return a clean
-    // 404 before paying the cost of a Serializable transaction attempt.
-    const paymentCheck = await prisma.payment.findUnique({ where: { id: paymentId } });
-    if (!paymentCheck || paymentCheck.invoiceId !== id) {
+    const paymentCheck = await prisma.purchasePayment.findUnique({ where: { id: paymentId } });
+    if (!paymentCheck || paymentCheck.purchaseBillId !== id) {
       return NextResponse.json({ error: "Payment not found" }, { status: 404 });
     }
-    const invoiceCheck = await prisma.invoice.findUnique({
-      where: { id },
-      include: { customer: true },
-    });
-    if (!invoiceCheck) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
-    if (invoiceCheck.deletedAt) {
-      return NextResponse.json({ error: "This invoice is in the bin — restore it before editing a payment" }, { status: 400 });
-    }
+    const billCheck = await prisma.purchaseBill.findFirst({ where: { id, deletedAt: null } });
+    if (!billCheck) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
 
     let paymentDate: Date | undefined;
     if (date) {
@@ -51,54 +42,37 @@ export async function PUT(
       if (isNaN(parsedDate.getTime())) {
         return NextResponse.json({ error: "Invalid payment date" }, { status: 400 });
       }
-      if (date < toIstDateStr(invoiceCheck.date)) {
-        return NextResponse.json({ error: "Payment date cannot be before the invoice date" }, { status: 400 });
+      if (date < toIstDateStr(billCheck.billDate)) {
+        return NextResponse.json({ error: "Payment date cannot be before the bill date" }, { status: 400 });
       }
       if (isFutureIstDate(date)) {
         return NextResponse.json({ error: "Payment date cannot be in the future" }, { status: 400 });
       }
-      // Normalized to exact IST midnight — see the same note in returns/route.ts.
       paymentDate = istDayStartUtc(toIstDateStr(parsedDate));
     }
 
-    // Re-validate balance inside a Serializable transaction (mirrors the create-payment route) so concurrent edits can't together overpay the invoice.
+    // Re-validate balance inside a Serializable transaction (mirrors the create-payment route) so concurrent edits can't together overpay the bill.
     async function attemptUpdate() {
       return prisma.$transaction(async (tx) => {
-        const payment = await tx.payment.findUnique({ where: { id: paymentId } });
-        if (!payment || payment.invoiceId !== id) {
+        const payment = await tx.purchasePayment.findUnique({ where: { id: paymentId } });
+        if (!payment || payment.purchaseBillId !== id) {
           throw new PaymentConflictError("Payment not found");
         }
-        const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });
+        const bill = await tx.purchaseBill.findUniqueOrThrow({ where: { id } });
 
-        const otherPayments = await tx.payment.aggregate({
-          where: { invoiceId: id, id: { not: paymentId } },
+        const otherPayments = await tx.purchasePayment.aggregate({
+          where: { purchaseBillId: id, id: { not: paymentId } },
           _sum: { amount: true },
         });
         const otherPaymentsTotal = otherPayments._sum.amount ?? 0;
-        const remaining = invoice.total - otherPaymentsTotal;
+        const remaining = bill.total - otherPaymentsTotal;
         if (parseFloat(amountStr) > remaining + 0.01) {
           throw new PaymentExceedsBalanceError(
             `Payment (₹${parseFloat(amountStr).toFixed(2)}) exceeds the remaining balance (₹${remaining.toFixed(2)})`
           );
         }
 
-        // A credit note is capped at creation time against the invoice's paidAmount as it stood
-        // then (see returns/route.ts) — that check isn't a standing DB constraint, so reducing a
-        // payment afterward could otherwise leave the invoice claiming less cash received than it
-        // has already refunded via credit notes. Re-verify against the new paidAmount here.
-        const existingReturns = await tx.return.aggregate({
-          where: { invoiceId: id, deletedAt: null },
-          _sum: { total: true },
-        });
-        const existingReturnTotal = existingReturns._sum.total ?? 0;
-        const newPaidAmount = otherPaymentsTotal + parseFloat(amountStr);
-        if (newPaidAmount < existingReturnTotal - 0.01) {
-          throw new PaymentBelowReturnedError(
-            `Cannot reduce this payment — ₹${existingReturnTotal.toFixed(2)} has already been refunded via credit note(s) against the paid amount.`
-          );
-        }
-
-        await tx.payment.update({
+        await tx.purchasePayment.update({
           where: { id: paymentId },
           data: {
             amount: parseFloat(amountStr),
@@ -108,14 +82,18 @@ export async function PUT(
           },
         });
 
-        const agg = await tx.payment.aggregate({
-          where: { invoiceId: id },
+        const agg = await tx.purchasePayment.aggregate({
+          where: { purchaseBillId: id },
           _sum: { amount: true },
         });
         const paidAmount = agg._sum.amount ?? 0;
-        const status = paidAmount + 0.01 >= invoice.total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+        // A cancelled bill's status is a deliberate, directly-set value — never recompute it away
+        // from "cancelled" just because a correction changed how much was paid against it.
+        const status = bill.status === "cancelled"
+          ? "cancelled"
+          : paidAmount + 0.01 >= bill.total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
 
-        return tx.invoice.update({
+        return tx.purchaseBill.update({
           where: { id },
           data: { paidAmount, status },
           include: { payments: { orderBy: { date: "desc" } } },
@@ -136,21 +114,20 @@ export async function PUT(
       }
     }
 
-    revalidateTag("invoices", { expire: 0 });
-    revalidateTag("reports", { expire: 0 });
+    revalidateTag("purchase-bills", { expire: 0 });
 
     const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     await logActivity(
       auth.session.user.id,
-      "update_payment",
-      `Updated payment to ₹${fmt(parseFloat(amountStr))} via ${method} for invoice ${invoiceCheck.invoiceNumber} (${invoiceCheck.customer.name})`,
+      "update_purchase_payment",
+      `Updated payment to ₹${fmt(parseFloat(amountStr))} via ${method} for bill ${billCheck.billNumber}`,
       id,
-      "invoice"
+      "purchase_bill"
     );
 
     return NextResponse.json(updated);
   } catch (error) {
-    if (error instanceof PaymentExceedsBalanceError || error instanceof PaymentBelowReturnedError) {
+    if (error instanceof PaymentExceedsBalanceError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     if (error instanceof PaymentConflictError) {
@@ -171,53 +148,35 @@ export async function DELETE(
 
     const { id, paymentId } = await params;
 
-    const paymentCheck = await prisma.payment.findUnique({ where: { id: paymentId } });
-    if (!paymentCheck || paymentCheck.invoiceId !== id) {
+    const paymentCheck = await prisma.purchasePayment.findUnique({ where: { id: paymentId } });
+    if (!paymentCheck || paymentCheck.purchaseBillId !== id) {
       return NextResponse.json({ error: "Payment not found" }, { status: 404 });
     }
-    const invoiceCheck = await prisma.invoice.findUnique({
-      where: { id },
-      include: { customer: true },
-    });
-    if (!invoiceCheck) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
-    if (invoiceCheck.deletedAt) {
-      return NextResponse.json({ error: "This invoice is in the bin — restore it before deleting a payment" }, { status: 400 });
-    }
+    const billCheck = await prisma.purchaseBill.findFirst({ where: { id, deletedAt: null } });
+    if (!billCheck) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
 
     async function attemptDelete() {
       return prisma.$transaction(async (tx) => {
-        const payment = await tx.payment.findUnique({ where: { id: paymentId } });
-        if (!payment || payment.invoiceId !== id) {
+        const payment = await tx.purchasePayment.findUnique({ where: { id: paymentId } });
+        if (!payment || payment.purchaseBillId !== id) {
           throw new PaymentConflictError("Payment not found");
         }
-        const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });
+        const bill = await tx.purchaseBill.findUniqueOrThrow({ where: { id } });
 
-        const otherPayments = await tx.payment.aggregate({
-          where: { invoiceId: id, id: { not: paymentId } },
+        await tx.purchasePayment.delete({ where: { id: paymentId } });
+
+        const agg = await tx.purchasePayment.aggregate({
+          where: { purchaseBillId: id },
           _sum: { amount: true },
         });
-        const newPaidAmount = otherPayments._sum.amount ?? 0;
+        const paidAmount = agg._sum.amount ?? 0;
+        const status = bill.status === "cancelled"
+          ? "cancelled"
+          : paidAmount + 0.01 >= bill.total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
 
-        // Same guard as the PUT above — deleting the payment can't drop paidAmount below what's
-        // already been refunded via credit note(s) against it.
-        const existingReturns = await tx.return.aggregate({
-          where: { invoiceId: id, deletedAt: null },
-          _sum: { total: true },
-        });
-        const existingReturnTotal = existingReturns._sum.total ?? 0;
-        if (newPaidAmount < existingReturnTotal - 0.01) {
-          throw new PaymentBelowReturnedError(
-            `Cannot delete this payment — ₹${existingReturnTotal.toFixed(2)} has already been refunded via credit note(s) against the paid amount.`
-          );
-        }
-
-        await tx.payment.delete({ where: { id: paymentId } });
-
-        const status = newPaidAmount + 0.01 >= invoice.total ? "paid" : newPaidAmount > 0 ? "partial" : "unpaid";
-
-        return tx.invoice.update({
+        return tx.purchaseBill.update({
           where: { id },
-          data: { paidAmount: newPaidAmount, status },
+          data: { paidAmount, status },
           include: { payments: { orderBy: { date: "desc" } } },
         });
       }, { isolationLevel: "Serializable", timeout: 20000, maxWait: 10000 });
@@ -236,23 +195,19 @@ export async function DELETE(
       }
     }
 
-    revalidateTag("invoices", { expire: 0 });
-    revalidateTag("reports", { expire: 0 });
+    revalidateTag("purchase-bills", { expire: 0 });
 
     const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     await logActivity(
       auth.session.user.id,
-      "delete_payment",
-      `Deleted payment of ₹${fmt(paymentCheck.amount)} via ${paymentCheck.method} for invoice ${invoiceCheck.invoiceNumber} (${invoiceCheck.customer.name})`,
+      "delete_purchase_payment",
+      `Deleted payment of ₹${fmt(paymentCheck.amount)} via ${paymentCheck.method} for bill ${billCheck.billNumber}`,
       id,
-      "invoice"
+      "purchase_bill"
     );
 
     return NextResponse.json(updated);
   } catch (error) {
-    if (error instanceof PaymentBelowReturnedError) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
     if (error instanceof PaymentConflictError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }

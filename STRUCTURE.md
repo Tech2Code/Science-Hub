@@ -231,6 +231,7 @@ BusinessSettings  id="singleton", name, tagline, email (printed on invoices),
 | GET/POST | `/api/purchase-bills` | List / create |
 | GET/PUT/DELETE | `/api/purchase-bills/[id]` | Get / edit / soft-delete |
 | POST | `/api/purchase-bills/[id]/payment` | Record payment against bill |
+| PUT/DELETE | `/api/purchase-bills/[id]/payment/[paymentId]` | Edit / delete a recorded payment, recompute `paidAmount`/status (added 2026-09-07 — see `CLAUDE.md` Features Completed #49) |
 | GET | `/api/purchase-bills/payments` | All payments made |
 | GET | `/api/purchase-reports` | Purchase reports (`summary`/`category` exclude cancelled bills) |
 | POST | `/api/products/[id]/adjust-stock` | Manual stock correction, requires a reason, writes a `"manual"` ledger row |

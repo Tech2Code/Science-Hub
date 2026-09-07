@@ -96,7 +96,8 @@ export function numberFormatDbFilter(formatId: string | null | undefined, prefix
 }
 
 // A string-sort trick only works when the sequence is a fixed-width right-most segment; "seq_fy"/
-// "prefix_seq_fy" don't zero-pad, so "9/..." isn't lexicographically less than "10/..." — hence scanning in JS.
+// "prefix_seq_fy" only zero-pad to 2 digits (not a fixed width once the sequence itself grows past
+// that), so "99/..." still isn't lexicographically less than "100/..." — hence scanning in JS.
 export function findMaxSequence(existingNumbers: string[], matcher: RegExp): number {
   let max = 0;
   for (const num of existingNumbers) {

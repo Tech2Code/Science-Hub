@@ -103,3 +103,104 @@ describe.skipIf(!hasTestDatabase)("POST /api/invoices/[id]/payment idempotencyKe
     expect(paymentCount).toBe(1);
   });
 });
+
+// Regression coverage for the gap the user reported: once a payment was recorded there was no
+// way to correct a mistake (wrong amount/method/date) or remove a duplicate/misattributed entry.
+describe.skipIf(!hasTestDatabase)("PUT/DELETE /api/invoices/[id]/payment/[paymentId]", () => {
+  let userId: string;
+
+  beforeEach(async () => {
+    await resetDb();
+    const user = await seedUser();
+    userId = user.id;
+    mockSession({ id: user.id, role: "staff" });
+  });
+
+  it("edits amount/method/reference and recomputes paidAmount/status", async () => {
+    const invoice = await makeInvoice(userId, { total: 1000 });
+    const payment = await testPrisma.payment.create({ data: { invoiceId: invoice.id, amount: 400, method: "Cash", date: new Date() } });
+    await testPrisma.invoice.update({ where: { id: invoice.id }, data: { paidAmount: 400, status: "partial" } });
+
+    const { PUT } = await import("@/app/api/invoices/[id]/payment/[paymentId]/route");
+    const res = await PUT(
+      jsonRequest(`http://localhost/api/invoices/${invoice.id}/payment/${payment.id}`, "PUT", { amount: 1000, method: "UPI", reference: "utr-1" }),
+      paramsOf(invoice.id, { paymentId: payment.id })
+    );
+    expect(res.status).toBe(200);
+
+    const updatedPayment = await testPrisma.payment.findUnique({ where: { id: payment.id } });
+    expect(updatedPayment?.amount).toBe(1000);
+    expect(updatedPayment?.method).toBe("UPI");
+    const updatedInvoice = await testPrisma.invoice.findUnique({ where: { id: invoice.id } });
+    expect(updatedInvoice?.paidAmount).toBe(1000);
+    expect(updatedInvoice?.status).toBe("paid");
+  });
+
+  it("rejects an edit that would exceed the invoice total", async () => {
+    const invoice = await makeInvoice(userId, { total: 1000 });
+    const payment = await testPrisma.payment.create({ data: { invoiceId: invoice.id, amount: 400, method: "Cash", date: new Date() } });
+    await testPrisma.invoice.update({ where: { id: invoice.id }, data: { paidAmount: 400, status: "partial" } });
+
+    const { PUT } = await import("@/app/api/invoices/[id]/payment/[paymentId]/route");
+    const res = await PUT(
+      jsonRequest(`http://localhost/api/invoices/${invoice.id}/payment/${payment.id}`, "PUT", { amount: 1500 }),
+      paramsOf(invoice.id, { paymentId: payment.id })
+    );
+    expect(res.status).toBe(400);
+    const unchanged = await testPrisma.payment.findUnique({ where: { id: payment.id } });
+    expect(unchanged?.amount).toBe(400);
+  });
+
+  it("deletes a payment and recomputes paidAmount/status back down", async () => {
+    const invoice = await makeInvoice(userId, { total: 1000 });
+    const payment = await testPrisma.payment.create({ data: { invoiceId: invoice.id, amount: 400, method: "Cash", date: new Date() } });
+    await testPrisma.invoice.update({ where: { id: invoice.id }, data: { paidAmount: 400, status: "partial" } });
+
+    const { DELETE } = await import("@/app/api/invoices/[id]/payment/[paymentId]/route");
+    const res = await DELETE(
+      jsonRequest(`http://localhost/api/invoices/${invoice.id}/payment/${payment.id}`, "DELETE"),
+      paramsOf(invoice.id, { paymentId: payment.id })
+    );
+    expect(res.status).toBe(200);
+
+    const updatedInvoice = await testPrisma.invoice.findUnique({ where: { id: invoice.id } });
+    expect(updatedInvoice?.paidAmount).toBe(0);
+    expect(updatedInvoice?.status).toBe("unpaid");
+    const remaining = await testPrisma.payment.count({ where: { invoiceId: invoice.id } });
+    expect(remaining).toBe(0);
+  });
+
+  // The real data-integrity risk this feature introduces: a credit note is capped at creation
+  // time against the invoice's paidAmount as it stood then (see returns/route.ts), not by a
+  // standing DB constraint — so reducing/deleting a payment afterward could otherwise leave the
+  // invoice claiming to have refunded more cash than it ever actually received.
+  it("blocks reducing a payment below an already-issued credit note's total", async () => {
+    const invoice = await makeInvoice(userId, { total: 1000 });
+    const payment = await testPrisma.payment.create({ data: { invoiceId: invoice.id, amount: 1000, method: "Cash", date: new Date() } });
+    await testPrisma.invoice.update({ where: { id: invoice.id }, data: { paidAmount: 1000, status: "paid" } });
+    await testPrisma.return.create({
+      data: { invoiceId: invoice.id, date: new Date(), subtotal: 600, cgst: 0, sgst: 0, igst: 0, total: 600 },
+    });
+
+    const { PUT } = await import("@/app/api/invoices/[id]/payment/[paymentId]/route");
+    const editRes = await PUT(
+      jsonRequest(`http://localhost/api/invoices/${invoice.id}/payment/${payment.id}`, "PUT", { amount: 500 }),
+      paramsOf(invoice.id, { paymentId: payment.id })
+    );
+    expect(editRes.status).toBe(400);
+    const editErr = await editRes.json();
+    expect(editErr.error).toMatch(/credit note/i);
+
+    const { DELETE } = await import("@/app/api/invoices/[id]/payment/[paymentId]/route");
+    const deleteRes = await DELETE(
+      jsonRequest(`http://localhost/api/invoices/${invoice.id}/payment/${payment.id}`, "DELETE"),
+      paramsOf(invoice.id, { paymentId: payment.id })
+    );
+    expect(deleteRes.status).toBe(400);
+    const deleteErr = await deleteRes.json();
+    expect(deleteErr.error).toMatch(/credit note/i);
+
+    const unchanged = await testPrisma.payment.findUnique({ where: { id: payment.id } });
+    expect(unchanged?.amount).toBe(1000);
+  });
+});
