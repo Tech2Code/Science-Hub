@@ -40,10 +40,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!auth.ok) return auth.response;
     const { id } = await params;
     const body = await req.json();
-    const { vendorId, billDate, dueDate, discount, notes, category, status, items, attachmentUrl, attachmentName, expectedUpdatedAt, transportCharge, transportChargeGstRate } = body;
+    const { vendorId, billDate, dueDate, discount, notes, category, status, items, attachmentUrl, attachmentName, attachmentSize, expectedUpdatedAt, transportCharge, transportChargeGstRate } = body;
 
     if (attachmentUrl && !isPurchaseBillBlobUrl(attachmentUrl)) {
       return NextResponse.json({ error: "Invalid attachment URL" }, { status: 400 });
+    }
+    if (attachmentSize !== undefined && attachmentSize !== null && (typeof attachmentSize !== "number" || !Number.isFinite(attachmentSize) || attachmentSize < 0)) {
+      return NextResponse.json({ error: "Invalid attachment size" }, { status: 400 });
     }
     if (typeof notes === "string" && notes.length > 2000) {
       return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
@@ -284,6 +287,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           ...(effectiveStatus !== undefined && { status: effectiveStatus }),
           ...(attachmentUrl !== undefined && { attachmentUrl: attachmentUrl || null }),
           ...(attachmentName !== undefined && { attachmentName: attachmentName || null }),
+          // Size tracks the URL: keep it only while there's an attachment, clear it when removed.
+          ...(attachmentUrl !== undefined && { attachmentSize: attachmentUrl ? (attachmentSize ?? null) : null }),
           ...(computedItems && {
             items: {
               create: computedItems.map(item => ({

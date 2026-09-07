@@ -10,7 +10,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { FillMaxButton } from "@/components/ui/FillMaxButton";
 import { useToast } from "@/components/ui/Toast";
-import { rules, validate } from "@/lib/validation";
+import { rules, validate, toIstDateStr, isFutureIstDate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
@@ -207,7 +207,7 @@ export default function InvoiceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [paymentForm, setPaymentForm] = useState({ amount: "", method: "Cash", reference: "", date: new Date().toISOString().slice(0, 10) });
+  const [paymentForm, setPaymentForm] = useState({ amount: "", method: "Cash", reference: "", date: toIstDateStr(new Date()) });
   const [paymentOtherMethod, setPaymentOtherMethod] = useState("");
   const [paymentAmountError, setPaymentAmountError] = useState<string | undefined>(undefined);
   const [paymentDateError, setPaymentDateError] = useState<string | undefined>(undefined);
@@ -311,9 +311,9 @@ export default function InvoiceDetailPage() {
     // repeated clicks as each earlier field gets fixed.
     const amtErr = validate(paymentForm.amount, rules.required("Amount is required."), rules.positiveNumber("Enter a valid amount greater than 0."))
       ?? (amt > balance ? `Amount cannot exceed balance due (₹${fmt(balance)}).` : undefined);
-    const dateErr = invoice && paymentForm.date < invoice.date.slice(0, 10)
+    const dateErr = invoice && paymentForm.date < toIstDateStr(new Date(invoice.date))
       ? "Payment date cannot be before the invoice date."
-      : paymentForm.date > new Date().toISOString().slice(0, 10)
+      : isFutureIstDate(paymentForm.date)
         ? "Payment date cannot be in the future."
         : undefined;
     const otherMethodErr = paymentForm.method === "Other" && !paymentOtherMethod.trim() ? "Please specify the payment method." : undefined;
@@ -332,7 +332,7 @@ export default function InvoiceDetailPage() {
     if (res.ok) {
       paymentIdempotency.renew(); // this dialog can be reopened for another payment — a fresh key must back the next submit
       setShowPaymentForm(false);
-      setPaymentForm({ amount: "", method: "Cash", reference: "", date: new Date().toISOString().slice(0, 10) });
+      setPaymentForm({ amount: "", method: "Cash", reference: "", date: toIstDateStr(new Date()) });
       setPaymentOtherMethod("");
       setPaymentAmountError(undefined);
       setPaymentDateError(undefined);
@@ -368,7 +368,7 @@ export default function InvoiceDetailPage() {
       qtyText: "1",
     })).filter(ri => ri.maxQty > 0));
     setReturnNotes("");
-    setReturnDate(new Date().toISOString().split("T")[0]);
+    setReturnDate(toIstDateStr(new Date()));
     setReturnDateError(undefined);
     setReturnItemsError(undefined);
     setShowReturnForm(true);
@@ -388,8 +388,8 @@ export default function InvoiceDetailPage() {
     for (const ri of selected) {
       if (ri.qty > ri.maxQty) { setReturnItemsError(`${ri.name}: quantity exceeds returnable amount (max ${ri.maxQty}).`); return; }
     }
-    if (invoice && returnDate < invoice.date.slice(0, 10)) { setReturnDateError("Return date cannot be before the invoice date."); return; }
-    if (returnDate > new Date().toISOString().slice(0, 10)) { setReturnDateError("Return date cannot be in the future."); return; }
+    if (invoice && returnDate < toIstDateStr(new Date(invoice.date))) { setReturnDateError("Return date cannot be before the invoice date."); return; }
+    if (isFutureIstDate(returnDate)) { setReturnDateError("Return date cannot be in the future."); return; }
     setReturnItemsError(undefined);
     setReturnDateError(undefined);
     setAddingReturn(true);
@@ -913,7 +913,7 @@ export default function InvoiceDetailPage() {
                   setShowPaymentForm((v) => {
                     const next = !v;
                     if (next) {
-                      setPaymentForm({ amount: "", method: "Cash", reference: "", date: new Date().toISOString().slice(0, 10) });
+                      setPaymentForm({ amount: "", method: "Cash", reference: "", date: toIstDateStr(new Date()) });
                       setPaymentOtherMethod("");
                       setPaymentAmountError(undefined);
                       setPaymentDateError(undefined);
@@ -1056,8 +1056,8 @@ export default function InvoiceDetailPage() {
                       type="date"
                       value={paymentForm.date}
                       onChange={(e) => { setPaymentForm((p) => ({ ...p, date: e.target.value })); setPaymentDateError(undefined); }}
-                      min={invoice.date.slice(0, 10)}
-                      max={new Date().toISOString().slice(0, 10)}
+                      min={toIstDateStr(new Date(invoice.date))}
+                      max={toIstDateStr(new Date())}
                       sz="sm"
                     />
                   </FormField>
@@ -1139,7 +1139,7 @@ export default function InvoiceDetailPage() {
                 <div className={styles.returnModalMetaRow}>
                   <div>
                     <FormField label="Return Date" error={returnDateError}>
-                      <Input type="date" sz="sm" value={returnDate} onChange={e => { setReturnDate(e.target.value); setReturnDateError(undefined); }} min={invoice?.date.slice(0, 10)} max={new Date().toISOString().slice(0, 10)} className={styles.returnDateInput} />
+                      <Input type="date" sz="sm" value={returnDate} onChange={e => { setReturnDate(e.target.value); setReturnDateError(undefined); }} min={invoice ? toIstDateStr(new Date(invoice.date)) : undefined} max={toIstDateStr(new Date())} className={styles.returnDateInput} />
                     </FormField>
                   </div>
                   <div className={styles.returnNotesField}>

@@ -19,6 +19,7 @@ import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { downloadXlsx } from "@/lib/downloadXlsx";
 import { formatDate } from "@/lib/formatDate";
+import { toIstDateStr } from "@/lib/validation";
 import styles from "./purchaseReports.module.css";
 
 interface SummaryRow { month: string; count: number; totalSpend: number; paid: number; payable: number; }
@@ -110,7 +111,7 @@ export default function PurchaseReportsPage() {
 
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("outstanding");
-  const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
+  const [todayStr] = useState(() => toIstDateStr(new Date()));
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const dateQuery = startDate || endDate ? `&startDate=${startDate}&endDate=${endDate}` : "";

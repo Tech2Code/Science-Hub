@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       addRandomSuffix: true,
     });
 
-    return NextResponse.json({ url: blob.url, name: file.name });
+    return NextResponse.json({ url: blob.url, name: file.name, size: file.size });
   } catch (error) {
     console.error("POST /api/purchase-bills/upload error:", error);
     return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });

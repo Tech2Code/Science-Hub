@@ -17,6 +17,7 @@ import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { downloadXlsx } from "@/lib/downloadXlsx";
 import { formatDate } from "@/lib/formatDate";
+import { toIstDateStr } from "@/lib/validation";
 import styles from "./salesReports.module.css";
 
 interface SummaryRow { invoicesThisMonth: number; revenueThisMonth: number; totalRevenue: number; totalCollected: number; outstandingTotal: number; pendingCount: number; }
@@ -62,7 +63,7 @@ export default function SalesReportsPage() {
   }, [session, router]);
 
   const [tab, setTab] = useState<Tab>("outstanding");
-  const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
+  const [todayStr] = useState(() => toIstDateStr(new Date()));
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const dateQuery = startDate || endDate ? `&startDate=${startDate}&endDate=${endDate}` : "";

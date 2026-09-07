@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input, FormField } from "@/components/ui/Input";
 import { Modal } from "@/components/dialogs/Modal";
-import { rules, validate } from "@/lib/validation";
+import { rules, validate, toIstDateStr } from "@/lib/validation";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
@@ -60,7 +60,7 @@ export default function CustomerStatementPage() {
   const { id } = useParams<{ id: string }>();
   const toast = useToast();
   const [settings, setSettings] = useState<{ name?: string; address?: string; city?: string; state?: string; pincode?: string; phone?: string; email?: string; gstin?: string; logoUrl?: string; showLogoOnInvoices?: boolean; } | null>(null);
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = toIstDateStr(new Date());
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [downloadingPdf, setDownloadingPdf] = useState(false);

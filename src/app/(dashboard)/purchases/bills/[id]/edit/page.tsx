@@ -11,7 +11,7 @@ import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { invalidateCachedPdf } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
 import { useDirty } from "@/lib/useDirty";
-import { rules, validate } from "@/lib/validation";
+import { rules, validate, toIstDateStr } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
 import { truncateFilename } from "@/lib/truncateFilename";
@@ -39,7 +39,7 @@ interface PurchaseBill {
   category: string | null; notes: string | null; status: string;
   subtotal: number; taxAmount: number; discount: number; total: number; paidAmount: number;
   transportCharge?: number; transportChargeGstRate?: number;
-  attachmentUrl: string | null; attachmentName: string | null;
+  attachmentUrl: string | null; attachmentName: string | null; attachmentSize: number | null;
   vendor: { id: string; name: string; company: string | null; gstin: string | null };
   items: BillItem[];
 }
@@ -94,7 +94,7 @@ export default function EditPurchaseBillPage() {
   const [vendorError, setVendorError] = useState<string | undefined>(undefined);
   const [billDate,  setBillDate]  = useState("");
   const [billDateError, setBillDateError] = useState<string | undefined>(undefined);
-  const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
+  const [todayStr] = useState(() => toIstDateStr(new Date()));
   const [dueDate,   setDueDate]   = useState("");
   const [dueDateError, setDueDateError] = useState<string | undefined>(undefined);
   const [itemsError, setItemsError] = useState<string | undefined>(undefined);
@@ -106,6 +106,7 @@ export default function EditPurchaseBillPage() {
   const [items,     setItems]     = useState<PurchaseBillLineItem[]>([]);
   const [attachmentUrl,  setAttachmentUrl]  = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
+  const [attachmentSize, setAttachmentSize] = useState<number | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
   // Defaults true; the load effect below flips it false if the saved bill had no transport charge.
   const [transportChargeEnabled, setTransportChargeEnabled] = useState(true);
@@ -184,8 +185,8 @@ export default function EditPurchaseBillPage() {
       setVendors(b.vendor && !fetchedVendors.some(x => x.id === b.vendor.id) ? [...fetchedVendors, b.vendor] : fetchedVendors);
       setProducts(p.data ?? []);
       setVendorId(b.vendorId ?? "");
-      setBillDate(b.billDate ? b.billDate.slice(0, 10) : "");
-      setDueDate(b.dueDate  ? b.dueDate.slice(0, 10)  : "");
+      setBillDate(b.billDate ? toIstDateStr(new Date(b.billDate)) : "");
+      setDueDate(b.dueDate  ? toIstDateStr(new Date(b.dueDate))  : "");
       setCategory(b.category ?? "");
       setNotes(b.notes ?? "");
       setDiscount(String(b.discount ?? 0));
@@ -193,6 +194,7 @@ export default function EditPurchaseBillPage() {
       setItems(lineItems);
       setAttachmentUrl(b.attachmentUrl ?? null);
       setAttachmentName(b.attachmentName ?? null);
+      setAttachmentSize(b.attachmentSize ?? null);
       originalAttachmentUrl.current = b.attachmentUrl ?? null;
       setLoadedUpdatedAt(b.updatedAt ?? null);
       const transportChargeVal = b.transportCharge && b.transportCharge > 0 ? String(b.transportCharge) : "";
@@ -203,8 +205,8 @@ export default function EditPurchaseBillPage() {
       // Use the freshly-fetched values directly — the state setters above haven't committed yet here.
       markClean({
         vendorId: b.vendorId ?? "",
-        billDate: b.billDate ? b.billDate.slice(0, 10) : "",
-        dueDate: b.dueDate ? b.dueDate.slice(0, 10) : "",
+        billDate: b.billDate ? toIstDateStr(new Date(b.billDate)) : "",
+        dueDate: b.dueDate ? toIstDateStr(new Date(b.dueDate)) : "",
         category: b.category ?? "",
         notes: b.notes ?? "",
         discount: String(b.discount ?? 0),
@@ -251,6 +253,7 @@ export default function EditPurchaseBillPage() {
         discardIfUnsaved(attachmentUrl);
         setAttachmentUrl(data.url);
         setAttachmentName(data.name);
+        setAttachmentSize(typeof data.size === "number" ? data.size : null);
         toast({ type: "success", title: "File uploaded", message: `${truncateFilename(data.name)} uploaded successfully.` });
       } else {
         toast({ type: "error", title: "Upload failed", message: data.error ?? "Could not upload file." });
@@ -266,6 +269,7 @@ export default function EditPurchaseBillPage() {
     discardIfUnsaved(attachmentUrl);
     setAttachmentUrl(null);
     setAttachmentName(null);
+    setAttachmentSize(null);
   }
 
   // The itemsError message auto-hides once the items array it was raised
@@ -335,6 +339,7 @@ export default function EditPurchaseBillPage() {
         discount: toNum(discount),
         attachmentUrl,
         attachmentName,
+        attachmentSize,
         transportCharge: effectiveTransportCharge,
         transportChargeGstRate: effectiveTransportGstRate,
         expectedUpdatedAt: loadedUpdatedAt,

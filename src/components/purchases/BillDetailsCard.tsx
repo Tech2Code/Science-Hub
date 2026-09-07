@@ -11,7 +11,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { AttachmentPicker } from "@/components/purchases/AttachmentPicker";
 import { useToast } from "@/components/ui/Toast";
 import { bustCachePrefix } from "@/lib/useCache";
-import { rules, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+import { rules, validateForm, hasErrors, toIstDateStr, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { useDirty } from "@/lib/useDirty";
 import { INDIA_STATES_FULL } from "@/lib/states";
@@ -66,7 +66,7 @@ export function BillDetailsCard({
   transportChargeGstRate, onTransportChargeGstRateChange, transportChargeError,
 }: BillDetailsCardProps) {
   const toast = useToast();
-  const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
+  const [todayStr] = useState(() => toIstDateStr(new Date()));
   const vendorFieldId = useId();
   const [vendorSearch, setVendorSearch] = useState("");
   const [showVendorDropdown, setShowVendorDropdown] = useState(false);

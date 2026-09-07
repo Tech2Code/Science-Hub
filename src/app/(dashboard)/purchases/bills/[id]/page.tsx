@@ -14,7 +14,7 @@ import { Sk } from "@/components/ui/Skeleton";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
-import { rules, validate } from "@/lib/validation";
+import { rules, validate, toIstDateStr, isFutureIstDate } from "@/lib/validation";
 import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
@@ -23,6 +23,7 @@ import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { amountInWordsINR } from "@/lib/numberToWords";
 import { animateSection } from "@/lib/animateSection";
 import { truncateFilename } from "@/lib/truncateFilename";
+import { formatFileSize } from "@/lib/formatFileSize";
 import { AttachmentIcon } from "@/components/purchases/AttachmentIcon";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
@@ -52,6 +53,7 @@ interface PurchaseBill {
   payments: PurchasePayment[];
   attachmentUrl: string | null;
   attachmentName: string | null;
+  attachmentSize: number | null;
 }
 interface BusinessSettings {
   name: string; tagline: string; email: string; phone: string;
@@ -124,7 +126,7 @@ export default function PurchaseBillDetailPage() {
   const [payOtherMethod, setPayOtherMethod] = useState("");
   const [payOtherMethodError, setPayOtherMethodError] = useState<string | undefined>(undefined);
   const [payRef,      setPayRef]        = useState("");
-  const [payDate,     setPayDate]       = useState(() => new Date().toISOString().slice(0, 10));
+  const [payDate,     setPayDate]       = useState(() => toIstDateStr(new Date()));
   const [submitting,  setSubmitting]    = useState(false);
 
   function resetPaymentForm() {
@@ -134,7 +136,7 @@ export default function PurchaseBillDetailPage() {
     setPayOtherMethod("");
     setPayOtherMethodError(undefined);
     setPayRef("");
-    setPayDate(new Date().toISOString().slice(0, 10));
+    setPayDate(toIstDateStr(new Date()));
   }
 
   const [updatingStatus] = useState(false);
@@ -322,8 +324,8 @@ export default function PurchaseBillDetailPage() {
     setPayAmountError(amountErr);
     setPayOtherMethodError(otherMethodErr);
     if (amountErr || otherMethodErr) return;
-    if (payDate < bill.billDate.slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be before the bill date." }); return; }
-    if (payDate > new Date().toISOString().slice(0, 10)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be in the future." }); return; }
+    if (payDate < toIstDateStr(new Date(bill.billDate))) { toast({ type: "error", title: "Check form", message: "Payment date cannot be before the bill date." }); return; }
+    if (isFutureIstDate(payDate)) { toast({ type: "error", title: "Check form", message: "Payment date cannot be in the future." }); return; }
     const method = resolvePaymentMethod(payMethod, payOtherMethod);
     setSubmitting(true);
     try {
@@ -961,7 +963,7 @@ export default function PurchaseBillDetailPage() {
               </FormField>
               <div className={styles.paymentDateField}>
                 <FormField label="Date">
-                  <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} min={bill.billDate.slice(0, 10)} max={new Date().toISOString().slice(0, 10)} sz="sm" />
+                  <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} min={toIstDateStr(new Date(bill.billDate))} max={toIstDateStr(new Date())} sz="sm" />
                 </FormField>
               </div>
               <div className={styles.paymentMethodField}>
@@ -1077,6 +1079,11 @@ export default function PurchaseBillDetailPage() {
               <a href={bill.attachmentUrl} target="_blank" rel="noopener noreferrer" download={bill.attachmentName ?? undefined} title={bill.attachmentName ?? undefined} className={styles.infoRowValue} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
                 <AttachmentIcon name={bill.attachmentName} />
                 {bill.attachmentName ? truncateFilename(bill.attachmentName) : "View attachment"}
+                {bill.attachmentSize != null && (
+                  <span style={{ color: "var(--c-text-3)", fontSize: "0.85em", fontWeight: 400 }}>
+                    · {formatFileSize(bill.attachmentSize)}
+                  </span>
+                )}
               </a>
             </div>
           )}

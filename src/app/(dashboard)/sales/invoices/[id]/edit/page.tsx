@@ -12,7 +12,7 @@ import { Sk } from "@/components/ui/Skeleton";
 import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { invalidateCachedPdf } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
-import { rules, validate, validateForm, hasErrors, type FormErrors } from "@/lib/validation";
+import { rules, validate, validateForm, hasErrors, toIstDateStr, type FormErrors } from "@/lib/validation";
 import { useDirty } from "@/lib/useDirty";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
@@ -66,7 +66,7 @@ export default function EditInvoicePage() {
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
-  const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
+  const [todayStr] = useState(() => toIstDateStr(new Date()));
   // Default true; the load effect below sets it false if the saved transportCharge was 0/absent.
   const [transportChargeEnabled, setTransportChargeEnabled] = useState(true);
   const [transportCharge, setTransportCharge] = useState("");
@@ -333,7 +333,7 @@ export default function EditInvoicePage() {
       const inter = invoice.isInterState ?? false;
       const pos = invoice.placeOfSupply ?? invoice.customer.state ?? "";
       const notesVal = invoice.notes ?? "";
-      const dueDateVal = invoice.dueDate ? invoice.dueDate.split("T")[0] : "";
+      const dueDateVal = invoice.dueDate ? toIstDateStr(new Date(invoice.dueDate)) : "";
       const lineItems: LineItem[] = invoice.items.map((item: InvoiceData["items"][0]) => ({
         key: makeInvoiceLineItemKey(),
         productId: item.productId ?? "",
@@ -353,7 +353,7 @@ export default function EditInvoicePage() {
       setReverseCharge(rc);
       setNotes(notesVal);
       setDueDate(dueDateVal);
-      setInvoiceDate(invoice.date ? invoice.date.split("T")[0] : "");
+      setInvoiceDate(invoice.date ? toIstDateStr(new Date(invoice.date)) : "");
       const transportEnabled = invoice.transportCharge != null && invoice.transportCharge > 0;
       setTransportChargeEnabled(transportEnabled);
       setTransportCharge(transportChargeVal);
@@ -363,7 +363,7 @@ export default function EditInvoicePage() {
       markClean({
         customerId: invoice.customer.id,
         isInterState: inter, placeOfSupply: pos, reverseCharge: rc, items: lineItems, notes: notesVal, dueDate: dueDateVal,
-        invoiceDate: invoice.date ? invoice.date.split("T")[0] : "",
+        invoiceDate: invoice.date ? toIstDateStr(new Date(invoice.date)) : "",
         transportChargeEnabled: transportEnabled, transportCharge: transportChargeVal, transportChargeGstRate: transportChargeGstRateVal,
       });
       setLoading(false);

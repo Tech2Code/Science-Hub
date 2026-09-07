@@ -21,7 +21,7 @@ import { computeInvoiceTotals, type InvoiceLineItem, type InvoiceProduct } from 
 import styles from "./new.module.css";
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
-import { rules, validate, validateForm, hasErrors } from "@/lib/validation";
+import { rules, validate, validateForm, hasErrors, toIstDateStr } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { useDirty } from "@/lib/useDirty";
 import { InfoBanner } from "@/components/ui/InfoBanner";
@@ -70,7 +70,7 @@ export default function NewInvoicePage() {
   const [items, setItems] = useState<LineItem[]>([]);
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [todayStr] = useState(() => new Date().toISOString().slice(0, 10));
+  const [todayStr] = useState(() => toIstDateStr(new Date()));
   // Default-on per business request — most invoices carry a transport charge.
   const [transportChargeEnabled, setTransportChargeEnabled] = useState(true);
   const [transportCharge, setTransportCharge] = useState("");

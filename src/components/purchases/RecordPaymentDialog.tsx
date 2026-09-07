@@ -6,6 +6,7 @@ import { Input, Select, FormField } from "@/components/ui/Input";
 import { FillMaxButton } from "@/components/ui/FillMaxButton";
 import { toNum, fmtCurrency } from "@/lib/purchaseBillForm";
 import { PAYMENT_METHODS, methodSelectValue, methodCustomText, resolvePaymentMethod } from "@/lib/paymentMethods";
+import { toIstDateStr } from "@/lib/validation";
 import styles from "./RecordPaymentDialog.module.css";
 
 export interface PaymentDraft {
@@ -97,7 +98,7 @@ export function RecordPaymentDialog({ open, billDate, grandTotal, initial, onCan
 
   if (!open) return null;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toIstDateStr(new Date());
 
   function handleSave() {
     const amt = toNum(amount);

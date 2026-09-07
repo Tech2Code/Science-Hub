@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { ArrowIcon } from "@/components/ui/ArrowIcon";
-import { rules, validate } from "@/lib/validation";
+import { rules, validate, toIstDateStr, isFutureIstDate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
@@ -45,7 +45,7 @@ export default function NewPurchaseBillPage() {
 
   const [vendorId,  setVendorId]  = useState("");
   const [vendorError, setVendorError] = useState<string | undefined>(undefined);
-  const [billDate,  setBillDate]  = useState(() => new Date().toISOString().slice(0, 10));
+  const [billDate,  setBillDate]  = useState(() => toIstDateStr(new Date()));
   const [billDateError, setBillDateError] = useState<string | undefined>(undefined);
   const [dueDate,   setDueDate]   = useState("");
   const [dueDateError, setDueDateError] = useState<string | undefined>(undefined);
@@ -59,6 +59,7 @@ export default function NewPurchaseBillPage() {
   const [items,     setItems]     = useState<PurchaseBillLineItem[]>([]);
   const [attachmentUrl,  setAttachmentUrl]  = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
+  const [attachmentSize, setAttachmentSize] = useState<number | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
   // Defaults off — most bills don't carry a transport charge.
   const [transportChargeEnabled, setTransportChargeEnabled] = useState(false);
@@ -74,7 +75,7 @@ export default function NewPurchaseBillPage() {
   const [payAmount,    setPayAmount]    = useState("");
   const [payMethod,    setPayMethod]    = useState("Cash");
   const [payReference, setPayReference] = useState("");
-  const [payDate,      setPayDate]      = useState(() => new Date().toISOString().slice(0, 10));
+  const [payDate,      setPayDate]      = useState(() => toIstDateStr(new Date()));
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
   function handleSavePayment(payment: PaymentDraft) {
@@ -129,7 +130,7 @@ export default function NewPurchaseBillPage() {
 
   type BillNewDraft = {
     vendorId: string; billDate: string; dueDate: string; category: string; discount: string; notes: string;
-    items: PurchaseBillLineItem[]; attachmentUrl: string | null; attachmentName: string | null;
+    items: PurchaseBillLineItem[]; attachmentUrl: string | null; attachmentName: string | null; attachmentSize: number | null;
     transportChargeEnabled: boolean; transportCharge: string; transportChargeGstRate: string;
     addPayment: boolean; payAmount: string; payMethod: string; payReference: string; payDate: string;
   };
@@ -150,7 +151,7 @@ export default function NewPurchaseBillPage() {
     if (draft?.values) {
       const v = draft.values;
       setVendorId(v.vendorId ?? "");
-      setBillDate(v.billDate ?? new Date().toISOString().slice(0, 10));
+      setBillDate(v.billDate ?? toIstDateStr(new Date()));
       setDueDate(v.dueDate ?? "");
       setCategory(v.category ?? "");
       setDiscount(v.discount ?? "0");
@@ -158,6 +159,7 @@ export default function NewPurchaseBillPage() {
       setItems(v.items ?? []);
       setAttachmentUrl(v.attachmentUrl ?? null);
       setAttachmentName(v.attachmentName ?? null);
+      setAttachmentSize(v.attachmentSize ?? null);
       setTransportChargeEnabled(v.transportChargeEnabled ?? true);
       setTransportCharge(v.transportCharge ?? "");
       setTransportChargeGstRate(v.transportChargeGstRate ?? "18");
@@ -165,7 +167,7 @@ export default function NewPurchaseBillPage() {
       setPayAmount(v.payAmount ?? "");
       setPayMethod(v.payMethod ?? "Cash");
       setPayReference(v.payReference ?? "");
-      setPayDate(v.payDate ?? new Date().toISOString().slice(0, 10));
+      setPayDate(v.payDate ?? toIstDateStr(new Date()));
     }
     setShowDraftBanner(false);
     setDraftReady(true);
@@ -183,7 +185,7 @@ export default function NewPurchaseBillPage() {
   }
 
   useFormDraft(DRAFT_KEY, {
-    vendorId, billDate, dueDate, category, discount, notes, items, attachmentUrl, attachmentName,
+    vendorId, billDate, dueDate, category, discount, notes, items, attachmentUrl, attachmentName, attachmentSize,
     transportChargeEnabled, transportCharge, transportChargeGstRate,
     addPayment, payAmount, payMethod, payReference, payDate,
   }, !draftReady || saving);
@@ -216,6 +218,7 @@ export default function NewPurchaseBillPage() {
       if (res.ok) {
         setAttachmentUrl(data.url);
         setAttachmentName(data.name);
+        setAttachmentSize(typeof data.size === "number" ? data.size : null);
         toast({ type: "success", title: "File uploaded", message: `${data.name} uploaded successfully.` });
       } else {
         toast({ type: "error", title: "Upload failed", message: data.error ?? "Could not upload file." });
@@ -238,6 +241,7 @@ export default function NewPurchaseBillPage() {
     }
     setAttachmentUrl(null);
     setAttachmentName(null);
+    setAttachmentSize(null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -254,12 +258,12 @@ export default function NewPurchaseBillPage() {
     if (items.some(i => validate(i.purchasePrice, rules.required(), rules.positiveNumber()))) { flagItemsError("All item prices must be greater than 0."); return; }
     if (items.some(i => validate(i.gstRate, rules.required(), rules.percentRange(100))))       { flagItemsError("All items must have a GST rate between 0 and 100%."); return; }
     setItemsError(undefined);
-    if (billDate > new Date().toISOString().slice(0, 10)) { setBillDateError("Bill date cannot be in the future."); return; }
+    if (isFutureIstDate(billDate)) { setBillDateError("Bill date cannot be in the future."); return; }
     setBillDateError(undefined);
     if (dueDate && dueDate < billDate)               { setDueDateError("Due date cannot be before the bill date."); return; }
     setDueDateError(undefined);
     if (addPayment && toNum(payAmount) > 0 && payDate < billDate) { setPaymentDateError("Payment date cannot be before the bill date."); return; }
-    if (addPayment && toNum(payAmount) > 0 && payDate > new Date().toISOString().slice(0, 10)) { setPaymentDateError("Payment date cannot be in the future."); return; }
+    if (addPayment && toNum(payAmount) > 0 && isFutureIstDate(payDate)) { setPaymentDateError("Payment date cannot be in the future."); return; }
     setPaymentDateError(undefined);
     if (missingTransportAmount) {
       setTransportChargeError("Enter the transport charge amount.");
@@ -301,6 +305,7 @@ export default function NewPurchaseBillPage() {
       items:     billItems,
       attachmentUrl,
       attachmentName,
+      attachmentSize,
       transportCharge: effectiveTransportCharge,
       transportChargeGstRate: effectiveTransportGstRate,
       idempotencyKey: idempotency.key(),

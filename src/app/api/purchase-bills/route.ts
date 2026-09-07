@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     const userId = auth.session.user.id;
 
     const body = await req.json();
-    const { vendorId, billDate, dueDate, discount, notes, category, items, payment, attachmentUrl, attachmentName, transportCharge, transportChargeGstRate, idempotencyKey } = body;
+    const { vendorId, billDate, dueDate, discount, notes, category, items, payment, attachmentUrl, attachmentName, attachmentSize, transportCharge, transportChargeGstRate, idempotencyKey } = body;
 
     if (!vendorId) return NextResponse.json({ error: "Vendor is required." }, { status: 400 });
     if (!Array.isArray(items) || items.length === 0) return NextResponse.json({ error: "At least one item is required." }, { status: 400 });
@@ -92,6 +92,11 @@ export async function POST(req: NextRequest) {
     }
     if (attachmentUrl && !isPurchaseBillBlobUrl(attachmentUrl)) {
       return NextResponse.json({ error: "Invalid attachment URL" }, { status: 400 });
+    }
+    // Size is a display-only hint sent alongside the URL; guard against a garbage/negative value so
+    // the stored number stays trustworthy. Only meaningful when there's actually an attachment.
+    if (attachmentSize !== undefined && attachmentSize !== null && (typeof attachmentSize !== "number" || !Number.isFinite(attachmentSize) || attachmentSize < 0)) {
+      return NextResponse.json({ error: "Invalid attachment size" }, { status: 400 });
     }
 
     // Not filtered by deletedAt: a "just for this bill" vendor is soft-deleted at creation but must still be usable here.
@@ -268,6 +273,7 @@ export async function POST(req: NextRequest) {
             category: normalizeCategoryInput(category),
             attachmentUrl: attachmentUrl || null,
             attachmentName: attachmentName || null,
+            attachmentSize: attachmentUrl ? (attachmentSize ?? null) : null,
             createdByUserId: userId,
             idempotencyKey: idempotencyKey || null,
             items: {

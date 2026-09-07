@@ -425,6 +425,10 @@ model PurchaseBill {
   notes           String?
   attachmentUrl   String?
   attachmentName  String?
+  // Byte size of the uploaded attachment, captured at upload time so the detail page can show
+  // "invoice.pdf · 240 KB" without a round-trip to Blob storage for Content-Length. Nullable —
+  // bills created before this column existed (and any legacy/backfilled rows) simply won't have it.
+  attachmentSize  Int?
   category        String?
   createdByUserId String
   createdBy       User              @relation("PurchaseBillCreator", fields: [createdByUserId], references: [id])
