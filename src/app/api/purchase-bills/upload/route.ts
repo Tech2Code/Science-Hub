@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
+import { randomBytes } from "crypto";
 import { deleteAttachmentBlob, isPurchaseBillBlobUrl } from "@/lib/blobStorage";
 import { requireWriteAccess } from "@/lib/apiAuth";
 
@@ -53,10 +54,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Attachment storage is not configured." }, { status: 503 });
     }
 
+    // A short per-upload random folder (not a suffix on the filename itself) guarantees a unique
+    // pathname — two unrelated bills whose vendor happened to name both attachments the same thing
+    // (common with generic scanner/invoice filenames) never collide or silently overwrite each
+    // other, while the visible filename stays exactly what was uploaded.
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100) || "attachment";
-    const blob = await put(`purchase-bills/${Date.now()}-${safeName}`, file, {
+    const uploadId = randomBytes(4).toString("hex");
+    const blob = await put(`purchase-bills/${uploadId}/${safeName}`, file, {
       access: "private",
-      addRandomSuffix: true,
       token: privateToken,
     });
 
