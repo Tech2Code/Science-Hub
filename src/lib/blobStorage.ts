@@ -3,11 +3,18 @@ import { del } from "@vercel/blob";
 // Vercel refuses to reuse the same auto-injected variable name across two Storage connections in
 // one project even when their environments don't overlap ("This project already uses
 // PRIVATE_BLOB_READ_WRITE_TOKEN in Production or Preview. Set a prefix to avoid the conflict.") — so
-// the Preview/Development-scoped private store had to be connected under a different prefix
-// (DEV_PRIVATE_BLOB_*) instead of reusing the Production one's name. Only one of the two is ever
-// actually set for a given running environment, so this just picks whichever exists.
+// each private store's "Connect to Project" was given its own prefixed name instead of sharing one:
+// LIVE_PRIVATE_BLOB_READ_WRITE_TOKEN (Vercel Production) and DEV_PRIVATE_BLOB_READ_WRITE_TOKEN
+// (Vercel Preview). Local development isn't a Vercel-managed environment at all — it just reads
+// whatever this machine's own .env names it, PRIVATE_BLOB_READ_WRITE_TOKEN, kept unprefixed there
+// since one local file only ever needs one value. Only one of the three is ever actually set for a
+// given place this code runs, so this just picks whichever exists, in that priority order.
 export function getPrivateBlobToken(): string | undefined {
-  return process.env.PRIVATE_BLOB_READ_WRITE_TOKEN || process.env.DEV_PRIVATE_BLOB_READ_WRITE_TOKEN;
+  return (
+    process.env.LIVE_PRIVATE_BLOB_READ_WRITE_TOKEN ||
+    process.env.DEV_PRIVATE_BLOB_READ_WRITE_TOKEN ||
+    process.env.PRIVATE_BLOB_READ_WRITE_TOKEN
+  );
 }
 
 // Derives a Blob store's exact hostname from its own read-write token, so the allowlist checks "is
