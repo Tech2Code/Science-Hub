@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { randomBytes } from "crypto";
-import { deleteAttachmentBlob, isPurchaseBillBlobUrl } from "@/lib/blobStorage";
+import { deleteAttachmentBlob, isPurchaseBillBlobUrl, getPrivateBlobToken } from "@/lib/blobStorage";
 import { requireWriteAccess } from "@/lib/apiAuth";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "File content doesn't match its type — upload a genuine PDF or image." }, { status: 400 });
     }
 
-    const privateToken = process.env.PRIVATE_BLOB_READ_WRITE_TOKEN;
+    const privateToken = getPrivateBlobToken();
     if (!privateToken) {
       return NextResponse.json({ error: "Attachment storage is not configured." }, { status: 503 });
     }

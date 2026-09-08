@@ -136,7 +136,12 @@ export default function NewPurchaseBillPage() {
   };
 
   useEffect(() => {
-    const draft = loadFormDraft<BillNewDraft>(DRAFT_KEY);
+    const draft = loadFormDraft<BillNewDraft>(DRAFT_KEY, (stale) => {
+      // The draft aged past DRAFT_MAX_AGE_MS and was just silently wiped — without this, an
+      // uploaded-but-never-saved attachment it referenced would stay orphaned in Blob storage
+      // forever, since nothing else ever gets a chance to see what this expired draft held.
+      if (stale.attachmentUrl) discardUnsavedAttachment(stale.attachmentUrl);
+    });
     const v = draft?.values;
     const hasContent = !!v && (!!v.vendorId || v.items?.length > 0 || !!v.notes?.trim());
     // One-time sync from localStorage (an external system) on mount — a legitimate effect, not
@@ -178,6 +183,10 @@ export default function NewPurchaseBillPage() {
   }
 
   function discardDraft() {
+    // A draft captured mid-fill (see useFormDraft below) can include an uploaded-but-never-saved
+    // attachment's URL — discarding without checking this left that blob orphaned in storage forever.
+    const draft = loadFormDraft<BillNewDraft>(DRAFT_KEY);
+    if (draft?.values.attachmentUrl) discardUnsavedAttachment(draft.values.attachmentUrl);
     clearFormDraft(DRAFT_KEY);
     setShowDraftBanner(false);
     setDraftReady(true);
@@ -230,18 +239,30 @@ export default function NewPurchaseBillPage() {
     e.target.value = "";
   }
 
+  function discardUnsavedAttachment(url: string) {
+    // keepalive: true — Cancel navigates away right after this fires; without it, the browser can
+    // abort an in-flight, not-yet-awaited fetch when the page unloads, leaving the blob orphaned.
+    fetch("/api/purchase-bills/upload", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
   function removeAttachment() {
     // Never saved to a bill yet, so it's safe to discard the blob right away.
-    if (attachmentUrl) {
-      fetch("/api/purchase-bills/upload", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: attachmentUrl }),
-      }).catch(() => {});
-    }
+    if (attachmentUrl) discardUnsavedAttachment(attachmentUrl);
     setAttachmentUrl(null);
     setAttachmentName(null);
     setAttachmentSize(null);
+  }
+
+  // Cancel leaves an uploaded-but-never-saved attachment orphaned in Blob storage forever unless
+  // discarded here — a plain href link (no onClick) previously skipped this entirely.
+  function handleCancel() {
+    if (attachmentUrl) discardUnsavedAttachment(attachmentUrl);
+    router.push("/purchases/bills");
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -416,6 +437,7 @@ export default function NewPurchaseBillPage() {
           onNotesChange={setNotes}
           attachmentUploading={attachmentUploading}
           attachmentName={attachmentName}
+          attachmentSize={attachmentSize}
           onAttachmentFileChange={handleAttachmentChange}
           onAttachmentRemove={removeAttachment}
           transportChargeEnabled={transportChargeEnabled}
@@ -479,7 +501,7 @@ export default function NewPurchaseBillPage() {
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
                   Create Purchase Bill
                 </Button>
-                <Button variant="secondary" size="full" href="/purchases/bills">
+                <Button variant="secondary" size="full" onClick={handleCancel}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                   Cancel
                 </Button>

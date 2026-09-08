@@ -16,6 +16,7 @@ import { animateSection } from "@/lib/animateSection";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
 import { truncateFilename } from "@/lib/truncateFilename";
 import { PurchaseBillFormBody } from "@/components/purchases/PurchaseBillFormBody";
+import { purchaseBillAttachmentPendingHref, purchaseBillAttachmentByIdHref } from "@/lib/attachmentHref";
 import {
   toNum, fmtCurrency, computePurchaseBillTotals, calcPurchaseBillItem,
   type PurchaseBillLineItem, type PurchaseBillProduct, type PurchaseBillVendor,
@@ -115,6 +116,9 @@ export default function EditPurchaseBillPage() {
   const [transportChargeError, setTransportChargeError] = useState<string | undefined>(undefined);
   // Persisted attachment at load time; lets an unsaved replacement/removal be discarded from Blob immediately.
   const originalAttachmentUrl = useRef<string | null>(null);
+  // Same value, mirrored into state — render (the attachment link's href) needs it too, and reading
+  // a ref during render is unsafe/disallowed; the ref above stays for the non-render event-handler use.
+  const [savedAttachmentUrl, setSavedAttachmentUrl] = useState<string | null>(null);
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
 
   const { isDirty, markClean } = useDirty({
@@ -159,6 +163,12 @@ export default function EditPurchaseBillPage() {
   }
 
   function discardDraft() {
+    // A draft captured mid-edit (see useFormDraft below) can include an uploaded-but-never-saved
+    // replacement attachment's URL — discarding without checking this left that blob orphaned in
+    // storage forever. discardIfUnsaved already skips deleting if this just matches the bill's own
+    // still-current saved attachment (the draft never actually replaced it).
+    const draft = loadFormDraft<BillEditDraft>(DRAFT_KEY);
+    if (draft?.values.attachmentUrl) discardIfUnsaved(draft.values.attachmentUrl);
     clearFormDraft(DRAFT_KEY);
     setShowDraftBanner(false);
     setDraftReady(true);
@@ -196,6 +206,7 @@ export default function EditPurchaseBillPage() {
       setAttachmentName(b.attachmentName ?? null);
       setAttachmentSize(b.attachmentSize ?? null);
       originalAttachmentUrl.current = b.attachmentUrl ?? null;
+      setSavedAttachmentUrl(b.attachmentUrl ?? null);
       setLoadedUpdatedAt(b.updatedAt ?? null);
       const transportChargeVal = b.transportCharge && b.transportCharge > 0 ? String(b.transportCharge) : "";
       const transportChargeGstRateVal = b.transportChargeGstRate ? String(b.transportChargeGstRate) : "18";
@@ -217,7 +228,14 @@ export default function EditPurchaseBillPage() {
         transportChargeGstRate: transportChargeGstRateVal,
       });
       setLoading(false);
-      if (loadFormDraft(`bill:edit:${id}`)) setShowDraftBanner(true);
+      const draft = loadFormDraft<BillEditDraft>(`bill:edit:${id}`, (stale) => {
+        // The draft aged past DRAFT_MAX_AGE_MS and was just silently wiped — without this, an
+        // uploaded-but-never-saved replacement attachment it referenced would stay orphaned in Blob
+        // storage forever. discardIfUnsaved already skips deleting if this just matches the bill's
+        // own still-current saved attachment (the draft never actually replaced it).
+        if (stale.attachmentUrl) discardIfUnsaved(stale.attachmentUrl);
+      });
+      if (draft) setShowDraftBanner(true);
       else setDraftReady(true);
     }).catch(() => { setLoadErr("Failed to load bill."); setLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- markClean is stable-enough for this one-time load
@@ -227,10 +245,13 @@ export default function EditPurchaseBillPage() {
     // Only ever discard a blob that isn't the bill's saved attachment — that
     // one is cleaned up by the PUT route itself once the change is committed.
     if (url && url !== originalAttachmentUrl.current) {
+      // keepalive: true — Cancel navigates away right after this fires; without it, the browser
+      // can abort an in-flight, not-yet-awaited fetch when the page unloads, orphaning the blob.
       fetch("/api/purchase-bills/upload", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
+        keepalive: true,
       }).catch(() => {});
     }
   }
@@ -270,6 +291,13 @@ export default function EditPurchaseBillPage() {
     setAttachmentUrl(null);
     setAttachmentName(null);
     setAttachmentSize(null);
+  }
+
+  // Cancel leaves an uploaded-but-never-saved replacement attachment orphaned in Blob storage
+  // forever unless discarded here — a plain href link (no onClick) previously skipped this entirely.
+  function handleCancel() {
+    discardIfUnsaved(attachmentUrl);
+    router.push(`/purchases/bills/${id}`);
   }
 
   // The itemsError message auto-hides once the items array it was raised
@@ -502,7 +530,15 @@ export default function EditPurchaseBillPage() {
           onNotesChange={setNotes}
           attachmentUploading={attachmentUploading}
           attachmentName={attachmentName}
-          attachmentUrl={attachmentUrl}
+          attachmentUrl={
+            attachmentUrl == null ? null
+              // Still the attachment already saved on this bill — use the short id-based link.
+              // A just-uploaded, not-yet-saved replacement has no saved row to key off yet, so it
+              // falls back to the generic url-based proxy instead.
+              : attachmentUrl === savedAttachmentUrl ? purchaseBillAttachmentByIdHref(id, attachmentName || "attachment.pdf")
+              : purchaseBillAttachmentPendingHref(attachmentUrl)
+          }
+          attachmentSize={attachmentSize}
           onAttachmentFileChange={handleAttachmentChange}
           onAttachmentRemove={removeAttachment}
           transportChargeEnabled={transportChargeEnabled}
@@ -543,7 +579,7 @@ export default function EditPurchaseBillPage() {
                 {!isDirty && !missingVendor && !noItems && !missingTransportCharge && !saving && (
                   <p className={styles.noChangesHint}>No changes detected.</p>
                 )}
-                <Button variant="secondary" size="full" href={`/purchases/bills/${id}`}>
+                <Button variant="secondary" size="full" onClick={handleCancel}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                   Cancel
                 </Button>

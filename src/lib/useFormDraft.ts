@@ -41,13 +41,21 @@ export function useFormDraft<T>(key: string, values: T, skip: boolean) {
   }, [serialized, skip, storageKey]);
 }
 
-export function loadFormDraft<T>(key: string): StoredDraft<T> | null {
+// `onExpire` fires synchronously, with the about-to-be-discarded values, only when this call is the
+// one that finds the draft too old and wipes it — never on a fresh draft, and never again once
+// another call has already expired/removed it. Optional and additive: every existing caller that
+// doesn't pass it keeps its exact current behavior. Exists because a draft can reference an external
+// resource (e.g. an uploaded-but-unsaved file's blob URL) that this generic localStorage utility
+// has no business knowing how to clean up itself — the caller does, and without this hook a stale
+// draft's silent auto-purge had no way to tell the caller anything needed cleaning up at all.
+export function loadFormDraft<T>(key: string, onExpire?: (staleValues: T) => void): StoredDraft<T> | null {
   try {
     const raw = localStorage.getItem(DRAFT_PREFIX + key);
     if (!raw) return null;
     const draft = JSON.parse(raw) as StoredDraft<T>;
     if (Date.now() - draft.savedAt > DRAFT_MAX_AGE_MS) {
       localStorage.removeItem(DRAFT_PREFIX + key);
+      onExpire?.(draft.values);
       return null;
     }
     return draft;

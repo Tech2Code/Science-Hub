@@ -24,7 +24,7 @@ import { amountInWordsINR } from "@/lib/numberToWords";
 import { animateSection } from "@/lib/animateSection";
 import { truncateFilename } from "@/lib/truncateFilename";
 import { formatFileSize } from "@/lib/formatFileSize";
-import { purchaseBillAttachmentHref } from "@/lib/attachmentHref";
+import { purchaseBillAttachmentByIdHref } from "@/lib/attachmentHref";
 import { AttachmentIcon } from "@/components/purchases/AttachmentIcon";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
@@ -1241,15 +1241,20 @@ export default function PurchaseBillDetailPage() {
           {bill.attachmentUrl && (
             <div className={styles.infoRow}>
               <span className={styles.infoRowLabel}>Attachment</span>
-              <a href={purchaseBillAttachmentHref(bill.attachmentUrl, bill.attachmentName)} target="_blank" rel="noopener noreferrer" download={bill.attachmentName ?? undefined} title={bill.attachmentName ?? undefined} className={styles.infoRowValue} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
-                <AttachmentIcon name={bill.attachmentName} />
-                {bill.attachmentName ? truncateFilename(bill.attachmentName) : "View attachment"}
+              <span style={{ display: "inline-flex", alignItems: "center" }}>
+                <a href={purchaseBillAttachmentByIdHref(bill.id, bill.attachmentName || "attachment.pdf")} target="_blank" rel="noopener noreferrer" title={bill.attachmentName ?? undefined} className={styles.infoRowValue} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                  <AttachmentIcon name={bill.attachmentName} />
+                  {bill.attachmentName ? truncateFilename(bill.attachmentName) : "View attachment"}
+                </a>
                 {bill.attachmentSize != null && (
-                  <span style={{ color: "var(--c-text-3)", fontSize: "0.85em", fontWeight: 400 }}>
+                  <span style={{ color: "var(--c-text-3)", fontSize: "0.85em", fontWeight: 400, marginLeft: "0.35rem" }}>
                     · {formatFileSize(bill.attachmentSize)}
                   </span>
                 )}
-              </a>
+                <a href={purchaseBillAttachmentByIdHref(bill.id, bill.attachmentName || "attachment.pdf")} download={bill.attachmentName ?? undefined} title="Download attachment" className={styles.attachmentDownloadLink}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </a>
+              </span>
             </div>
           )}
           {bill.notes && (

@@ -1,5 +1,15 @@
 import { del } from "@vercel/blob";
 
+// Vercel refuses to reuse the same auto-injected variable name across two Storage connections in
+// one project even when their environments don't overlap ("This project already uses
+// PRIVATE_BLOB_READ_WRITE_TOKEN in Production or Preview. Set a prefix to avoid the conflict.") — so
+// the Preview/Development-scoped private store had to be connected under a different prefix
+// (DEV_PRIVATE_BLOB_*) instead of reusing the Production one's name. Only one of the two is ever
+// actually set for a given running environment, so this just picks whichever exists.
+export function getPrivateBlobToken(): string | undefined {
+  return process.env.PRIVATE_BLOB_READ_WRITE_TOKEN || process.env.DEV_PRIVATE_BLOB_READ_WRITE_TOKEN;
+}
+
 // Derives a Blob store's exact hostname from its own read-write token, so the allowlist checks "is
 // this blob in our store", not just "shaped like a Vercel Blob store" — a suffix-only check would
 // let a user point attachmentUrl/logoUrl at a different store they control, skipping upload
@@ -20,7 +30,7 @@ function ownBlobStoreHostname(token: string | undefined, suffix: "public" | "pri
 export function isPurchaseBillBlobUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    const ownHost = ownBlobStoreHostname(process.env.PRIVATE_BLOB_READ_WRITE_TOKEN, "private");
+    const ownHost = ownBlobStoreHostname(getPrivateBlobToken(), "private");
     return (
       parsed.protocol === "https:" &&
       !!ownHost && parsed.hostname === ownHost &&
@@ -55,7 +65,7 @@ export async function deleteAttachmentBlob(url: string | null | undefined) {
   if (!url || !url.startsWith("https://")) return;
   try {
     const isPrivateStoreUrl = new URL(url).hostname.endsWith(".private.blob.vercel-storage.com");
-    await del(url, isPrivateStoreUrl ? { token: process.env.PRIVATE_BLOB_READ_WRITE_TOKEN } : undefined);
+    await del(url, isPrivateStoreUrl ? { token: getPrivateBlobToken() } : undefined);
   } catch (error) {
     console.error("Failed to delete blob:", error);
   }

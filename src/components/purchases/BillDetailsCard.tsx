@@ -44,6 +44,7 @@ interface BillDetailsCardProps {
   attachmentUploading: boolean;
   attachmentName: string | null;
   attachmentUrl?: string | null;
+  attachmentSize?: number | null;
   onAttachmentFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onAttachmentRemove: () => void;
 
@@ -60,7 +61,7 @@ interface BillDetailsCardProps {
 export function BillDetailsCard({
   sectionIndex, vendors, vendorId, onVendorIdChange, onVendorCreated, onVendorUpdated, vendorError,
   category, onCategoryChange, billDate, onBillDateChange, billDateError, dueDate, onDueDateChange, dueDateError,
-  notes, onNotesChange, attachmentUploading, attachmentName, attachmentUrl,
+  notes, onNotesChange, attachmentUploading, attachmentName, attachmentUrl, attachmentSize,
   onAttachmentFileChange, onAttachmentRemove,
   transportChargeEnabled, onToggleTransportCharge, transportCharge, onTransportChargeChange,
   transportChargeGstRate, onTransportChargeGstRateChange, transportChargeError,
@@ -409,6 +410,7 @@ export function BillDetailsCard({
           uploading={attachmentUploading}
           name={attachmentName}
           url={attachmentUrl}
+          size={attachmentSize}
           onFileChange={onAttachmentFileChange}
           onRemove={onAttachmentRemove}
         />

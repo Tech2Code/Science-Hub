@@ -153,6 +153,18 @@
   font-family: var(--font-mono);
 }
 
+.attachmentDownloadLink {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.4rem;
+  color: var(--c-text-4);
+  vertical-align: middle;
+}
+
+.attachmentDownloadLink:hover {
+  color: var(--c-blue);
+}
+
 /* ── Info cards grid: Vendor | Bill Meta ── */
 .infoGrid {
   display: grid;

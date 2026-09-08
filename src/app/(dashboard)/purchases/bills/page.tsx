@@ -22,7 +22,7 @@ import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
-import { purchaseBillAttachmentHref } from "@/lib/attachmentHref";
+import { purchaseBillAttachmentByIdHref } from "@/lib/attachmentHref";
 import { useRouter, useSearchParams } from "next/navigation";
 import styles from "./billsList.module.css";
 
@@ -331,7 +331,7 @@ export default function PurchasesPage() {
                     <a href={`/purchases/bills/${b.id}`} className={styles.billLink}>{b.billNumber}</a>
                     {b.attachmentUrl && (
                       <a
-                        href={purchaseBillAttachmentHref(b.attachmentUrl, b.attachmentName)}
+                        href={purchaseBillAttachmentByIdHref(b.id, b.attachmentName || "attachment.pdf")}
                         target="_blank"
                         rel="noopener noreferrer"
                         title={b.attachmentName || "View attachment"}

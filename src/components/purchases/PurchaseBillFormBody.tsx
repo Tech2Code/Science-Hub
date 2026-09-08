@@ -30,6 +30,7 @@ interface PurchaseBillFormBodyProps {
   attachmentUploading: boolean;
   attachmentName: string | null;
   attachmentUrl?: string | null;
+  attachmentSize?: number | null;
   onAttachmentFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onAttachmentRemove: () => void;
 
@@ -69,7 +70,7 @@ export function PurchaseBillFormBody({
   startIndex = 0,
   vendors, vendorId, onVendorIdChange, onVendorCreated, onVendorUpdated, vendorError,
   category, onCategoryChange, billDate, onBillDateChange, billDateError, dueDate, onDueDateChange, dueDateError,
-  notes, onNotesChange, attachmentUploading, attachmentName, attachmentUrl,
+  notes, onNotesChange, attachmentUploading, attachmentName, attachmentUrl, attachmentSize,
   onAttachmentFileChange, onAttachmentRemove,
   transportChargeEnabled, onToggleTransportCharge, transportCharge, onTransportChargeChange,
   transportChargeGstRate, onTransportChargeGstRateChange, transportChargeError,
@@ -104,6 +105,7 @@ export function PurchaseBillFormBody({
           attachmentUploading={attachmentUploading}
           attachmentName={attachmentName}
           attachmentUrl={attachmentUrl}
+          attachmentSize={attachmentSize}
           onAttachmentFileChange={onAttachmentFileChange}
           onAttachmentRemove={onAttachmentRemove}
           transportChargeEnabled={transportChargeEnabled}
