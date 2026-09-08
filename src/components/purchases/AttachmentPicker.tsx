@@ -2,6 +2,7 @@
 
 import { Spinner } from "@/components/ui/Spinner";
 import { truncateFilename } from "@/lib/truncateFilename";
+import { purchaseBillAttachmentHref } from "@/lib/attachmentHref";
 import { AttachmentIcon } from "./AttachmentIcon";
 import styles from "./AttachmentPicker.module.css";
 
@@ -35,7 +36,7 @@ export function AttachmentPicker({
     return (
       <div className={styles.attachmentRow}>
         {url ? (
-          <a href={url} target="_blank" rel="noopener noreferrer" title={name} className={styles.attachmentLink}>
+          <a href={purchaseBillAttachmentHref(url, name)} target="_blank" rel="noopener noreferrer" title={name} className={styles.attachmentLink}>
             <AttachmentIcon name={name} />
             {truncateFilename(name)}
           </a>

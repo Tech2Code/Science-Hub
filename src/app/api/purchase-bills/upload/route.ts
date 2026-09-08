@@ -6,7 +6,7 @@ import { requireWriteAccess } from "@/lib/apiAuth";
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"];
 
-// `file.type` is spoofable and this store is public — verify actual bytes, not the client label.
+// `file.type` is spoofable — verify actual bytes, not the client label.
 function matchesDeclaredType(bytes: Uint8Array, type: string): boolean {
   const hex = (n: number) => bytes[n]?.toString(16).padStart(2, "0");
   switch (type) {
@@ -48,10 +48,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "File content doesn't match its type — upload a genuine PDF or image." }, { status: 400 });
     }
 
+    const privateToken = process.env.PRIVATE_BLOB_READ_WRITE_TOKEN;
+    if (!privateToken) {
+      return NextResponse.json({ error: "Attachment storage is not configured." }, { status: 503 });
+    }
+
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100) || "attachment";
     const blob = await put(`purchase-bills/${Date.now()}-${safeName}`, file, {
-      access: "public",
+      access: "private",
       addRandomSuffix: true,
+      token: privateToken,
     });
 
     return NextResponse.json({ url: blob.url, name: file.name, size: file.size });

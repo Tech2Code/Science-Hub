@@ -24,6 +24,7 @@ import { amountInWordsINR } from "@/lib/numberToWords";
 import { animateSection } from "@/lib/animateSection";
 import { truncateFilename } from "@/lib/truncateFilename";
 import { formatFileSize } from "@/lib/formatFileSize";
+import { purchaseBillAttachmentHref } from "@/lib/attachmentHref";
 import { AttachmentIcon } from "@/components/purchases/AttachmentIcon";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
@@ -1240,7 +1241,7 @@ export default function PurchaseBillDetailPage() {
           {bill.attachmentUrl && (
             <div className={styles.infoRow}>
               <span className={styles.infoRowLabel}>Attachment</span>
-              <a href={bill.attachmentUrl} target="_blank" rel="noopener noreferrer" download={bill.attachmentName ?? undefined} title={bill.attachmentName ?? undefined} className={styles.infoRowValue} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+              <a href={purchaseBillAttachmentHref(bill.attachmentUrl, bill.attachmentName)} target="_blank" rel="noopener noreferrer" download={bill.attachmentName ?? undefined} title={bill.attachmentName ?? undefined} className={styles.infoRowValue} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
                 <AttachmentIcon name={bill.attachmentName} />
                 {bill.attachmentName ? truncateFilename(bill.attachmentName) : "View attachment"}
                 {bill.attachmentSize != null && (
