@@ -318,7 +318,10 @@ export async function generateInvoicePdfBlob(
           footerY = hdrH + (tfootTop - startPx);
         }
         stampPageMarker(ctx, footerY, pageNum, totalPages);
-        return { dataUrl: pc.toDataURL("image/jpeg", 0.95), totalH };
+        // PNG, not JPEG — this canvas is text/lines/borders on a flat white background (a rendered
+        // document, not a photo), which PNG's lossless compression handles noticeably smaller than a
+        // high-quality JPEG (JPEG's DCT-based compression struggles with sharp text/line edges).
+        return { dataUrl: pc.toDataURL("image/png"), totalH };
       };
 
       // Renders a full page-height canvas with the footer pinned to the bottom, not floating under the
@@ -377,7 +380,9 @@ export async function generateInvoicePdfBlob(
           ctx.stroke();
         }
         stampPageMarker(ctx, tfootH > 0 ? footerTop : null, pageNum, totalPages);
-        return { dataUrl: pc.toDataURL("image/jpeg", 0.95), totalH: pageHeightPx };
+        // See slicePage's identical comment above — PNG compresses this flat-background,
+        // sharp-edged document render smaller than JPEG, losslessly.
+        return { dataUrl: pc.toDataURL("image/png"), totalH: pageHeightPx };
       };
 
       // Render — footer is pinned to the bottom of every page that shows it. pageNum/totalPages are scoped to this copy only (see header comment).
@@ -388,7 +393,13 @@ export async function generateInvoicePdfBlob(
         const { dataUrl, totalH } = tfootH > 0
           ? slicePagePinned(start, splitAt, withHeader, i + 1, pageSplits.length)
           : slicePage(start, splitAt, withHeader, false, i + 1, pageSplits.length);
-        pdf.addImage(dataUrl, "JPEG", M, M, contentW, totalH * mmPerPx);
+        // jsPDF's `compression` param (undocumented default: "NONE") controls the FlateDecode level it
+        // applies when re-embedding a PNG's raw pixel data into the PDF — unlike a JPEG's own DCT bytes,
+        // which pass through as-is, jsPDF does NOT reuse the source PNG's own compressed bytes at all,
+        // so omitting this silently embeds the image fully uncompressed (confirmed: without it, a single
+        // invoice page inflates to ~10MB). "SLOW" = strongest compression; the CPU cost is a one-time,
+        // non-blocking-UI cost per PDF generation, not a hot path.
+        pdf.addImage(dataUrl, "PNG", M, M, contentW, totalH * mmPerPx, undefined, "SLOW");
         start = splitAt;
       });
     }
