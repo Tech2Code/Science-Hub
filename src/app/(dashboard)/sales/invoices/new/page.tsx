@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { Badge } from "@/components/ui/Badge";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
@@ -85,6 +86,10 @@ export default function NewInvoicePage() {
   const [creditLimitMessage, setCreditLimitMessage] = useState("");
   const [showFirstInvoiceNudge, setShowFirstInvoiceNudge] = useState(false);
   const [firstInvoicePreviewNumber, setFirstInvoicePreviewNumber] = useState("");
+  // Always-shown preview of the number this invoice will get if saved right now (see
+  // /api/invoices/next-number) — purely informational, since a concurrently-created invoice can
+  // still change the real number by the time this one actually saves.
+  const [nextInvoiceNumber, setNextInvoiceNumber] = useState("");
 
   const DRAFT_KEY = "invoice:new";
   const [showDraftBanner, setShowDraftBanner] = useState(false);
@@ -160,6 +165,7 @@ export default function NewInvoicePage() {
       }
     }).catch(() => {});
     fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { data: Product[] }) => setProducts(res.data ?? [])).catch(() => {});
+    fetch("/api/invoices/next-number", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { documentNumber?: string }) => setNextInvoiceNumber(res.documentNumber ?? "")).catch(() => {});
     fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((s) => {
       setBusinessState(s?.state ?? "");
       const numberingUntouched = !s?.invoiceNumberPrefix && !s?.nextInvoiceNumberOverride && !s?.invoiceNumberFormat;
@@ -443,7 +449,12 @@ export default function NewInvoicePage() {
       <Breadcrumb items={[{ label: "Invoices", href: "/sales/invoices" }, { label: "New Invoice" }]} />
       <div>
         <h1 className="page-title">Create Invoice</h1>
-        <p className="page-sub">Generate a GST-compliant invoice</p>
+        <p className="page-sub">
+          Generate a GST-compliant invoice
+          {nextInvoiceNumber && (
+            <Badge variant="blue" className={styles.nextNumberBadge}>Next no.: {nextInvoiceNumber}</Badge>
+          )}
+        </p>
       </div>
       <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
       <ConfirmDialog

@@ -8,6 +8,7 @@ import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { rules, validate, toIstDateStr, isFutureIstDate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { Badge } from "@/components/ui/Badge";
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { PurchaseBillFormBody } from "@/components/purchases/PurchaseBillFormBody";
@@ -70,6 +71,10 @@ export default function NewPurchaseBillPage() {
   // Optional: record payment immediately, via a popup dialog
   const [showFirstBillNudge, setShowFirstBillNudge] = useState(false);
   const [firstBillPreviewNumber, setFirstBillPreviewNumber] = useState("");
+  // Always-shown preview of the number this bill will get if saved right now (see
+  // /api/purchase-bills/next-number) — refetched whenever billDate changes, since the bill's FY
+  // segment (and so its whole number) is derived from billDate, not "now".
+  const [nextBillNumber, setNextBillNumber] = useState("");
 
   const [addPayment,   setAddPayment]   = useState(false);
   const [payAmount,    setPayAmount]    = useState("");
@@ -122,6 +127,16 @@ export default function NewPurchaseBillPage() {
     localStorage.setItem(FIRST_BILL_NUDGE_DISMISSED_KEY, "1");
     setShowFirstBillNudge(false);
   }
+
+  useEffect(() => {
+    if (!billDate) return;
+    const controller = new AbortController();
+    fetch(`/api/purchase-bills/next-number?billDate=${encodeURIComponent(billDate)}`, { headers: { "x-no-loader": "1" }, signal: controller.signal })
+      .then((r) => r.json())
+      .then((res: { documentNumber?: string }) => setNextBillNumber(res.documentNumber ?? ""))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [billDate]);
 
   const DRAFT_KEY = "bill:new";
   const [showDraftBanner, setShowDraftBanner] = useState(false);
@@ -393,7 +408,12 @@ export default function NewPurchaseBillPage() {
       <Breadcrumb items={[{ label: "Purchases", href: "/purchases/bills" }, { label: "New Purchase Bill" }]} />
       <div>
         <h1 className="page-title">Create Purchase Bill</h1>
-        <p className="page-sub">Record a GST-compliant purchase bill</p>
+        <p className="page-sub">
+          Record a GST-compliant purchase bill
+          {nextBillNumber && (
+            <Badge variant="blue" className={styles.nextNumberBadge}>Next no.: {nextBillNumber}</Badge>
+          )}
+        </p>
       </div>
       <DiscardDraftConfirm open={confirmDiscardDraftOpen} onConfirm={discardDraft} onCancel={() => setConfirmDiscardDraftOpen(false)} />
 

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { StatusBadge } from "@/components/ui/Badge";
+import { Badge, StatusBadge } from "@/components/ui/Badge";
 import { fetchCached, bustCache, bustCachePrefix, useFetch } from "@/lib/useCache";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Select, FormField } from "@/components/ui/Input";
@@ -257,6 +257,10 @@ export default function InvoiceDetailPage() {
   const [returnDate, setReturnDate] = useState("");
   const [returnDateError, setReturnDateError] = useState<string | undefined>(undefined);
   const [returnItemsError, setReturnItemsError] = useState<string | undefined>(undefined);
+  // Always-shown preview of the credit note number this return will get if saved right now (see
+  // /api/credit-notes/next-number) — refetched whenever the return date changes, since the FY
+  // segment (and so the whole number) is derived from that date, not "now".
+  const [nextCreditNoteNumber, setNextCreditNoteNumber] = useState("");
   const [addingReturn, setAddingReturn] = useState(false);
   const [returnDeleteConfirm, setReturnDeleteConfirm] = useState<ReturnRecord | null>(null);
   const [deletingReturn, setDeletingReturn] = useState(false);
@@ -478,6 +482,16 @@ export default function InvoiceDetailPage() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [showReturnForm, addingReturn]);
+
+  useEffect(() => {
+    if (!showReturnForm || !returnDate) return;
+    const controller = new AbortController();
+    fetch(`/api/credit-notes/next-number?date=${encodeURIComponent(returnDate)}`, { headers: { "x-no-loader": "1" }, signal: controller.signal })
+      .then((r) => r.json())
+      .then((res: { documentNumber?: string }) => setNextCreditNoteNumber(res.documentNumber ?? ""))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [showReturnForm, returnDate]);
 
   async function handleAddReturn(e: React.FormEvent) {
     e.preventDefault();
@@ -1298,6 +1312,9 @@ export default function InvoiceDetailPage() {
                   <div className={styles.returnModalHeaderLeft}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 102.13-9.36L1 10" /></svg>
                     <h3 className={styles.returnModalTitle}>Record Return</h3>
+                    {nextCreditNoteNumber && (
+                      <Badge variant="blue" className={styles.returnNextNumberBadge}>Next no.: {nextCreditNoteNumber}</Badge>
+                    )}
                   </div>
                   <button
                     type="button"

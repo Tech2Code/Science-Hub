@@ -1,3 +1,5 @@
+.nextNumberBadge { margin-left: 0.625rem; text-transform: none; vertical-align: middle; }
+
 /* ── Validation warnings (right column) ───────── */
 .warningList {
   display: flex;

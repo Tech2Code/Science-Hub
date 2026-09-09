@@ -6,6 +6,8 @@
 
 .leftCol { display: flex; flex-direction: column; gap: 1rem; flex: 1; min-width: 0; }
 
+.nextNumberBadge { margin-left: 0.625rem; text-transform: none; vertical-align: middle; }
+
 .rightCol { width: 100%; }
 
 @media (min-width: 1280px) {

@@ -180,8 +180,9 @@
   padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--c-border);
 }
-.returnModalHeaderLeft { display: flex; align-items: center; gap: 0.5rem; }
+.returnModalHeaderLeft { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .returnModalTitle { font-size: 0.9375rem; font-weight: 600; color: var(--c-text); margin: 0; }
+.returnNextNumberBadge { text-transform: none; }
 .returnModalCloseBtn {
   background: none;
   border: none;
