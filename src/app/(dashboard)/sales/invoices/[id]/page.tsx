@@ -664,6 +664,11 @@ export default function InvoiceDetailPage() {
     // sync (it previously used table border-collapse, which silently drops
     // borders across colSpan boundaries; the PDF pipeline already works around
     // that by switching to border-collapse:separate with per-cell borders).
+    // Cache-first (not force-regenerated) as of 2026-09-09 — every mutation that
+    // can change what this invoice's PDF renders (payment/return CRUD, invoice
+    // edit/delete, customer edit, settings/logo/bank-details change) now correctly
+    // invalidates the cache, so a stale print output is no longer a real risk;
+    // the "Regenerate" button remains the manual force-refresh escape hatch.
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
     setPdfPrinting(true);
@@ -674,7 +679,7 @@ export default function InvoiceDetailPage() {
     // since it's strictly safer than rAF with no downside.
     await new Promise(r => (isMobile ? setTimeout(r, 30) : requestAnimationFrame(() => requestAnimationFrame(r))));
     await document.fonts.ready;
-    const blob = await generatePdfBlob(["ORIGINAL COPY", "DUPLICATE COPY"], true);
+    const blob = await generatePdfBlob(["ORIGINAL COPY", "DUPLICATE COPY"]);
     setPdfPrinting(false);
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
 

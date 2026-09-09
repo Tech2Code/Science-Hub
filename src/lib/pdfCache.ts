@@ -9,7 +9,11 @@ const DB_VERSION = 1;
 
 // Bump whenever the PDF rendering pipeline itself changes, so already-cached blobs (whose entity data
 // didn't change) aren't served stale — namespaces cache keys by version instead of forcing manual regeneration.
-const RENDER_VERSION = 1;
+// Bumped to 2 (2026-09-09): generateInvoicePdf.ts's page-composition logic changed (item column-header
+// row's continuation-page repeat behavior, page-split fallback) — a browser with an already-cached
+// invoice PDF from before this change would otherwise keep serving output from the old renderer
+// indefinitely, since none of that invoice's own data changed to trigger invalidateCachedPdf().
+const RENDER_VERSION = 2;
 
 export type PdfEntity = "invoice" | "purchase-bill" | "return" | "rate-list" | "statement";
 
