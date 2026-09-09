@@ -97,6 +97,30 @@ export async function invalidateCachedPdf(entity: PdfEntity, entityId: string): 
   }
 }
 
+/**
+ * Shared cache-check/render/cache-save wrapper — every PDF-generating page (invoice/purchase-bill
+ * list+detail, rate-list, statements, credit-notes) was hand-rolling this same `if (!force) { check
+ * cache } render() { cache it }` boilerplate around a differently-sourced `render` (some read a DOM
+ * element directly, some load a hidden iframe) — this only unifies the caching boilerplate, not the
+ * render strategy itself, which must stay per-page since a list page doesn't have the full detail
+ * data (payments/items) needed to render inline and has to iframe-load the detail page instead.
+ */
+export async function withCachedPdf(
+  entity: PdfEntity,
+  entityId: string,
+  variantKey: string,
+  render: () => Promise<Blob | null>,
+  force = false,
+): Promise<Blob | null> {
+  if (!force) {
+    const cached = await getCachedPdf(entity, entityId, variantKey);
+    if (cached) return cached;
+  }
+  const blob = await render();
+  if (blob) await setCachedPdf(entity, entityId, variantKey, blob);
+  return blob;
+}
+
 /** Wipes the entire PDF cache — call on sign-out so nothing carries over to the next login. */
 export async function clearAllCachedPdfs(): Promise<void> {
   if (typeof indexedDB === "undefined") return;

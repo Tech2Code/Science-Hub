@@ -6,6 +6,16 @@ import {
   isValidGstin, hasValidGstinStateCode, isStandardGstRate, amountsMatch, issue, type ValidationIssue,
 } from "@/lib/gstValidation";
 import { istDayStartUtc, istDayEndUtc } from "@/lib/validation";
+import { getGstPosLabel } from "@/lib/gstStateCodes";
+
+// Same resolvability check the GSTR-1 CSV exporter (`resolvePos()` in gstr1CsvExport.ts) uses to
+// drop a row it can't place — applied here too so the headline summary/HSN-B2B/HSN-B2C figures
+// never count something the CSV export silently excludes (an earlier version of this report let
+// the two diverge: an invoice with an unrecognized place-of-supply state stayed in the on-screen
+// "Net GST Payable"/HSN totals while being dropped from the actual filed CSV).
+function isPosResolvable(stateName: string): boolean {
+  return !!getGstPosLabel(stateName);
+}
 
 export interface SalesRegisterRow {
   invoiceNumber: string; date: Date; customerName: string; customerGstin: string;
@@ -78,7 +88,7 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
       where: { date: { gte: start, lte: end }, deletedAt: null, invoice: { deletedAt: null } },
       include: {
         items: true,
-        invoice: { select: { invoiceNumber: true, isInterState: true, customer: { select: { name: true, gstin: true } } } },
+        invoice: { select: { invoiceNumber: true, isInterState: true, placeOfSupply: true, customer: { select: { name: true, gstin: true, state: true } } } },
       },
       orderBy: { date: "asc" },
     }),
@@ -114,6 +124,14 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
   const hsnMapB2B = new Map<string, HsnSummaryRow>();
   const hsnMapB2C = new Map<string, HsnSummaryRow>();
   const seenInvoiceNumbers = new Map<string, number>();
+  // Transport charge carries its own GST, kept in a separate DB column from cgst/sgst/igst by
+  // design (Invoice.transportCharge) so the Sales Register's cgst/sgst/igst columns keep matching
+  // the invoice's own item-tax-only columns — but it's still real output tax collected from the
+  // customer, so it must still be folded into the headline "Net GST Payable" summary. Accumulated
+  // separately here rather than inside SalesRegisterRow so the register's per-invoice display and
+  // the payable total don't have to agree on what "cgst"/"sgst"/"igst" means. Only invoices whose
+  // place-of-supply actually resolves are counted, matching what the CSV/HSN exports below include.
+  let transportOutputTaxable = 0, transportOutputCgst = 0, transportOutputSgst = 0, transportOutputIgst = 0;
 
   for (const inv of invoices) {
     seenInvoiceNumbers.set(inv.invoiceNumber, (seenInvoiceNumbers.get(inv.invoiceNumber) ?? 0) + 1);
@@ -127,8 +145,17 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
     }
     // Legacy invoices predate `placeOfSupply`; fall back to the customer's registered state
     // before treating it as missing (matches the Sales Register's own display fallback below).
-    if (!(inv.placeOfSupply ?? inv.customer.state ?? "").trim()) {
+    const posValue = inv.placeOfSupply ?? inv.customer.state ?? "";
+    if (!posValue.trim()) {
       issues.push(issue("warning", "Sales", `Invoice ${inv.invoiceNumber} has no place of supply recorded, and the customer has no state on file to fall back to.`, inv.invoiceNumber));
+    }
+    // The GSTR-1 CSV exporter drops any row whose place-of-supply doesn't match a recognized
+    // GST state/UT (see gstr1CsvExport.ts's resolvePos()) — this invoice's HSN-B2B/HSN-B2C and
+    // output-tax contribution must be excluded on the same condition, or the on-screen summary
+    // counts something the actual filed CSV omits.
+    const posOk = isPosResolvable(posValue);
+    if (posValue.trim() && !posOk) {
+      issues.push(issue("warning", "Sales", `Place of supply "${posValue}" on invoice ${inv.invoiceNumber} doesn't match a recognized GST state/UT — excluded from the HSN Summary and Net GST Payable totals (it will also be skipped by the GSTR-1 CSV export).`, inv.invoiceNumber));
     }
 
     const itemTaxSum = inv.items.reduce((s, it) => s + it.gstAmount, 0);
@@ -167,19 +194,25 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
         });
       }
 
-      const splitMap = isB2B ? hsnMapB2B : hsnMapB2C;
-      const splitExisting = splitMap.get(key);
-      if (splitExisting) {
-        splitExisting.totalQuantity += it.quantity;
-        splitExisting.taxableValue += taxable;
-        splitExisting.cgst += cgstShare; splitExisting.sgst += sgstShare; splitExisting.igst += igstShare;
-        splitExisting.total += it.total;
-        if (splitExisting.unit !== it.unit) splitExisting.unit = "Mixed";
-      } else {
-        splitMap.set(key, {
-          hsn: it.hsn.trim() || "—", gstRate: it.gstRate, unit: it.unit, totalQuantity: it.quantity,
-          taxableValue: taxable, cgst: cgstShare, sgst: sgstShare, igst: igstShare, total: it.total,
-        });
+      // HSN-B2B/HSN-B2C feed the GSTR-1 CSV export, which drops any row whose place-of-supply
+      // doesn't resolve — so only fold this item into the split maps when it would also survive
+      // that CSV's own filter (the combined `hsnMap` above stays unfiltered — it isn't part of
+      // the CSV zip, so it's meant to show every item regardless of a POS ambiguity).
+      if (posOk) {
+        const splitMap = isB2B ? hsnMapB2B : hsnMapB2C;
+        const splitExisting = splitMap.get(key);
+        if (splitExisting) {
+          splitExisting.totalQuantity += it.quantity;
+          splitExisting.taxableValue += taxable;
+          splitExisting.cgst += cgstShare; splitExisting.sgst += sgstShare; splitExisting.igst += igstShare;
+          splitExisting.total += it.total;
+          if (splitExisting.unit !== it.unit) splitExisting.unit = "Mixed";
+        } else {
+          splitMap.set(key, {
+            hsn: it.hsn.trim() || "—", gstRate: it.gstRate, unit: it.unit, totalQuantity: it.quantity,
+            taxableValue: taxable, cgst: cgstShare, sgst: sgstShare, igst: igstShare, total: it.total,
+          });
+        }
       }
 
       const rateKey = `${inv.invoiceNumber}|${it.gstRate}`;
@@ -191,16 +224,47 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
       } else {
         salesRateMap.set(rateKey, {
           invoiceNumber: inv.invoiceNumber, date: inv.date, customerName: inv.customer.name, customerGstin,
-          placeOfSupply: inv.placeOfSupply ?? inv.customer.state ?? "",
+          placeOfSupply: posValue,
           supplyType: inv.isInterState ? "Inter-State" : "Intra-State", isB2B, reverseCharge: inv.reverseCharge,
           gstRate: it.gstRate, taxableValue: taxable, cgst: cgstShare, sgst: sgstShare, igst: igstShare, total: it.total,
         });
       }
     }
 
+    // Transport/freight charge is a real taxable addition to the invoice (invoiceCalc.ts) with
+    // its own GST rate, possibly different from every item's rate — fold it into the same
+    // per-(invoice, rate) bucket the items above use, so a mixed-rate invoice's rate-wise rows
+    // still sum back to the invoice's real total instead of falling short by the transport
+    // portion (this previously caused salesRegisterByRate — and therefore the B2B CSV's
+    // rate-wise rows — to under-total any invoice carrying a transport charge).
+    if (inv.transportCharge) {
+      const tCgst = inv.isInterState ? 0 : inv.transportChargeGstAmount / 2;
+      const tSgst = inv.isInterState ? 0 : inv.transportChargeGstAmount / 2;
+      const tIgst = inv.isInterState ? inv.transportChargeGstAmount : 0;
+      const rateKey = `${inv.invoiceNumber}|${inv.transportChargeGstRate}`;
+      const rateExisting = salesRateMap.get(rateKey);
+      if (rateExisting) {
+        rateExisting.taxableValue += inv.transportCharge;
+        rateExisting.cgst += tCgst; rateExisting.sgst += tSgst; rateExisting.igst += tIgst;
+        rateExisting.total += inv.transportCharge + inv.transportChargeGstAmount;
+      } else {
+        salesRateMap.set(rateKey, {
+          invoiceNumber: inv.invoiceNumber, date: inv.date, customerName: inv.customer.name, customerGstin,
+          placeOfSupply: posValue,
+          supplyType: inv.isInterState ? "Inter-State" : "Intra-State", isB2B, reverseCharge: inv.reverseCharge,
+          gstRate: inv.transportChargeGstRate, taxableValue: inv.transportCharge, cgst: tCgst, sgst: tSgst, igst: tIgst,
+          total: inv.transportCharge + inv.transportChargeGstAmount,
+        });
+      }
+      if (posOk) {
+        transportOutputTaxable += inv.transportCharge;
+        transportOutputCgst += tCgst; transportOutputSgst += tSgst; transportOutputIgst += tIgst;
+      }
+    }
+
     salesRegister.push({
       invoiceNumber: inv.invoiceNumber, date: inv.date, customerName: inv.customer.name,
-      customerGstin, placeOfSupply: inv.placeOfSupply ?? inv.customer.state ?? "",
+      customerGstin, placeOfSupply: posValue,
       supplyType: inv.isInterState ? "Inter-State" : "Intra-State", isB2B, reverseCharge: inv.reverseCharge,
       taxableValue: inv.subtotal, cgst: inv.cgst, sgst: inv.sgst, igst: inv.igst, total: inv.total,
     });
@@ -212,6 +276,11 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
 
   const b2bSales = salesRegister.filter((r) => r.isB2B);
   const b2cSales = salesRegister.filter((r) => !r.isB2B);
+  // One row per invoice already (salesRegister.push runs once per invoice above), so this is a
+  // safe 1:1 lookup — used below to apply the exact same "was this invoice actually filed"
+  // condition the CDNR CSV uses (see gstr1CsvExport.ts: a credit note is dropped from cdnr.csv
+  // when its invoice isn't in-period or its place-of-supply doesn't resolve).
+  const posOkByInvoiceNumber = new Map(salesRegister.map((r) => [r.invoiceNumber, isPosResolvable(r.placeOfSupply)]));
   const hsnSummary = Array.from(hsnMap.values()).sort((a, b) => a.hsn.localeCompare(b.hsn));
   const hsnSummaryB2B = Array.from(hsnMapB2B.values()).sort((a, b) => a.hsn.localeCompare(b.hsn));
   const hsnSummaryB2C = Array.from(hsnMapB2C.values()).sort((a, b) => a.hsn.localeCompare(b.hsn));
@@ -249,20 +318,32 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
     if (!vendorGstin && b.taxAmount > 0) {
       issues.push(issue("error", "Purchases", `Bill ${b.billNumber} includes GST (₹${b.taxAmount.toFixed(2)}) but vendor "${b.vendor.name}" has no GSTIN on file — ITC cannot be claimed without one.`, b.billNumber));
     }
+    // Transport/freight charge on a purchase bill is real ITC-eligible tax paid to the vendor —
+    // folded into the register's own taxableValue/taxAmount (unlike the sales side, there's no
+    // per-rate CSV export for purchases to keep in sync, so this can live directly on the row).
     purchaseRegister.push({
       billNumber: b.billNumber, date: b.billDate, vendorName: b.vendor.name, vendorGstin,
-      taxableValue: b.subtotal, taxAmount: b.taxAmount, total: b.total,
+      taxableValue: b.subtotal + b.transportCharge, taxAmount: b.taxAmount + b.transportChargeGstAmount, total: b.total,
     });
   }
 
   // ── Summary ───────────────────────────────────────────────────────────
-  const outputTaxable = salesRegister.reduce((s, r) => s + r.taxableValue, 0);
-  const outputCgst = salesRegister.reduce((s, r) => s + r.cgst, 0);
-  const outputSgst = salesRegister.reduce((s, r) => s + r.sgst, 0);
-  const outputIgst = salesRegister.reduce((s, r) => s + r.igst, 0);
+  // Item-level output tax (Sales Register rows carry each invoice's own stored cgst/sgst/igst,
+  // which are item-tax-only by design) plus the transport-charge output tax accumulated above —
+  // both filtered to place-of-supply-resolvable invoices, matching the GSTR-1 CSV export.
+  const outputTaxable = salesRegister.reduce((s, r) => (isPosResolvable(r.placeOfSupply) ? s + r.taxableValue : s), 0) + transportOutputTaxable;
+  const outputCgst = salesRegister.reduce((s, r) => (isPosResolvable(r.placeOfSupply) ? s + r.cgst : s), 0) + transportOutputCgst;
+  const outputSgst = salesRegister.reduce((s, r) => (isPosResolvable(r.placeOfSupply) ? s + r.sgst : s), 0) + transportOutputSgst;
+  const outputIgst = salesRegister.reduce((s, r) => (isPosResolvable(r.placeOfSupply) ? s + r.igst : s), 0) + transportOutputIgst;
   const outputTax = outputCgst + outputSgst + outputIgst;
-  const creditNoteTaxable = creditNotes.reduce((s, r) => s + r.taxableValue, 0);
-  const creditNoteTax = creditNotes.reduce((s, r) => s + r.cgst + r.sgst + r.igst, 0);
+  // Excludes a credit note with no assigned number, or whose invoice is out-of-period/unresolvable
+  // place-of-supply — the same conditions under which cdnr.csv drops that row (see resolvePos() /
+  // the `if (!invoiceRow) continue` and `if (cn.creditNoteNumber === "—") continue` guards in
+  // gstr1CsvExport.ts) — so "Net GST Payable" never nets out more credit-note tax than the actual
+  // filed CSV accounts for.
+  const filedCreditNotes = creditNotes.filter((r) => r.creditNoteNumber !== "—" && (posOkByInvoiceNumber.get(r.invoiceNumber) ?? false));
+  const creditNoteTaxable = filedCreditNotes.reduce((s, r) => s + r.taxableValue, 0);
+  const creditNoteTax = filedCreditNotes.reduce((s, r) => s + r.cgst + r.sgst + r.igst, 0);
   const inputTaxable = purchaseRegister.reduce((s, r) => s + r.taxableValue, 0);
   const inputTax = purchaseRegister.reduce((s, r) => s + r.taxAmount, 0);
   const netOutputTax = outputTax - creditNoteTax;

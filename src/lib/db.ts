@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { safeDecrypt } from "@/lib/crypto";
-import { istDayStartUtc, istDayEndUtc, istMonthStartUtc, istNextMonthStartUtc } from "@/lib/validation";
+import { istDayStartUtc, istDayEndUtc, istMonthStartUtc, istNextMonthStartUtc, istTodayStartUtc } from "@/lib/validation";
 
 export async function getBusinessSettings() {
   // Hot path (every server-rendered page). Prisma's upsert can still hit a real unique-constraint
@@ -59,7 +59,10 @@ function buildInvoiceWhere(filters: InvoiceListFilters): Prisma.InvoiceWhereInpu
   const where: Prisma.InvoiceWhereInput = { deletedAt: null };
   if (status === "overdue") {
     where.status = { not: "paid" };
-    where.dueDate = { lt: new Date() };
+    // IST-aware "today" boundary — matches the Dashboard routes' own overdue definition
+    // (istTodayStartUtc), so a bill due "today" isn't overdue on one page but overdue on
+    // another depending on which raw `new Date()` a route happened to use.
+    where.dueDate = { lt: istTodayStartUtc() };
   } else if (status) {
     where.status = status;
   }
@@ -116,7 +119,7 @@ export async function getInvoiceStats(filters: Omit<InvoiceListFilters, "search"
   // overdue condition's status constraint (e.g. the "paid" tab always yields 0 overdue).
   const [agg, overdueCount, years] = await Promise.all([
     prisma.invoice.aggregate({ where, _sum: { total: true, paidAmount: true } }),
-    prisma.invoice.count({ where: { AND: [where, { status: { not: "paid" }, dueDate: { lt: new Date() } }] } }),
+    prisma.invoice.count({ where: { AND: [where, { status: { not: "paid" }, dueDate: { lt: istTodayStartUtc() } }] } }),
     prisma.$queryRaw<{ year: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM "date")::int AS year FROM "Invoice" WHERE "deletedAt" IS NULL ORDER BY year DESC`,
   ]);
   const totalInvoiced = agg._sum.total ?? 0;

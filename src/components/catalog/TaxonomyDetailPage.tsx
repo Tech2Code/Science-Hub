@@ -82,6 +82,10 @@ export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }
       if (res.ok) {
         setEntity((prev) => (prev ? { ...prev, name } : prev));
         bustCachePrefix(apiBase);
+        // Product list/detail embed the brand/category's name, so a rename here leaves them
+        // stale until this bust — same fix already applied to the Brands/Categories list pages'
+        // own rename handlers.
+        bustCachePrefix("/api/products");
         setRenaming(false);
         toast({ type: "success", title: `${entityLabel} renamed`, message: `Renamed to "${name}".` });
       } else if (res.status === 409) {

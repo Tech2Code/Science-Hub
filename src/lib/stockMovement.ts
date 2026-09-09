@@ -18,38 +18,6 @@ export const DOCUMENT_TYPE_BY_MOVEMENT_TYPE: Record<StockMovementType, StockMove
   manual: "manual",
 };
 
-interface RecordStockMovementInput {
-  productId: string;
-  type: StockMovementType;
-  quantity: number; // signed: positive = stock in, negative = stock out
-  balanceAfter: number;
-  reference?: string;
-  notes?: string;
-  purchaseBillId?: string;
-  createdByUserId?: string;
-  // Pass when already known (e.g. from an update() just run) to skip an extra query — matters in per-line-item loops against the pooled single-connection Neon DB.
-  productName?: string;
-}
-
-export async function recordStockMovement(tx: TxClient, input: RecordStockMovementInput) {
-  const productName = input.productName ??
-    (await tx.product.findUnique({ where: { id: input.productId }, select: { name: true } }))?.name ?? "";
-  return tx.stockMovement.create({
-    data: {
-      productId: input.productId,
-      productName,
-      type: input.type,
-      documentType: DOCUMENT_TYPE_BY_MOVEMENT_TYPE[input.type],
-      quantity: input.quantity,
-      balanceAfter: input.balanceAfter,
-      reference: input.reference ?? null,
-      notes: input.notes ?? null,
-      purchaseBillId: input.purchaseBillId ?? null,
-      createdByUserId: input.createdByUserId ?? null,
-    },
-  });
-}
-
 export class ProductNotFoundError extends Error {
   constructor(public readonly productIds: string[]) {
     super(`One or more products no longer exist (they may have been deleted) — remove the affected line item(s) and re-add them from the current product list.`);

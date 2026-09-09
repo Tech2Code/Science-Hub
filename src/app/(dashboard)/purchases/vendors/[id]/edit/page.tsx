@@ -100,6 +100,7 @@ export default function EditVendorPage() {
     if (res.ok) {
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/vendors");
+      bustCachePrefix("/api/purchase-bills");
       toast({ type: "success", title: "Vendor updated", message: "Changes saved." });
       router.push(`/purchases/vendors/${id}`);
       // No setSaving(false) here — page is navigating away; resetting it first would briefly

@@ -17,7 +17,7 @@ import { useToast } from "@/components/ui/Toast";
 import { formatDate } from "@/lib/formatDate";
 import { useFetch } from "@/lib/useCache";
 import { generatePdfViaIframe } from "@/lib/pdfIframeGenerator";
-import { getCachedPdf, setCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
+import { withCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { Cell, type Column } from "@/components/ui/Table";
 import { StatCardsRow } from "@/components/ui/StatCardsRow";
 import { animateSection } from "@/lib/animateSection";
@@ -167,23 +167,22 @@ export default function CreditNotesPage() {
 
   // Line items never change after creation, so the PDF is cached by return id + a variant key over the only
   // things that still can change (settings, customer) — regenerated only when those change or the note is deleted.
-  async function getOrRenderCreditNotePdf(c: CreditNote): Promise<Blob | null> {
+  async function getOrRenderCreditNotePdf(c: CreditNote, force = false): Promise<Blob | null> {
     const showLogo = settings?.showLogoOnInvoices !== false;
     const variantKey = buildPdfVariantKey(undefined, {
       logo: showLogo,
       settings: settings?.updatedAt ?? "loading",
       customer: c.invoice?.customer?.updatedAt ?? "loading",
     });
-    const cached = await getCachedPdf("return", c.id, variantKey);
-    if (cached) return cached;
-
-    const blob = await generatePdfViaIframe({
-      route: `/sales/invoices/${c.invoiceId}?creditNoteId=${c.id}`,
-      printAreaId: "credit-note-print-area",
-      includeLogo: true,
-    });
-    if (blob) setCachedPdf("return", c.id, variantKey, blob);
-    return blob;
+    return withCachedPdf(
+      "return", c.id, variantKey,
+      () => generatePdfViaIframe({
+        route: `/sales/invoices/${c.invoiceId}?creditNoteId=${c.id}`,
+        printAreaId: "credit-note-print-area",
+        includeLogo: true,
+      }),
+      force,
+    );
   }
 
   async function handleViewPdf(c: CreditNote) {
@@ -211,22 +210,11 @@ export default function CreditNotesPage() {
     regenerateBusyRef.current = true;
     setRegeneratingId(c.id);
     try {
-      const showLogo = settings?.showLogoOnInvoices !== false;
-      const variantKey = buildPdfVariantKey(undefined, {
-        logo: showLogo,
-        settings: settings?.updatedAt ?? "loading",
-        customer: c.invoice?.customer?.updatedAt ?? "loading",
-      });
-      const blob = await generatePdfViaIframe({
-        route: `/sales/invoices/${c.invoiceId}?creditNoteId=${c.id}`,
-        printAreaId: "credit-note-print-area",
-        includeLogo: true,
-      });
+      const blob = await getOrRenderCreditNotePdf(c, true);
       if (!blob) {
         toast({ type: "error", title: "PDF failed", message: "Could not regenerate credit note PDF." });
         return;
       }
-      await setCachedPdf("return", c.id, variantKey, blob);
       const url = URL.createObjectURL(blob);
       setPdfPreviewUrl(url);
       setPdfPreviewNote({ number: c.creditNoteNumber ?? "Credit Note", customer: c.invoice?.customer?.name ?? "" });

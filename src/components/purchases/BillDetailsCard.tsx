@@ -194,6 +194,7 @@ export function BillDetailsCard({
         setVendorSearch("");
         closeVendorCreate();
         if (ivEditId || !ivDontSave) bustCachePrefix("/api/vendors");
+        if (ivEditId) bustCachePrefix("/api/purchase-bills");
         toast(ivEditId
           ? { type: "success", title: "Vendor updated", message: `${data.name} saved.` }
           : { type: "success", title: "Vendor created", message: ivDontSave ? `${data.name} added and selected for this bill only.` : `${data.name} added and selected.` }

@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { istTodayStartUtc } from "@/lib/validation";
 
 // Shared between the purchase-bills list route and its stats route so the
 // two can't drift on what "status=overdue"/search/date-range mean.
@@ -17,7 +18,9 @@ export function buildBillWhere(filters: PurchaseBillListFilters): Prisma.Purchas
   const where: Prisma.PurchaseBillWhereInput = { deletedAt: null };
   if (status === "overdue") {
     where.status = { notIn: ["paid", "cancelled"] };
-    where.dueDate = { lt: new Date() };
+    // IST-aware "today" boundary — matches the Dashboard routes' own overdue definition, so
+    // a bill due "today" isn't overdue on the Dashboard but overdue on the Purchase Bills list.
+    where.dueDate = { lt: istTodayStartUtc() };
   } else if (status) {
     where.status = status;
   }

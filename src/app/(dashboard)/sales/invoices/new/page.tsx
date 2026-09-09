@@ -265,6 +265,7 @@ export default function NewInvoicePage() {
         setCustomerSearch(data.name);
         applyPlaceOfSupply(data.state ?? "");
         bustCachePrefix("/api/customers");
+        bustCachePrefix("/api/invoices");
         setCustomerEditId(null);
         setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
         setCustomModalOpen(false);

@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { logActivity } from "@/lib/activity";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { isPurchaseBillBlobUrl } from "@/lib/blobStorage";
-import { isFutureIstDate, toIstDateStr, istDayStartUtc, MAX_MONEY_VALUE } from "@/lib/validation";
+import { isFutureIstDate, toIstDateStr, istDayStartUtc, MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
 import { computeRoundOff } from "@/lib/roundOff";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { purchaseBillLineBreakdown, normalizeCategoryInput } from "@/lib/purchaseBillForm";
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
       const purchasePrice = parseFloat(String(item.purchasePrice));
       const gstRate = parseFloat(String(item.gstRate ?? 0));
       const discountPercent = parseFloat(String(item.discountPercent ?? 0));
-      if (!(quantity > 0)) return NextResponse.json({ error: "Item quantity must be greater than 0" }, { status: 400 });
+      if (!(quantity > 0 && quantity <= MAX_QUANTITY)) return NextResponse.json({ error: "Item quantity must be a valid, reasonable amount" }, { status: 400 });
       if (!(purchasePrice >= 0 && purchasePrice <= MAX_MONEY_VALUE)) return NextResponse.json({ error: "Item price must be a valid, reasonable amount" }, { status: 400 });
       if (!(gstRate >= 0 && gstRate <= 100)) return NextResponse.json({ error: "Item GST rate must be between 0 and 100%" }, { status: 400 });
       if (Number.isNaN(discountPercent) || discountPercent < 0 || discountPercent > 100) {
@@ -196,8 +196,8 @@ export async function POST(req: NextRequest) {
     const subtotal = computedItems.reduce((s, i) => s + i.itemSubtotal, 0);
     const taxAmount = computedItems.reduce((s, i) => s + i.gstAmount, 0);
     const parsedDiscount = discount !== undefined && discount !== null && discount !== "" ? parseFloat(String(discount)) : 0;
-    if (Number.isNaN(parsedDiscount) || parsedDiscount < 0) {
-      return NextResponse.json({ error: "Discount cannot be negative" }, { status: 400 });
+    if (Number.isNaN(parsedDiscount) || !(parsedDiscount >= 0 && parsedDiscount <= MAX_MONEY_VALUE)) {
+      return NextResponse.json({ error: "Discount must be a valid, reasonable amount" }, { status: 400 });
     }
 
     // GST type is derived from the vendor's registered state, not chosen by the preparer — same reasoning as deriveIsInterState for sales invoices.
@@ -213,14 +213,21 @@ export async function POST(req: NextRequest) {
     // CGST/SGST/IGST split, always server-recomputed rather than trusted.
     const transportChargeVal = parseFloat(String(transportCharge ?? 0)) || 0;
     const transportChargeGstRateVal = parseFloat(String(transportChargeGstRate ?? 0)) || 0;
-    if (transportChargeVal < 0) {
-      return NextResponse.json({ error: "Transport charge cannot be negative" }, { status: 400 });
+    if (!(transportChargeVal >= 0 && transportChargeVal <= MAX_MONEY_VALUE)) {
+      return NextResponse.json({ error: "Transport charge must be a valid, reasonable amount" }, { status: 400 });
     }
-    if (transportChargeGstRateVal < 0) {
-      return NextResponse.json({ error: "Transport charge GST rate cannot be negative" }, { status: 400 });
+    if (!(transportChargeGstRateVal >= 0 && transportChargeGstRateVal <= 100)) {
+      return NextResponse.json({ error: "Transport charge GST rate must be between 0 and 100%" }, { status: 400 });
     }
     const transportChargeGstAmountVal = (transportChargeVal * transportChargeGstRateVal) / 100;
 
+    // NOTE (flagged by audit, unconfirmed design intent — do not "fix" without a product-owner
+    // decision): this bill-level `discount` is a post-tax cash rebate (subtracted after `taxAmount`,
+    // which is itself computed from each item's pre-discount subtotal via
+    // `purchaseBillLineBreakdown`) — it does NOT reduce the taxable value the way an item-level
+    // discount does. If a vendor's bill-level discount is meant to be GST-relevant (i.e. should
+    // lower the taxable value, not just the cash total), this calculation needs to change; until
+    // then this is deliberately unmodified from its existing behavior.
     const payAmt = payment?.amount ?? 0;
     const { roundOff, roundedTotal: billTotal } = computeRoundOff(subtotal + taxAmount - parsedDiscount + transportChargeVal + transportChargeGstAmountVal);
     if (billTotal < 0) return NextResponse.json({ error: "Discount cannot exceed the bill total" }, { status: 400 });

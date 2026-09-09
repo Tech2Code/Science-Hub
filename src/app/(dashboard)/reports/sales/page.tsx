@@ -279,7 +279,7 @@ export default function SalesReportsPage() {
             <div className="card-header">
               <div>
                 <h2 className="card-header-title">GST Summary</h2>
-                <p className="card-header-sub">Monthly GST breakdown across all invoices</p>
+                <p className="card-header-sub">Monthly GST breakdown across all invoices — gross output tax only, before netting credit notes/ITC. For net GST payable, see Reports → GST Reports.</p>
               </div>
               {!loadingGst && gstRows.length > 0 && (
                 <Button variant="secondary" size="sm" loading={exportingGst} onClick={exportGstCsv}>Export Excel</Button>

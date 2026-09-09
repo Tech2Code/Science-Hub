@@ -4,9 +4,9 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
-import { useFetch } from "@/lib/useCache";
+import { useFetch, bustCachePrefix } from "@/lib/useCache";
 import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenerator";
-import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
+import { withCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { SearchField } from "@/components/ui/SearchField";
 import { OverlayLoader } from "@/components/ui/Spinner";
@@ -138,13 +138,11 @@ export default function PurchasesPage() {
       settings: settings?.updatedAt ?? "loading",
       vendor: b.vendor?.updatedAt ?? "loading",
     });
-    if (!force) {
-      const cached = await getCachedPdf("purchase-bill", b.id, variantKey);
-      if (cached) return cached;
-    }
-    const blob = await pdfIframeGenerate({ route: `/purchases/bills/${b.id}`, printAreaId: "bill-print-area" });
-    if (blob) setCachedPdf("purchase-bill", b.id, variantKey, blob);
-    return blob;
+    return withCachedPdf(
+      "purchase-bill", b.id, variantKey,
+      () => pdfIframeGenerate({ route: `/purchases/bills/${b.id}`, printAreaId: "bill-print-area" }),
+      force,
+    );
   }
 
   // Bypasses the cache and re-renders a fresh PDF for the "Regenerate" action.
@@ -210,6 +208,9 @@ export default function PurchasesPage() {
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
         await Promise.all([mutate(), mutateStats()]);
+        bustCachePrefix("/api/products");
+        bustCachePrefix("/api/reports");
+        bustCachePrefix("/api/purchase-reports");
         invalidateCachedPdf("purchase-bill", target.id);
         toast({ type: "success", title: "Moved to bin", message: `${target.billNumber} moved to bin. You can restore it within 30 days.` });
       } else {

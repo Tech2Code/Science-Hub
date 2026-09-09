@@ -66,15 +66,20 @@ function bustNotificationCaches() {
 // own list page (e.g. Credit Notes) can still be holding a stale cached copy from an earlier
 // visit this session, so it must be busted here too or the restored/removed row won't show
 // up there until a full page refresh clears the in-memory cache.
+// Restoring an invoice/purchase-bill/credit-note re-applies its stock effect (batchAdjustStock
+// inside the same POST /api/bin/[type]/[id] transaction — see sale_bin_restore/purchase_bin_restore/
+// return_bin_restore in stockMovement.ts), so each of those three types must also bust the Products
+// list/stats cache, not just their own — otherwise a Products page open in another tab (or visited
+// right after) keeps showing the pre-restore stock level.
 const TYPE_CACHE_PREFIXES: Record<BinType, string[]> = {
-  invoice:       ["/api/invoices", "/api/invoices/stats", "/api/reports"],
+  invoice:       ["/api/invoices", "/api/invoices/stats", "/api/reports", "/api/products", "/api/products/stats"],
   customer:      ["/api/customers", "/api/reports"],
   product:       ["/api/products", "/api/products/stats", "/api/reports"],
   brand:         ["/api/brands", "/api/reports"],
   category:      ["/api/categories", "/api/reports"],
   vendor:        ["/api/vendors"],
-  purchase_bill: ["/api/purchase-bills", "/api/purchase-bills/stats", "/api/reports", "/api/purchase-reports"],
-  return:        ["/api/credit-notes", "/api/credit-notes/stats", "/api/reports"],
+  purchase_bill: ["/api/purchase-bills", "/api/purchase-bills/stats", "/api/reports", "/api/purchase-reports", "/api/products", "/api/products/stats"],
+  return:        ["/api/credit-notes", "/api/credit-notes/stats", "/api/reports", "/api/products", "/api/products/stats"],
   rate_list:     ["/api/rate-lists"],
 };
 

@@ -17,8 +17,9 @@ import { Modal } from "@/components/dialogs/Modal";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
-import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
+import { withCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { amountInWordsINR } from "@/lib/numberToWords";
+import { splitGstForDisplay } from "@/lib/roundOff";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
@@ -348,6 +349,7 @@ export default function InvoiceDetailPage() {
         setPaymentAmountError(undefined);
         setPaymentDateError(undefined);
         setPaymentOtherMethodError(undefined);
+        invalidateCachedPdf("invoice", id);
         bustCache(`/api/invoices/${id}`);
         bustCachePrefix("/api/invoices");
         bustCachePrefix("/api/payments");
@@ -404,6 +406,7 @@ export default function InvoiceDetailPage() {
       });
       if (res.ok) {
         setEditingPayment(null);
+        invalidateCachedPdf("invoice", id);
         bustCache(`/api/invoices/${id}`);
         bustCachePrefix("/api/invoices");
         bustCachePrefix("/api/payments");
@@ -427,6 +430,7 @@ export default function InvoiceDetailPage() {
       const res = await fetch(`/api/invoices/${id}/payment/${paymentDeleteConfirm.id}`, { method: "DELETE" });
       if (res.ok) {
         setPaymentDeleteConfirm(null);
+        invalidateCachedPdf("invoice", id);
         bustCache(`/api/invoices/${id}`);
         bustCachePrefix("/api/invoices");
         bustCachePrefix("/api/payments");
@@ -503,6 +507,7 @@ export default function InvoiceDetailPage() {
         const created = await res.json();
         setReturns(prev => [created, ...prev]);
         setShowReturnForm(false);
+        invalidateCachedPdf("invoice", id);
         bustCache(`/api/invoices/${id}`);
         bustCachePrefix("/api/invoices");
         bustCachePrefix("/api/products");
@@ -527,6 +532,7 @@ export default function InvoiceDetailPage() {
       if (res.ok) {
         setReturns(prev => prev.filter(r => r.id !== returnDeleteConfirm.id));
         invalidateCachedPdf("return", returnDeleteConfirm.id);
+        invalidateCachedPdf("invoice", id);
         bustCache(`/api/invoices/${id}`);
         bustCachePrefix("/api/invoices");
         bustCachePrefix("/api/products");
@@ -557,20 +563,18 @@ export default function InvoiceDetailPage() {
       settings: settings?.updatedAt ?? "loading",
       customer: invoice?.customer?.updatedAt ?? "loading",
     });
-    const cached = await getCachedPdf("return", ret.id, variantKey);
-    if (cached) return cached;
-
-    setCreditNoteToRender(ret);
-    // Wait for the hidden print area to actually mount/paint before
-    // html2canvas reads it off the DOM — same two-frame + fonts wait used
-    // by the main invoice PDF download.
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    await document.fonts.ready;
-    const el = document.getElementById("credit-note-print-area");
-    const blob = el ? await generateInvoicePdfBlob(el, { logoUrl: showLogo ? settings?.logoUrl || undefined : undefined }) : null;
-    setCreditNoteToRender(null);
-    if (blob) setCachedPdf("return", ret.id, variantKey, blob);
-    return blob;
+    return withCachedPdf("return", ret.id, variantKey, async () => {
+      setCreditNoteToRender(ret);
+      // Wait for the hidden print area to actually mount/paint before
+      // html2canvas reads it off the DOM — same two-frame + fonts wait used
+      // by the main invoice PDF download.
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await document.fonts.ready;
+      const el = document.getElementById("credit-note-print-area");
+      const blob = el ? await generateInvoicePdfBlob(el, { logoUrl: showLogo ? settings?.logoUrl || undefined : undefined }) : null;
+      setCreditNoteToRender(null);
+      return blob;
+    });
   }
 
   async function handleDownloadCreditNotePdf(ret: ReturnRecord) {
@@ -594,15 +598,11 @@ export default function InvoiceDetailPage() {
       settings: settings?.updatedAt ?? "loading",
       customer: invoice?.customer?.updatedAt ?? "loading",
     });
-    if (!force) {
-      const cached = await getCachedPdf("invoice", id, variantKey);
-      if (cached) return cached;
-    }
-    const el = document.getElementById("invoice-print-area");
-    if (!el) return null;
-    const blob = await generateInvoicePdfBlob(el, { copyLabels, logoUrl: showLogo ? settings?.logoUrl || undefined : undefined });
-    if (blob) setCachedPdf("invoice", id, variantKey, blob);
-    return blob;
+    return withCachedPdf("invoice", id, variantKey, async () => {
+      const el = document.getElementById("invoice-print-area");
+      if (!el) return null;
+      return generateInvoicePdfBlob(el, { copyLabels, logoUrl: showLogo ? settings?.logoUrl || undefined : undefined });
+    }, force);
   }
 
   // Discards whatever's cached for the current toggle state and forces a
@@ -853,6 +853,7 @@ export default function InvoiceDetailPage() {
     try {
       const res = await fetch(`/api/invoices/${id}`, { method: "DELETE" });
       if (res.ok) {
+        invalidateCachedPdf("invoice", id);
         bustCachePrefix("/api/invoices");
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/reports");
@@ -1614,13 +1615,23 @@ export default function InvoiceDetailPage() {
                   </td>
                 </tr>
 
-                {/* Items header — a single real row (no rowSpan anywhere): html2canvas
-                    doesn't compute rowSpan cell heights correctly, which cut off/hid
-                    borders in the generated PDF even though it rendered fine on
-                    screen. The CGST/SGST/IGST group cells still colSpan the same 2
-                    underlying data columns below them (colSpan renders fine), but
-                    their Rate/Amount sub-labels are nested inline via flex instead of
-                    living in a second table row. */}
+                {/* Items header — a single real row (no rowSpan anywhere): html2canvas doesn't
+                    compute rowSpan cell heights correctly, which cut off/hid borders in the
+                    generated PDF even though it rendered fine on screen. The CGST/SGST/IGST group
+                    cells still colSpan the same 2 underlying data columns below them (colSpan
+                    renders fine), but their Rate/Amount sub-labels are nested inline via flex
+                    instead of living in a second table row.
+                    `data-header-item-cols="true"` marks this row for generateInvoicePdf.ts's
+                    page-split logic: on a continuation page that still has item rows on it, this
+                    row is redrawn stacked right under the repeating banner (so the columns are
+                    still labeled past page 1) — but on a continuation page that's purely the
+                    trailing Notes/Bank/Terms/Totals block with no item rows, only the banner
+                    repeats and this row is skipped (column headers with nothing under them would
+                    look broken there). Deliberately kept in <tbody>, immediately above the actual
+                    item rows — NOT in <thead> — so it stays visually right above where the items
+                    start on page 1 (after Invoice No./Bill To/Place of Supply etc.), instead of
+                    jumping to the very top of the table under the banner the way anything inside
+                    <thead> unavoidably would. */}
                 {(() => {
                   const taxGroup = (label: string, width: string) => (
                     <td key={label} colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", width, whiteSpace: "nowrap" }}>
@@ -1632,7 +1643,7 @@ export default function InvoiceDetailPage() {
                     </td>
                   );
                   return (
-                    <tr id="invoice-col-header" style={{ background: "var(--inv-bg3)", fontWeight: 700, fontSize: 8, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--inv-tx2)" }}>
+                    <tr id="invoice-col-header" data-header-item-cols="true" style={{ background: "var(--inv-bg3)", fontWeight: 700, fontSize: 8, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--inv-tx2)" }}>
                       {[
                         ["#", "center", "3%"], ["Description", "left", "7%"], ["HSN/SAC", "center", "8%"],
                         ["Qty", "center", "5%"], ["Unit", "center", "10%"],
@@ -1835,18 +1846,26 @@ export default function InvoiceDetailPage() {
                     <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total IGST</td>
                     <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.igst + (invoice.transportChargeGstAmount ?? 0))}</td>
                   </tr>
-                ) : (
-                  <>
-                    <tr>
-                      <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total CGST</td>
-                      <td colSpan={4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.cgst + (invoice.transportChargeGstAmount ?? 0) / 2)}</td>
-                    </tr>
-                    <tr>
-                      <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total SGST</td>
-                      <td colSpan={4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.sgst + (invoice.transportChargeGstAmount ?? 0) / 2)}</td>
-                    </tr>
-                  </>
-                )}
+                ) : (() => {
+                  // Split the combined CGST+SGST once (not each half independently) so the two
+                  // printed rows always foot back to the printed Grand Total — see
+                  // splitGstForDisplay's own comment for why independently rounding invoice.cgst
+                  // and invoice.sgst (both exact halves in raw float math) can silently print
+                  // ₹0.01 more than the actual total GST on an odd-paisa invoice.
+                  const { cgst: cgstDisplay, sgst: sgstDisplay } = splitGstForDisplay(invoice.cgst + invoice.sgst + (invoice.transportChargeGstAmount ?? 0));
+                  return (
+                    <>
+                      <tr>
+                        <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total CGST</td>
+                        <td colSpan={4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(cgstDisplay)}</td>
+                      </tr>
+                      <tr>
+                        <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total SGST</td>
+                        <td colSpan={4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(sgstDisplay)}</td>
+                      </tr>
+                    </>
+                  );
+                })()}
                 {invoice.roundOff !== 0 && (
                   <tr>
                     <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Round Off</td>
@@ -2032,7 +2051,11 @@ export default function InvoiceDetailPage() {
             width: 700, background: "var(--inv-bg)", color: "var(--inv-tx)",
           }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10.5 }}>
-              <tbody>
+              {/* Letterhead + credit-note-meta + column-header rows live in a real <thead> (this
+                  print area previously had none at all) so generateInvoicePdf.ts's page-split
+                  logic repeats them on every continuation page of a long credit note, the same
+                  way the main invoice print area's own header repeats. */}
+              <thead>
                 <tr>
                   <td colSpan={6} style={{ padding: 0 }}>
                     <div style={{
@@ -2085,6 +2108,8 @@ export default function InvoiceDetailPage() {
                     <td key={h} style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", fontWeight: 700, fontSize: 9.5, textAlign: i === 0 ? "left" : "right" }}>{h}</td>
                   ))}
                 </tr>
+              </thead>
+              <tbody>
                 {creditNoteToRender.items.map((ri) => (
                   <tr key={ri.id}>
                     <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)" }}>{ri.name}</td>
@@ -2099,6 +2124,10 @@ export default function InvoiceDetailPage() {
                   const cnTotalsRows = 1 + (creditNoteToRender.igst > 0 ? 1 : 2) + (creditNoteToRender.roundOff !== 0 ? 1 : 0) + 1;
                   const cnLabelCell: CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 8px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" };
                   const cnValueCell: CSSProperties = { ...cnLabelCell, textAlign: "right" };
+                  // Same reconciliation fix as the main invoice footer — round the combined
+                  // CGST+SGST once instead of each half independently, so the two printed rows
+                  // always foot back to the printed credit-note Total.
+                  const { cgst: cnCgstDisplay, sgst: cnSgstDisplay } = splitGstForDisplay(creditNoteToRender.cgst + creditNoteToRender.sgst);
                   return (
                     <>
                       <tr>
@@ -2118,11 +2147,11 @@ export default function InvoiceDetailPage() {
                         <>
                           <tr>
                             <td style={cnLabelCell}>CGST</td>
-                            <td style={cnValueCell}>₹{fmt(creditNoteToRender.cgst)}</td>
+                            <td style={cnValueCell}>₹{fmt(cnCgstDisplay)}</td>
                           </tr>
                           <tr>
                             <td style={cnLabelCell}>SGST</td>
-                            <td style={cnValueCell}>₹{fmt(creditNoteToRender.sgst)}</td>
+                            <td style={cnValueCell}>₹{fmt(cnSgstDisplay)}</td>
                           </tr>
                         </>
                       )}

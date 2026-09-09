@@ -16,7 +16,7 @@ import { DateRangeFilter } from "@/components/ui/DateRangeFilter";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { StatementPrintArea, type StatementPrintRow } from "@/components/statements/StatementPrintArea";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
-import { getCachedPdf, setCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
+import { withCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { downloadXlsx } from "@/lib/downloadXlsx";
 import { formatDate } from "@/lib/formatDate";
 import { useFetch } from "@/lib/useCache";
@@ -50,7 +50,7 @@ interface Statement {
 // reflows into `rows`/the balances, which changes the hash, which misses the cache automatically —
 // no manual invalidation call needed anywhere a bill/payment is edited.
 function fingerprintStatement(s: Statement): string {
-  const json = JSON.stringify({ o: s.openingBalance, c: s.closingBalance, d: s.totalDebit, cr: s.totalCredit, rows: s.rows });
+  const json = JSON.stringify({ o: s.openingBalance, c: s.closingBalance, d: s.totalDebit, cr: s.totalCredit, rows: s.rows, party: s.vendor });
   let h = 5381;
   for (let i = 0; i < json.length; i++) h = (h * 33) ^ json.charCodeAt(i);
   return (h >>> 0).toString(36);
@@ -59,7 +59,7 @@ function fingerprintStatement(s: Statement): string {
 export default function VendorStatementPage() {
   const { id } = useParams<{ id: string }>();
   const toast = useToast();
-  const [settings, setSettings] = useState<{ name?: string; address?: string; city?: string; state?: string; pincode?: string; phone?: string; email?: string; gstin?: string; logoUrl?: string; showLogoOnInvoices?: boolean; } | null>(null);
+  const [settings, setSettings] = useState<{ name?: string; address?: string; city?: string; state?: string; pincode?: string; phone?: string; email?: string; gstin?: string; logoUrl?: string; showLogoOnInvoices?: boolean; updatedAt?: string; } | null>(null);
   const todayStr = toIstDateStr(new Date());
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -112,17 +112,14 @@ export default function VendorStatementPage() {
     const variantKey = buildPdfVariantKey(undefined, {
       period: qs.toString() || "all",
       fp: fingerprintStatement(statement),
+      settings: settings?.updatedAt ?? "loading",
     });
-    if (!force) {
-      const cached = await getCachedPdf("statement", id, variantKey);
-      if (cached) return cached;
-    }
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    await document.fonts.ready;
-    const el = document.getElementById("statement-print-area");
-    const blob = el ? await generateInvoicePdfBlob(el, { logoUrl: settings?.showLogoOnInvoices !== false ? settings?.logoUrl || undefined : undefined }) : null;
-    if (blob) setCachedPdf("statement", id, variantKey, blob);
-    return blob;
+    return withCachedPdf("statement", id, variantKey, async () => {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await document.fonts.ready;
+      const el = document.getElementById("statement-print-area");
+      return el ? await generateInvoicePdfBlob(el, { logoUrl: settings?.showLogoOnInvoices !== false ? settings?.logoUrl || undefined : undefined }) : null;
+    }, force);
   }
 
   async function handleRegeneratePdf() {

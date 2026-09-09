@@ -10,7 +10,7 @@ import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
-import { MAX_MONEY_VALUE } from "@/lib/validation";
+import { MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
 import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
 import { checkCustomerCreditLimit, type CreditLimitCheck } from "@/lib/creditLimit";
 
@@ -103,8 +103,8 @@ export async function POST(request: NextRequest) {
       const price = parseFloat(String(item.price));
       const gstRate = parseFloat(String(item.gstRate ?? 0));
       const discountPercent = parseFloat(String(item.discountPercent ?? 0));
-      if (!(quantity > 0)) {
-        return NextResponse.json({ error: "Item quantity must be greater than 0" }, { status: 400 });
+      if (!(quantity > 0 && quantity <= MAX_QUANTITY)) {
+        return NextResponse.json({ error: "Item quantity must be a valid, reasonable amount" }, { status: 400 });
       }
       if (!(price >= 0 && price <= MAX_MONEY_VALUE)) {
         return NextResponse.json({ error: "Item price must be a valid, reasonable amount" }, { status: 400 });
@@ -225,11 +225,11 @@ export async function POST(request: NextRequest) {
     // Transport charge GST is kept separate from CGST/SGST/IGST (pure item-tax sum); amount is always recomputed server-side, never trusted from client.
     const transportChargeVal = parseFloat(String(transportCharge ?? 0)) || 0;
     const transportChargeGstRateVal = parseFloat(String(transportChargeGstRate ?? 0)) || 0;
-    if (transportChargeVal < 0) {
-      return NextResponse.json({ error: "Transport charge cannot be negative" }, { status: 400 });
+    if (!(transportChargeVal >= 0 && transportChargeVal <= MAX_MONEY_VALUE)) {
+      return NextResponse.json({ error: "Transport charge must be a valid, reasonable amount" }, { status: 400 });
     }
-    if (transportChargeGstRateVal < 0) {
-      return NextResponse.json({ error: "Transport charge GST rate cannot be negative" }, { status: 400 });
+    if (!(transportChargeGstRateVal >= 0 && transportChargeGstRateVal <= 100)) {
+      return NextResponse.json({ error: "Transport charge GST rate must be between 0 and 100%" }, { status: 400 });
     }
     const transportChargeGstAmountVal = (transportChargeVal * transportChargeGstRateVal) / 100;
 

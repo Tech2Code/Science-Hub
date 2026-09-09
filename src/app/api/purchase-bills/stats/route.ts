@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/apiAuth";
 import { monthYearToDateRange } from "@/lib/listQuery";
 import { buildBillWhere } from "@/lib/purchaseBillQuery";
+import { istTodayStartUtc } from "@/lib/validation";
 
 // Kept separate from the paginated list route, since a single page of rows can't produce a correct total.
 export async function GET(request: NextRequest) {
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
     const [agg, overdueCount, years] = await Promise.all([
       prisma.purchaseBill.aggregate({ where, _sum: { total: true, paidAmount: true } }),
       // Nested AND (not merged into `where`) so a status tab's own meaning isn't overwritten by the overdue condition's status constraint.
-      prisma.purchaseBill.count({ where: { AND: [where, { status: { notIn: ["paid", "cancelled"] }, dueDate: { lt: new Date() } }] } }),
+      prisma.purchaseBill.count({ where: { AND: [where, { status: { notIn: ["paid", "cancelled"] }, dueDate: { lt: istTodayStartUtc() } }] } }),
       prisma.$queryRaw<{ year: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM "billDate")::int AS year FROM "PurchaseBill" WHERE "deletedAt" IS NULL ORDER BY year DESC`,
     ]);
     const totalPurchase = agg._sum.total ?? 0;

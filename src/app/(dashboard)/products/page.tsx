@@ -9,7 +9,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { SearchField } from "@/components/ui/SearchField";
-import { useFetch } from "@/lib/useCache";
+import { useFetch, bustCachePrefix } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -131,6 +131,9 @@ export default function ProductsPage() {
         setConfirmState(null);
         if (res.ok) {
           await Promise.all([mutate(), mutateStats()]);
+          // Reports' stock/value aggregates read live Product rows — a deleted product's stock
+          // no longer counts toward them (server already busts this tag, see /api/products/[id]).
+          bustCachePrefix("/api/reports");
           toast({ type: "success", title: "Product deleted", message: `"${name}" removed from catalog.` });
         } else {
           toast({ type: "error", title: "Delete failed", message: resBody.error ?? "Could not delete product." });
@@ -149,7 +152,14 @@ export default function ProductsPage() {
       <ProductBulkImportModal
         open={bulkImportOpen}
         onClose={() => setBulkImportOpen(false)}
-        onImported={() => { mutate(); mutateStats(); }}
+        onImported={() => {
+          mutate(); mutateStats();
+          // Bulk-imported products can carry real opening stock — same reasoning as the single
+          // delete/adjust-stock handlers below: Reports' stock/value aggregates read live Product
+          // rows and would otherwise show stale figures for up to the 2-min cache TTL right after
+          // importing dozens of products at once.
+          bustCachePrefix("/api/reports");
+        }}
       />
       <ConfirmDialog
         open={!!confirmState}

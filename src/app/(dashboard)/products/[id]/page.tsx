@@ -137,6 +137,11 @@ export default function ProductViewPage() {
         setAdjustOpen(false);
         bustCachePrefix("/api/products");
         bustCache(`/api/products/${id}`);
+        // A manual adjustment writes a StockMovement row and changes stock — both the Reports
+        // "stock" view and Purchase Reports' stock-ledger tab read this live and would otherwise
+        // show stale numbers/miss the new ledger row until a hard refresh.
+        bustCachePrefix("/api/reports");
+        bustCachePrefix("/api/purchase-reports");
         await loadProduct();
         toast({ type: "success", title: "Stock adjusted", message: `"${product.name}" is now at ${data.stock} ${product.unit}.` });
       } else {
@@ -159,6 +164,9 @@ export default function ProductViewPage() {
       setConfirmOpen(false);
       if (res.ok) {
         bustCachePrefix("/api/products");
+        // Reports' stock/value aggregates read live Product rows — a deleted product's stock
+        // no longer counts toward them (server already busts this tag, see /api/products/[id]).
+        bustCachePrefix("/api/reports");
         toast({ type: "success", title: "Product deleted", message: `"${product.name}" moved to bin.` });
         router.push("/products");
       } else {

@@ -61,10 +61,34 @@ export async function generateInvoicePdfBlob(
     const tableLeftPx  = tableRect ? Math.round((tableRect.left  - elLeft) * SCALE) : 0;
     const tableRightPx = tableRect ? Math.round((tableRect.right - elLeft) * SCALE) : 0;
 
-    // Measure TAX INVOICE banner (thead) — repeated at top of every page after page 1
-    const theadRowEl = el.querySelector("thead tr") as HTMLElement | null;
-    const theadTop = theadRowEl ? Math.round((theadRowEl.getBoundingClientRect().top - elTop) * SCALE) : 0;
-    const theadH   = theadRowEl ? Math.round(theadRowEl.getBoundingClientRect().height * SCALE) : 0;
+    // Measure the <thead> (the banner/letterhead — repeated at the top of every page after page 1).
+    const theadEl = el.querySelector("thead") as HTMLElement | null;
+    const theadTop = theadEl ? Math.round((theadEl.getBoundingClientRect().top - elTop) * SCALE) : 0;
+    const theadH   = theadEl ? Math.round(theadEl.getBoundingClientRect().height * SCALE) : 0;
+
+    // A row marked `data-header-item-cols="true"` (the invoice's item column-header row) is a
+    // SECOND, independent repeating region — measured separately from `theadEl` because it must
+    // stay a normal <tbody> row, positioned right above the actual item rows on page 1 (after
+    // Invoice No./Bill To/Place of Supply etc.), not inside <thead> (which would force it to the
+    // very top of the table, under the banner, ahead of all that other content — wrong on page 1).
+    // On a continuation page it's redrawn stacked directly under the repeated banner, but only when
+    // that page actually has item rows on it — a page that overflowed purely because the trailing
+    // Notes/Bank/Terms/Totals block didn't fit has no item rows at all, so printing column headers
+    // ("Qty", "Rate", "GST"...) with nothing under them would look broken there.
+    const colHeaderEl = el.querySelector('[data-header-item-cols="true"]') as HTMLElement | null;
+    const colHeaderTop = colHeaderEl ? Math.round((colHeaderEl.getBoundingClientRect().top - elTop) * SCALE) : 0;
+    const colHeaderH   = colHeaderEl ? Math.round(colHeaderEl.getBoundingClientRect().height * SCALE) : 0;
+
+    // Item rows' own vertical ranges — used to decide, per continuation page, whether it actually
+    // contains any item row (see colHeaderH above).
+    const itemRowRects = Array.from(el.querySelectorAll('tbody tr[data-invoice-item-row]')).map((row) => {
+      const rect = (row as HTMLElement).getBoundingClientRect();
+      return {
+        top: Math.round((rect.top - elTop) * SCALE),
+        bottom: Math.round((rect.bottom - elTop) * SCALE),
+      };
+    });
+    const pageHasItemRows = (start: number, end: number) => itemRowRects.some((r) => r.top < end && r.bottom > start);
 
     // Measure footer row (tfoot) — appended at bottom of every non-last page
     const tfootRowEl = el.querySelector("tfoot tr") as HTMLElement | null;
@@ -233,7 +257,11 @@ export async function generateInvoicePdfBlob(
 
       const mmPerPx = contentW / canvas.width;
       const pageHeightPx = Math.floor(contentH / mmPerPx);
-      const page2HeightPx = pageHeightPx - theadH; // pages 2+ have the TAX INVOICE banner
+      // Reserves room for BOTH the banner and the column-header on every continuation page while
+      // computing where to split — even on a page that ends up not needing the column-header
+      // (see colHeaderH above), since we don't know that yet at this point. Reserving the larger,
+      // worst-case amount only ever costs a little unused whitespace, never an overflow.
+      const page2HeightPx = pageHeightPx - theadH - colHeaderH;
 
       // Computes this copy's split points using tbody row bottoms as safe break points, reserving
       // footer room on every page and packing page 1 with as many items as actually fit.
@@ -247,7 +275,18 @@ export async function generateInvoicePdfBlob(
           let splitAt = idealEnd;
           if (idealEnd < canvas.height) {
             const safe = tbodySplitPoints.filter(b => b > start && b <= idealEnd);
-            splitAt = safe.length > 0 ? safe[safe.length - 1] : idealEnd;
+            if (safe.length > 0) {
+              splitAt = safe[safe.length - 1];
+            } else {
+              // No row boundary fits within this page's ideal content height — the very next row
+              // is taller than a full page's remaining content area (only plausible for an
+              // unusually tall row right after `start`). Push it whole onto this page instead of
+              // slicing through its content: use the nearest row-boundary AFTER idealEnd, so
+              // pagination degrades to "this one row makes the page slightly taller than ideal"
+              // rather than a raw pixel cut through a row's middle.
+              const next = tbodySplitPoints.find(b => b > start);
+              splitAt = next !== undefined ? next : idealEnd;
+            }
             if (splitAt >= lastTbodyBottom) {
               if (canvas.height - start <= fullAvail - FOOTER_MARGIN_PX - ROW_SAFETY_MARGIN_PX) {
                 splitAt = canvas.height;
@@ -290,10 +329,14 @@ export async function generateInvoicePdfBlob(
         ctx.fillText("Contd. on next page...", xRight, yTop);
       };
 
-      // Slice a strip from the canvas. Optionally prepend header and/or append footer.
-      const slicePage = (startPx: number, endPx: number, withHeader: boolean, appendFooter: boolean, pageNum: number, totalPages: number) => {
+      // Slice a strip from the canvas. `bannerH` (theadTop, letterhead) and `colHeaderH`
+      // (colHeaderTop, item column headers) are two INDEPENDENT source regions — not
+      // contiguous in the original DOM (Invoice No./Bill To/etc. sits between them) — each
+      // either drawn (its measured height) or skipped (0). Pass bannerH=0 for page 1 (already
+      // shown in-flow); colHeaderH=0 for a continuation page with no item rows on it.
+      const slicePage = (startPx: number, endPx: number, bannerH: number, colHeaderH: number, appendFooter: boolean, pageNum: number, totalPages: number) => {
         const sliceH = endPx - startPx;
-        const hdrH  = withHeader   ? theadH : 0;
+        const hdrH  = bannerH + colHeaderH;
         const ftrH  = appendFooter ? tfootH : 0;
         const totalH = hdrH + sliceH + ftrH;
         const pc = document.createElement("canvas");
@@ -303,9 +346,13 @@ export async function generateInvoicePdfBlob(
         ctx.fillStyle = "#fff";
         ctx.fillRect(0, 0, canvas.width, totalH);
         let y = 0;
-        if (withHeader) {
-          ctx.drawImage(canvas, 0, theadTop, canvas.width, theadH, 0, y, canvas.width, theadH);
-          y += theadH;
+        if (bannerH > 0) {
+          ctx.drawImage(canvas, 0, theadTop, canvas.width, bannerH, 0, y, canvas.width, bannerH);
+          y += bannerH;
+        }
+        if (colHeaderH > 0) {
+          ctx.drawImage(canvas, 0, colHeaderTop, canvas.width, colHeaderH, 0, y, canvas.width, colHeaderH);
+          y += colHeaderH;
         }
         ctx.drawImage(canvas, 0, startPx, canvas.width, sliceH, 0, y, canvas.width, sliceH);
         y += sliceH;
@@ -326,7 +373,8 @@ export async function generateInvoicePdfBlob(
 
       // Renders a full page-height canvas with the footer pinned to the bottom, not floating under the
       // last content row; the blank gap above it gets canvas-stroked border lines (a stretched drawImage smeared).
-      const slicePagePinned = (startPx: number, endPx: number, withHeader: boolean, pageNum: number, totalPages: number) => {
+      // `bannerH`/`colHeaderH` — see slicePage's comment above.
+      const slicePagePinned = (startPx: number, endPx: number, bannerH: number, colHeaderH: number, pageNum: number, totalPages: number) => {
         const pc = document.createElement("canvas");
         pc.width = canvas.width;
         pc.height = pageHeightPx;
@@ -334,9 +382,13 @@ export async function generateInvoicePdfBlob(
         ctx.fillStyle = "#fff";
         ctx.fillRect(0, 0, canvas.width, pageHeightPx);
         let y = 0;
-        if (withHeader) {
-          ctx.drawImage(canvas, 0, theadTop, canvas.width, theadH, 0, y, canvas.width, theadH);
-          y += theadH;
+        if (bannerH > 0) {
+          ctx.drawImage(canvas, 0, theadTop, canvas.width, bannerH, 0, y, canvas.width, bannerH);
+          y += bannerH;
+        }
+        if (colHeaderH > 0) {
+          ctx.drawImage(canvas, 0, colHeaderTop, canvas.width, colHeaderH, 0, y, canvas.width, colHeaderH);
+          y += colHeaderH;
         }
         // Pinned flush to the bottom — FOOTER_MARGIN_PX is only a cushion for the fit calculation
         // above, not a gap to leave here (subtracting it too used to leave the footer short of the page edge).
@@ -388,11 +440,17 @@ export async function generateInvoicePdfBlob(
       // Render — footer is pinned to the bottom of every page that shows it. pageNum/totalPages are scoped to this copy only (see header comment).
       let start = 0;
       pageSplits.forEach((splitAt, i) => {
-        const withHeader = i > 0;
+        // Page 1 never gets a repeated banner/column-header (everything's already shown in-flow
+        // there). A continuation page always repeats the banner; it additionally repeats the item
+        // column-header only if this page actually contains an item row — a page that's purely the
+        // trailing Notes/Bank/Terms/Totals block has none, so column headers with nothing under
+        // them would look broken there.
+        const bannerH = i === 0 ? 0 : theadH;
+        const pageColHeaderH = i === 0 ? 0 : (pageHasItemRows(start, splitAt) ? colHeaderH : 0);
         addPageBreakIfNeeded();
         const { dataUrl, totalH } = tfootH > 0
-          ? slicePagePinned(start, splitAt, withHeader, i + 1, pageSplits.length)
-          : slicePage(start, splitAt, withHeader, false, i + 1, pageSplits.length);
+          ? slicePagePinned(start, splitAt, bannerH, pageColHeaderH, i + 1, pageSplits.length)
+          : slicePage(start, splitAt, bannerH, pageColHeaderH, false, i + 1, pageSplits.length);
         // jsPDF's `compression` param (undocumented default: "NONE") controls the FlateDecode level it
         // applies when re-embedding a PNG's raw pixel data into the PDF — unlike a JPEG's own DCT bytes,
         // which pass through as-is, jsPDF does NOT reuse the source PNG's own compressed bytes at all,

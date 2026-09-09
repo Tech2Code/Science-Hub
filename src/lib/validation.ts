@@ -184,6 +184,13 @@ export function parseCreditLimit(value: string | number | null | undefined): num
 // sum (invoice/bill totals, GENERATED columns like balanceDue, GST reports) with Infinity/NaN.
 export const MAX_MONEY_VALUE = 100_000_000; // ₹10 crore
 
+// Same "Infinity"/garbage-value class of gap as MAX_MONEY_VALUE, for the other side of a line
+// item's `quantity * price` multiplication — quantity itself was only ever checked for `> 0`, so an
+// absurd-but-finite quantity times a price near MAX_MONEY_VALUE can still overflow/lose precision
+// past Number.MAX_SAFE_INTEGER and corrupt the stored total. No real invoice/purchase-bill line
+// item quantity is anywhere near this.
+export const MAX_QUANTITY = 1_000_000;
+
 // Generic numeric field check shared by product create/update routes — like a `rules.*` validator but for an already-parsed number.
 export function validateNumericField(
   key: string,

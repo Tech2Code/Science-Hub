@@ -150,6 +150,19 @@ export async function POST(
     const creditNoteYearLabel = formatFinancialYearLabel(getIndianFinancialYear(returnDate));
     async function attemptCreate() {
       return prisma.$transaction(async (tx) => {
+        // Re-read the invoice's own paidAmount/items INSIDE this transaction rather than trusting
+        // the `inv`/`invoice.items` snapshot captured before the transaction opened — Postgres
+        // Serializable isolation only detects a conflict on rows this transaction actually reads,
+        // so without this re-read a concurrent payment edit/delete (which reduces paidAmount) or an
+        // invoice item edit (which changes invoiced quantity) that commits in the gap between the
+        // outer fetch and this transaction would go completely undetected, letting a return be
+        // validated against stale numbers — the exact class of bug the payment PUT/DELETE routes'
+        // own `existingReturnTotal` re-check exists to prevent from the other direction.
+        const currentInvoice = await tx.invoice.findUniqueOrThrow({
+          where: { id },
+          select: { paidAmount: true, items: { select: { productId: true, quantity: true } } },
+        });
+
         const existingReturns = await tx.return.findMany({
           where: { invoiceId: id, deletedAt: null },
           include: { items: true },
@@ -157,7 +170,7 @@ export async function POST(
         // GST-inclusive value — capping against paidAmount on the ex-GST value alone would let more be refunded than the customer ever paid.
         const existingReturnTotal = existingReturns.reduce((s, r) => s + r.total, 0);
         const newReturnTotal = creditNoteTotal;
-        const availableForReturn = inv.paidAmount - existingReturnTotal;
+        const availableForReturn = currentInvoice.paidAmount - existingReturnTotal;
 
         if (newReturnTotal > availableForReturn + 0.01) {
           throw new ReturnValidationError(
@@ -167,7 +180,7 @@ export async function POST(
 
         // Quantity must not exceed what was invoiced net of quantity already returned, or a return could fabricate stock that was never sold.
         const invoicedQtyByProduct = new Map<string, number>();
-        for (const it of inv.items) {
+        for (const it of currentInvoice.items) {
           if (!it.productId) continue;
           invoicedQtyByProduct.set(it.productId, (invoicedQtyByProduct.get(it.productId) ?? 0) + it.quantity);
         }

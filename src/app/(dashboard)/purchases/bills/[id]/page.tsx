@@ -18,7 +18,7 @@ import { rules, validate, toIstDateStr, isFutureIstDate } from "@/lib/validation
 import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
-import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
+import { withCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { amountInWordsINR } from "@/lib/numberToWords";
 import { animateSection } from "@/lib/animateSection";
@@ -184,15 +184,12 @@ export default function PurchaseBillDetailPage() {
       settings: settings?.updatedAt ?? "loading",
       vendor: bill.vendor?.updatedAt ?? "loading",
     });
-    let blob = force ? null : await getCachedPdf("purchase-bill", bill.id, variantKey);
-    if (!blob) {
+    return withCachedPdf("purchase-bill", bill.id, variantKey, async () => {
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
       await document.fonts.ready;
       const el = document.getElementById("bill-print-area");
-      blob = el ? await generateInvoicePdfBlob(el) : null;
-      if (blob) setCachedPdf("purchase-bill", bill.id, variantKey, blob);
-    }
-    return blob;
+      return el ? await generateInvoicePdfBlob(el) : null;
+    }, force);
   }
 
   async function handleDownloadPdf(force = false) {

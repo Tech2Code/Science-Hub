@@ -12,7 +12,7 @@ import { Input, FormField } from "@/components/ui/Input";
 import { rules, validate } from "@/lib/validation";
 import { useToast } from "@/components/ui/Toast";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
-import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
+import { withCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { RateListPrintArea } from "@/components/rateLists/RateListPrintArea";
 import { downloadXlsx } from "@/lib/downloadXlsx";
@@ -93,16 +93,12 @@ export default function RateListDetailPage() {
     if (!rateList) return null;
     const showLogo = settings?.showLogoOnInvoices !== false;
     const variantKey = buildPdfVariantKey(undefined, { logo: showLogo, settings: settings?.updatedAt ?? "loading", updatedAt: rateList.updatedAt });
-    if (!force) {
-      const cached = await getCachedPdf("rate-list", rateList.id, variantKey);
-      if (cached) return cached;
-    }
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    await document.fonts.ready;
-    const el = document.getElementById("rate-list-print-area");
-    const blob = el ? await generateInvoicePdfBlob(el, { logoUrl: showLogo ? settings?.logoUrl || undefined : undefined }) : null;
-    if (blob) setCachedPdf("rate-list", rateList.id, variantKey, blob);
-    return blob;
+    return withCachedPdf("rate-list", rateList.id, variantKey, async () => {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await document.fonts.ready;
+      const el = document.getElementById("rate-list-print-area");
+      return el ? await generateInvoicePdfBlob(el, { logoUrl: showLogo ? settings?.logoUrl || undefined : undefined }) : null;
+    }, force);
   }
 
   async function handleRegeneratePdf() {

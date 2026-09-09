@@ -252,6 +252,7 @@ export default function EditInvoicePage() {
         setCustomers((prev) => prev.map((c) => (c.id === data.id ? data : c)));
         if (customerId === data.id) setCustomerSearch(data.name);
         bustCachePrefix("/api/customers");
+        bustCachePrefix("/api/invoices");
         setCustomerModalOpen(false);
         setCustomerEditId(null);
         setCustomerForm(BLANK_CUSTOMER_FORM);

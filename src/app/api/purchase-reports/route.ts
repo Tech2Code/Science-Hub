@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSectionAccess } from "@/lib/apiAuth";
 import { parsePageParams } from "@/lib/listQuery";
-import { toIstDateStr, istDayStartUtc, istDayEndUtc, istMonthBoundsUtc } from "@/lib/validation";
+import { toIstDateStr, istDayStartUtc, istDayEndUtc, istMonthBoundsUtc, istTodayStartUtc } from "@/lib/validation";
 
 async function getPurchaseSummary() {
   const now = new Date();
@@ -61,7 +61,9 @@ async function getPurchaseOutstanding(startDate: string | undefined, endDate: st
     }),
     prisma.purchaseBill.count({ where }),
     prisma.purchaseBill.aggregate({ where, _sum: { total: true, paidAmount: true } }),
-    prisma.purchaseBill.count({ where: { ...where, dueDate: { lt: now } } }),
+    // IST-aware "today" boundary for the count — matches the Dashboard routes' own overdue
+    // definition, so a bill due "today" isn't overdue on the Dashboard but overdue here.
+    prisma.purchaseBill.count({ where: { ...where, dueDate: { lt: istTodayStartUtc(now) } } }),
   ]);
 
   const data = bills.map((b) => {

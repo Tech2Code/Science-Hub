@@ -12,7 +12,8 @@ import { SearchField } from "@/components/ui/SearchField";
 import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenerator";
-import { getCachedPdf, setCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
+import { withCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
+import { bustCachePrefix } from "@/lib/useCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
@@ -142,13 +143,11 @@ export default function InvoicesPage() {
       settings: settings?.updatedAt ?? "loading",
       customer: inv.customer?.updatedAt ?? "loading",
     });
-    if (!force) {
-      const cached = await getCachedPdf("invoice", inv.id, variantKey);
-      if (cached) return cached;
-    }
-    const blob = await pdfIframeGenerate({ route: `/sales/invoices/${inv.id}`, printAreaId: "invoice-print-area", copyLabels, includeLogo: true });
-    if (blob) setCachedPdf("invoice", inv.id, variantKey, blob);
-    return blob;
+    return withCachedPdf(
+      "invoice", inv.id, variantKey,
+      () => pdfIframeGenerate({ route: `/sales/invoices/${inv.id}`, printAreaId: "invoice-print-area", copyLabels, includeLogo: true }),
+      force,
+    );
   }
 
   // Bypasses the cache — for when something outside the invoice's own data (business logo/settings) changed.
@@ -237,6 +236,12 @@ export default function InvoicesPage() {
       if (res.ok) {
         await Promise.all([mutate(), mutateStats()]);
         invalidateCachedPdf("invoice", target.id);
+        // Delete restores stock and the invoice's own payments drop out of Payments Received
+        // (buildPaymentWhere filters out payments whose invoice is deleted) — both need busting
+        // alongside the invoice list/stats this page already refreshes.
+        bustCachePrefix("/api/products");
+        bustCachePrefix("/api/reports");
+        bustCachePrefix("/api/payments");
         toast({ type: "success", title: "Moved to bin", message: `${target.invoiceNumber} moved to bin. You can restore it within 30 days.` });
       } else {
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete invoice." });

@@ -9,7 +9,7 @@ import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { purchaseBillLineBreakdown, normalizeCategoryInput } from "@/lib/purchaseBillForm";
 import { getBusinessSettings } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
-import { isFutureIstDate, MAX_MONEY_VALUE } from "@/lib/validation";
+import { isFutureIstDate, MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
 
 class BillConflictError extends Error {}
@@ -111,7 +111,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         const purchasePrice = parseFloat(String(item.purchasePrice));
         const gstRate = parseFloat(String(item.gstRate ?? 0));
         const discountPercent = parseFloat(String(item.discountPercent ?? 0));
-        if (!(quantity > 0)) return NextResponse.json({ error: "Item quantity must be greater than 0" }, { status: 400 });
+        if (!(quantity > 0 && quantity <= MAX_QUANTITY)) return NextResponse.json({ error: "Item quantity must be a valid, reasonable amount" }, { status: 400 });
         if (!(purchasePrice >= 0 && purchasePrice <= MAX_MONEY_VALUE)) return NextResponse.json({ error: "Item price must be a valid, reasonable amount" }, { status: 400 });
         if (!(gstRate >= 0 && gstRate <= 100)) return NextResponse.json({ error: "Item GST rate must be between 0 and 100%" }, { status: 400 });
         if (Number.isNaN(discountPercent) || discountPercent < 0 || discountPercent > 100) {
@@ -176,8 +176,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const parsedDiscount = discount !== undefined && discount !== null && discount !== ""
       ? parseFloat(String(discount))
       : undefined;
-    if (parsedDiscount !== undefined && (Number.isNaN(parsedDiscount) || parsedDiscount < 0)) {
-      return NextResponse.json({ error: "Discount cannot be negative" }, { status: 400 });
+    if (parsedDiscount !== undefined && (Number.isNaN(parsedDiscount) || !(parsedDiscount >= 0 && parsedDiscount <= MAX_MONEY_VALUE))) {
+      return NextResponse.json({ error: "Discount must be a valid, reasonable amount" }, { status: 400 });
     }
     const effectiveDiscount = parsedDiscount !== undefined ? parsedDiscount : existing.discount;
 
@@ -185,16 +185,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const parsedTransportCharge = transportCharge !== undefined && transportCharge !== null && transportCharge !== ""
       ? parseFloat(String(transportCharge))
       : undefined;
-    if (parsedTransportCharge !== undefined && (Number.isNaN(parsedTransportCharge) || parsedTransportCharge < 0)) {
-      return NextResponse.json({ error: "Transport charge cannot be negative" }, { status: 400 });
+    if (parsedTransportCharge !== undefined && (Number.isNaN(parsedTransportCharge) || !(parsedTransportCharge >= 0 && parsedTransportCharge <= MAX_MONEY_VALUE))) {
+      return NextResponse.json({ error: "Transport charge must be a valid, reasonable amount" }, { status: 400 });
     }
     const effectiveTransportCharge = parsedTransportCharge !== undefined ? parsedTransportCharge : existing.transportCharge;
 
     const parsedTransportGstRate = transportChargeGstRate !== undefined && transportChargeGstRate !== null && transportChargeGstRate !== ""
       ? parseFloat(String(transportChargeGstRate))
       : undefined;
-    if (parsedTransportGstRate !== undefined && (Number.isNaN(parsedTransportGstRate) || parsedTransportGstRate < 0)) {
-      return NextResponse.json({ error: "Transport charge GST rate cannot be negative" }, { status: 400 });
+    if (parsedTransportGstRate !== undefined && (Number.isNaN(parsedTransportGstRate) || !(parsedTransportGstRate >= 0 && parsedTransportGstRate <= 100))) {
+      return NextResponse.json({ error: "Transport charge GST rate must be between 0 and 100%" }, { status: 400 });
     }
     const effectiveTransportGstRate = parsedTransportGstRate !== undefined ? parsedTransportGstRate : existing.transportChargeGstRate;
     const effectiveTransportGstAmount = (effectiveTransportCharge * effectiveTransportGstRate) / 100;
