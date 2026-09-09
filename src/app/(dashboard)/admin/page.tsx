@@ -15,7 +15,7 @@ import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { useScrollToHash } from "@/lib/useScrollToHash";
 import { useDirty } from "@/lib/useDirty";
-import { formatDate } from "@/lib/formatDate";
+import { formatDate, formatDateTime } from "@/lib/formatDate";
 import styles from "./admin.module.css";
 
 interface User {
@@ -125,10 +125,7 @@ function Msg({ m }: { m: { type: "ok" | "err"; text: string } }) {
   );
 }
 
-function fmtTime(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
-}
+const fmtTime = formatDateTime;
 
 export default function AdminPage() {
   const { data: session, update: updateSession } = useSession();

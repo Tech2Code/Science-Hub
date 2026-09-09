@@ -17,7 +17,7 @@ import { bustCachePrefix } from "@/lib/useCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
-import { formatDate } from "@/lib/formatDate";
+import { formatDate, formatTime } from "@/lib/formatDate";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
 import { StatCardsRow } from "@/components/ui/StatCardsRow";
@@ -372,7 +372,7 @@ export default function InvoicesPage() {
                   <Cell col={COLUMNS[1]} className={styles.dateCell}>
                     <div>{formatDate(inv.date)}</div>
                     <div className={["date-sub", styles.dateSub].join(" ")}>
-                      {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                      {formatTime(inv.createdAt)}
                     </div>
                     {isOverdue(inv) && <div className={styles.overdueSub}>Overdue</div>}
                   </Cell>

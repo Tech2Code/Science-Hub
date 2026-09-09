@@ -26,4 +26,10 @@ if [ "$SCHEMA_CHANGED" -gt 0 ] && [ "$NEW_MIGRATION" -eq 0 ]; then
   exit 1
 fi
 
+# Blocks the recurring IST/UTC date-boundary bug class (see CLAUDE.md's date-handling "Do not"
+# rules) — raw locale-formatting calls that skip the shared IST-pinned helpers, and raw
+# `new Date(dateOnlyString)` parses that skip the IST-anchored helpers. Git hooks run with cwd
+# at the repo root, so this path is relative to that, not to this script's own location.
+node scripts/check-date-safety.js || exit 1
+
 exit 0

@@ -175,9 +175,7 @@ function TypeSection({
                     {item.meta || <span className={styles.emptyValue}>—</span>}
                   </Cell>
                   <Cell col={BIN_COLUMNS[2]} className={styles.mutedCell}>
-                    {new Date(item.deletedAt).toLocaleDateString("en-IN", {
-                      day: "2-digit", month: "short", year: "numeric",
-                    })}
+                    {formatDate(item.deletedAt)}
                   </Cell>
                   <Cell col={BIN_COLUMNS[3]} className={styles.mutedCell}>
                     {item.deletedBy ?? <span className={styles.emptyValue}>—</span>}

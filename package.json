@@ -8,6 +8,7 @@
     "build": "node scripts/migrate-deploy-retry.js && next build",
     "start": "next start",
     "lint": "eslint",
+    "check:dates": "node scripts/check-date-safety.js --all",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

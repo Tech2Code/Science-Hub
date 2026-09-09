@@ -27,7 +27,7 @@ import { formatFileSize } from "@/lib/formatFileSize";
 import { purchaseBillAttachmentByIdHref } from "@/lib/attachmentHref";
 import { AttachmentIcon } from "@/components/purchases/AttachmentIcon";
 import { useCanWrite } from "@/lib/useCanWrite";
-import { formatDate } from "@/lib/formatDate";
+import { formatDate, formatDateTime } from "@/lib/formatDate";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { useDirty } from "@/lib/useDirty";
 import { useMenuA11y } from "@/lib/useMenuA11y";
@@ -1234,7 +1234,7 @@ export default function PurchaseBillDetailPage() {
           <InfoRow label="Due Date"    value={bill.dueDate ? formatDate(bill.dueDate) : "Not set"} />
           <InfoRow label="Category"    value={bill.category || "—"} />
           <InfoRow label="Created By"  value={bill.createdBy.name} />
-          <InfoRow label="Created At"  value={new Date(bill.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })} />
+          <InfoRow label="Created At"  value={formatDateTime(bill.createdAt)} />
           {bill.attachmentUrl && (
             <div className={styles.infoRow}>
               <span className={styles.infoRowLabel}>Attachment</span>

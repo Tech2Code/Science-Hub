@@ -107,18 +107,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Bill date cannot be in the future" }, { status: 400 });
     }
 
+    // `billDate` arrives as a plain "YYYY-MM-DD" string (a bill can be entered late for an earlier
+    // period, so unlike Invoice this is genuinely user-supplied at creation) — istDayStartUtc()
+    // anchors it to the real IST calendar-day boundary. A bare `new Date(billDate)` parses it as
+    // UTC midnight, ~5.5 hours before the actual IST day starts.
+    const effectiveBillDate = billDate ? istDayStartUtc(billDate) : new Date();
+
+    let parsedDueDate: Date | undefined;
     if (dueDate) {
-      const parsedDueDate = new Date(dueDate);
+      parsedDueDate = istDayStartUtc(dueDate);
       if (isNaN(parsedDueDate.getTime())) {
         return NextResponse.json({ error: "Invalid due date" }, { status: 400 });
       }
-      const parsedBillDate = new Date(billDate ?? Date.now());
-      if (parsedDueDate < parsedBillDate) {
+      if (parsedDueDate < effectiveBillDate) {
         return NextResponse.json({ error: "Due date cannot be before the bill date" }, { status: 400 });
       }
     }
-
-    const effectiveBillDate = new Date(billDate ?? Date.now());
     let paymentDate: Date | undefined;
     if (payment?.date) {
       const parsedPaymentDate = new Date(payment.date);
@@ -234,7 +238,7 @@ export async function POST(req: NextRequest) {
     const paidAmount = Math.min(payAmt, billTotal);
     const status = paidAmount >= billTotal && billTotal > 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
     // Indian FY of the bill's own billDate (not "now"), since a bill can be entered late for an earlier period.
-    const yearLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date(billDate ?? Date.now())));
+    const yearLabel = formatFinancialYearLabel(getIndianFinancialYear(effectiveBillDate));
 
     // Number generation + create run in one Serializable transaction, retried on write-conflict, to prevent duplicate bill numbers under concurrent requests.
     const billPrefix = biz.purchaseBillNumberPrefix || "PB";
@@ -259,8 +263,8 @@ export async function POST(req: NextRequest) {
           data: {
             billNumber,
             vendorId,
-            billDate: billDate ? new Date(billDate) : new Date(),
-            dueDate: dueDate ? new Date(dueDate) : null,
+            billDate: effectiveBillDate,
+            dueDate: parsedDueDate ?? null,
             subtotal,
             taxAmount,
             isInterState,

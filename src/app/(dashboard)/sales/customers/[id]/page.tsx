@@ -13,7 +13,7 @@ import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { fetchCached, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
-import { formatDate } from "@/lib/formatDate";
+import { formatDate, formatTime } from "@/lib/formatDate";
 import type { Column } from "@/components/ui/Table";
 
 const INVOICE_COLUMNS: Column[] = [
@@ -202,7 +202,7 @@ export default function CustomerViewPage() {
                   <td data-label="Date" className={styles.dateCellText}>
                     <div>{formatDate(inv.date)}</div>
                     <div className={`date-sub ${styles.dateSubRow}`}>
-                      {new Date(inv.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                      {formatTime(inv.createdAt)}
                     </div>
                   </td>
                   <td data-label="Total" className={`table-td-right ${styles.totalCell}`}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>

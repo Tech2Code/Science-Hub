@@ -104,7 +104,7 @@ export default function VendorStatementPage() {
   const { visible: visibleRows } = usePagination(displayRows, page, showAll);
 
   const periodLabel = startDate || endDate
-    ? `${startDate ? new Date(startDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "Beginning"} – ${endDate ? new Date(endDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "Today"}`
+    ? `${startDate ? formatDate(startDate) : "Beginning"} – ${endDate ? formatDate(endDate) : "Today"}`
     : "All Time";
 
   async function generateStatementPdfBlob(force = false): Promise<Blob | null> {
@@ -460,7 +460,7 @@ export default function VendorStatementPage() {
                 <tr><td colSpan={5} className={styles.emptyCell}>No transactions in this period.</td></tr>
               ) : visibleRows.map((r) => (
                 <tr key={`${r.type}-${r.refId}`}>
-                  <td data-mobile-full>{new Date(r.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</td>
+                  <td data-mobile-full>{formatDate(r.date)}</td>
                   <td data-label="Particulars">{r.label}</td>
                   <td data-label="Debit" className="table-td-right">{r.debit ? fmt(r.debit) : "—"}</td>
                   <td data-label="Credit" className="table-td-right">{r.credit ? fmt(r.credit) : "—"}</td>

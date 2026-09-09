@@ -22,7 +22,7 @@ import { amountInWordsINR } from "@/lib/numberToWords";
 import { splitGstForDisplay } from "@/lib/roundOff";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
-import { formatDate } from "@/lib/formatDate";
+import { formatDate, formatDateTime } from "@/lib/formatDate";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { useDirty } from "@/lib/useDirty";
 import { useMenuA11y } from "@/lib/useMenuA11y";
@@ -1818,7 +1818,7 @@ export default function InvoiceDetailPage() {
                         {invoice.notes && (
                           <><div style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10, marginBottom: 4, color: "var(--inv-tx2)" }}>Notes</div><p>{invoice.notes}</p></>
                         )}
-                        <p style={{ marginTop: 10, fontSize: 9.5, opacity: 0.55 }}>This is a computer-generated invoice.</p>
+                        <p style={{ marginTop: 10, fontSize: 9.5, opacity: 0.55 }}>**Disclaimer:** This is a computer-generated invoice; please verify all details and calculations, as errors or discrepancies may occur.</p>
                         <div style={{ marginTop: 16, borderTop: "1px solid var(--inv-bd2)", paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 16 }}>
                           <div>
                             <div style={{ fontSize: 10, fontWeight: 600, color: "var(--inv-tx2)", marginBottom: 20 }}>For {settings?.name}</div>
@@ -1930,7 +1930,7 @@ export default function InvoiceDetailPage() {
                     {sorted.map((p) => (
                       <tr key={p.id}>
                         <td colSpan={2} style={{ ...bd, color: "var(--inv-tx2)" }}>
-                          {new Date(p.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                          {formatDate(p.date)}
                         </td>
                         <td colSpan={2} style={{ ...bd, color: "var(--inv-tx2)" }}>{p.method}</td>
                         <td colSpan={refCols} style={{ ...bd, color: "var(--inv-tx2)" }}>{p.reference || "—"}</td>
@@ -1980,7 +1980,7 @@ export default function InvoiceDetailPage() {
                           {riIdx === 0 && (
                             <td colSpan={2} rowSpan={ret.items.length} style={{ ...bd, color: "var(--inv-tx2)", verticalAlign: "top" }}>
                               {ret.creditNoteNumber && <div style={{ fontWeight: 600, color: "var(--inv-tx)" }}>{ret.creditNoteNumber}</div>}
-                              {parseDate(ret.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
+                              {formatDateTime(ret.createdAt)}
                               {ret.notes ? <div style={{ fontSize: 10, color: "var(--inv-tx3)", marginTop: 2 }}>{ret.notes}</div> : null}
                             </td>
                           )}
@@ -2292,7 +2292,7 @@ export default function InvoiceDetailPage() {
                           <tr key={p.id}>
                             <td className={styles.payIdxCell}>{idx + 1}</td>
                             <td data-label="Date" className={styles.payDateCell}>
-                              {new Date(p.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                              {formatDate(p.date)}
                             </td>
                             <td data-label="Method">
                               <span className={styles.methodBadge} style={{ background: ms.bg, color: ms.color, border: `1px solid ${ms.border}` }}>{p.method}</span>
@@ -2376,7 +2376,7 @@ export default function InvoiceDetailPage() {
                       <div className={styles.returnEntryHeadLeft}>
                         {ret.creditNoteNumber && <span className={styles.creditNoteNumberBadge}>{ret.creditNoteNumber}</span>}
                         <span className={styles.returnEntryDate}>
-                          {parseDate(ret.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
+                          {formatDateTime(ret.createdAt)}
                         </span>
                         {ret.notes && <span className={styles.returnEntryNotes}>— {ret.notes}</span>}
                       </div>

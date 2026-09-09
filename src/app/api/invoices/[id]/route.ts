@@ -7,7 +7,7 @@ import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { assertInvoiceQuantitiesNotBelowReturned, InvoiceQuantityValidationError } from "@/lib/invoiceReturns";
-import { isFutureIstDate, MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
+import { isFutureIstDate, istDayStartUtc, toIstDateStr, MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
 
 class InvoiceConflictError extends Error {}
@@ -104,7 +104,11 @@ export async function PUT(
     // Invoice date is editable but never across an FY boundary — the number was already generated for a specific FY.
     let parsedInvoiceDate: Date | undefined;
     if (date) {
-      parsedInvoiceDate = new Date(date);
+      // `date` arrives as a plain "YYYY-MM-DD" string from the edit form — istDayStartUtc() anchors it to
+      // the actual IST calendar-day boundary; a bare `new Date(date)` parses it as UTC midnight instead,
+      // ~5.5 hours before the real IST day starts, corrupting the invoice's date on every single edit
+      // (the edit form resends its currently-loaded date on every save, not just when the user changes it).
+      parsedInvoiceDate = istDayStartUtc(date);
       if (isNaN(parsedInvoiceDate.getTime())) {
         return NextResponse.json({ error: "Invalid invoice date" }, { status: 400 });
       }
@@ -116,13 +120,16 @@ export async function PUT(
       }
     }
 
+    let parsedDueDate: Date | undefined;
     if (dueDate) {
-      const parsedDueDate = new Date(dueDate);
+      parsedDueDate = istDayStartUtc(dueDate);
       if (isNaN(parsedDueDate.getTime())) {
         return NextResponse.json({ error: "Invalid due date" }, { status: 400 });
       }
-      const invoiceDate = parsedInvoiceDate ?? new Date(existing.date); invoiceDate.setHours(0, 0, 0, 0);
-      if (parsedDueDate < invoiceDate) {
+      // IST-anchored floor of the invoice date, derived via toIstDateStr()/istDayStartUtc() rather
+      // than a local setHours(0,0,0,0) — that would read the server's own (often UTC) timezone.
+      const invoiceDateFloor = istDayStartUtc(toIstDateStr(parsedInvoiceDate ?? new Date(existing.date)));
+      if (parsedDueDate < invoiceDateFloor) {
         return NextResponse.json({ error: "Due date cannot be before the invoice date" }, { status: 400 });
       }
     }
@@ -288,8 +295,8 @@ export async function PUT(
           isInterState: inter,
           placeOfSupply: String(placeOfSupply).trim(),
           reverseCharge: Boolean(reverseCharge),
-          ...(date ? { date: new Date(date) } : {}),
-          dueDate: dueDate ? new Date(dueDate) : null,
+          ...(parsedInvoiceDate ? { date: parsedInvoiceDate } : {}),
+          dueDate: parsedDueDate ?? null,
           notes: notes ?? null,
           subtotal,
           cgst,

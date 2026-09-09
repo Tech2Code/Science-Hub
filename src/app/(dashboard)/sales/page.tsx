@@ -10,6 +10,7 @@ import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { formatMonthYear } from "@/lib/formatDate";
 import styles from "./salesOverview.module.css";
 
 interface MonthlyBar { month: string; total: number; }
@@ -112,7 +113,7 @@ export default function SalesDashboardPage() {
         <div>
           <h1 className="page-title">Sales Overview</h1>
           <p className="page-sub" suppressHydrationWarning>
-            {new Date().toLocaleString("en-IN", { month: "long", year: "numeric" })}
+            {formatMonthYear()}
           </p>
         </div>
       </div>

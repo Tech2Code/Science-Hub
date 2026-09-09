@@ -9,7 +9,7 @@ import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { purchaseBillLineBreakdown, normalizeCategoryInput } from "@/lib/purchaseBillForm";
 import { getBusinessSettings } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
-import { isFutureIstDate, MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
+import { isFutureIstDate, istDayStartUtc, MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
 
 class BillConflictError extends Error {}
@@ -71,7 +71,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // Bill date is editable but never across an FY boundary — the bill number was already generated for a specific FY.
     let parsedBillDate: Date | undefined;
     if (billDate) {
-      parsedBillDate = new Date(billDate);
+      // `billDate`/`dueDate` arrive as plain "YYYY-MM-DD" strings from the edit form — istDayStartUtc()
+      // anchors them to the real IST calendar-day boundary; a bare `new Date(dateStr)` parses as UTC
+      // midnight instead, ~5.5 hours before the actual IST day starts (the exact bug already fixed for
+      // Invoice.date in src/app/api/invoices/[id]/route.ts — see that file's comment for the full story).
+      parsedBillDate = istDayStartUtc(billDate);
       if (isNaN(parsedBillDate.getTime())) {
         return NextResponse.json({ error: "Invalid bill date" }, { status: 400 });
       }
@@ -83,8 +87,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
 
+    let parsedDueDate: Date | undefined;
     if (dueDate) {
-      const parsedDueDate = new Date(dueDate);
+      parsedDueDate = istDayStartUtc(dueDate);
       if (isNaN(parsedDueDate.getTime())) {
         return NextResponse.json({ error: "Invalid due date" }, { status: 400 });
       }
@@ -267,8 +272,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         where: { id },
         data: {
           ...(vendorId && { vendorId }),
-          ...(billDate && { billDate: new Date(billDate) }),
-          ...(dueDate !== undefined && { dueDate: dueDate ? new Date(dueDate) : null }),
+          ...(parsedBillDate && { billDate: parsedBillDate }),
+          ...(dueDate !== undefined && { dueDate: parsedDueDate ?? null }),
           ...(subtotal !== undefined && { subtotal }),
           ...(taxAmount !== undefined && { taxAmount }),
           isInterState,

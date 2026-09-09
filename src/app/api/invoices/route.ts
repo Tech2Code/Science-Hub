@@ -10,7 +10,7 @@ import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
-import { MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
+import { MAX_MONEY_VALUE, MAX_QUANTITY, istDayStartUtc, istTodayStartUtc } from "@/lib/validation";
 import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
 import { checkCustomerCreditLimit, type CreditLimitCheck } from "@/lib/creditLimit";
 
@@ -88,13 +88,13 @@ export async function POST(request: NextRequest) {
     const derivedIsInterState = deriveIsInterState(String(placeOfSupply), biz.state);
     const isInterState = derivedIsInterState !== null ? derivedIsInterState : Boolean(clientIsInterState);
 
+    let parsedDueDate: Date | undefined;
     if (dueDate) {
-      const parsedDueDate = new Date(dueDate);
+      parsedDueDate = istDayStartUtc(dueDate);
       if (isNaN(parsedDueDate.getTime())) {
         return NextResponse.json({ error: "Invalid due date" }, { status: 400 });
       }
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      if (parsedDueDate < today) {
+      if (parsedDueDate < istTodayStartUtc()) {
         return NextResponse.json({ error: "Due date cannot be in the past" }, { status: 400 });
       }
     }
@@ -281,7 +281,7 @@ export async function POST(request: NextRequest) {
             transportChargeGstAmount: transportChargeGstAmountVal,
             paidAmount: 0,
             notes: notes || null,
-            dueDate: dueDate ? new Date(dueDate) : null,
+            dueDate: parsedDueDate ?? null,
             isInterState: Boolean(isInterState),
             placeOfSupply: String(placeOfSupply).trim(),
             reverseCharge: Boolean(reverseCharge),

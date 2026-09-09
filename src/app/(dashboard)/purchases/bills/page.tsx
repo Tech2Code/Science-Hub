@@ -21,7 +21,7 @@ import { StatCardsRow } from "@/components/ui/StatCardsRow";
 import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
-import { formatDate } from "@/lib/formatDate";
+import { formatDate, formatTime } from "@/lib/formatDate";
 import { purchaseBillAttachmentByIdHref } from "@/lib/attachmentHref";
 import { useRouter, useSearchParams } from "next/navigation";
 import styles from "./billsList.module.css";
@@ -346,7 +346,7 @@ export default function PurchasesPage() {
                   <Cell col={COLUMNS[1]} className={styles.dateCell}>
                     <div>{formatDate(b.billDate)}</div>
                     <div className={["date-sub", styles.dateSub].join(" ")}>
-                      {new Date(b.createdAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                      {formatTime(b.createdAt)}
                     </div>
                     {b.dueDate && new Date(b.dueDate) < new Date() && b.status !== "paid" && (
                       <div className={styles.overdueSub}>Overdue</div>

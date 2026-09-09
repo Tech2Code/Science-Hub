@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
+import { formatMonthYear } from "@/lib/formatDate";
 import styles from "./dashboardHome.module.css";
 
 interface RecentInvoice { id: string; invoiceNumber: string; date: string; customerName: string; total: number; paidAmount: number; status: string; }
@@ -138,7 +139,7 @@ export default function DashboardPage() {
           </p>
           <h1 className={styles.heroTitle}>Here&apos;s your business at a glance</h1>
           <p className={styles.heroSub} suppressHydrationWarning>
-            {new Date().toLocaleString("en-IN", { month: "long", year: "numeric" })} overview
+            {formatMonthYear()} overview
           </p>
         </div>
       </div>
