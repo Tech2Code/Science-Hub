@@ -13,7 +13,7 @@ import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { fetchCached, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
-import { formatDate, formatTime } from "@/lib/formatDate";
+import { formatDate, formatDateTime } from "@/lib/formatDate";
 import type { Column } from "@/components/ui/Table";
 
 const INVOICE_COLUMNS: Column[] = [
@@ -26,7 +26,7 @@ const INVOICE_COLUMNS: Column[] = [
 ];
 
 interface Invoice {
-  id: string; invoiceNumber: string; date: string; createdAt: string;
+  id: string; invoiceNumber: string; date: string;
   total: number; paidAmount: number; status: string;
 }
 interface Customer {
@@ -112,7 +112,7 @@ export default function CustomerViewPage() {
               {!loading && (customer?.createdBy || customer?.createdAt) && (
                 <div className={styles.metaText}>
                   {customer?.createdBy && <>Added by {customer.createdBy}</>}
-                  {customer?.createdAt && <> · {formatDate(customer.createdAt)}</>}
+                  {customer?.createdAt && <> · {formatDateTime(customer.createdAt)}</>}
                 </div>
               )}
               <div className={styles.contactRow}>
@@ -201,9 +201,6 @@ export default function CustomerViewPage() {
                   </td>
                   <td data-label="Date" className={styles.dateCellText}>
                     <div>{formatDate(inv.date)}</div>
-                    <div className={`date-sub ${styles.dateSubRow}`}>
-                      {formatTime(inv.createdAt)}
-                    </div>
                   </td>
                   <td data-label="Total" className={`table-td-right ${styles.totalCell}`}>₹{inv.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td data-label="Paid" className={`table-td-right ${styles.paidCell}`}>₹{inv.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>

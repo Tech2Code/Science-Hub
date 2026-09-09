@@ -2,11 +2,14 @@
 // (Features Completed #48/#53/#54, and the invoice/purchase-bill date fixes this script
 // was added alongside). Two anti-patterns, both of which have shipped real bugs before:
 //
-//   1. Display: `new Date(x).toLocaleDateString("en-IN", {...})` / `.toLocaleString("en-IN", {...})`
-//      with day/month/year/hour options but no explicit `timeZone` — renders in the viewing
-//      device's own local timezone instead of IST, so the same value can show a different
-//      calendar day on different machines. Use formatDate()/formatDateTime()/formatTime()/
-//      formatMonthYear() from src/lib/formatDate.ts instead — they pin `timeZone: "Asia/Kolkata"`.
+//   1. Display: `new Date(x).toLocaleDateString("en-IN", {...})` / `.toLocaleString("en-IN", {...})` /
+//      `.toLocaleTimeString("en-IN", {...})` with day/month/year/hour options but no explicit
+//      `timeZone` — renders in the viewing device's own local timezone instead of IST, so the same
+//      value can show a different calendar day on different machines. Use formatDate()/
+//      formatDateTime()/formatTime()/formatMonthYear()/formatCreatedSub() from src/lib/formatDate.ts
+//      instead — they pin `timeZone: "Asia/Kolkata"` (formatCreatedSub also avoids the sibling UX
+//      bug of a bare "created at" time reading as if it belongs to a different, main date shown
+//      right above it, once a document has been backdated/postdated from when it was created).
 //
 //   2. Storage/comparison: `new Date(dateOnlyString)` on a plain "YYYY-MM-DD" string parses it as
 //      UTC midnight, ~5.5 hours before the real IST calendar-day boundary. Use istDayStartUtc()/
@@ -55,7 +58,7 @@ function checkDisplayAntiPattern(relPath, lines) {
   if (ALLOWLISTED_FILES.has(relPath)) return findings;
   lines.forEach((line, i) => {
     if (ALLOWLISTED_LINE_SUBSTRINGS.some((s) => line.includes(s))) return;
-    const isLocaleCall = /\.toLocaleDateString\(|\.toLocaleString\(/.test(line);
+    const isLocaleCall = /\.toLocaleDateString\(|\.toLocaleString\(|\.toLocaleTimeString\(/.test(line);
     if (!isLocaleCall) return;
     const looksDateShaped = /\b(day|month|hour|weekday)\s*:/.test(line);
     if (!looksDateShaped) return; // a bare number/currency .toLocaleString() call, not a date

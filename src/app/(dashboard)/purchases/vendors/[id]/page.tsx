@@ -12,7 +12,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { fetchCached, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
-import { formatDate } from "@/lib/formatDate";
+import { formatDate, formatDateTime } from "@/lib/formatDate";
 import type { Column } from "@/components/ui/Table";
 import styles from "./vendorDetail.module.css";
 
@@ -125,7 +125,7 @@ export default function VendorDetailPage() {
               {!loading && (vendor?.createdBy || vendor?.createdAt) && (
                 <div className={styles.metaText}>
                   {vendor?.createdBy && <>Added by {vendor.createdBy}</>}
-                  {vendor?.createdAt && <> · {formatDate(vendor.createdAt)}</>}
+                  {vendor?.createdAt && <> · {formatDateTime(vendor.createdAt)}</>}
                 </div>
               )}
               <div className={styles.contactRow}>

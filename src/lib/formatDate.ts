@@ -10,7 +10,12 @@ export function formatDateTime(date: Date | string): string {
   return new Date(date).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
 }
 
-// Time-of-day only (e.g. a list row's "created at" sub-line under its main date).
+// Time-of-day only — used sparingly, only where a precise time genuinely carries meaning (e.g. the
+// Stock Movement Ledger export, reconciling multiple same-day movements). Business documents
+// (invoices, purchase bills, credit notes, payments) have no legal/professional use for a time
+// component — GST filing, financial year, and the printed document itself all operate purely on
+// the calendar day — so prefer formatDate() alone for anything document-dated; don't reach for this
+// to label a "created at"/"edited at" sub-line under a document's own date.
 export function formatTime(date: Date | string): string {
   return new Date(date).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
 }

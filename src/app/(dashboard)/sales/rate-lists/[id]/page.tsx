@@ -19,7 +19,7 @@ import { downloadXlsx } from "@/lib/downloadXlsx";
 import { fmtCurrency } from "@/lib/rateListForm";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { bustCachePrefix } from "@/lib/useCache";
-import { formatDate } from "@/lib/formatDate";
+import { formatDateTime } from "@/lib/formatDate";
 import { useMenuA11y } from "@/lib/useMenuA11y";
 import styles from "./rateListDetail.module.css";
 
@@ -359,7 +359,7 @@ export default function RateListDetailPage() {
         <div>
           <Breadcrumb items={[{ label: "Rate Lists", href: "/sales/rate-lists" }, { label: rateList.title }]} />
           <div className={styles.metaText}>
-            {rateList.items.length} item{rateList.items.length === 1 ? "" : "s"} · Created by {rateList.createdBy.name} · {formatDate(rateList.createdAt)}
+            {rateList.items.length} item{rateList.items.length === 1 ? "" : "s"} · Created by {rateList.createdBy.name} · {formatDateTime(rateList.createdAt)}
           </div>
         </div>
         <div className={styles.toolbarActions}>

@@ -27,12 +27,16 @@ export function buildReturnWhere(filters: CreditNoteListFilters): Prisma.ReturnW
 
 export function buildReturnOrderBy(sort?: CreditNoteSort): Prisma.ReturnOrderByWithRelationInput[] {
   switch (sort) {
-    case "oldest":      return [{ date: "asc" }, { createdAt: "asc" }, { id: "asc" }];
+    // Sorted by `createdAt`, not the credit note's own (editable) `date` — creditNoteNumber is
+    // always assigned in creation order, so `createdAt` order always matches numbering order and
+    // is immune to a later backdate of the return's own `date`. Same reasoning as
+    // buildInvoiceOrderBy()/buildBillOrderBy() in db.ts/purchaseBillQuery.ts.
+    case "oldest":      return [{ createdAt: "asc" }, { id: "asc" }];
     case "amount_high": return [{ total: "desc" }, { id: "asc" }];
     case "amount_low":  return [{ total: "asc" }, { id: "asc" }];
     case "customer_az": return [{ invoice: { customer: { name: "asc" } } }, { id: "asc" }];
     case "customer_za": return [{ invoice: { customer: { name: "desc" } } }, { id: "asc" }];
     case "newest":
-    default:            return [{ date: "desc" }, { createdAt: "desc" }, { id: "asc" }];
+    default:            return [{ createdAt: "desc" }, { id: "asc" }];
   }
 }

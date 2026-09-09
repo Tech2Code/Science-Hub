@@ -21,7 +21,7 @@ import { StatCardsRow } from "@/components/ui/StatCardsRow";
 import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
-import { formatDate, formatTime } from "@/lib/formatDate";
+import { formatDate } from "@/lib/formatDate";
 import { purchaseBillAttachmentByIdHref } from "@/lib/attachmentHref";
 import { useRouter, useSearchParams } from "next/navigation";
 import styles from "./billsList.module.css";
@@ -31,7 +31,6 @@ interface PurchaseBill {
   billNumber: string;
   billDate: string;
   dueDate: string | null;
-  createdAt: string;
   status: string;
   total: number;
   paidAmount: number;
@@ -345,9 +344,6 @@ export default function PurchasesPage() {
                   </Cell>
                   <Cell col={COLUMNS[1]} className={styles.dateCell}>
                     <div>{formatDate(b.billDate)}</div>
-                    <div className={["date-sub", styles.dateSub].join(" ")}>
-                      {formatTime(b.createdAt)}
-                    </div>
                     {b.dueDate && new Date(b.dueDate) < new Date() && b.status !== "paid" && (
                       <div className={styles.overdueSub}>Overdue</div>
                     )}

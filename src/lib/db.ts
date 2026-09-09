@@ -86,6 +86,12 @@ function buildInvoiceWhere(filters: InvoiceListFilters): Prisma.InvoiceWhereInpu
 
 function buildInvoiceOrderBy(sort?: InvoiceSort): Prisma.InvoiceOrderByWithRelationInput[] {
   switch (sort) {
+    // Sorted by `createdAt`, not the invoice's own (editable, backdatable) `date` — invoiceNumber
+    // is always assigned in creation order (computeNextNumber() reads the current max sequence
+    // inside the same transaction the row is created in), so `createdAt` order is always identical
+    // to numbering order and immune to a later date edit; sorting by `date` instead would let
+    // backdating an invoice visibly reorder it away from where its own number sequence says it
+    // belongs — confusing for a business that routinely backdates/postdates real invoices.
     case "oldest":      return [{ createdAt: "asc" }, { id: "asc" }];
     case "customer_az": return [{ customer: { name: "asc" } }, { id: "asc" }];
     case "customer_za": return [{ customer: { name: "desc" } }, { id: "asc" }];
@@ -195,7 +201,9 @@ export async function getCustomer(id: string) {
     include: {
       invoices: {
         include: { items: true, payments: true },
-        orderBy: { date: "desc" },
+        // See the matching comment on buildInvoiceOrderBy() above — createdAt order always matches
+        // invoiceNumber sequence order, immune to a later backdate of the invoice's own `date`.
+        orderBy: { createdAt: "desc" },
       },
     },
   });
@@ -299,9 +307,11 @@ export async function getReportSummary() {
       _sum: { total: true, paidAmount: true },
     }),
     prisma.product.count({ where: { deletedAt: null, isLowStock: true } }),
+    // createdAt, not date — matches invoiceNumber's creation-order sequence and stays immune to a
+    // later backdate (see buildInvoiceOrderBy()'s comment for the full reasoning).
     prisma.invoice.findMany({
       where: { deletedAt: null },
-      orderBy: { date: "desc" },
+      orderBy: { createdAt: "desc" },
       take: 5,
       include: { customer: { select: { name: true } } },
     }),

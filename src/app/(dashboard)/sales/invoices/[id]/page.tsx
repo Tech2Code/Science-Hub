@@ -1065,7 +1065,7 @@ export default function InvoiceDetailPage() {
             {(invoice.createdBy?.name || invoice.createdAt) && (
               <div className={styles.metaText}>
                 {invoice.createdBy?.name && <>Created by {invoice.createdBy.name}</>}
-                {invoice.createdAt && <> · {formatDate(invoice.createdAt)}</>}
+                {invoice.createdAt && <> · {formatDateTime(invoice.createdAt)}</>}
               </div>
             )}
           </div>
@@ -1980,7 +1980,7 @@ export default function InvoiceDetailPage() {
                           {riIdx === 0 && (
                             <td colSpan={2} rowSpan={ret.items.length} style={{ ...bd, color: "var(--inv-tx2)", verticalAlign: "top" }}>
                               {ret.creditNoteNumber && <div style={{ fontWeight: 600, color: "var(--inv-tx)" }}>{ret.creditNoteNumber}</div>}
-                              {formatDateTime(ret.createdAt)}
+                              {formatDate(ret.date)}
                               {ret.notes ? <div style={{ fontSize: 10, color: "var(--inv-tx3)", marginTop: 2 }}>{ret.notes}</div> : null}
                             </td>
                           )}
@@ -2376,7 +2376,7 @@ export default function InvoiceDetailPage() {
                       <div className={styles.returnEntryHeadLeft}>
                         {ret.creditNoteNumber && <span className={styles.creditNoteNumberBadge}>{ret.creditNoteNumber}</span>}
                         <span className={styles.returnEntryDate}>
-                          {formatDateTime(ret.createdAt)}
+                          {formatDate(ret.date)}
                         </span>
                         {ret.notes && <span className={styles.returnEntryNotes}>— {ret.notes}</span>}
                       </div>

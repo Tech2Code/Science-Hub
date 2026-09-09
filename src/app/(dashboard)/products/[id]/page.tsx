@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { needsRestock } from "@/lib/stockStatus";
 import { useCanWrite } from "@/lib/useCanWrite";
-import { formatDate } from "@/lib/formatDate";
+import { formatDate, formatDateTime } from "@/lib/formatDate";
 import type { Column } from "@/components/ui/Table";
 import styles from "./view.module.css";
 
@@ -303,7 +303,7 @@ export default function ProductViewPage() {
               {!loading && (product?.createdBy || product?.createdAt) && (
                 <div className={styles.metaText}>
                   {product?.createdBy && <>Added by {product.createdBy}</>}
-                  {product?.createdAt && <> · {formatDate(product.createdAt)}</>}
+                  {product?.createdAt && <> · {formatDateTime(product.createdAt)}</>}
                 </div>
               )}
             </div>

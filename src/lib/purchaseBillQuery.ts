@@ -47,6 +47,12 @@ export function buildBillWhere(filters: PurchaseBillListFilters): Prisma.Purchas
 
 export function buildBillOrderBy(sort?: PurchaseBillSort): Prisma.PurchaseBillOrderByWithRelationInput[] {
   switch (sort) {
+    // Sorted by `createdAt`, not the bill's own (editable, backdatable) `billDate` — billNumber is
+    // always assigned in creation order (computeNextNumber() reads the current max sequence inside
+    // the same transaction the row is created in), so `createdAt` order is always identical to
+    // numbering order and immune to a later date edit; sorting by `billDate` instead would let a
+    // bill "entered late for an earlier period" visibly reorder away from where its own number
+    // sequence says it belongs — confusing when many bills are backfilled this way in one sitting.
     case "oldest":      return [{ createdAt: "asc" }, { id: "asc" }];
     case "vendor_az":   return [{ vendor: { name: "asc" } }, { id: "asc" }];
     case "vendor_za":   return [{ vendor: { name: "desc" } }, { id: "asc" }];

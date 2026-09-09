@@ -13,12 +13,6 @@
   color: var(--c-text-3);
 }
 
-.dateSub {
-  font-size: 0.7rem;
-  opacity: 0.6;
-  margin-top: 2px;
-}
-
 .overdueSub {
   font-size: 0.7rem;
   color: var(--c-red);

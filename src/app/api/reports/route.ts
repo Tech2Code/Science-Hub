@@ -30,9 +30,11 @@ async function getSalesDashboard() {
     prisma.invoice.count({
       where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } },
     }),
+    // createdAt, not date — matches invoiceNumber's creation-order sequence and stays immune to a
+    // later backdate (see buildInvoiceOrderBy()'s comment in db.ts for the full reasoning).
     prisma.invoice.findMany({
       where: { deletedAt: null },
-      orderBy: { date: "desc" },
+      orderBy: { createdAt: "desc" },
       take: 10,
       include: { customer: { select: { name: true } } },
     }),
@@ -121,9 +123,11 @@ async function getPurchaseDashboard() {
     prisma.purchaseBill.count({
       where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } },
     }),
+    // createdAt, not billDate — matches billNumber's creation-order sequence and stays immune to a
+    // later backdate (see buildBillOrderBy()'s comment in purchaseBillQuery.ts for the full reasoning).
     prisma.purchaseBill.findMany({
       where: { deletedAt: null },
-      orderBy: { billDate: "desc" },
+      orderBy: { createdAt: "desc" },
       take: 10,
       include: { vendor: { select: { name: true } } },
     }),
@@ -209,8 +213,9 @@ async function getCombinedDashboard(canSeeSales: boolean, canSeePurchases: boole
     prisma.purchaseBill.aggregate({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] } }, _sum: { balanceDue: true } }),
     prisma.purchaseBill.count({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } } }),
     prisma.purchasePayment.aggregate({ where: { date: { gte: todayStart, lt: todayEnd } }, _sum: { amount: true } }),
-    prisma.invoice.findMany({ where: { deletedAt: null }, orderBy: { date: "desc" }, take: 5, include: { customer: { select: { name: true } } } }),
-    prisma.purchaseBill.findMany({ where: { deletedAt: null }, orderBy: { billDate: "desc" }, take: 5, include: { vendor: { select: { name: true } } } }),
+    // Both createdAt, not date/billDate — matches each document's numbering sequence, immune to a later backdate.
+    prisma.invoice.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "desc" }, take: 5, include: { customer: { select: { name: true } } } }),
+    prisma.purchaseBill.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "desc" }, take: 5, include: { vendor: { select: { name: true } } } }),
     // isLowStock is also a real Postgres GENERATED column — a plain count against it instead of fetching every product to filter in JS.
     prisma.product.count({ where: { deletedAt: null, isLowStock: true } }),
     // Mirrors isOutOfStock() in stockStatus.ts (stock <= 0) — there's no generated column for this one, so filter directly.

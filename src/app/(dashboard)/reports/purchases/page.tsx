@@ -18,7 +18,7 @@ import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
 import { downloadXlsx } from "@/lib/downloadXlsx";
-import { formatDate } from "@/lib/formatDate";
+import { formatDate, formatTime } from "@/lib/formatDate";
 import { toIstDateStr } from "@/lib/validation";
 import styles from "./purchaseReports.module.css";
 
@@ -207,7 +207,7 @@ export default function PurchaseReportsPage() {
         ["Date", "Time", "Product", "Type", "Document", "Quantity", "Balance After", "Reference", "Bill No.", "Notes"],
         exportData.data.map(m => [
           formatDate(m.createdAt),
-          new Date(m.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+          formatTime(m.createdAt),
           m.productId ? m.productName : `${m.productName} (deleted)`,
           LEDGER_TYPE_LABEL[m.type] ?? m.type,
           DOCUMENT_TYPE_LABEL[m.documentType] ?? m.documentType,

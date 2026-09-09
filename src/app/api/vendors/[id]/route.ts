@@ -17,7 +17,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         purchaseBills: {
           where: { deletedAt: null },
           select: { id: true, billNumber: true, billDate: true, total: true, paidAmount: true, status: true },
-          orderBy: { billDate: "desc" },
+          // See the matching comment on buildBillOrderBy() in purchaseBillQuery.ts — createdAt order
+          // always matches billNumber sequence order, immune to a later backdate of the bill's own
+          // `billDate`.
+          orderBy: { createdAt: "desc" },
         },
       },
     });

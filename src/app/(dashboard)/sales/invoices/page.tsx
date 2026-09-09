@@ -17,7 +17,7 @@ import { bustCachePrefix } from "@/lib/useCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { Cell, type Column } from "@/components/ui/Table";
 import { OverlayLoader } from "@/components/ui/Spinner";
-import { formatDate, formatTime } from "@/lib/formatDate";
+import { formatDate } from "@/lib/formatDate";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
 import { StatCardsRow } from "@/components/ui/StatCardsRow";
@@ -32,7 +32,6 @@ interface Invoice {
   invoiceNumber: string;
   date: string;
   dueDate: string | null;
-  createdAt: string;
   customer: { name: string; updatedAt?: string };
   total: number;
   paidAmount: number;
@@ -371,9 +370,6 @@ export default function InvoicesPage() {
                   </Cell>
                   <Cell col={COLUMNS[1]} className={styles.dateCell}>
                     <div>{formatDate(inv.date)}</div>
-                    <div className={["date-sub", styles.dateSub].join(" ")}>
-                      {formatTime(inv.createdAt)}
-                    </div>
                     {isOverdue(inv) && <div className={styles.overdueSub}>Overdue</div>}
                   </Cell>
                   <Cell col={COLUMNS[2]} className={styles.customerCell}>{inv.customer?.name}</Cell>

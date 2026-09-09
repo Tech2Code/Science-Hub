@@ -134,12 +134,6 @@
 
 .dateCellText { color: var(--c-text-3); }
 
-.dateSubRow {
-  font-size: 0.7rem;
-  opacity: 0.6;
-  margin-top: 2px;
-}
-
 .totalCell { color: var(--c-text); }
 .paidCell { color: var(--c-green); }
 .balanceCell { font-weight: 500; color: var(--c-text); }

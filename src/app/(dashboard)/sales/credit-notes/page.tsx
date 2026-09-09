@@ -28,7 +28,6 @@ interface CreditNote {
   id: string;
   creditNoteNumber: string | null;
   date: string;
-  createdAt: string;
   subtotal: number; cgst: number; sgst: number; igst: number; total: number;
   _count: { items: number };
   invoiceId: string;
@@ -145,10 +144,9 @@ export default function CreditNotesPage() {
       await downloadXlsx(
         "credit-notes.xlsx",
         "Credit Notes",
-        ["Date", "Time", "Credit Note No.", "Customer", "Invoice", "Taxable Value", "CGST", "SGST", "IGST", "Total"],
+        ["Date", "Credit Note No.", "Customer", "Invoice", "Taxable Value", "CGST", "SGST", "IGST", "Total"],
         exportData.data.map(c => [
           formatDate(c.date),
-          new Date(c.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
           c.creditNoteNumber ?? "—", c.invoice.customer.name, c.invoice.invoiceNumber,
           c.subtotal, c.cgst, c.sgst, c.igst, c.total,
         ])
@@ -331,9 +329,6 @@ export default function CreditNotesPage() {
                   <tr key={c.id}>
                     <Cell col={COLUMNS[0]} className={styles.dateCell}>
                       {formatDate(c.date)}
-                      <div className={styles.timeText}>
-                        {new Date(c.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                      </div>
                     </Cell>
                     <Cell col={COLUMNS[1]} className={styles.creditNoteNumberCell}>{c.creditNoteNumber ?? "—"}</Cell>
                     <Cell col={COLUMNS[2]} className={styles.customerCell}>{c.invoice?.customer?.name}</Cell>
