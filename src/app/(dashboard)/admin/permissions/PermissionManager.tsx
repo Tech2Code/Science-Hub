@@ -26,6 +26,7 @@ function SkeletonRow() {
       <td className={styles.tdUser}>
         <div className={styles.skeletonName} />
         <div className={styles.skeletonEmail} />
+        <div className={styles.skeletonRole} />
       </td>
       {PROTECTED_SECTIONS.map((s) => (
         <td key={s} className={styles.tdToggle}>
@@ -45,6 +46,7 @@ function SkeletonCard() {
       <div className={styles.mobileCardHeader}>
         <div className={styles.skeletonName} />
         <div className={styles.skeletonEmail} />
+        <div className={styles.skeletonRole} />
       </div>
       <div className={styles.mobileCardBody}>
         {PROTECTED_SECTIONS.map((s) => (

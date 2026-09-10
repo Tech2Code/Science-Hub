@@ -491,31 +491,48 @@ export default function EditInvoicePage() {
     <div className="page-stack">
       <style>{`@keyframes skPulse{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
       <Sk w={220} h={14} />
-      <div className={`card ${styles.skCard}`}>
-        <Sk w={160} h={13} />
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className={styles.skItemRow}>
-            <Sk h={36} r={8} />
-            <Sk h={36} r={8} />
-            <Sk h={36} r={8} />
-            <Sk h={36} r={8} />
-            <Sk w={28} h={28} r={6} />
+      <Sk w={260} h={20} />
+      <div className={styles.layout}>
+        <div className={styles.leftCol}>
+          {/* Bill To */}
+          <div className={`card ${styles.skCard}`}>
+            <Sk w={80} h={13} />
+            <Sk h={56} r={10} />
           </div>
-        ))}
-        <Sk w={120} h={32} r={8} />
-      </div>
-      <div className={styles.skGrid}>
-        <div className={`card ${styles.skSummaryCard}`}>
-          <Sk w={100} h={13} />
-          <Sk h={80} r={8} />
+          {/* Place of supply / due date / transport charge options row */}
+          <div className={`card ${styles.skCard}`}>
+            <Sk h={36} r={8} />
+            <Sk h={36} r={8} />
+          </div>
+          {/* Items */}
+          <div className={`card ${styles.skCard}`}>
+            <Sk w={160} h={13} />
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className={styles.skItemRow}>
+                <Sk h={36} r={8} />
+                <Sk h={36} r={8} />
+                <Sk h={36} r={8} />
+                <Sk h={36} r={8} />
+                <Sk w={28} h={28} r={6} />
+              </div>
+            ))}
+            <Sk w={120} h={32} r={8} />
+          </div>
+          {/* Notes */}
+          <div className={`card ${styles.skCard}`}>
+            <Sk w={100} h={13} />
+            <Sk h={48} r={8} />
+          </div>
         </div>
-        <div className={`card ${styles.skSummaryCard}`}>
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className={styles.skSummaryRow}>
-              <Sk w="40%" h={13} />
-              <Sk w="30%" h={13} />
-            </div>
-          ))}
+        <div className={styles.rightCol}>
+          <div className={`card ${styles.skSummaryCard}`}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className={styles.skSummaryRow}>
+                <Sk w="40%" h={13} />
+                <Sk w="30%" h={13} />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

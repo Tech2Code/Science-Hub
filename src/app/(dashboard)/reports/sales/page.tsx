@@ -251,7 +251,7 @@ export default function SalesReportsPage() {
           <div className={styles.summaryTabPanel}>
             {loadingSummary ? (
               <div className={styles.summarySkeletonGrid}>
-                {[...Array(4)].map((_, i) => <div key={i} className={styles.summarySkeletonItem} />)}
+                {[...Array(6)].map((_, i) => <div key={i} className={styles.summarySkeletonItem} />)}
               </div>
             ) : (
               <div className={styles.summaryGrid}>

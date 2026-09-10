@@ -467,9 +467,17 @@ export default function BinPage() {
       {isInitialLoad ? (
         <div {...animateSection(0, "card")}>
           <div className="table-wrap">
-            <table className="table-base">
+            <table className={`table-base ${styles.binTable}`}>
+              <colgroup>
+                <col className={styles.colName} />
+                <col className={styles.colDetails} />
+                <col className={styles.colDeletedOn} />
+                <col className={styles.colDeletedBy} />
+                <col className={styles.colExpires} />
+                <col className={styles.colActions} />
+              </colgroup>
               <thead><tr><th>Name</th><th>Details</th><th>Deleted On</th><th>Deleted By</th><th>Expires</th><th>Actions</th></tr></thead>
-              <tbody><TableSkeleton cols={6} /></tbody>
+              <tbody><TableSkeleton columns={BIN_COLUMNS} /></tbody>
             </table>
           </div>
         </div>

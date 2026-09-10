@@ -101,6 +101,7 @@ function InvoiceSkeleton() {
             <Sk w={110} h={13} r={4} />
           </div>
           <div className={styles.skActionsRow}>
+            <Sk w={64} h={20} r={10} />
             <Sk w={28} h={28} r={6} />
             <Sk w={100} h={28} r={6} />
             <Sk w={118} h={28} r={6} />
@@ -181,7 +182,7 @@ function InvoiceSkeleton() {
               <Sk w="60%" h={11} r={3} />
             </div>
             <div className={styles.skTotalsRight}>
-              {["Subtotal", "CGST", "SGST", "Round Off", "Grand Total", "Paid", "Balance Due"].map(label => (
+              {["Subtotal", "CGST", "SGST", "Round Off", "Grand Total", "Amount in Words", "Paid", "Balance Due"].map(label => (
                 <div key={label} className={styles.skTotalsLine}>
                   <Sk w="60%" h={11} r={3} />
                   <Sk w="70%" h={11} r={3} />
@@ -969,6 +970,8 @@ export default function InvoiceDetailPage() {
               type="date"
               value={editPaymentForm.date}
               onChange={(e) => { setEditPaymentForm((p) => ({ ...p, date: e.target.value })); setEditPaymentDateError(undefined); }}
+              min={invoice ? toIstDateStr(new Date(invoice.date)) : undefined}
+              max={toIstDateStr(new Date())}
               disabled={savingPaymentEdit}
             />
           </FormField>

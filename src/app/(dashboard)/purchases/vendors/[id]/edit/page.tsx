@@ -165,11 +165,12 @@ export default function EditVendorPage() {
             <div className={styles.skFieldStack}><Sk w={90} h={11} /><Sk h={38} r={8} /></div>
             <div className={styles.skFieldStack}><Sk w={130} h={11} /><Sk h={38} r={8} /></div>
           </div>
+          {/* Address — single full-width field, not a grid-2 pair */}
+          <div className={styles.skFieldStack}><Sk w={70} h={11} /><Sk h={38} r={8} /></div>
           <div className="form-grid-2">
             <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
             <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
           </div>
-          <div className={styles.skFieldStack}><Sk w={70} h={11} /><Sk h={38} r={8} /></div>
           <div className="form-grid-2">
             <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
             <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>

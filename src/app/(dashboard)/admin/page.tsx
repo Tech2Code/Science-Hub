@@ -751,7 +751,7 @@ export default function AdminPage() {
               {usersLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}>
-                    <td>
+                    <td data-mobile-full data-label="User">
                       <div className={styles.skUserCell}>
                         <div className={styles.skAvatarSm} />
                         <div className={styles.skCellCol}>
@@ -760,10 +760,10 @@ export default function AdminPage() {
                         </div>
                       </div>
                     </td>
-                    <td><div className={styles.skRolePill} /></td>
-                    <td className="table-td-right"><div className={styles.skNumCell} /></td>
-                    <td><div className={styles.skJoinedCell} /></td>
-                    <td><div className={styles.skActionsCell} /></td>
+                    <td data-label="Role"><div className={styles.skRolePill} /></td>
+                    <td data-label="Invoices" className="table-td-right"><div className={styles.skNumCell} /></td>
+                    <td data-label="Joined"><div className={styles.skJoinedCell} /></td>
+                    <td data-mobile-full data-label="Actions"><div className={styles.skActionsCell} /></td>
                   </tr>
                 ))
               ) : users.map((u) => {
@@ -878,16 +878,16 @@ export default function AdminPage() {
               {logsLoading && !logsLoadedOnce ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i}>
-                    <td>
+                    <td data-label="User">
                       <div className={styles.skLogUserCol}>
                         <div className={styles.skLogLine} style={{ width: [90, 110, 80, 100, 95, 105, 88, 115][i % 8] }} />
                         <div className={styles.skLogPill} />
                       </div>
                     </td>
-                    <td><div className={styles.skLogActionPill} style={{ width: [100, 120, 95, 130, 108, 118, 100, 125][i % 8] }} /></td>
-                    <td><div className={styles.skLogDetails} /></td>
-                    <td><div className={styles.skLogTime} /></td>
-                    <td></td>
+                    <td data-label="Action"><div className={styles.skLogActionPill} style={{ width: [100, 120, 95, 130, 108, 118, 100, 125][i % 8] }} /></td>
+                    <td data-mobile-full data-label="Details"><div className={styles.skLogDetails} /></td>
+                    <td data-label="Time"><div className={styles.skLogTime} /></td>
+                    <td data-label="Actions"></td>
                   </tr>
                 ))
               ) : visibleLogs.length === 0 ? (

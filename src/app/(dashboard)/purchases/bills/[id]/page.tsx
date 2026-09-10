@@ -598,7 +598,7 @@ export default function PurchaseBillDetailPage() {
         ))}
       </div>
 
-      {/* Payment history table */}
+      {/* Payment history table — 5th cell mirrors the canWrite-gated Actions column (edit/delete icons) */}
       <div className="card">
         <div className={styles.sectionHeaderRow}>
           <Sk w={140} h={14} r={3} />
@@ -609,6 +609,7 @@ export default function PurchaseBillDetailPage() {
             <Sk w="20%" h={12} r={3} />
             <Sk w="30%" h={12} r={3} />
             <Sk w="15%" h={12} r={3} />
+            {canWrite && <Sk w={50} h={12} r={3} />}
           </div>
         ))}
       </div>
@@ -922,6 +923,8 @@ export default function PurchaseBillDetailPage() {
             type="date"
             value={editPaymentForm.date}
             onChange={(e) => setEditPaymentForm((p) => ({ ...p, date: e.target.value }))}
+            min={bill ? toIstDateStr(new Date(bill.billDate)) : undefined}
+            max={toIstDateStr(new Date())}
             disabled={savingPaymentEdit}
           />
         </FormField>

@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
-import { Sk } from "@/components/ui/Skeleton";
+import { Sk, TableSkeleton } from "@/components/ui/Skeleton";
+import type { Column } from "@/components/ui/Table";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
@@ -36,6 +37,19 @@ interface BusinessSettings {
   name?: string; address?: string; city?: string; state?: string; pincode?: string;
   phone?: string; email?: string; gstin?: string; logoUrl?: string; showLogoOnInvoices?: boolean; updatedAt?: string;
 }
+
+// Mirrors the real items table's columns (all plain `data-label`, no "full" column — see the
+// hand-written <td data-label="..."> rows below) so the loading skeleton's card-layout collapse
+// on mobile matches the loaded table exactly.
+const RATE_LIST_ITEM_SK_COLUMNS: Column[] = [
+  { label: "#", mobile: "label" },
+  { label: "Item", mobile: "label" },
+  { label: "Brand", mobile: "label" },
+  { label: "Unit", mobile: "label" },
+  { label: "List Rate (₹)", cls: "table-th-right", mobile: "label" },
+  { label: "Discount", cls: "table-th-right", mobile: "label" },
+  { label: "Amount (₹)", cls: "table-th-right", mobile: "label" },
+];
 
 export default function RateListDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -280,9 +294,45 @@ export default function RateListDetailPage() {
   if (loading) {
     return (
       <div className="page-stack">
-        <Sk h={24} w="16rem" />
-        <Sk h={160} />
-        <Sk h={320} />
+        <div className="page-header">
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+              <Sk w={70} h={13} r={4} />
+              <Sk w={8} h={13} r={2} />
+              <Sk w={140} h={13} r={4} />
+            </div>
+            <div className={styles.metaText}>
+              <Sk w={220} h={11} r={3} />
+            </div>
+          </div>
+          <div className={styles.toolbarActions}>
+            <Sk w={70} h={28} r={6} />
+            <Sk w={34} h={28} r={6} />
+            <Sk w={90} h={28} r={6} />
+            <Sk w={130} h={28} r={6} />
+            <Sk w={110} h={28} r={6} />
+            <Sk w={100} h={28} r={6} />
+            <Sk w={80} h={28} r={6} />
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="table-wrap">
+            <table className="table-base">
+              <thead>
+                <tr>
+                  <th>#</th><th>Item</th><th>Brand</th><th>Unit</th>
+                  <th className="table-th-right">List Rate (₹)</th>
+                  <th className="table-th-right">Discount</th>
+                  <th className="table-th-right">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <TableSkeleton columns={RATE_LIST_ITEM_SK_COLUMNS} rows={6} />
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     );
   }

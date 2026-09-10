@@ -164,17 +164,20 @@ export default function EditCustomerPage() {
       {loading ? (
         <div className="form-card">
           <div className={styles.skFieldStack}><Sk w={110} h={11} /><Sk h={38} r={8} /></div>
+          <div className={styles.skFieldStack}><Sk w={70} h={11} /><Sk h={38} r={8} /></div>
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={60} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+          </div>
+          <div className="form-grid-2">
+            <div className={styles.skFieldStack}><Sk w={40} h={11} /><Sk h={38} r={8} /></div>
+            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+          </div>
           <div className="form-grid-2">
             <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
             <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
           </div>
-          <div className={styles.skFieldStack}><Sk w={70} h={11} /><Sk h={60} r={8} /></div>
-          <div className="form-grid-3">
-            <div className={styles.skFieldStack}><Sk w={40} h={11} /><Sk h={38} r={8} /></div>
-            <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
-            <div className={styles.skFieldStack}><Sk w={60} h={11} /><Sk h={38} r={8} /></div>
-          </div>
-          <div className={styles.skFieldStack}><Sk w={50} h={11} /><Sk h={38} r={8} /></div>
+          <div className={styles.skFieldStack}><Sk w={80} h={11} /><Sk h={38} r={8} /></div>
         </div>
       ) : (
         <form onSubmit={handleSubmit} noValidate {...animateSection(0, "form-card")}>

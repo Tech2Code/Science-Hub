@@ -199,6 +199,7 @@ export default function SettingsPage() {
 
   const [logoUploading, setLogoUploading] = useState(false);
   const [savingBranding, setSavingBranding] = useState(false);
+  const [removeLogoConfirmOpen, setRemoveLogoConfirmOpen] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   // Branding saves instantly with no edit step, so a full-page overlay signals the brief block.
@@ -634,6 +635,11 @@ export default function SettingsPage() {
     setLogoUploading(false);
   }
 
+  async function handleConfirmRemoveLogo() {
+    await handleRemoveLogo();
+    setRemoveLogoConfirmOpen(false);
+  }
+
   async function handleToggleInvoiceLogo() {
     const next = !saved.showLogoOnInvoices;
     setSavingBranding(true);
@@ -736,11 +742,15 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
-          {[5, 4].map((count, ci) => (
-            <div key={ci} {...animateSection(ci + 1, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
-              <Sk w={ci === 0 ? 140 : 100} h={13} />
+          {[
+            { idx: 1, title: 140, count: 6 }, // Identity: Name/Tagline/Email/Phone/GSTIN/PAN
+            { idx: 2, title: 100, count: 4 }, // Address: Street/City/State/Pincode
+            { idx: 3, title: 110, count: 5 }, // Bank Details: Name/Account Name/Account No/IFSC/Branch
+          ].map((cfg) => (
+            <div key={cfg.idx} {...animateSection(cfg.idx, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
+              <Sk w={cfg.title} h={13} />
               <div className={styles.skeletonGrid}>
-                {Array.from({ length: count }).map((_, i) => (
+                {Array.from({ length: cfg.count }).map((_, i) => (
                   <div key={i} className={styles.skeletonFieldStack}>
                     <Sk w={70} h={10} />
                     <Sk w="80%" h={15} />
@@ -749,9 +759,37 @@ export default function SettingsPage() {
               </div>
             </div>
           ))}
-          <div {...animateSection(3, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
+          {/* Terms & Conditions — numbered list preview */}
+          <div {...animateSection(4, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
             <Sk w={160} h={13} />
-            <Sk w="50%" h={15} />
+            <Sk w="90%" h={12} />
+            <Sk w="70%" h={12} />
+            <Sk w="60%" h={12} />
+          </div>
+          {/* Email configuration — status dot + 2 fields */}
+          <div {...animateSection(5, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
+            <Sk w={220} h={13} />
+            <Sk w={110} h={20} r={10} />
+            <div className={styles.skeletonGrid}>
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className={styles.skeletonFieldStack}>
+                  <Sk w={70} h={10} />
+                  <Sk w="80%" h={15} />
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Document Numbering — 9 info rows (invoice/purchase-bill/credit-note x format/prefix/next-number) */}
+          <div {...animateSection(6, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
+            <Sk w={180} h={13} />
+            <div className={styles.skeletonGrid}>
+              {Array.from({ length: 9 }).map((_, i) => (
+                <div key={i} className={styles.skeletonFieldStack}>
+                  <Sk w={70} h={10} />
+                  <Sk w="80%" h={15} />
+                </div>
+              ))}
+            </div>
           </div>
         </>
 
@@ -779,7 +817,7 @@ export default function SettingsPage() {
                     {logoUploading ? "Uploading…" : saved.logoUrl ? "Replace Logo" : "Upload Logo"}
                   </Button>
                   {saved.logoUrl && (
-                    <Button type="button" variant="danger" disabled={logoUploading} onClick={handleRemoveLogo}>
+                    <Button type="button" variant="danger" disabled={logoUploading} onClick={() => setRemoveLogoConfirmOpen(true)}>
                       Remove
                     </Button>
                   )}
@@ -1313,6 +1351,16 @@ export default function SettingsPage() {
         loading={savingNumbering}
         onConfirm={handleConfirmNumbering}
         onCancel={() => setNumberingConfirmOpen(false)}
+      />
+      <ConfirmDialog
+        open={removeLogoConfirmOpen}
+        title="Remove business logo?"
+        message="This reverts to the default logo everywhere it's shown — sidebar, login page, and invoice/purchase-bill/rate-list PDFs."
+        variant="danger"
+        confirmLabel={logoUploading ? "Removing…" : "Remove"}
+        loading={logoUploading}
+        onConfirm={handleConfirmRemoveLogo}
+        onCancel={() => setRemoveLogoConfirmOpen(false)}
       />
     </div>
   );

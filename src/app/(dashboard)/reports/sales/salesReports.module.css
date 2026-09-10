@@ -76,6 +76,7 @@
 
 .summarySkeletonGrid {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1rem;
 }
 
@@ -122,7 +123,8 @@
    viewport, so a tile squeezed toward the 200px minmax floor (tablet widths,
    sidebar docked) could overflow a large Indian-grouped amount. */
 @media (max-width: 768px) {
-  .summaryGrid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; }
+  .summaryGrid,
+  .summarySkeletonGrid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; }
   .summaryCard { padding: 0.875rem 1rem; }
   .summaryCardValue { font-size: 1rem; }
 }

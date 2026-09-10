@@ -5,16 +5,31 @@ import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { rules, validate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
-import { Sk } from "@/components/ui/Skeleton";
+import { Sk, TableSkeleton } from "@/components/ui/Skeleton";
+import type { Column } from "@/components/ui/Table";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { bustCachePrefix } from "@/lib/useCache";
 import { invalidateCachedPdf } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
 import { RateListFormBody } from "@/components/rateLists/RateListFormBody";
+import formBodyStyles from "@/components/rateLists/RateListFormBody.module.css";
 import { toNum, calcRateListItem, makeRateListLineItemKey, type RateListLineItem } from "@/lib/rateListForm";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { InfoBanner } from "@/components/ui/InfoBanner";
 import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
+
+// Mirrors RateListItemsTable's real column headers (#, Item, Brand, Unit, Discount, List Rate,
+// Amount, and the trailing remove-row action column) for the loading skeleton.
+const RATE_LIST_EDIT_ITEM_SK_COLUMNS: Column[] = [
+  { label: "#", mobile: "label" },
+  { label: "Item", mobile: "label" },
+  { label: "Brand", mobile: "label" },
+  { label: "Unit", mobile: "label" },
+  { label: "Discount", mobile: "label" },
+  { label: "List Rate (₹)", cls: "table-th-right", mobile: "label" },
+  { label: "Amount (₹)", cls: "table-th-right", mobile: "label" },
+  { label: "", mobile: "label" },
+];
 
 type RateListEditDraft = { title: string; note: string; items: RateListLineItem[] };
 
@@ -180,9 +195,56 @@ export default function EditRateListPage() {
   if (loading) {
     return (
       <div className="page-stack">
-        <Sk h={24} w="16rem" />
-        <Sk h={160} />
-        <Sk h={320} />
+        <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+          <Sk w={80} h={13} r={4} /><Sk w={8} h={13} r={2} />
+          <Sk w={120} h={13} r={4} /><Sk w={8} h={13} r={2} />
+          <Sk w={40} h={13} r={4} />
+        </div>
+        <div>
+          <Sk w={170} h={20} r={4} />
+          <div style={{ marginTop: "0.35rem" }}><Sk w={230} h={13} r={3} /></div>
+        </div>
+
+        <div className={formBodyStyles.layout}>
+          <div className={formBodyStyles.leftCol}>
+            <div className="form-card">
+              <Sk w={60} h={14} r={3} />
+              <div className="form-grid-2">
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}><Sk w={30} h={11} r={3} /><Sk h={38} r={8} /></div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}><Sk w={35} h={11} r={3} /><Sk h={60} r={8} /></div>
+            </div>
+
+            <div className="form-card">
+              <Sk w={40} h={14} r={3} />
+              <div className="table-wrap">
+                <table className="table-base">
+                  <thead>
+                    <tr>
+                      <th>#</th><th>Item</th><th>Brand</th><th>Unit</th><th>Discount</th>
+                      <th className="table-th-right">List Rate (₹)</th>
+                      <th className="table-th-right">Amount (₹)</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <TableSkeleton columns={RATE_LIST_EDIT_ITEM_SK_COLUMNS} rows={4} />
+                  </tbody>
+                </table>
+              </div>
+              <Sk w={90} h={30} r={8} />
+            </div>
+          </div>
+
+          <div className={formBodyStyles.rightCol}>
+            <div className="form-card">
+              <Sk w={70} h={14} r={3} />
+              <div style={{ display: "flex", justifyContent: "space-between" }}><Sk w={40} h={12} r={3} /><Sk w={20} h={12} r={3} /></div>
+              <Sk w="100%" h={38} r={8} />
+              <Sk w="100%" h={38} r={8} />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
