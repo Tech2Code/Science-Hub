@@ -12,7 +12,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: `${name} — Billing & Inventory`,
     description: `Professional GST billing and inventory management for ${name}`,
-    ...(logoUrl ? { icons: { icon: logoUrl } } : {}),
+    icons: { icon: logoUrl || "/favicon.ico" },
   };
 }
 

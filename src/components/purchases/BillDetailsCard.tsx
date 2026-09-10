@@ -225,6 +225,9 @@ export function BillDetailsCard({
                 {[selectedVendor.city, selectedVendor.state].filter(Boolean).join(", ")}
                 {selectedVendor.gstin && ` · GSTIN: ${selectedVendor.gstin}`}
               </div>
+              {selectedVendor.isActive === false && (
+                <p className={styles.selectHint}>⚠ This vendor is marked Inactive</p>
+              )}
             </div>
             <div className={styles.selectedVendorActions}>
               <button type="button" onClick={() => openVendorEdit(selectedVendor)} className={styles.dropdownEmptyLink}>Edit</button>
@@ -247,7 +250,10 @@ export function BillDetailsCard({
               <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
                 {filteredVendors.length > 0 ? filteredVendors.map((v) => (
                   <button key={v.id} type="button" onClick={() => handleVendorSelect(v)} className={styles.dropdownBtn}>
-                    <div className={styles.dropdownItemName} title={v.name}>{v.name}{v.company ? ` — ${v.company}` : ""}</div>
+                    <div className={styles.dropdownItemName} title={v.name}>
+                      {v.name}{v.company ? ` — ${v.company}` : ""}
+                      {v.isActive === false && <span className={styles.inactiveTag}>Inactive</span>}
+                    </div>
                     <div className={styles.dropdownItemSub}>{[v.city, v.gstin].filter(Boolean).join(" · ")}</div>
                   </button>
                 )) : (

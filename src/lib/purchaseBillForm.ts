@@ -21,6 +21,7 @@ export interface PurchaseBillProduct {
 export interface PurchaseBillVendor {
   id: string; name: string; company: string | null; gstin?: string | null; state?: string | null;
   address?: string | null; city?: string | null; pincode?: string | null; phone?: string | null; email?: string | null;
+  isActive?: boolean;
 }
 
 export const PURCHASE_BILL_UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pkt", "Set", "Mtr", "Dozen", "Pair"];

@@ -41,7 +41,7 @@ interface PurchaseBill {
   subtotal: number; taxAmount: number; discount: number; total: number; paidAmount: number;
   transportCharge?: number; transportChargeGstRate?: number;
   attachmentUrl: string | null; attachmentName: string | null; attachmentSize: number | null;
-  vendor: { id: string; name: string; company: string | null; gstin: string | null };
+  vendor: { id: string; name: string; company: string | null; gstin: string | null; isActive?: boolean };
   items: BillItem[];
 }
 
