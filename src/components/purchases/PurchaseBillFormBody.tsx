@@ -11,11 +11,9 @@ interface PurchaseBillFormBodyProps {
   /** Section-index the leftCol's Bill Details card starts at — lets a page with content above this (e.g. a stat strip) keep its stagger animation sequential. */
   startIndex?: number;
 
-  vendors: PurchaseBillVendor[];
   vendorId: string;
   onVendorIdChange: (id: string) => void;
-  onVendorCreated: (vendor: PurchaseBillVendor) => void;
-  onVendorUpdated: (vendor: PurchaseBillVendor) => void;
+  initialVendor?: PurchaseBillVendor | null;
   vendorError?: string;
   category: string;
   onCategoryChange: (category: string) => void;
@@ -68,7 +66,7 @@ interface PurchaseBillFormBodyProps {
 // Shared layout for New/Edit Purchase Bill; each page owns its own state/validation and supplies `footer`.
 export function PurchaseBillFormBody({
   startIndex = 0,
-  vendors, vendorId, onVendorIdChange, onVendorCreated, onVendorUpdated, vendorError,
+  vendorId, onVendorIdChange, initialVendor, vendorError,
   category, onCategoryChange, billDate, onBillDateChange, billDateError, dueDate, onDueDateChange, dueDateError,
   notes, onNotesChange, attachmentUploading, attachmentName, attachmentUrl, attachmentSize,
   onAttachmentFileChange, onAttachmentRemove,
@@ -86,11 +84,9 @@ export function PurchaseBillFormBody({
         {banner}
         <BillDetailsCard
           sectionIndex={startIndex}
-          vendors={vendors}
           vendorId={vendorId}
           onVendorIdChange={onVendorIdChange}
-          onVendorCreated={onVendorCreated}
-          onVendorUpdated={onVendorUpdated}
+          initialVendor={initialVendor}
           vendorError={vendorError}
           category={category}
           onCategoryChange={onCategoryChange}

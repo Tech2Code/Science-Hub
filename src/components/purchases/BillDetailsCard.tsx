@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Input";
@@ -17,6 +17,7 @@ import { useDirty } from "@/lib/useDirty";
 import { INDIA_STATES_FULL } from "@/lib/states";
 import { usePincodeAutofill } from "@/lib/usePincodeLookup";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
+import { useEntitySearch } from "@/lib/useEntitySearch";
 import { PURCHASE_BILL_CATEGORIES, type PurchaseBillVendor } from "@/lib/purchaseBillForm";
 import styles from "./BillDetailsCard.module.css";
 
@@ -25,11 +26,12 @@ const BLANK_INLINE_VENDOR: InlineVendorForm = { name: "", company: "", phone: ""
 
 interface BillDetailsCardProps {
   sectionIndex: number;
-  vendors: PurchaseBillVendor[];
   vendorId: string;
   onVendorIdChange: (id: string) => void;
-  onVendorCreated: (vendor: PurchaseBillVendor) => void;
-  onVendorUpdated: (vendor: PurchaseBillVendor) => void;
+  // Seeds the selected-vendor display without an extra fetch (e.g. Edit Bill's own already-loaded
+  // `bill.vendor`) — optional, since the card resolves `vendorId` by itself (GET /api/vendors/[id])
+  // whenever it doesn't already have a matching selected vendor (draft-restore, ?vendorId= prefill).
+  initialVendor?: PurchaseBillVendor | null;
   vendorError?: string;
   category: string;
   onCategoryChange: (category: string) => void;
@@ -59,7 +61,7 @@ interface BillDetailsCardProps {
 
 // Shared by New/Edit Purchase Bill pages so the two forms can't drift apart.
 export function BillDetailsCard({
-  sectionIndex, vendors, vendorId, onVendorIdChange, onVendorCreated, onVendorUpdated, vendorError,
+  sectionIndex, vendorId, onVendorIdChange, initialVendor, vendorError,
   category, onCategoryChange, billDate, onBillDateChange, billDateError, dueDate, onDueDateChange, dueDateError,
   notes, onNotesChange, attachmentUploading, attachmentName, attachmentUrl, attachmentSize,
   onAttachmentFileChange, onAttachmentRemove,
@@ -84,21 +86,39 @@ export function BillDetailsCard({
   const ivIdempotency = useIdempotencyKey();
 
   const ivDirty = useDirty(ivForm);
-  const selectedVendor = vendors.find((v) => v.id === vendorId);
-  // Typed query wins over the selected vendor's name — handles `vendors` loading after `vendorId` is already set (e.g. Edit page) with no extra sync effect.
-  const vendorSearchValue = vendorSearch || selectedVendor?.name || "";
-  const filteredVendors = vendors.filter((v) => {
-    const q = vendorSearch.toLowerCase();
-    return v.name.toLowerCase().includes(q) || (v.company ?? "").toLowerCase().includes(q) || (v.gstin ?? "").toLowerCase().includes(q);
-  });
+
+  // Card owns the selected vendor's own details (not a `.find()` over a prefetched full list — see
+  // useEntitySearch below for why prefetching every vendor doesn't scale). `initialVendor` seeds this
+  // for free when the parent already has it (Edit Bill's loaded `bill.vendor`); otherwise the resolve
+  // effect below fetches it once `vendorId` is set from elsewhere (draft-restore, ?vendorId= prefill).
+  const [selectedVendor, setSelectedVendor] = useState<PurchaseBillVendor | null>(initialVendor ?? null);
+  useEffect(() => {
+    if (!vendorId || selectedVendor?.id === vendorId) return;
+    let cancelled = false;
+    fetch(`/api/vendors/${vendorId}`, { headers: { "x-no-loader": "1" } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((v) => { if (!cancelled && v && v.id === vendorId) setSelectedVendor(v); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resolves vendorId → full vendor details; selectedVendor is read, not a dep we want to re-trigger on
+  }, [vendorId]);
+
+  // pageSize 200 — comfortably covers this app's real vendor counts (dozens-hundreds) so an empty
+  // search still browses effectively everything, same as before; typing still narrows via live
+  // server search regardless of how large the list grows later.
+  const { results: vendorSearchResults, loading: vendorSearchLoading } = useEntitySearch<PurchaseBillVendor>(
+    "/api/vendors", vendorSearch, { pageSize: 200, enabled: !vendorId }
+  );
 
   function handleVendorSelect(v: PurchaseBillVendor) {
+    setSelectedVendor(v);
     onVendorIdChange(v.id);
     setVendorSearch("");
     setShowVendorDropdown(false);
   }
 
   function removeVendor() {
+    setSelectedVendor(null);
     onVendorIdChange("");
     setVendorSearch("");
     setShowVendorDropdown(false);
@@ -188,8 +208,8 @@ export function BillDetailsCard({
       });
       const data = await res.json();
       if (res.ok) {
-        if (ivEditId) onVendorUpdated(data);
-        else { ivIdempotency.renew(); onVendorCreated(data); }
+        if (!ivEditId) ivIdempotency.renew();
+        setSelectedVendor(data);
         onVendorIdChange(data.id);
         setVendorSearch("");
         closeVendorCreate();
@@ -240,7 +260,7 @@ export function BillDetailsCard({
               id={vendorFieldId}
               type="text"
               placeholder="Search vendor…"
-              value={vendorSearchValue}
+              value={vendorSearch}
               onChange={(e) => { setVendorSearch(e.target.value); onVendorIdChange(""); setShowVendorDropdown(true); }}
               onFocus={() => setShowVendorDropdown(true)}
               onBlur={() => setTimeout(() => setShowVendorDropdown(false), 150)}
@@ -248,7 +268,9 @@ export function BillDetailsCard({
             />
             {showVendorDropdown && (
               <div className={styles.dropdown} onMouseDown={(e) => e.preventDefault()}>
-                {filteredVendors.length > 0 ? filteredVendors.map((v) => (
+                {vendorSearchLoading ? (
+                  <div className={styles.dropdownEmpty}>Searching…</div>
+                ) : vendorSearchResults.length > 0 ? vendorSearchResults.map((v) => (
                   <button key={v.id} type="button" onClick={() => handleVendorSelect(v)} className={styles.dropdownBtn}>
                     <div className={styles.dropdownItemName} title={v.name}>
                       {v.name}{v.company ? ` — ${v.company}` : ""}

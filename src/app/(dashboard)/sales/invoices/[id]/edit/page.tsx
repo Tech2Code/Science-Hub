@@ -25,6 +25,7 @@ import { animateSection } from "@/lib/animateSection";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
+import { useEntitySearch } from "@/lib/useEntitySearch";
 import { InfoBanner } from "@/components/ui/InfoBanner";
 import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
 import styles from "./edit.module.css";
@@ -80,7 +81,7 @@ export default function EditInvoicePage() {
   const [stockOutItems, setStockOutItems] = useState<{ name: string; available: number; requested: number }[]>([]);
   const [showCreditLimitDialog, setShowCreditLimitDialog] = useState(false);
   const [creditLimitMessage, setCreditLimitMessage] = useState("");
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerId, setCustomerId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -121,8 +122,7 @@ export default function EditInvoicePage() {
       setTransportChargeEnabled(v.transportChargeEnabled);
       setTransportCharge(v.transportCharge ?? "");
       setTransportChargeGstRate(v.transportChargeGstRate ?? "18");
-      const selected = customers.find((c) => c.id === v.customerId);
-      if (selected) setCustomerSearch(selected.name);
+      // The resolve-by-id effect below fills in customerSearch once it fetches this customer's details.
     }
     setShowDraftBanner(false);
     setDraftReady(true);
@@ -144,8 +144,28 @@ export default function EditInvoicePage() {
     transportChargeEnabled, transportCharge, transportChargeGstRate,
   }, !draftReady || saving || !isDirty);
 
-  const filteredCustomers = customers.filter((c) => c.name.toLowerCase().includes(customerSearch.toLowerCase()));
-  const selectedCustomer = customers.find((c) => c.id === customerId);
+  // Resolves customerId → full customer details whenever it's set from elsewhere without an object
+  // in hand (draft-restore) — handleCustomerSelect/saveNewCustomer/saveCustomerEdit and the initial
+  // invoice load (which already has invoice.customer for free) set selectedCustomer directly and
+  // skip this fetch.
+  useEffect(() => {
+    if (!customerId || selectedCustomer?.id === customerId) return;
+    let cancelled = false;
+    fetch(`/api/customers/${customerId}`, { headers: { "x-no-loader": "1" } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c) => {
+        if (cancelled || !c || c.id !== customerId) return;
+        setSelectedCustomer(c);
+        setCustomerSearch((prev) => prev || c.name);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resolves customerId → full details; selectedCustomer is read, not a dep we want to re-trigger on
+  }, [customerId]);
+
+  // pageSize 200 — comfortably covers this app's real customer counts so an empty search still
+  // browses effectively everything, same as before; typing still narrows via live server search.
+  const { results: filteredCustomers } = useEntitySearch<Customer>("/api/customers", customerSearch, { pageSize: 200, enabled: !customerId });
 
   const customerPincodeLookup = usePincodeAutofill((city, state) => {
     setCustomerForm((p) => ({ ...p, city: city || p.city, state: state || p.state }));
@@ -166,6 +186,7 @@ export default function EditInvoicePage() {
   }
 
   const handleCustomerSelect = useCallback((c: Customer) => {
+    setSelectedCustomer(c);
     setCustomerId(c.id);
     setCustomerSearch(c.name);
     setShowCustomerDropdown(false);
@@ -174,6 +195,7 @@ export default function EditInvoicePage() {
   }, [businessState]);
 
   function handleRemoveCustomer() {
+    setSelectedCustomer(null);
     setCustomerId("");
     setCustomerSearch("");
     setShowCustomerDropdown(true);
@@ -249,8 +271,8 @@ export default function EditInvoicePage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setCustomers((prev) => prev.map((c) => (c.id === data.id ? data : c)));
-        if (customerId === data.id) setCustomerSearch(data.name);
+        setSelectedCustomer(data);
+        setCustomerSearch(data.name);
         bustCachePrefix("/api/customers");
         bustCachePrefix("/api/invoices");
         setCustomerModalOpen(false);
@@ -289,7 +311,7 @@ export default function EditInvoicePage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         customerIdempotency.renew();
-        setCustomers((prev) => [...prev, data]);
+        setSelectedCustomer(data);
         setCustomerId(data.id);
         setCustomerSearch(data.name);
         setPlaceOfSupply(data.state ?? "");
@@ -316,18 +338,12 @@ export default function EditInvoicePage() {
       fetchCached(`/api/invoices/${id}`),
       fetchCached("/api/products?pageSize=5000").catch(() => ({ data: [] })),
       fetchCached("/api/settings").catch(() => null),
-      fetchCached("/api/customers?pageSize=5000").catch(() => ({ data: [] })),
-    ]).then(([inv, prods, settings, custs]) => {
+    ]).then(([inv, prods, settings]) => {
       const invoice = inv as InvoiceData;
       const products = (prods as { data: Product[] }).data ?? [];
-      const customerList = (custs as { data: Customer[] }).data ?? [];
-      // The invoice's own customer may be a one-off (soft-deleted) row not returned by /api/customers — keep it visible either way.
-      const mergedCustomers = customerList.some((c) => c.id === invoice.customer.id)
-        ? customerList
-        : [...customerList, invoice.customer];
       setInvoice(invoice);
       setProducts(products);
-      setCustomers(mergedCustomers);
+      setSelectedCustomer(invoice.customer);
       setCustomerId(invoice.customer.id);
       setCustomerSearch(invoice.customer.name);
       setBusinessState((settings as { state?: string } | null)?.state ?? "");

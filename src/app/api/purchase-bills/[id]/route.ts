@@ -15,7 +15,7 @@ import { getIndianFinancialYear } from "@/lib/documentNumbering";
 class BillConflictError extends Error {}
 
 const BILL_INCLUDE = {
-  vendor: { select: { id: true, name: true, company: true, phone: true, email: true, gstin: true, address: true, state: true, isActive: true, updatedAt: true } },
+  vendor: { select: { id: true, name: true, company: true, phone: true, email: true, gstin: true, address: true, city: true, pincode: true, state: true, isActive: true, updatedAt: true } },
   createdBy: { select: { id: true, name: true } },
   items: { include: { product: { select: { id: true, name: true, unit: true } } } },
   payments: { orderBy: { date: "desc" as const } },

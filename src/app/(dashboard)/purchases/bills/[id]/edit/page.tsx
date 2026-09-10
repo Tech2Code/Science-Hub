@@ -19,7 +19,7 @@ import { PurchaseBillFormBody } from "@/components/purchases/PurchaseBillFormBod
 import { purchaseBillAttachmentPendingHref, purchaseBillAttachmentByIdHref } from "@/lib/attachmentHref";
 import {
   toNum, fmtCurrency, computePurchaseBillTotals, calcPurchaseBillItem,
-  type PurchaseBillLineItem, type PurchaseBillProduct, type PurchaseBillVendor,
+  type PurchaseBillLineItem, type PurchaseBillProduct,
 } from "@/lib/purchaseBillForm";
 import { computeRoundOff } from "@/lib/roundOff";
 import { useFormDraft, loadFormDraft, clearFormDraft } from "@/lib/useFormDraft";
@@ -41,7 +41,7 @@ interface PurchaseBill {
   subtotal: number; taxAmount: number; discount: number; total: number; paidAmount: number;
   transportCharge?: number; transportChargeGstRate?: number;
   attachmentUrl: string | null; attachmentName: string | null; attachmentSize: number | null;
-  vendor: { id: string; name: string; company: string | null; gstin: string | null; isActive?: boolean };
+  vendor: { id: string; name: string; company: string | null; gstin: string | null; city?: string | null; state?: string | null; pincode?: string | null; isActive?: boolean };
   items: BillItem[];
 }
 
@@ -84,7 +84,6 @@ export default function EditPurchaseBillPage() {
     if (session?.user?.role === "manager") router.replace("/dashboard");
   }, [session, router]);
 
-  const [vendors,  setVendors]  = useState<PurchaseBillVendor[]>([]);
   const [products, setProducts] = useState<PurchaseBillProduct[]>([]);
   const [bill,    setBill]    = useState<PurchaseBill | null>(null);
   const [loading, setLoading] = useState(true);
@@ -186,13 +185,9 @@ export default function EditPurchaseBillPage() {
       // the r.ok check, the {error: "..."} body would silently be treated as the bill itself and
       // crash the render below on bill.vendor.name.
       fetch(`/api/purchase-bills/${id}`, { headers: { "x-no-loader": "1" } }).then(r => { if (!r.ok) throw new Error("Failed to load bill."); return r.json(); }),
-      fetch("/api/vendors?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
       fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
-    ]).then(([b, v, p]: [PurchaseBill, { data: PurchaseBillVendor[] }, { data: PurchaseBillProduct[] }]) => {
+    ]).then(([b, p]: [PurchaseBill, { data: PurchaseBillProduct[] }]) => {
       setBill(b);
-      // A "one-off" vendor is soft-deleted at creation so /api/vendors omits it; inject it back so the select isn't blank.
-      const fetchedVendors = v.data ?? [];
-      setVendors(b.vendor && !fetchedVendors.some(x => x.id === b.vendor.id) ? [...fetchedVendors, b.vendor] : fetchedVendors);
       setProducts(p.data ?? []);
       setVendorId(b.vendorId ?? "");
       setBillDate(b.billDate ? toIstDateStr(new Date(b.billDate)) : "");
@@ -512,11 +507,9 @@ export default function EditPurchaseBillPage() {
               onDismiss={dismissDraft}
             />
           )}
-          vendors={vendors}
           vendorId={vendorId}
           onVendorIdChange={(id) => { setVendorId(id); setVendorError(undefined); }}
-          onVendorCreated={(v) => setVendors(prev => [...prev, v])}
-          onVendorUpdated={(v) => setVendors(prev => prev.map(p => p.id === v.id ? v : p))}
+          initialVendor={bill?.vendor}
           vendorError={vendorError}
           category={category}
           onCategoryChange={setCategory}

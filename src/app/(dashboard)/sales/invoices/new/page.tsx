@@ -17,6 +17,7 @@ import { INDIA_STATES_FULL } from "@/lib/states";
 import { usePincodeAutofill } from "@/lib/usePincodeLookup";
 import { InvoiceOptionsRow } from "@/components/invoices/InvoiceOptionsRow";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
+import { useEntitySearch } from "@/lib/useEntitySearch";
 import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
 import { computeInvoiceTotals, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
 import styles from "./new.module.css";
@@ -54,7 +55,7 @@ export default function NewInvoicePage() {
   useEffect(() => {
     if (session?.user?.role === "manager") router.replace("/dashboard");
   }, [session, router]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [customerId, setCustomerId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -152,18 +153,11 @@ export default function NewInvoicePage() {
   }, !draftReady || saving);
 
   useEffect(() => {
-    fetch("/api/customers?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { data: Customer[] }) => {
-      const all = res.data ?? [];
-      setCustomers(all);
-      const prefillId = searchParams.get("customerId");
-      if (prefillId) {
-        const found = all.find((c) => c.id === prefillId);
-        if (found) {
-          setCustomerId(found.id);
-          setCustomerSearch(found.name);
-        }
-      }
-    }).catch(() => {});
+    // The resolve-by-id effect below fetches full customer details for this once it's set — no
+    // need to prefetch/validate against the full customer list here.
+    const prefillId = searchParams.get("customerId");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (prefillId) setCustomerId(prefillId);
     fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { data: Product[] }) => setProducts(res.data ?? [])).catch(() => {});
     fetch("/api/invoices/next-number", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { documentNumber?: string }) => setNextInvoiceNumber(res.documentNumber ?? "")).catch(() => {});
     fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((s) => {
@@ -186,8 +180,27 @@ export default function NewInvoicePage() {
     setShowFirstInvoiceNudge(false);
   }
 
-  const filteredCustomers = customers.filter((c) => c.name.toLowerCase().includes(customerSearch.toLowerCase()));
-  const selectedCustomer = customers.find((c) => c.id === customerId);
+  // Resolves customerId → full customer details whenever it's set from elsewhere without an object
+  // in hand (draft-restore, ?customerId= URL prefill) — handleCustomerSelect/saveNewCustomer/
+  // saveCustomerEdit set selectedCustomer directly and skip this fetch.
+  useEffect(() => {
+    if (!customerId || selectedCustomer?.id === customerId) return;
+    let cancelled = false;
+    fetch(`/api/customers/${customerId}`, { headers: { "x-no-loader": "1" } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c) => {
+        if (cancelled || !c || c.id !== customerId) return;
+        setSelectedCustomer(c);
+        setCustomerSearch((prev) => prev || c.name);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resolves customerId → full details; selectedCustomer is read, not a dep we want to re-trigger on
+  }, [customerId]);
+
+  // pageSize 200 — comfortably covers this app's real customer counts so an empty search still
+  // browses effectively everything, same as before; typing still narrows via live server search.
+  const { results: filteredCustomers } = useEntitySearch<Customer>("/api/customers", customerSearch, { pageSize: 200, enabled: !customerId });
   const customCustomerDirty = useDirty(customCustomer);
 
   function applyPlaceOfSupply(state: string) {
@@ -210,6 +223,7 @@ export default function NewInvoicePage() {
   }
 
   const handleCustomerSelect = useCallback((c: Customer) => {
+    setSelectedCustomer(c);
     setCustomerId(c.id);
     setCustomerSearch(c.name);
     setShowCustomerDropdown(false);
@@ -267,7 +281,7 @@ export default function NewInvoicePage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setCustomers((prev) => prev.map((c) => (c.id === data.id ? data : c)));
+        setSelectedCustomer(data);
         setCustomerSearch(data.name);
         applyPlaceOfSupply(data.state ?? "");
         bustCachePrefix("/api/customers");
@@ -308,7 +322,7 @@ export default function NewInvoicePage() {
       const data = await res.json();
       if (res.ok) {
         customerIdempotency.renew();
-        setCustomers((prev) => [...prev, data]);
+        setSelectedCustomer(data);
         setCustomerId(data.id);
         setCustomerSearch(data.name);
         applyPlaceOfSupply(data.state ?? "");
@@ -601,7 +615,7 @@ export default function NewInvoicePage() {
                     <button type="button" onClick={() => openCustomerEdit(selectedCustomer)} className={styles.dropdownEmptyLink}>Edit</button>
                     <button
                       type="button"
-                      onClick={() => { setCustomerId(""); setCustomerSearch(""); }}
+                      onClick={() => { setSelectedCustomer(null); setCustomerId(""); setCustomerSearch(""); }}
                       className={styles.removeCustomLink}
                     >
                       Remove

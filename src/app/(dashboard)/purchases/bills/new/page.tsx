@@ -15,7 +15,7 @@ import { PurchaseBillFormBody } from "@/components/purchases/PurchaseBillFormBod
 import { RecordPaymentDialog, type PaymentDraft } from "@/components/purchases/RecordPaymentDialog";
 import {
   toNum, fmtCurrency, computePurchaseBillTotals, calcPurchaseBillItem,
-  type PurchaseBillLineItem, type PurchaseBillProduct, type PurchaseBillVendor,
+  type PurchaseBillLineItem, type PurchaseBillProduct,
 } from "@/lib/purchaseBillForm";
 import { InfoBanner } from "@/components/ui/InfoBanner";
 import { DiscardDraftConfirm } from "@/components/dialogs/DiscardDraftConfirm";
@@ -40,7 +40,6 @@ export default function NewPurchaseBillPage() {
     if (session?.user?.role === "manager") router.replace("/dashboard");
   }, [session, router]);
 
-  const [vendors,  setVendors]  = useState<PurchaseBillVendor[]>([]);
   const [products, setProducts] = useState<PurchaseBillProduct[]>([]);
   const [saving,   setSaving]   = useState(false);
 
@@ -102,12 +101,12 @@ export default function NewPurchaseBillPage() {
   }
 
   useEffect(() => {
-    fetch("/api/vendors?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then((res: { data: PurchaseBillVendor[] }) => {
-      const all = res.data ?? [];
-      setVendors(all);
-      const prefillVendorId = searchParams.get("vendorId");
-      if (prefillVendorId && all.some(v => v.id === prefillVendorId)) setVendorId(prefillVendorId);
-    }).catch(() => {});
+    // BillDetailsCard resolves this id to full vendor details itself (GET /api/vendors/[id]) —
+    // no need to prefetch/validate against the full vendor list here. One-time sync from the
+    // initial URL (an external system) on mount — a legitimate effect, not state derivable from render.
+    const prefillVendorId = searchParams.get("vendorId");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (prefillVendorId) setVendorId(prefillVendorId);
     fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then((res: { data: PurchaseBillProduct[] }) => setProducts(res.data ?? [])).catch(() => {});
     fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((s) => {
       const numberingUntouched = !s?.purchaseBillNumberPrefix && !s?.nextPurchaseBillNumberOverride && !s?.purchaseBillNumberFormat;
@@ -439,11 +438,8 @@ export default function NewPurchaseBillPage() {
               )}
             </>
           }
-          vendors={vendors}
           vendorId={vendorId}
           onVendorIdChange={(id) => { setVendorId(id); setVendorError(undefined); }}
-          onVendorCreated={(v) => setVendors(prev => [...prev, v])}
-          onVendorUpdated={(v) => setVendors(prev => prev.map(p => p.id === v.id ? v : p))}
           vendorError={vendorError}
           category={category}
           onCategoryChange={setCategory}
