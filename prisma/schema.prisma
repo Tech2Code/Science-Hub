@@ -246,6 +246,20 @@ model InvoiceItem {
   gstRate           Float
   gstAmount         Float
   total             Float
+  // Actual per-unit purchase cost of this sold line, computed by src/lib/inventoryCosting.ts's
+  // chronological weighted-average-cost (WAC) replay of every PurchaseBillItem/InvoiceItem/
+  // ReturnItem for this product, ordered by document date — NOT the synthetic
+  // Product.purchasePrice master. Recomputed (for every item of the affected product, not just
+  // this one) any time a purchase/sale/return touching this product is created, edited, deleted,
+  // or restored, since a backdated document can change the correct cost of everything after it.
+  // Nullable: legacy rows never recomputed since this column was added.
+  costPrice         Float?
+  // "ledger" = a real weighted-average cost was available from purchase history at the time of
+  // sale. "fallback" = no stock was available yet (sold before any qualifying purchase, or an
+  // oversold/negative-stock line), so Product.purchasePrice was used as a placeholder — if a
+  // later (even backdated) purchase for this product supplies real history, the next recompute
+  // upgrades this row from "fallback" to "ledger" automatically. Null on legacy rows.
+  costSource        String?
   invoice           Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   product           Product? @relation(fields: [productId], references: [id])
 
@@ -310,6 +324,12 @@ model ReturnItem {
   gstRate         Float    @default(0)
   gstAmount       Float    @default(0)
   total           Float
+  // The running weighted-average cost AT THE MOMENT OF THIS RETURN (src/lib/inventoryCosting.ts) —
+  // there's no link back to the specific InvoiceItem being reversed, so this is the best available
+  // approximation (neither a paper profit nor a paper loss on the returned units) rather than the
+  // exact original sale's frozen cost. Nullable: legacy rows never recomputed since this column
+  // was added, and any line whose product has no cost data at all.
+  costPrice       Float?
 }
 
 model BusinessSettings {

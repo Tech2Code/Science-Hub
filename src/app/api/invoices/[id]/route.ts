@@ -288,6 +288,11 @@ export async function PUT(
 
       await tx.invoiceItem.deleteMany({ where: { invoiceId: id } });
 
+      // costPrice/costSource are left unset here — batchAdjustStock() below (for the new items)
+      // triggers recostProducts() (src/lib/inventoryCosting.ts), which replays every affected
+      // product's full purchase/sale/return history in document-date order and fills them in —
+      // correctly re-costing a backdated edit and everything that comes after it, not just this
+      // invoice's own lines.
       const inv = await tx.invoice.update({
         where: { id },
         data: {

@@ -1,17 +1,44 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
+import { PeriodFilter, defaultPeriod, periodLabel, type PeriodValue } from "@/components/dashboard/PeriodFilter";
 import { StatusBadge } from "@/components/ui/Badge";
 import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
-import { formatMonthYear } from "@/lib/formatDate";
 import styles from "./dashboardHome.module.css";
 
 interface RecentInvoice { id: string; invoiceNumber: string; date: string; customerName: string; total: number; paidAmount: number; status: string; }
 interface RecentBill { id: string; billNumber: string; billDate: string; vendorName: string; total: number; paidAmount: number; status: string; }
+interface FinancialFigures {
+  // Actual Profit section — fully netted
+  grossSales: number;            // sales incl. GST (incl. transport)
+  gst: number;                   // output GST
+  netSales: number;              // grossSales - gst
+  returnNet: number;             // credit notes' own ex-GST value
+  netSalesAfterReturns: number;  // netSales - returnNet
+  cogs: number;                  // real cost of goods sold (WAC, from src/lib/inventoryCosting.ts)
+  returnCogs: number;            // cost of the returned quantity
+  netCogs: number;                // cogs - returnCogs
+  grossProfit: number;           // netSalesAfterReturns - netCogs
+  costedQty: number;    // qty sold with a real weighted-average cost
+  estimatedQty: number; // qty sold using Product.purchasePrice as a placeholder (no purchase history yet)
+  uncostedQty: number;  // qty sold with no product cost at all (legacy, never recomputed)
+  // Cash Flow section — simple totals, deliberately not netted against each other
+  totalSales: number;
+  totalPurchases: number;
+}
+interface FinancialMonth extends FinancialFigures { month: string; future: boolean; }
+interface DashboardFinancials {
+  fyLabel: string;
+  canSeeSales: boolean;
+  canSeePurchases: boolean;
+  total: FinancialFigures;
+  monthly: FinancialMonth[];
+}
 interface CombinedDashboard {
   // Null when the user lacks the matching section grant — server-redacted, not client-hidden.
   sales: {
@@ -30,46 +57,48 @@ interface CombinedDashboard {
   } | null;
   lowStockCount: number;
   outOfStockCount: number;
+  financials?: DashboardFinancials | null;
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-function SectionLabel({ children }: { children: string }) {
+// Tiny inline "i" affordance — uses the native title tooltip (no extra deps) plus an accessible label.
+function InfoDot({ text }: { text: string }) {
   return (
-    <div className={styles.sectionLabel}>
-      {children}
+    <span className={styles.infoDot} title={text} role="img" aria-label={text} tabIndex={0}>i</span>
+  );
+}
+
+type FinTone = "neutral" | "blue" | "amber" | "green" | "red";
+// One compact financial tile: label + info tooltip, prominent value, small helper line.
+function FinTile({ label, value, help, info, tone = "neutral", loading }: {
+  label: string; value: string; help: string; info: string; tone?: FinTone; loading?: boolean;
+}) {
+  return (
+    <div className={`${styles.finTile} ${styles[`finTone_${tone}`]}`}>
+      <div className={styles.finTileLabelRow}>
+        <span className={styles.finTileLabel}>{label}</span>
+        <InfoDot text={info} />
+      </div>
+      {loading
+        ? <div className={`${styles.kpiCardSkeleton} ${styles.skeletonPulse}`} />
+        : <div className={styles.finTileValue}>{value}</div>}
+      <div className={styles.finTileHelp}>{help}</div>
     </div>
   );
 }
 
 type Tone = "blue" | "amber" | "red" | "green" | "neutral";
 
-const KPI_ICONS: Record<string, React.ReactNode> = {
-  trendUp: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>,
-  trendDown: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 18l-9.5-9.5-5 5L1 6"/><path d="M17 18h6v-6"/></svg>,
-  clock: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
-  alert: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
-  check: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
-  wallet: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg>,
-};
-
-function KpiCard({ icon, label, value, tone = "neutral", loading }: { icon: keyof typeof KPI_ICONS; label: string; value: string; tone?: Tone; loading?: boolean }) {
-  return (
-    <div className={`card ${styles.kpiCard}`} data-tone={tone}>
-      <div className={styles.kpiIconWrap}>{KPI_ICONS[icon]}</div>
-      <div className={styles.kpiBody}>
-        <div className={styles.kpiLabel}>{label}</div>
-        {loading
-          ? <div className={`${styles.kpiCardSkeleton} ${styles.skeletonPulse}`} />
-          : <div className={styles.kpiValue}>{value}</div>
-        }
-      </div>
-    </div>
-  );
-}
-
 export default function DashboardPage() {
-  const { data, loading, error } = useFetch<CombinedDashboard>("/api/reports?type=combined-dashboard");
+  // Financial Summary period: a financial year + (whole year | a month). Default = current FY, full year.
+  const [finPeriod, setFinPeriod] = useState<PeriodValue>(defaultPeriod());
+  // "How your profit is calculated" is a collapsible accordion under the Actual Profit tiles —
+  // starts open since it was always-visible before this was made collapsible.
+  const [profitBreakdownOpen, setProfitBreakdownOpen] = useState(true);
+  // Fetch is scoped to the chosen FY (so a past FY refetches). Month drill-down within the loaded FY
+  // is done client-side from financials.monthly, so switching months is instant with no refetch.
+  const { data, loading, error } = useFetch<CombinedDashboard>(`/api/reports?type=combined-dashboard&fy=${finPeriod.fyStartYear}`);
   const { data: session } = useSession();
   const role = session?.user?.role;
   const sections = session?.user?.sections ?? [];
@@ -81,6 +110,30 @@ export default function DashboardPage() {
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   const canWrite = role !== "manager";
+
+  const financials = data?.financials ?? null;
+  const EMPTY_FIN: FinancialFigures = {
+    grossSales: 0, gst: 0, netSales: 0, returnNet: 0, netSalesAfterReturns: 0,
+    cogs: 0, returnCogs: 0, netCogs: 0, grossProfit: 0,
+    costedQty: 0, estimatedQty: 0, uncostedQty: 0,
+    totalSales: 0, totalPurchases: 0,
+  };
+  // periodLabel() builds the same en-IN/IST short month label ("Sep 2026") the server uses for
+  // financials.monthly[].month, so a chosen month matches its row exactly. "Full year" → FY total.
+  const finPeriodLabel = periodLabel(finPeriod);
+  const finMonth = finPeriod.month0 === "all"
+    ? null
+    : financials?.monthly.find((m) => m.month === finPeriodLabel) ?? null;
+  const finSelected: FinancialFigures =
+    financials == null ? EMPTY_FIN
+    : finPeriod.month0 === "all" ? financials.total
+    : finMonth ?? EMPTY_FIN;   // a month with no data shows zeros, not the FY total
+  // Gross Profit Margin = (Gross Profit / Net Sales After Returns) × 100. Guard divide-by-zero.
+  const marginPct = finSelected.netSalesAfterReturns > 0 ? (finSelected.grossProfit / finSelected.netSalesAfterReturns) * 100 : null;
+  // Flag when some sold units' cost is missing entirely (legacy rows never recomputed), so the
+  // owner doesn't read profit as more exact than it is.
+  const hasUncostedSales = finSelected.uncostedQty > 0;
+  const cashFlowNet = finSelected.totalSales - finSelected.totalPurchases;
 
   const quickActionSections = [
     {
@@ -139,7 +192,8 @@ export default function DashboardPage() {
           </p>
           <h1 className={styles.heroTitle}>Here&apos;s your business at a glance</h1>
           <p className={styles.heroSub} suppressHydrationWarning>
-            {formatMonthYear()} overview
+            {/* Mirrors the Financial Summary period selector (FY + month). */}
+            {finPeriodLabel} overview
           </p>
         </div>
       </div>
@@ -194,38 +248,156 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Sales & Purchases side-by-side */}
-      {(canSeeSales || canSeePurchases) && (
-      <div {...animateSection(3, styles.sideBySideGrid)}>
-        {/* SALES half */}
-        {canSeeSales && (
-        <div className={styles.sideBySideCol}>
-          <SectionLabel>Sales</SectionLabel>
-          <div className={styles.kpiGrid}>
-            <KpiCard icon="trendUp" label="Revenue This Month" value={loading ? "—" : fmt(data?.sales?.revenueThisMonth ?? 0)} tone="blue" loading={loading} />
-            <KpiCard icon="clock" label="Outstanding" value={loading ? "—" : fmt(data?.sales?.outstandingAmount ?? 0)} tone="amber" loading={loading} />
-            <KpiCard icon="alert" label="Overdue Invoices" value={loading ? "—" : String(data?.sales?.overdueInvoices ?? 0)} tone={(data?.sales?.overdueInvoices ?? 0) > 0 ? "red" : "neutral"} loading={loading} />
-            <KpiCard icon="check" label="Collected Today" value={loading ? "—" : fmt(data?.sales?.collectedToday ?? 0)} tone="green" loading={loading} />
+      {/* ── Actual Profit: net sales → returns → COGS → gross profit, whole financial year ── */}
+      {canSeeSales && (
+      <div {...animateSection(3, `card ${styles.financialsCard}`)}>
+        <div className={styles.financialsHeader}>
+          <div>
+            <h2 className={styles.cardHeaderTitle}>Actual Profit</h2>
+            <div className={styles.financialsSub}>
+              {loading ? "—" : (finPeriod.month0 === "all" ? "Full year" : "Month")}
+              {" · "}{finPeriodLabel}
+            </div>
+          </div>
+          <PeriodFilter value={finPeriod} onChange={setFinPeriod} disabled={loading} className={styles.financialsSelectWrap} />
+        </div>
+
+        {/* Compact financial tiles */}
+        <div className={styles.finTileGrid}>
+          <FinTile
+            label="Total Sales" tone="blue" loading={loading}
+            value={fmt(finSelected.grossSales)}
+            help="Incl. GST"
+            info="Total invoice value including GST (incl. transport charges)."
+          />
+          <FinTile
+            label="GST Collected" tone="neutral" loading={loading}
+            value={fmt(finSelected.gst)}
+            help="GST within sales"
+            info="The GST portion included in your total sales (incl. transport charge GST)."
+          />
+          <FinTile
+            label="Net Sales" tone="blue" loading={loading}
+            value={fmt(finSelected.netSalesAfterReturns)}
+            help="After GST & returns"
+            info="Total Sales, minus GST, minus the value of any credit notes (returns) — the real revenue actually earned and kept."
+          />
+          <FinTile
+            label="COGS" tone="amber" loading={loading}
+            value={fmt(finSelected.netCogs)}
+            help="Cost of goods actually sold"
+            info="Actual weighted-average cost of the goods sold (from real purchase-bill history), minus the cost of any returned quantity."
+          />
+          <FinTile
+            label="Gross Profit" tone={finSelected.grossProfit < 0 ? "red" : "green"} loading={loading}
+            value={fmt(finSelected.grossProfit)}
+            help="Net Sales − COGS"
+            info="Net Sales (after returns) minus Net Cost of Goods Sold."
+          />
+          <FinTile
+            label="Profit Margin" tone={finSelected.grossProfit < 0 ? "red" : "green"} loading={loading}
+            value={marginPct == null ? "—" : `${marginPct.toFixed(2)}%`}
+            help="Gross Profit ÷ Net Sales"
+            info="Gross Profit divided by Net Sales (after returns), shown as a percentage."
+          />
+        </div>
+
+        {/* How your profit is calculated — collapsible, every step in order */}
+        <div className={styles.calcBreakdown}>
+          <button
+            type="button"
+            className={styles.calcToggle}
+            aria-expanded={profitBreakdownOpen}
+            aria-controls="profit-breakdown-panel"
+            onClick={() => setProfitBreakdownOpen((v) => !v)}
+          >
+            <span>How your profit is calculated</span>
+            <svg
+              className={`${styles.calcToggleIcon} ${profitBreakdownOpen ? styles.calcToggleIconOpen : ""}`}
+              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <div id="profit-breakdown-panel" className={`${styles.calcAccordion} ${profitBreakdownOpen ? styles.calcAccordionOpen : ""}`}>
+            <div className={styles.calcAccordionInner}>
+              <div className={styles.calcAccordionContent}>
+                <div className={styles.calcRow}><span>Total Sales <em>(incl. GST)</em></span><span>{loading ? "—" : fmt(finSelected.grossSales)}</span></div>
+                <div className={styles.calcRow}><span>− GST</span><span className={styles.calcNeg}>{loading ? "—" : `− ${fmt(finSelected.gst)}`}</span></div>
+                <div className={`${styles.calcRow} ${styles.calcSubtotal}`}><span>= Net Sales</span><span>{loading ? "—" : fmt(finSelected.netSales)}</span></div>
+                <div className={styles.calcRow}><span>− Sales Returns <em>(credit notes, ex-GST)</em></span><span className={styles.calcNeg}>{loading ? "—" : `− ${fmt(finSelected.returnNet)}`}</span></div>
+                <div className={`${styles.calcRow} ${styles.calcSubtotal}`}><span>= Net Sales After Returns</span><span>{loading ? "—" : fmt(finSelected.netSalesAfterReturns)}</span></div>
+                <div className={styles.calcRow}><span>− COGS <em>(cost of goods sold)</em></span><span className={styles.calcNeg}>{loading ? "—" : `− ${fmt(finSelected.cogs)}`}</span></div>
+                <div className={styles.calcRow}><span>+ Cost of Returned Goods</span><span>{loading ? "—" : `+ ${fmt(finSelected.returnCogs)}`}</span></div>
+                <div className={`${styles.calcRow} ${styles.calcTotal}`}>
+                  <span>= Gross Profit</span>
+                  <span className={finSelected.grossProfit < 0 ? styles.calcLoss : styles.calcProfit}>{loading ? "—" : fmt(finSelected.grossProfit)}</span>
+                </div>
+                <div className={styles.financialsNote}>
+                  COGS uses each product&apos;s real weighted-average purchase cost (from actual purchase-bill history), not just its list/master price — so it reflects what the goods actually cost, blended across every batch bought.
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        )}
-        {/* PURCHASES half */}
-        {canSeePurchases && (
-        <div className={styles.sideBySideCol}>
-          <SectionLabel>Purchases</SectionLabel>
-          <div className={styles.kpiGrid}>
-            <KpiCard icon="trendDown" label="Spend This Month" value={loading ? "—" : fmt(data?.purchases?.spendThisMonth ?? 0)} tone="amber" loading={loading} />
-            <KpiCard icon="wallet" label="Payable Balance" value={loading ? "—" : fmt(data?.purchases?.payableBalance ?? 0)} tone="amber" loading={loading} />
-            <KpiCard icon="alert" label="Overdue Bills" value={loading ? "—" : String(data?.purchases?.overdueBills ?? 0)} tone={(data?.purchases?.overdueBills ?? 0) > 0 ? "red" : "neutral"} loading={loading} />
-            <KpiCard icon="check" label="Paid Today" value={loading ? "—" : fmt(data?.purchases?.paidToday ?? 0)} tone="green" loading={loading} />
+
+        {!loading && hasUncostedSales && (
+          <div className={styles.financialsWarn}>
+            COGS and profit are understated for some sales — those line items have no cost data at all (usually a legacy sale from before cost tracking started). They&apos;ll be corrected the next time that product&apos;s history is recomputed.
           </div>
-        </div>
         )}
       </div>
       )}
 
+      {/* ── Cash Flow: total money in vs total money out, simple totals (not profit) ── */}
+      {(canSeeSales || canSeePurchases) && (
+      <div {...animateSection(4, `card ${styles.financialsCard}`)}>
+        <div className={styles.financialsHeader}>
+          <div>
+            <h2 className={styles.cardHeaderTitle}>Cash Flow</h2>
+            <div className={styles.financialsSub}>
+              {loading ? "—" : (finPeriod.month0 === "all" ? "Full year" : "Month")}
+              {" · "}{finPeriodLabel}
+            </div>
+          </div>
+          <PeriodFilter value={finPeriod} onChange={setFinPeriod} disabled={loading} className={styles.financialsSelectWrap} />
+        </div>
+
+        <div className={styles.finTileGrid}>
+          {canSeeSales && (
+            <FinTile
+              label="Total Sales" tone="blue" loading={loading}
+              value={fmt(finSelected.totalSales)}
+              help="Money billed to customers"
+              info="Total invoice value including GST — the simple total billed, with nothing netted out."
+            />
+          )}
+          {canSeePurchases && (
+            <FinTile
+              label="Total Purchases" tone="amber" loading={loading}
+              value={fmt(finSelected.totalPurchases)}
+              help="Money billed by vendors"
+              info="Total purchase bill value including GST — everything bought in the period, whether or not it has sold yet."
+            />
+          )}
+          {canSeeSales && canSeePurchases && (
+            <FinTile
+              label="Net (Sales − Purchases)" tone={cashFlowNet < 0 ? "red" : "neutral"} loading={loading}
+              value={fmt(cashFlowNet)}
+              help="Not profit — see note below"
+              info="Total Sales minus Total Purchases. This is a simple cash comparison, not profit — see the note below."
+            />
+          )}
+        </div>
+
+        <div className={styles.financialsNote}>
+          This is a simple cash comparison — total billed vs total spent — not profit. A bulk purchase of stock that hasn&apos;t sold yet will show up here as a big spend with nothing to offset it; that&apos;s expected for a cash-flow view. For real profit (which correctly excludes unsold stock), see Actual Profit above.
+        </div>
+      </div>
+      )}
+
       {/* Recent invoices & bills */}
-      <div {...animateSection(4, styles.recentGrid)}>
+      <div {...animateSection(5, styles.recentGrid)}>
         <div className="card">
           <div className={styles.cardHeader}>
             <h2 className={styles.cardHeaderTitle}>Recent Invoices</h2>
@@ -289,7 +461,7 @@ export default function DashboardPage() {
           </div>
         </div>
       ) : ((data?.lowStockCount ?? 0) > 0 || (data?.outOfStockCount ?? 0) > 0) && (
-        <div {...animateSection(5, `card ${styles.lowStockCard}`)}>
+        <div {...animateSection(6, `card ${styles.lowStockCard}`)}>
           <div className={styles.lowStockIconWrap}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--c-red)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </div>

@@ -7,6 +7,7 @@ import {
 } from "@/lib/gstValidation";
 import { istDayStartUtc, istDayEndUtc } from "@/lib/validation";
 import { getGstPosLabel } from "@/lib/gstStateCodes";
+import { computeRoundOff } from "@/lib/roundOff";
 
 // Same resolvability check the GSTR-1 CSV exporter (`resolvePos()` in gstr1CsvExport.ts) uses to
 // drop a row it can't place — applied here too so the headline summary/HSN-B2B/HSN-B2C figures
@@ -65,7 +66,7 @@ export interface GstFilingReport {
     creditNoteTaxable: number; creditNoteTax: number;
     netOutputTax: number;
     inputTaxable: number; inputTax: number;
-    netGstPayable: number;
+    rawNetGstPayable: number; netGstPayableRoundOff: number; netGstPayable: number;
   };
   validation: { issues: ValidationIssue[]; errorCount: number; warningCount: number };
 }
@@ -348,6 +349,13 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
   const inputTax = purchaseRegister.reduce((s, r) => s + r.taxAmount, 0);
   const netOutputTax = outputTax - creditNoteTax;
 
+  // Net GST Payable is what the business actually remits (or claims back), so it's rounded to the
+  // nearest rupee just like an invoice/purchase-bill grand total. computeRoundOff handles negatives
+  // (a refund) too. We keep the raw figure and the signed round-off adjustment so the UI can show
+  // both the rounded headline and, if needed, the exact pre-rounding value.
+  const rawNetGstPayable = netOutputTax - inputTax;
+  const { roundOff: netGstPayableRoundOff, roundedTotal: netGstPayable } = computeRoundOff(rawNetGstPayable);
+
   return {
     period: { startDate, endDate, label: `${formatDate(startDate)} – ${formatDate(endDate)}` },
     company,
@@ -357,7 +365,7 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
       outputTaxable, outputCgst, outputSgst, outputIgst, outputTax,
       creditNoteTaxable, creditNoteTax, netOutputTax,
       inputTaxable, inputTax,
-      netGstPayable: netOutputTax - inputTax,
+      rawNetGstPayable, netGstPayableRoundOff, netGstPayable,
     },
     validation: {
       issues,

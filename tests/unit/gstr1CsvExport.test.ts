@@ -18,7 +18,7 @@ function baseReport(overrides: Partial<GstFilingReport> = {}): GstFilingReport {
     summary: {
       outputTaxable: 0, outputCgst: 0, outputSgst: 0, outputIgst: 0, outputTax: 0,
       creditNoteTaxable: 0, creditNoteTax: 0, netOutputTax: 0,
-      inputTaxable: 0, inputTax: 0, netGstPayable: 0,
+      inputTaxable: 0, inputTax: 0, rawNetGstPayable: 0, netGstPayableRoundOff: 0, netGstPayable: 0,
     },
     validation: { issues: [], errorCount: 0, warningCount: 0 },
     ...overrides,

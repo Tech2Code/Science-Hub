@@ -275,3 +275,19 @@
   text-align: right;
   color: var(--balance-color, var(--c-text));
 }
+
+/* KPI section wrapper — groups the period filter with the four KPIs it scopes. */
+.kpiSection { display: flex; flex-direction: column; gap: 0.75rem; }
+.kpiSectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* FY + Month filter — the two dropdowns' own widths come from PeriodFilter.module.css. */
+.periodSelectWrap { flex-shrink: 0; }
+@media (max-width: 520px) {
+  .periodSelectWrap { width: 100%; }
+}

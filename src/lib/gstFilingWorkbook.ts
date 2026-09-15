@@ -136,11 +136,14 @@ export function buildGstFilingWorkbook(report: GstFilingReport): ExcelJS.Workboo
       { label: "Net Output Tax", value: money(s.netOutputTax) },
       { label: "Input Taxable Value (Purchases)", value: money(s.inputTaxable) },
       { label: "Input Tax Credit (ITC)", value: money(s.inputTax) },
-      { label: "Net GST Payable (Net Output Tax − ITC)", value: money(s.netGstPayable) },
+      { label: "Net GST Payable (before round off)", value: money(s.rawNetGstPayable) },
+      { label: "Round Off", value: money(s.netGstPayableRoundOff) },
+      { label: "Net GST Payable (Rounded)", value: money(s.netGstPayable) },
     ]
   );
   const gstSummarySheet = wb.getWorksheet("GST Summary");
-  if (gstSummarySheet) gstSummarySheet.getRow(13).font = { bold: true };
+  // Bold the final "Net GST Payable (Rounded)" row — 14 data rows below the header row (row 1) => row 15.
+  if (gstSummarySheet) gstSummarySheet.getRow(15).font = { bold: true };
 
   return wb;
 }

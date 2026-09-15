@@ -264,6 +264,9 @@ export async function POST(request: NextRequest) {
           await tx.businessSettings.update({ where: { id: "singleton" }, data: { nextInvoiceNumberOverride: null } });
         }
 
+        // costPrice/costSource are left unset here — batchAdjustStock() below triggers
+        // recostProducts() (src/lib/inventoryCosting.ts), which fills them in for every item of
+        // every affected product via a full weighted-average-cost replay, once these rows exist.
         const inv = await tx.invoice.create({
           data: {
             invoiceNumber,

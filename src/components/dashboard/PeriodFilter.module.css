@@ -1,0 +1,15 @@
+.group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.fySelect { width: 130px; }
+.monthSelect { width: 150px; }
+
+/* On small phones stack the two selects full-width so they never crowd the header title. */
+@media (max-width: 520px) {
+  .group { width: 100%; flex-direction: column; align-items: stretch; }
+  .fySelect,
+  .monthSelect { width: 100%; }
+}

@@ -992,6 +992,12 @@ export default function PurchaseBillDetailPage() {
       <div className={styles.toolbarRow}>
         <div>
           <Breadcrumb items={[{ label: "Purchase Bills", href: "/purchases/bills" }, { label: bill.billNumber }]} />
+          {(bill.createdBy?.name || bill.createdAt) && (
+            <div className={styles.metaText}>
+              {bill.createdBy?.name && <>Created by {bill.createdBy.name}</>}
+              {bill.createdAt && <> · {formatDateTime(bill.createdAt)}</>}
+            </div>
+          )}
         </div>
         <div className={styles.toolbarActions}>
           <StatusBadge status={bill.status} />
@@ -1024,7 +1030,7 @@ export default function PurchaseBillDetailPage() {
           </Button>
           <Button variant="secondary" size="sm" onClick={() => handleDownloadPdf(false)} disabled={pdfDownloading}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            {pdfDownloading ? "Generating…" : "Download PDF"}
+            {pdfDownloading ? "Generating…" : "PDF"}
           </Button>
           <Button variant="secondary" size="sm" title="Discard the cached PDF and download a freshly generated copy" aria-label="Regenerate PDF" onClick={() => handleDownloadPdf(true)} disabled={pdfDownloading}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
@@ -1236,8 +1242,6 @@ export default function PurchaseBillDetailPage() {
           <InfoRow label="Bill Date"   value={formatDate(bill.billDate)} />
           <InfoRow label="Due Date"    value={bill.dueDate ? formatDate(bill.dueDate) : "Not set"} />
           <InfoRow label="Category"    value={bill.category || "—"} />
-          <InfoRow label="Created By"  value={bill.createdBy.name} />
-          <InfoRow label="Created At"  value={formatDateTime(bill.createdAt)} />
           {bill.attachmentUrl && (
             <div className={styles.infoRow}>
               <span className={styles.infoRowLabel}>Attachment</span>

@@ -29,7 +29,8 @@ interface GstFilingReport {
   hsnSummary: unknown[];
   summary: {
     outputTaxable: number; outputTax: number; creditNoteTax: number; netOutputTax: number;
-    inputTaxable: number; inputTax: number; netGstPayable: number;
+    inputTaxable: number; inputTax: number;
+    rawNetGstPayable: number; netGstPayableRoundOff: number; netGstPayable: number;
   };
   validation: { issues: ValidationIssue[]; errorCount: number; warningCount: number };
 }
@@ -278,8 +279,11 @@ export default function GstFilingPage() {
                 { label: "Net Output Tax", value: fmt(report.summary.netOutputTax) },
                 { label: "Input Tax Credit", value: fmt(report.summary.inputTax) },
                 {
-                  label: "Net GST Payable",
+                  label: "Net GST Payable (Rounded)",
                   value: fmt(report.summary.netGstPayable),
+                  sub: report.summary.netGstPayableRoundOff !== 0
+                    ? `Round off ${report.summary.netGstPayableRoundOff > 0 ? "+" : "−"}${fmt(Math.abs(report.summary.netGstPayableRoundOff))} · exact ${fmt(report.summary.rawNetGstPayable)}`
+                    : undefined,
                   valueClassName:
                     report.summary.netGstPayable < 0
                       ? styles.summaryCardValueRefund
@@ -287,10 +291,11 @@ export default function GstFilingPage() {
                         ? styles.summaryCardValueDue
                         : undefined,
                 },
-              ] as { label: string; value: string; valueClassName?: string }[]).map(({ label, value, valueClassName }) => (
+              ] as { label: string; value: string; valueClassName?: string; sub?: string }[]).map(({ label, value, valueClassName, sub }) => (
                 <div key={label} className={styles.summaryCard}>
                   <div className={styles.summaryCardLabel}>{label}</div>
                   <div className={`${styles.summaryCardValue} ${valueClassName ?? ""}`}>{value}</div>
+                  {sub && <div className={styles.summaryCardSub}>{sub}</div>}
                 </div>
               ))}
             </div>

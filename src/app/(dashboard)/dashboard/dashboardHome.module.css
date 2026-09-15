@@ -377,6 +377,239 @@
   color: var(--c-text-2);
 }
 
+.financialsCard {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+}
+
+@media (max-width: 760px) {
+  .financialsCard { padding: 1rem 1.15rem; gap: 0.85rem; }
+}
+@media (max-width: 420px) {
+  .financialsCard { padding: 0.85rem 0.9rem; gap: 0.75rem; }
+}
+
+.financialsHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.financialsSub {
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--c-text-3);
+}
+
+/* FY + Month filter in the Financial Summary header — the two dropdowns size themselves
+   (PeriodFilter.module.css); this just keeps them from being squeezed and stacks on phones. */
+.financialsSelectWrap { flex-shrink: 0; }
+@media (max-width: 520px) {
+  .financialsSelectWrap { width: 100%; }
+}
+
+/* ── Six compact financial tiles ── */
+/* Desktop: 3 across × 2 rows (not all 6 cramped on one line). */
+.finTileGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.finTile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--c-border);
+  border-left-width: 3px;
+  border-radius: 0.75rem;
+  background: var(--c-bg-subtle, rgba(255, 255, 255, 0.02));
+  min-width: 0;
+}
+.finTone_neutral { border-left-color: var(--c-border-md); }
+.finTone_blue    { border-left-color: var(--c-blue); }
+.finTone_amber   { border-left-color: var(--c-amber, #d97706); }
+.finTone_green   { border-left-color: var(--c-green-text, #16a34a); }
+.finTone_red     { border-left-color: var(--c-red-text, #dc2626); }
+
+.finTileLabelRow {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.finTileLabel {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--c-text-3);
+  line-height: 1.2;
+}
+.finTileValue {
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--c-text);
+  overflow-wrap: break-word;
+}
+.finTone_blue  .finTileValue { color: var(--c-blue); }
+.finTone_amber .finTileValue { color: var(--c-amber, #d97706); }
+.finTone_green .finTileValue { color: var(--c-green-text, #16a34a); }
+.finTone_red   .finTileValue { color: var(--c-red-text, #dc2626); }
+.finTileHelp {
+  font-size: 0.68rem;
+  color: var(--c-text-3);
+}
+
+/* Tablet & small laptop: 2 across (3 rows). Small phones: 1 per row so values never truncate. */
+@media (max-width: 760px) {
+  .finTileGrid { grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
+  .finTile { padding: 0.85rem 0.9rem; }
+  .finTileValue { font-size: 1.2rem; }
+}
+@media (max-width: 420px) {
+  .finTileGrid { grid-template-columns: 1fr; }
+}
+
+/* ── "How your profit is calculated" breakdown — collapsible, smooth-height accordion ── */
+.calcBreakdown {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--c-border);
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.9rem;
+}
+.calcToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.15rem 0 0.35rem;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--c-text-3);
+  transition: color 150ms ease;
+}
+.calcToggle:hover { color: var(--c-text-2); }
+.calcToggle:focus-visible { outline: 2px solid var(--c-blue); outline-offset: 2px; border-radius: 0.25rem; }
+.calcToggleIcon {
+  flex-shrink: 0;
+  transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.calcToggleIconOpen { transform: rotate(180deg); }
+/* Grid-track height animates from 0fr → 1fr — no JS height measurement needed, and it degrades
+   gracefully to fully-open content if grid-template-rows transitions aren't supported. */
+.calcAccordion {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.calcAccordionOpen { grid-template-rows: 1fr; }
+.calcAccordionInner { overflow: hidden; min-height: 0; }
+.calcAccordionContent { padding-top: 0.1rem; }
+.calcRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.32rem 0;
+  font-size: 0.8125rem;
+  color: var(--c-text-2);
+}
+.calcRow > span:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.calcRow > span:last-child {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--c-text);
+}
+.calcRow em { font-style: normal; color: var(--c-text-3); font-size: 0.72rem; }
+.calcNeg { color: var(--c-text-2) !important; }
+.calcSubtotal {
+  border-top: 1px dashed var(--c-border-md);
+  margin-top: 0.15rem;
+  padding-top: 0.45rem;
+  font-weight: 600;
+  color: var(--c-text);
+}
+.calcTotal {
+  border-top: 2px solid var(--c-border-md);
+  margin-top: 0.15rem;
+  padding-top: 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--c-text);
+}
+.calcProfit { color: var(--c-green-text, #16a34a) !important; }
+.calcLoss { color: var(--c-red-text, #dc2626) !important; }
+.calcAside {
+  border-top: 1px dashed var(--c-border);
+  margin-top: 0.15rem;
+  padding-top: 0.45rem;
+  font-size: 0.78rem;
+  color: var(--c-text-3);
+}
+.calcAside > span:last-child { color: var(--c-text-2); }
+
+.infoDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--c-border-md);
+  font-size: 0.62rem;
+  font-weight: 700;
+  font-style: italic;
+  color: var(--c-text-3);
+  cursor: help;
+  user-select: none;
+  flex-shrink: 0;
+}
+.infoDot:focus-visible { outline: 2px solid var(--c-blue); outline-offset: 1px; }
+
+.financialsWarn {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--c-amber-text, #b45309);
+  background: var(--c-amber-bg, rgba(217, 119, 6, 0.1));
+  border: 1px solid var(--c-amber, rgba(217, 119, 6, 0.3));
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.75rem;
+}
+
+.financialsNote {
+  font-size: 0.72rem;
+  color: var(--c-text-3);
+  line-height: 1.4;
+}
+
+/* Stack the flow vertically on narrow screens; arrows rotate to point down. */
+@container (max-width: 640px) {
+  .flowGrid { grid-template-columns: 1fr; }
+  .flowArrow { padding: 0.1rem 0; }
+}
+@media (max-width: 640px) {
+  .flowGrid { grid-template-columns: 1fr; }
+}
+
 .viewAllLink {
   display: inline-flex;
   align-items: center;

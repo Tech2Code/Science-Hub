@@ -11,12 +11,14 @@ import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatMonthYear } from "@/lib/formatDate";
+import { PeriodFilter, defaultPeriod, periodToQuery, periodLabel as fmtPeriodLabel, type PeriodValue } from "@/components/dashboard/PeriodFilter";
 import styles from "./salesOverview.module.css";
 
 interface MonthlyBar { month: string; total: number; }
 interface RecentInvoice { id: string; invoiceNumber: string; date: string; customerName: string; total: number; paidAmount: number; status: string; }
 interface TopCustomer { id: string; name: string; totalBilled: number; totalPaid: number; }
 interface SalesDashboard {
+  periodLabel?: string;
   revenueThisMonth: number;
   totalCollected: number;
   outstandingBalance: number;
@@ -105,7 +107,22 @@ export default function SalesDashboardPage() {
     }
   }, [session, router]);
 
-  const { data, loading } = useFetch<SalesDashboard>("/api/reports?type=sales-dashboard");
+  // Default = current FY, full year. Two dropdowns (FY + month) drive the KPIs.
+  const [period, setPeriod] = useState<PeriodValue>(defaultPeriod());
+
+  // Two fetches with distinct cache keys so the period selector only touches the KPI numbers:
+  //  • base   → stable current-FY URL. Powers the monthly bar chart, Recent Invoices and Top
+  //             Customers (a "this year / latest" view) so changing the KPI period never refetches
+  //             or re-renders them.
+  //  • scoped → changes with the FY+month selection; only its four KPI figures are read.
+  const baseUrl = "/api/reports?type=sales-dashboard";
+  const scopedUrl = `/api/reports?type=sales-dashboard&${periodToQuery(period)}`;
+  const { data: base, loading: baseLoading } = useFetch<SalesDashboard>(baseUrl);
+  const { data: scoped, loading: scopedLoading } = useFetch<SalesDashboard>(scopedUrl);
+  const loading = baseLoading;                 // chart/lists skeletons follow the base fetch
+  const kpiLoading = scopedLoading;            // KPI skeletons follow the period-scoped fetch
+  const data = base;                           // chart + lists read the current-FY payload
+  const periodLabel = scoped?.periodLabel ?? fmtPeriodLabel(period);
 
   return (
     <div className="page-stack">
@@ -130,12 +147,18 @@ export default function SalesDashboardPage() {
         </div>
       </div>
 
-      {/* KPI row */}
-      <div {...animateSection(1, styles.kpiRow)}>
-        <KpiCard label="Revenue This Month" value={loading ? "—" : fmt(data?.revenueThisMonth ?? 0)} sub="total billed" loading={loading} color="var(--c-blue)" />
-        <KpiCard label="Total Collected" value={loading ? "—" : fmt(data?.totalCollected ?? 0)} sub="all time" loading={loading} color="var(--c-green-text)" />
-        <KpiCard label="Outstanding Balance" value={loading ? "—" : fmt(data?.outstandingBalance ?? 0)} sub="pending collection" loading={loading} color="var(--c-amber)" />
-        <KpiCard label="Overdue Invoices" value={loading ? "—" : String(data?.overdueCount ?? 0)} sub="past due date" loading={loading} color={(data?.overdueCount ?? 0) > 0 ? "var(--c-red)" : "var(--c-text-4)"} />
+      {/* KPI section — the period filter scopes only these four figures, so it lives here with them. */}
+      <div {...animateSection(1, styles.kpiSection)}>
+        <div className={styles.kpiSectionHead}>
+          <h2 className={styles.sectionTitle}>Key figures</h2>
+          <PeriodFilter value={period} onChange={setPeriod} disabled={kpiLoading} className={styles.periodSelectWrap} />
+        </div>
+        <div className={styles.kpiRow}>
+          <KpiCard label="Revenue" value={kpiLoading ? "—" : fmt(scoped?.revenueThisMonth ?? 0)} sub={`total billed · ${periodLabel}`} loading={kpiLoading} color="var(--c-blue)" />
+          <KpiCard label="Collected" value={kpiLoading ? "—" : fmt(scoped?.totalCollected ?? 0)} sub={`payments · ${periodLabel}`} loading={kpiLoading} color="var(--c-green-text)" />
+          <KpiCard label="Outstanding Balance" value={kpiLoading ? "—" : fmt(scoped?.outstandingBalance ?? 0)} sub={`pending now · ${periodLabel}`} loading={kpiLoading} color="var(--c-amber)" />
+          <KpiCard label="Overdue Invoices" value={kpiLoading ? "—" : String(scoped?.overdueCount ?? 0)} sub={`past due · ${periodLabel}`} loading={kpiLoading} color={(scoped?.overdueCount ?? 0) > 0 ? "var(--c-red)" : "var(--c-text-4)"} />
+        </div>
       </div>
 
       {/* Monthly bar chart */}
