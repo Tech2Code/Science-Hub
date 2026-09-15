@@ -52,7 +52,13 @@ export async function recostProducts(tx: TxClient, productIds: Iterable<string>)
     tx.product.findMany({ where: { id: { in: ids } }, select: { id: true, purchasePrice: true } }),
     tx.purchaseBillItem.findMany({
       where: { productId: { in: ids }, purchaseBill: { deletedAt: null, status: { not: "cancelled" } } },
-      select: { productId: true, quantity: true, purchasePrice: true, purchaseBill: { select: { billDate: true, createdAt: true } } },
+      // purchasePrice is the LIST rate BEFORE the line's own discountPercent is applied (same shape
+      // as InvoiceItem.price) — NOT the net per-unit cost actually paid. Using it directly here was
+      // a real bug: it overstated cost by the full discount amount on any discounted purchase (e.g.
+      // a bill with 60% off costed the product at its pre-discount rate). total/gstAmount already
+      // have the discount baked in, so (total - gstAmount) / quantity gives the true net-of-
+      // discount, pre-GST unit cost — the same derivation used for custom line items below.
+      select: { productId: true, quantity: true, total: true, gstAmount: true, purchaseBill: { select: { billDate: true, createdAt: true } } },
     }),
     tx.invoiceItem.findMany({
       where: { productId: { in: ids }, invoice: { deletedAt: null } },
@@ -83,7 +89,8 @@ export async function recostProducts(tx: TxClient, productIds: Iterable<string>)
   };
 
   for (const p of purchaseItems) {
-    pushEvent(p.productId, { date: p.purchaseBill.billDate, createdAt: p.purchaseBill.createdAt, kindOrder: 0, kind: "purchase", quantity: p.quantity, unitCost: p.purchasePrice });
+    const netUnitCost = p.quantity > 0 ? (p.total - p.gstAmount) / p.quantity : 0;
+    pushEvent(p.productId, { date: p.purchaseBill.billDate, createdAt: p.purchaseBill.createdAt, kindOrder: 0, kind: "purchase", quantity: p.quantity, unitCost: netUnitCost });
   }
   for (const r of returnItems) {
     pushEvent(r.productId, { date: r.return.date, createdAt: r.return.createdAt, kindOrder: 0, kind: "return", quantity: r.quantity, returnItemId: r.id });
