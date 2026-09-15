@@ -14,21 +14,24 @@ import styles from "./dashboardHome.module.css";
 interface RecentInvoice { id: string; invoiceNumber: string; date: string; customerName: string; total: number; paidAmount: number; status: string; }
 interface RecentBill { id: string; billNumber: string; billDate: string; vendorName: string; total: number; paidAmount: number; status: string; }
 interface FinancialFigures {
-  // Actual Profit section — fully netted
-  grossSales: number;            // sales incl. GST (incl. transport)
-  gst: number;                   // output GST
+  // Actual Profit section — VERIFIED ONLY (costSource 'ledger'/'custom-provided' — a real cost,
+  // never a guess). A line whose cost is still an assumption ('fallback'/'custom') contributes
+  // nothing here — its revenue shows up in unverifiedRevenue instead, never blended in.
+  grossSales: number;            // verified sales incl. GST (incl. transport)
+  gst: number;                   // output GST on verified sales
   netSales: number;              // grossSales - gst
-  returnNet: number;             // credit notes' own ex-GST value
+  returnNet: number;             // credit notes' own ex-GST value (verified returns only)
   netSalesAfterReturns: number;  // netSales - returnNet
   cogs: number;                  // real cost of goods sold (WAC, from src/lib/inventoryCosting.ts) + sale transport charge at assumed 0% margin
   returnCogs: number;            // cost of the returned quantity
   netCogs: number;                // cogs - returnCogs
   otherExpenses: number;         // Purchase Bill's own transport/freight charge — not tied to any product's cost
-  grossProfit: number;           // netSalesAfterReturns - netCogs - otherExpenses
+  grossProfit: number;           // netSalesAfterReturns - netCogs - otherExpenses — the headline "Actual Profit"
+  unverifiedRevenue: number;     // ex-GST revenue with no verified cost yet, net of returns of those same sales — deliberately has no profit figure alongside it
   costedQty: number;    // qty sold with a real weighted-average cost
   estimatedQty: number; // qty sold using Product.purchasePrice as a placeholder (no purchase history yet)
   uncostedQty: number;  // qty sold with no product cost at all (legacy, never recomputed)
-  // Cash Flow section — simple totals, deliberately not netted against each other
+  // Cash Flow section — simple totals (verified + unverified together), deliberately not netted against each other
   totalSales: number;
   totalPurchases: number;
 }
@@ -115,7 +118,7 @@ export default function DashboardPage() {
   const financials = data?.financials ?? null;
   const EMPTY_FIN: FinancialFigures = {
     grossSales: 0, gst: 0, netSales: 0, returnNet: 0, netSalesAfterReturns: 0,
-    cogs: 0, returnCogs: 0, netCogs: 0, otherExpenses: 0, grossProfit: 0,
+    cogs: 0, returnCogs: 0, netCogs: 0, otherExpenses: 0, grossProfit: 0, unverifiedRevenue: 0,
     costedQty: 0, estimatedQty: 0, uncostedQty: 0,
     totalSales: 0, totalPurchases: 0,
   };
@@ -131,9 +134,10 @@ export default function DashboardPage() {
     : finMonth ?? EMPTY_FIN;   // a month with no data shows zeros, not the FY total
   // Gross Profit Margin = (Gross Profit / Net Sales After Returns) × 100. Guard divide-by-zero.
   const marginPct = finSelected.netSalesAfterReturns > 0 ? (finSelected.grossProfit / finSelected.netSalesAfterReturns) * 100 : null;
-  // Flag when some sold units' cost is missing entirely (legacy rows never recomputed), so the
-  // owner doesn't read profit as more exact than it is.
-  const hasUncostedSales = finSelected.uncostedQty > 0;
+  // Actual Profit only ever counts VERIFIED lines (real cost, never a guess) — this flags when
+  // some revenue this period has no verified cost yet (incl. legacy uncosted rows, a subset of
+  // this), so it's excluded from Gross Profit above rather than silently blended in.
+  const hasUnverifiedRevenue = finSelected.unverifiedRevenue > 0;
   const cashFlowNet = finSelected.totalSales - finSelected.totalPurchases;
 
   const quickActionSections = [
@@ -263,37 +267,37 @@ export default function DashboardPage() {
           <PeriodFilter value={finPeriod} onChange={setFinPeriod} disabled={loading} className={styles.financialsSelectWrap} />
         </div>
 
-        {/* Compact financial tiles */}
+        {/* Compact financial tiles — verified-only; see the "Unverified Revenue" note below */}
         <div className={styles.finTileGrid}>
           <FinTile
-            label="Total Sales" tone="blue" loading={loading}
+            label="Verified Sales" tone="blue" loading={loading}
             value={fmt(finSelected.grossSales)}
             help="Incl. GST"
-            info="Total invoice value including GST (incl. transport charges)."
+            info="Total invoice value (incl. GST, incl. transport charges) for lines with a REAL, verified cost — see Unverified Revenue below for the rest."
           />
           <FinTile
             label="GST Collected" tone="neutral" loading={loading}
             value={fmt(finSelected.gst)}
-            help="GST within sales"
-            info="The GST portion included in your total sales (incl. transport charge GST)."
+            help="GST within verified sales"
+            info="The GST portion included in verified sales (incl. transport charge GST)."
           />
           <FinTile
             label="Net Sales" tone="blue" loading={loading}
             value={fmt(finSelected.netSalesAfterReturns)}
             help="After GST & returns"
-            info="Total Sales, minus GST, minus the value of any credit notes (returns) — the real revenue actually earned and kept."
+            info="Verified Sales, minus GST, minus the value of any credit notes (returns) on verified sales."
           />
           <FinTile
             label="COGS" tone="amber" loading={loading}
             value={fmt(finSelected.netCogs)}
-            help="Cost of goods actually sold"
+            help="Real cost of goods actually sold"
             info="Actual weighted-average cost of the goods sold (from real purchase-bill history), plus any transport charge billed to the customer (assumed at 0% margin), minus the cost of any returned quantity."
           />
           <FinTile
             label="Gross Profit" tone={finSelected.grossProfit < 0 ? "red" : "green"} loading={loading}
             value={fmt(finSelected.grossProfit)}
-            help="Net Sales − COGS"
-            info="Net Sales (after returns) minus Net Cost of Goods Sold."
+            help="Verified only — no guessing"
+            info="Net Sales (after returns) minus Net Cost of Goods Sold — computed ONLY from lines with a real, verified cost. Never includes a guessed/assumed cost."
           />
           <FinTile
             label="Profit Margin" tone={finSelected.grossProfit < 0 ? "red" : "green"} loading={loading}
@@ -302,6 +306,12 @@ export default function DashboardPage() {
             info="Gross Profit divided by Net Sales (after returns), shown as a percentage."
           />
         </div>
+
+        {!loading && hasUnverifiedRevenue && (
+          <div className={styles.financialsWarn}>
+            <strong>₹{fmt(finSelected.unverifiedRevenue)} of revenue this period has no verified cost yet</strong> — it&apos;s excluded from Gross Profit above (not counted as profit, not counted as loss). This happens when a product was sold before any real purchase bill for it existed, or a custom item&apos;s cost was never confirmed. To fix it: record the real purchase bill for that product (even backdated), or edit the custom item to give its real cost — the next recompute will pick it up automatically.
+          </div>
+        )}
 
         {/* How your profit is calculated — collapsible, every step in order */}
         <div className={styles.calcBreakdown}>
@@ -323,7 +333,7 @@ export default function DashboardPage() {
           <div id="profit-breakdown-panel" className={`${styles.calcAccordion} ${profitBreakdownOpen ? styles.calcAccordionOpen : ""}`}>
             <div className={styles.calcAccordionInner}>
               <div className={styles.calcAccordionContent}>
-                <div className={styles.calcRow}><span>Total Sales <em>(incl. GST)</em></span><span>{loading ? "—" : fmt(finSelected.grossSales)}</span></div>
+                <div className={styles.calcRow}><span>Verified Sales <em>(incl. GST)</em></span><span>{loading ? "—" : fmt(finSelected.grossSales)}</span></div>
                 <div className={styles.calcRow}><span>− GST</span><span className={styles.calcNeg}>{loading ? "—" : `− ${fmt(finSelected.gst)}`}</span></div>
                 <div className={`${styles.calcRow} ${styles.calcSubtotal}`}><span>= Net Sales</span><span>{loading ? "—" : fmt(finSelected.netSales)}</span></div>
                 <div className={styles.calcRow}><span>− Sales Returns <em>(credit notes, ex-GST)</em></span><span className={styles.calcNeg}>{loading ? "—" : `− ${fmt(finSelected.returnNet)}`}</span></div>
@@ -336,18 +346,13 @@ export default function DashboardPage() {
                   <span className={finSelected.grossProfit < 0 ? styles.calcLoss : styles.calcProfit}>{loading ? "—" : fmt(finSelected.grossProfit)}</span>
                 </div>
                 <div className={styles.financialsNote}>
-                  COGS uses each product&apos;s real weighted-average purchase cost (from actual purchase-bill history), not just its list/master price — so it reflects what the goods actually cost, blended across every batch bought.
+                  Only lines with a REAL, verified cost are included here — a product&apos;s real weighted-average purchase cost (from actual purchase-bill history) or a custom item&apos;s confirmed cost. Nothing here is ever a guess; see the note above if some revenue this period is still excluded for that reason.
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {!loading && hasUncostedSales && (
-          <div className={styles.financialsWarn}>
-            COGS and profit are understated for some sales — those line items have no cost data at all (usually a legacy sale from before cost tracking started). They&apos;ll be corrected the next time that product&apos;s history is recomputed.
-          </div>
-        )}
       </div>
       )}
 

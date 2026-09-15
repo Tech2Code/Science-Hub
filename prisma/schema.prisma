@@ -339,6 +339,12 @@ model ReturnItem {
   // exact original sale's frozen cost. Nullable: legacy rows never recomputed since this column
   // was added, and any line whose product has no cost data at all.
   costPrice       Float?
+  // Mirrors InvoiceItem.costSource — "ledger"/"custom-provided" mean costPrice is a REAL cost (from
+  // purchase history, an exact sourceInvoiceItemId link, or a legacy name-match to a
+  // 'custom-provided' sale); "fallback"/"custom" mean it's an ASSUMPTION (Product.purchasePrice
+  // placeholder, or a 0%-margin guess). The dashboard's Verified Profit sums only the "real" tier —
+  // see getDashboardFinancials in src/app/api/reports/route.ts.
+  costSource      String?
 }
 
 model BusinessSettings {

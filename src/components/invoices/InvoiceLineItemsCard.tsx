@@ -9,6 +9,7 @@ import { QuickAddProductModal, type QuickAddOutcome } from "@/components/product
 import { animateSection } from "@/lib/animateSection";
 import { useDropUp } from "@/lib/useDropUp";
 import { lineBreakdown, makeInvoiceLineItemKey, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
+import { resolveQuickAddLineRate } from "@/lib/purchaseBillForm";
 import styles from "./InvoiceLineItemsCard.module.css";
 
 const QUICK_ADD_UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pkt", "Set", "Mtr", "Dozen"];
@@ -65,22 +66,22 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
     setShowProductDropdown(false);
   }
 
-  // A custom "just for this invoice" item has no product record to carry a Selling Price on, so its
-  // line is priced straight off the popup's List Price/Discount % (there's no other rate to use).
-  // But a newly-created CATALOG product goes through the same divergence-aware pricing as picking
-  // an existing product (addProduct() above) — the popup lets the user type a Selling Price
-  // distinct from the vendor's List Price/Discount terms, and that must reach this invoice's line,
-  // not just sit unused on the new product's own catalog record.
+  // A custom "just for this invoice" item has no product record, so its cost is always List Price
+  // × Discount % (purchasePriceNum) — mandatory on the popup, never a guess. Its own line rate
+  // comes from the popup's required Selling Price, via the same divergence-aware resolution
+  // addProduct() below uses for an existing product: sold at exactly its cost (List Price ×
+  // Discount %) shows the vendor breakdown on the line; sold at any other price is a flat rate
+  // with the discount column left at 0%. A newly-created CATALOG product goes through the same
+  // logic via addProduct() — the popup's Selling Price must reach this invoice's line, not just
+  // sit unused on the new product's own catalog record.
   function handleQuickAddOutcome(outcome: QuickAddOutcome) {
     if (outcome.skipCatalog) {
-      const listPriceNum = parseFloat(outcome.listPrice) || 0;
-      const discountPercentNum = Math.min(100, Math.max(0, parseFloat(outcome.discountPercent) || 0));
-      const customCostPrice = outcome.customCost ? parseFloat(outcome.customCost) : undefined;
+      const { rate, discountPercent } = resolveQuickAddLineRate(outcome.listPrice, outcome.discountPercent, outcome.salePrice ?? "0");
       setItems((prev) => [...prev, {
         key: makeInvoiceLineItemKey(), productId: "", productName: outcome.name,
-        unit: outcome.unit, qty: outcome.qty, price: listPriceNum,
-        gstRate: parseFloat(outcome.gstRate) || 0, hsn: outcome.hsn, discountPercent: discountPercentNum,
-        ...(customCostPrice !== undefined && !isNaN(customCostPrice) ? { customCostPrice } : {}),
+        unit: outcome.unit, qty: outcome.qty, price: parseFloat(rate) || 0,
+        gstRate: parseFloat(outcome.gstRate) || 0, hsn: outcome.hsn, discountPercent: parseFloat(discountPercent) || 0,
+        customCostPrice: outcome.purchasePriceNum,
       }]);
       return;
     }

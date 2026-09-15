@@ -20,6 +20,8 @@ interface TopVendor { id: string; name: string; totalBilled: number; totalPaid: 
 interface PurchaseDashboard {
   periodLabel?: string;
   spendThisMonth: number;
+  spendTaxable: number;
+  spendGst: number;
   totalPaid: number;
   payableBalance: number;
   overdueBillsCount: number;
@@ -153,7 +155,7 @@ export default function PurchaseDashboardPage() {
           <PeriodFilter value={period} onChange={setPeriod} disabled={kpiLoading} className={styles.periodSelectWrap} />
         </div>
         <div className={styles.kpiRow}>
-          <KpiCard label="Spend" value={kpiLoading ? "—" : fmt(scoped?.spendThisMonth ?? 0)} sub={`total billed · ${periodLabel}`} loading={kpiLoading} color="var(--c-amber)" />
+          <KpiCard label="Spend" value={kpiLoading ? "—" : fmt(scoped?.spendThisMonth ?? 0)} sub={kpiLoading ? undefined : `${fmt(scoped?.spendTaxable ?? 0)} taxable + ${fmt(scoped?.spendGst ?? 0)} GST · ${periodLabel}`} loading={kpiLoading} color="var(--c-amber)" />
           <KpiCard label="Paid" value={kpiLoading ? "—" : fmt(scoped?.totalPaid ?? 0)} sub={`payments · ${periodLabel}`} loading={kpiLoading} color="var(--c-green-text)" />
           <KpiCard label="Payable Balance" value={kpiLoading ? "—" : fmt(scoped?.payableBalance ?? 0)} sub={`pending now · ${periodLabel}`} loading={kpiLoading} color="var(--c-amber)" />
           <KpiCard label="Overdue Bills" value={kpiLoading ? "—" : String(scoped?.overdueBillsCount ?? 0)} sub={`past due · ${periodLabel}`} loading={kpiLoading} color={(scoped?.overdueBillsCount ?? 0) > 0 ? "var(--c-red)" : "var(--c-text-4)"} />

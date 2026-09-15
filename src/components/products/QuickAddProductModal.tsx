@@ -40,12 +40,13 @@ interface QuickAddOutcomeBase {
   gstRate: string;
   listPrice: string;
   discountPercent: string;
-  /** List Price × Discount % — the derived net rate. */
+  /** List Price × Discount % — the derived net rate. Doubles as the item's real cost when
+   *  skipCatalog is true and entityLabel is "invoice" (see purchasePriceNum below), the same way
+   *  it's already the purchase-bill custom item's cost — no separate "cost" field to type. */
   purchasePriceNum: number;
-  /** Only meaningful when skipCatalog is true and entityLabel is "invoice" — what the user says
-   *  this item actually cost them, so COGS doesn't have to assume 0% margin. Undefined/empty means
-   *  they didn't provide one. */
-  customCost?: string;
+  /** Only meaningful when skipCatalog is true and entityLabel is "invoice" — what to charge the
+   *  customer, now required there (there's no product to carry a Selling Price on otherwise). */
+  salePrice?: string;
 }
 
 // Discriminated on skipCatalog so `product` is only reachable (and required) in the branch where
@@ -67,9 +68,9 @@ interface QuickAddProductModalProps {
   initialName: string;
 }
 
-const EMPTY_FORM = { name: "", unit: "", quantity: "1", listPrice: "", discountPercent: "", gstRate: "18", salePrice: "", hsn: "", skipCatalog: false, customCost: "" };
+const EMPTY_FORM = { name: "", unit: "", quantity: "1", listPrice: "", discountPercent: "", gstRate: "18", salePrice: "", hsn: "", skipCatalog: false };
 
-type QuickAddErrors = Partial<Record<"name" | "listPrice" | "unit" | "gstRate" | "quantity" | "customCost", string>>;
+type QuickAddErrors = Partial<Record<"name" | "listPrice" | "unit" | "gstRate" | "quantity" | "salePrice", string>>;
 
 // Shared "search a product or add a custom one" quick-add popup — used identically by the New/Edit
 // Invoice and New/Edit Purchase Bill line-item tables (InvoiceLineItemsCard.tsx / PurchaseBillItemsTable.tsx)
@@ -135,13 +136,13 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
       listPrice: validate(form.listPrice, rules.required("List price is required."), rules.nonNegativeNumber("List price cannot be negative.")) ?? undefined,
       unit: validate(form.unit, rules.required("Unit is required.")) ?? undefined,
       gstRate: validate(form.gstRate, rules.required("GST rate is required."), rules.percentRange(100, "GST rate must be between 0 and 100%.")) ?? undefined,
-      // Required only for an invoice's "skip catalog" custom item — that's the one case with no
-      // other way to know the real cost (a catalog item's cost comes from purchase history; a
-      // purchase-bill's own custom item already IS its cost, via List Price/Discount % above).
-      // Leaving it optional let every blank submission silently fall back to a 0%-margin
-      // assumption with no visible signal that the profit figure was ever a guess.
-      customCost: (form.skipCatalog && entityLabel === "invoice")
-        ? (validate(form.customCost, rules.required("Enter what this cost you (0 if it was free)."), rules.nonNegativeNumber("Cost cannot be negative.")) ?? undefined)
+      // Required only for an invoice's "skip catalog" custom item — the one case with no product
+      // to carry a Selling Price on otherwise. The item's cost is never a separate typed field: it
+      // reuses List Price × Discount % above (purchasePriceNum), exactly like a purchase-bill
+      // custom item already does — so cost is never left blank/guessed, without asking for a
+      // second number.
+      salePrice: (form.skipCatalog && entityLabel === "invoice")
+        ? (validate(form.salePrice, rules.required("Selling price is required."), rules.nonNegativeNumber("Selling price cannot be negative.")) ?? undefined)
         : undefined,
     };
     if (Object.values(errs).some(Boolean)) { setErrors(errs); return; }
@@ -154,7 +155,7 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
         skipCatalog: true, name: form.name.trim(), quantity: form.quantity, qty,
         unit: form.unit.trim() || defaultUnit, hsn: form.hsn.trim(), gstRate: form.gstRate,
         listPrice: form.listPrice, discountPercent: form.discountPercent, purchasePriceNum,
-        customCost: entityLabel === "invoice" ? form.customCost.trim() || undefined : undefined,
+        salePrice: entityLabel === "invoice" ? form.salePrice.trim() : undefined,
       });
       toast({ type: "success", title: "Item added", message: `"${form.name.trim()}" added to this ${entityLabel} only.` });
       onClose();
@@ -282,36 +283,26 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
                 onChange={(e) => { setForm((p) => ({ ...p, gstRate: e.target.value.replace(/[^\d.]/g, "") })); setErrors((p) => ({ ...p, gstRate: undefined })); }}
               />
             </FormField>
-            {!form.skipCatalog && (
+            {(!form.skipCatalog || entityLabel === "invoice") && (
               <FormField
                 label="Selling Price (₹)"
+                required={form.skipCatalog}
+                error={errors.salePrice}
                 hint={
-                  salePriceBelowCost
-                    ? `Selling price is lower than purchase price (₹${fmtCurrency(purchasePriceNum)})`
-                    : purchasePriceNum > 0
-                      ? `Defaults to purchase price ₹${fmtCurrency(purchasePriceNum)} (+₹${fmtCurrency(gstAmount)} GST = ₹${fmtCurrency(landedCost)} landed cost) if left blank`
-                      : "Defaults to purchase price (before GST) if left blank"
+                  form.skipCatalog
+                    ? "What to charge the customer. Its cost is List Price × Discount % above (₹" + fmtCurrency(purchasePriceNum) + ") — there's no product history to look up otherwise, so this is treated as the real cost, not a guess."
+                    : salePriceBelowCost
+                      ? `Selling price is lower than purchase price (₹${fmtCurrency(purchasePriceNum)})`
+                      : purchasePriceNum > 0
+                        ? `Defaults to purchase price ₹${fmtCurrency(purchasePriceNum)} (+₹${fmtCurrency(gstAmount)} GST = ₹${fmtCurrency(landedCost)} landed cost) if left blank`
+                        : "Defaults to purchase price (before GST) if left blank"
                 }
-                hintWarning={salePriceBelowCost}
+                hintWarning={!form.skipCatalog && salePriceBelowCost}
               >
                 <Input
                   type="text" inputMode="decimal" placeholder="0.00"
                   value={form.salePrice}
-                  onChange={(e) => setForm((p) => ({ ...p, salePrice: e.target.value.replace(/[^\d.]/g, "") }))}
-                />
-              </FormField>
-            )}
-            {form.skipCatalog && entityLabel === "invoice" && (
-              <FormField
-                label="Your Cost (₹)"
-                required
-                error={errors.customCost}
-                hint="What this actually cost you — there's no product history to look this up from since it's not in the catalog. Enter 0 if it was genuinely free."
-              >
-                <Input
-                  type="text" inputMode="decimal" placeholder="0.00"
-                  value={form.customCost}
-                  onChange={(e) => { setForm((p) => ({ ...p, customCost: e.target.value.replace(/[^\d.]/g, "") })); setErrors((p) => ({ ...p, customCost: undefined })); }}
+                  onChange={(e) => { setForm((p) => ({ ...p, salePrice: e.target.value.replace(/[^\d.]/g, "") })); setErrors((p) => ({ ...p, salePrice: undefined })); }}
                 />
               </FormField>
             )}

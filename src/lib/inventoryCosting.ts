@@ -100,7 +100,7 @@ export async function recostProducts(tx: TxClient, productIds: Iterable<string>)
   }
 
   const saleUpdates: { id: string; costPrice: number; costSource: "ledger" | "fallback" }[] = [];
-  const returnUpdates: { id: string; costPrice: number }[] = [];
+  const returnUpdates: { id: string; costPrice: number; costSource: "ledger" | "fallback" }[] = [];
 
   for (const productId of ids) {
     const events = eventsByProduct.get(productId);
@@ -123,10 +123,11 @@ export async function recostProducts(tx: TxClient, productIds: Iterable<string>)
         continue;
       }
       if (ev.kind === "return") {
-        const avgAtReturn = runningQty > 0 ? runningValue / runningQty : fallbackCost;
+        const hadStock = runningQty > 0;
+        const avgAtReturn = hadStock ? runningValue / runningQty : fallbackCost;
         runningQty += ev.quantity;
         runningValue += ev.quantity * avgAtReturn;
-        returnUpdates.push({ id: ev.returnItemId!, costPrice: avgAtReturn });
+        returnUpdates.push({ id: ev.returnItemId!, costPrice: avgAtReturn, costSource: hadStock ? "ledger" : "fallback" });
         continue;
       }
       // sale
@@ -153,13 +154,13 @@ export async function recostProducts(tx: TxClient, productIds: Iterable<string>)
 
   if (returnUpdates.length > 0) {
     const values = Prisma.join(
-      returnUpdates.map((u) => Prisma.sql`(${u.id}::text, ${u.costPrice}::float8)`),
+      returnUpdates.map((u) => Prisma.sql`(${u.id}::text, ${u.costPrice}::float8, ${u.costSource}::text)`),
       ", ",
     );
     await tx.$executeRaw`
       UPDATE "ReturnItem" AS ri
-      SET "costPrice" = v.cost
-      FROM (VALUES ${values}) AS v(id, cost)
+      SET "costPrice" = v.cost, "costSource" = v.source
+      FROM (VALUES ${values}) AS v(id, cost, source)
       WHERE ri.id = v.id
     `;
   }
@@ -192,7 +193,8 @@ export async function costCustomLineItems(
   if (scope.returnId) {
     // A custom return line has no productId — if the original sale had a real user-provided cost
     // (costSource 'custom-provided'), it would otherwise be silently discarded in favor of
-    // re-deriving an 0%-margin assumption from the return's OWN price fields.
+    // re-deriving an 0%-margin assumption from the return's OWN price fields. costSource carries
+    // the same real-vs-assumed distinction as InvoiceItem's, for the dashboard's Verified Profit.
     // Tier 1 — exact: sourceInvoiceItemId (see schema.prisma) unambiguously identifies the specific
     // InvoiceItem this return reverses, set at return-creation time. No guessing involved.
     await tx.$executeRaw`
@@ -200,8 +202,8 @@ export async function costCustomLineItems(
       SET "costPrice" = (
         SELECT ii."costPrice" FROM "InvoiceItem" ii
         WHERE ii.id = ri."sourceInvoiceItemId" AND ii."costSource" = 'custom-provided'
-      )
-      WHERE ri."returnId" = ${scope.returnId} AND ri."productId" IS NULL AND ri."costPrice" IS NULL
+      ), "costSource" = 'custom-provided'
+      WHERE ri."returnId" = ${scope.returnId} AND ri."productId" IS NULL AND ri."costSource" IS NULL
         AND ri."sourceInvoiceItemId" IS NOT NULL
         AND EXISTS (SELECT 1 FROM "InvoiceItem" ii2 WHERE ii2.id = ri."sourceInvoiceItemId" AND ii2."costSource" = 'custom-provided')
     `;
@@ -216,8 +218,8 @@ export async function costCustomLineItems(
         WHERE r.id = ri."returnId" AND ii."productId" IS NULL
           AND ii."name" = ri."name" AND ii."costSource" = 'custom-provided'
         ORDER BY ii.id LIMIT 1
-      )
-      WHERE ri."returnId" = ${scope.returnId} AND ri."productId" IS NULL AND ri."costPrice" IS NULL
+      ), "costSource" = 'custom-provided'
+      WHERE ri."returnId" = ${scope.returnId} AND ri."productId" IS NULL AND ri."costSource" IS NULL
         AND EXISTS (
           SELECT 1 FROM "InvoiceItem" ii2
           JOIN "Return" r2 ON r2."invoiceId" = ii2."invoiceId"
@@ -228,8 +230,8 @@ export async function costCustomLineItems(
     // Tier 3 — no real cost found by either link: assume 0% margin from the return's own rate.
     await tx.$executeRaw`
       UPDATE "ReturnItem"
-      SET "costPrice" = ("total" - "gstAmount") / NULLIF("quantity", 0)
-      WHERE "returnId" = ${scope.returnId} AND "productId" IS NULL AND "costPrice" IS NULL
+      SET "costPrice" = ("total" - "gstAmount") / NULLIF("quantity", 0), "costSource" = 'custom'
+      WHERE "returnId" = ${scope.returnId} AND "productId" IS NULL AND "costSource" IS NULL
     `;
   }
   if (!scope.invoiceId && !scope.returnId) {
@@ -266,8 +268,8 @@ export async function costCustomLineItems(
       SET "costPrice" = (
         SELECT ii."costPrice" FROM "InvoiceItem" ii
         WHERE ii.id = ri."sourceInvoiceItemId" AND ii."costSource" = 'custom-provided'
-      )
-      WHERE ri."productId" IS NULL AND ri."costPrice" IS NULL AND ri."sourceInvoiceItemId" IS NOT NULL
+      ), "costSource" = 'custom-provided'
+      WHERE ri."productId" IS NULL AND ri."costSource" IS NULL AND ri."sourceInvoiceItemId" IS NOT NULL
         AND EXISTS (SELECT 1 FROM "InvoiceItem" ii2 WHERE ii2.id = ri."sourceInvoiceItemId" AND ii2."costSource" = 'custom-provided')
     `;
     await tx.$executeRaw`
@@ -278,8 +280,8 @@ export async function costCustomLineItems(
         WHERE r.id = ri."returnId" AND r."deletedAt" IS NULL AND ii."productId" IS NULL
           AND ii."name" = ri."name" AND ii."costSource" = 'custom-provided'
         ORDER BY ii.id LIMIT 1
-      )
-      WHERE ri."productId" IS NULL AND ri."costPrice" IS NULL
+      ), "costSource" = 'custom-provided'
+      WHERE ri."productId" IS NULL AND ri."costSource" IS NULL
         AND EXISTS (
           SELECT 1 FROM "InvoiceItem" ii2
           JOIN "Return" r2 ON r2."invoiceId" = ii2."invoiceId"
@@ -289,10 +291,10 @@ export async function costCustomLineItems(
     `;
     await tx.$executeRaw`
       UPDATE "ReturnItem" ri
-      SET "costPrice" = (ri."total" - ri."gstAmount") / NULLIF(ri."quantity", 0)
+      SET "costPrice" = (ri."total" - ri."gstAmount") / NULLIF(ri."quantity", 0), "costSource" = 'custom'
       FROM "Return" r
       WHERE ri."returnId" = r.id AND r."deletedAt" IS NULL
-        AND ri."productId" IS NULL AND ri."costPrice" IS NULL
+        AND ri."productId" IS NULL AND ri."costSource" IS NULL
     `;
   }
 }
