@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/dialogs/Modal";
 import { OverlayLoader } from "@/components/ui/Spinner";
@@ -9,6 +9,7 @@ import { UnitCombo } from "@/components/ui/UnitCombo";
 import { useToast } from "@/components/ui/Toast";
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useUnitSuggestions } from "@/lib/useUnitSuggestions";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { rules, validate } from "@/lib/validation";
 import { computeQuickAddNetRate, computeQuickAddTaxInclusivePrice, fmtCurrency, toNum } from "@/lib/purchaseBillForm";
 import styles from "./QuickAddProductModal.module.css";
@@ -80,6 +81,30 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
   const [form, setForm] = useState({ ...EMPTY_FORM, name: initialName });
   const [errors, setErrors] = useState<QuickAddErrors>({});
   const [saving, setSaving] = useState(false);
+
+  // Catalog name-similarity check — a custom item (especially "don't save to catalog") that's
+  // actually the same product as an existing catalog entry can never have its cost linked to that
+  // product's real purchase/sale history (see src/lib/inventoryCosting.ts — cost matching is keyed
+  // on productId, never on name). This is a soft nudge only: it never auto-links or blocks
+  // submission, since a name match can be coincidental (two genuinely different products sharing a
+  // name) or the catalog entry might be the wrong one — the user decides.
+  const debouncedName = useDebouncedValue(form.name, 400);
+  const [similarProducts, setSimilarProducts] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    const q = debouncedName.trim();
+    // Below the fetch threshold, the render guard (q.length >= 3) already hides any stale hint —
+    // no need to clear state here (which would be a synchronous setState in the effect body).
+    if (q.length < 3) return;
+    const controller = new AbortController();
+    fetch(`/api/products?search=${encodeURIComponent(q)}&pageSize=5`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.data) return;
+        setSimilarProducts((d.data as { id: string; name: string }[]).map((p) => ({ id: p.id, name: p.name })));
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [debouncedName]);
 
   // Purchase Price is always List Price × Discount % — there's no separate typed field for it.
   // Shown as an informational hint (with GST-inclusive landed cost) next to Selling Price instead.
@@ -192,6 +217,12 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
               maxLength={200}
             />
           </FormField>
+          {debouncedName.trim().length >= 3 && similarProducts.length > 0 && (
+            <div className={styles.similarHint}>
+              Similar item{similarProducts.length > 1 ? "s" : ""} already in your catalog: {similarProducts.map((p) => `"${p.name}"`).join(", ")}.
+              {" "}If this is the same product, cancel and pick it from the item list instead — a custom item here can never link to its purchase/sale cost history.
+            </div>
+          )}
           <div className={styles.grid2}>
             <FormField label="Quantity" required error={errors.quantity}>
               <Input
