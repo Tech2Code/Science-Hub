@@ -8,6 +8,7 @@ import { deriveDefaultPrefix, computeNextNumber, numberFormatDbFilter, getIndian
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
+import { costCustomLineItems } from "@/lib/inventoryCosting";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { MAX_MONEY_VALUE, MAX_QUANTITY, istDayStartUtc, istTodayStartUtc } from "@/lib/validation";
@@ -303,6 +304,9 @@ export async function POST(request: NextRequest) {
           })),
           { type: "sale", reference: inv.invoiceNumber, createdByUserId: user.id }
         );
+        // Custom (no-catalog) line items have no product for batchAdjustStock/recostProducts to
+        // ever see — cost them separately at their own net rate (see costCustomLineItems).
+        await costCustomLineItems(tx, { invoiceId: inv.id });
         const warnings = updatedProducts
           .filter((p) => p.stock < 0)
           .map((p) => `${p.name} (stock: ${p.stock})`);

@@ -20,10 +20,11 @@ interface FinancialFigures {
   netSales: number;              // grossSales - gst
   returnNet: number;             // credit notes' own ex-GST value
   netSalesAfterReturns: number;  // netSales - returnNet
-  cogs: number;                  // real cost of goods sold (WAC, from src/lib/inventoryCosting.ts)
+  cogs: number;                  // real cost of goods sold (WAC, from src/lib/inventoryCosting.ts) + sale transport charge at assumed 0% margin
   returnCogs: number;            // cost of the returned quantity
   netCogs: number;                // cogs - returnCogs
-  grossProfit: number;           // netSalesAfterReturns - netCogs
+  otherExpenses: number;         // Purchase Bill's own transport/freight charge — not tied to any product's cost
+  grossProfit: number;           // netSalesAfterReturns - netCogs - otherExpenses
   costedQty: number;    // qty sold with a real weighted-average cost
   estimatedQty: number; // qty sold using Product.purchasePrice as a placeholder (no purchase history yet)
   uncostedQty: number;  // qty sold with no product cost at all (legacy, never recomputed)
@@ -114,7 +115,7 @@ export default function DashboardPage() {
   const financials = data?.financials ?? null;
   const EMPTY_FIN: FinancialFigures = {
     grossSales: 0, gst: 0, netSales: 0, returnNet: 0, netSalesAfterReturns: 0,
-    cogs: 0, returnCogs: 0, netCogs: 0, grossProfit: 0,
+    cogs: 0, returnCogs: 0, netCogs: 0, otherExpenses: 0, grossProfit: 0,
     costedQty: 0, estimatedQty: 0, uncostedQty: 0,
     totalSales: 0, totalPurchases: 0,
   };
@@ -286,7 +287,7 @@ export default function DashboardPage() {
             label="COGS" tone="amber" loading={loading}
             value={fmt(finSelected.netCogs)}
             help="Cost of goods actually sold"
-            info="Actual weighted-average cost of the goods sold (from real purchase-bill history), minus the cost of any returned quantity."
+            info="Actual weighted-average cost of the goods sold (from real purchase-bill history), plus any transport charge billed to the customer (assumed at 0% margin), minus the cost of any returned quantity."
           />
           <FinTile
             label="Gross Profit" tone={finSelected.grossProfit < 0 ? "red" : "green"} loading={loading}
@@ -327,8 +328,9 @@ export default function DashboardPage() {
                 <div className={`${styles.calcRow} ${styles.calcSubtotal}`}><span>= Net Sales</span><span>{loading ? "—" : fmt(finSelected.netSales)}</span></div>
                 <div className={styles.calcRow}><span>− Sales Returns <em>(credit notes, ex-GST)</em></span><span className={styles.calcNeg}>{loading ? "—" : `− ${fmt(finSelected.returnNet)}`}</span></div>
                 <div className={`${styles.calcRow} ${styles.calcSubtotal}`}><span>= Net Sales After Returns</span><span>{loading ? "—" : fmt(finSelected.netSalesAfterReturns)}</span></div>
-                <div className={styles.calcRow}><span>− COGS <em>(cost of goods sold)</em></span><span className={styles.calcNeg}>{loading ? "—" : `− ${fmt(finSelected.cogs)}`}</span></div>
+                <div className={styles.calcRow}><span>− COGS <em>(cost of goods sold, incl. sale transport at 0% margin)</em></span><span className={styles.calcNeg}>{loading ? "—" : `− ${fmt(finSelected.cogs)}`}</span></div>
                 <div className={styles.calcRow}><span>+ Cost of Returned Goods</span><span>{loading ? "—" : `+ ${fmt(finSelected.returnCogs)}`}</span></div>
+                <div className={styles.calcRow}><span>− Other Business Expenses <em>(purchase transport/freight)</em></span><span className={styles.calcNeg}>{loading ? "—" : `− ${fmt(finSelected.otherExpenses)}`}</span></div>
                 <div className={`${styles.calcRow} ${styles.calcTotal}`}>
                   <span>= Gross Profit</span>
                   <span className={finSelected.grossProfit < 0 ? styles.calcLoss : styles.calcProfit}>{loading ? "—" : fmt(finSelected.grossProfit)}</span>

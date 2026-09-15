@@ -355,6 +355,10 @@ async function getCombinedDashboard(canSeeSales: boolean, canSeePurchases: boole
 //        Net Sales (ex-GST)  =  Gross Sales (incl. transport) − GST
 //        − Sales Returns     =  credit notes' own (ex-GST) value, so a returned sale isn't counted as revenue
 //        − Net COGS          =  SUM(sold qty × InvoiceItem.costPrice) − SUM(returned qty × ReturnItem.costPrice)
+//                                (Invoice's own transport charge is folded in here too, at an
+//                                assumed 0% margin — its own net amount counted as its cost)
+//        − Other Business Expenses = Purchase Bill's own transport/freight charge — a real cost of
+//                                acquiring stock that isn't tied to any one product's per-unit cost
 //        = Gross Profit
 //      costPrice/ReturnItem.costPrice are maintained by src/lib/inventoryCosting.ts's weighted-
 //      average-cost (WAC) replay, triggered on every stock-affecting mutation — never derived here.
@@ -465,6 +469,24 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
       `
     : [];
 
+  // Purchase Bill's own transport/freight charge (what's paid to get stock delivered) — a real
+  // business expense, but it isn't tied to any one product's per-unit cost (it's a bill-level
+  // charge, and allocating it across that bill's items would need a whole extra layer). Rather
+  // than silently dropping it from Actual Profit (which would overstate margin by exactly this
+  // amount every time a bill carries freight), it's subtracted as its own "Other Business
+  // Expenses" line — full amount, ex-GST (the GST paid on it is reclaimable input credit, not a
+  // real cost, matching how every other cost figure here is ex-GST).
+  const purchaseTransportRows = canSeePurchases
+    ? await prisma.$queryRaw<Array<{ month: Date; transport: number }>>`
+        SELECT date_trunc('month', "billDate" + interval '330 minutes') AS month,
+               COALESCE(SUM("transportCharge"), 0) AS transport
+        FROM "PurchaseBill"
+        WHERE "deletedAt" IS NULL AND "status" <> 'cancelled'
+          AND "billDate" >= ${fyStart} AND "billDate" < ${fyEnd}
+        GROUP BY month
+      `
+    : [];
+
   // Key each SQL bucket by its IST year-month so we can line it up against the fixed 12-month grid.
   const keyOf = (d: Date) => new Date(d).toLocaleString("en-IN", { month: "2-digit", year: "numeric", timeZone: "UTC" });
   const salesByMonth = new Map(salesRows.map((r) => [keyOf(r.month), r]));
@@ -472,6 +494,7 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
   const returnByMonth = new Map(returnRows.map((r) => [keyOf(r.month), r]));
   const returnRoundOffByMonth = new Map(returnRoundOffRows.map((r) => [keyOf(r.month), Number(r.roundOff) || 0]));
   const spendByMonth = new Map(spendRows.map((r) => [keyOf(r.month), Number(r.spend) || 0]));
+  const purchaseTransportByMonth = new Map(purchaseTransportRows.map((r) => [keyOf(r.month), Number(r.transport) || 0]));
 
   const monthly = Array.from({ length: 12 }, (_, i) => {
     const monthIndex0 = (3 + i) % 12;                       // Apr(3) … Mar(2)
@@ -491,7 +514,11 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
     const grossSales = (Number(s?.itemGross) || 0) + transport + transportGst + invoiceRoundOff;
     const gst = (Number(s?.itemGst) || 0) + transportGst;
     const netSales = grossSales - gst;                      // = item taxable + transport (ex-GST) + roundOff
-    const cogs = Number(s?.cogs) || 0;                      // transport has no product cost
+    // Transport charge assumed at 0% margin (same treatment as a custom line item, see
+    // costCustomLineItems in src/lib/inventoryCosting.ts) — its own net (ex-GST) amount counted as
+    // its cost, so it nets to zero profit contribution instead of flowing straight through as
+    // 100%-margin revenue. Item-level product/custom-item COGS is unaffected.
+    const cogs = (Number(s?.cogs) || 0) + transport;
 
     const returnGross = Number(r?.returnGross) || 0;
     const returnGst = Number(r?.returnGst) || 0;
@@ -501,6 +528,11 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
 
     const netSalesAfterReturns = netSales - returnNet;
     const netCogs = cogs - returnCogs;
+    // Purchase Bill's own transport/freight — a real expense, but not tied to any one product's
+    // cost (see purchaseTransportRows above) — subtracted as a separate "Other Business Expenses"
+    // line rather than folded into netCogs, so the COGS figure itself still reads as "cost of the
+    // goods actually sold" and this stays visibly its own line in the calculation breakdown.
+    const otherExpenses = purchaseTransportByMonth.get(key) ?? 0;
 
     return {
       month: label,
@@ -513,7 +545,8 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
       cogs,
       returnCogs,
       netCogs,
-      grossProfit: netSalesAfterReturns - netCogs,
+      otherExpenses,
+      grossProfit: netSalesAfterReturns - netCogs - otherExpenses,
       costedQty: Number(s?.costedQty) || 0,
       estimatedQty: Number(s?.estimatedQty) || 0,
       uncostedQty: Number(s?.uncostedQty) || 0,
@@ -535,6 +568,7 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
       cogs: acc.cogs + m.cogs,
       returnCogs: acc.returnCogs + m.returnCogs,
       netCogs: acc.netCogs + m.netCogs,
+      otherExpenses: acc.otherExpenses + m.otherExpenses,
       grossProfit: acc.grossProfit + m.grossProfit,
       costedQty: acc.costedQty + m.costedQty,
       estimatedQty: acc.estimatedQty + m.estimatedQty,
@@ -542,7 +576,7 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
       totalSales: acc.totalSales + m.totalSales,
       totalPurchases: acc.totalPurchases + m.totalPurchases,
     }),
-    { grossSales: 0, gst: 0, netSales: 0, returnNet: 0, netSalesAfterReturns: 0, cogs: 0, returnCogs: 0, netCogs: 0, grossProfit: 0, costedQty: 0, estimatedQty: 0, uncostedQty: 0, totalSales: 0, totalPurchases: 0 },
+    { grossSales: 0, gst: 0, netSales: 0, returnNet: 0, netSalesAfterReturns: 0, cogs: 0, returnCogs: 0, netCogs: 0, otherExpenses: 0, grossProfit: 0, costedQty: 0, estimatedQty: 0, uncostedQty: 0, totalSales: 0, totalPurchases: 0 },
   );
 
   return {

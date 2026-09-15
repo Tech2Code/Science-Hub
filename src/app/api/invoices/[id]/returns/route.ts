@@ -5,6 +5,7 @@ import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
+import { costCustomLineItems } from "@/lib/inventoryCosting";
 import { isFutureIstDate, toIstDateStr, istDayStartUtc, MAX_MONEY_VALUE } from "@/lib/validation";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { computeRoundOff } from "@/lib/roundOff";
@@ -249,6 +250,9 @@ export async function POST(
           items.filter((item) => item.productId).map((item) => ({ productId: item.productId!, quantity: item.quantity })),
           { type: "return", reference: inv.invoiceNumber, createdByUserId: userId }
         );
+        // Custom (no-catalog) return lines have no product for batchAdjustStock/recostProducts to
+        // ever see — cost them separately at their own net rate (see costCustomLineItems).
+        await costCustomLineItems(tx, { returnId: created.id });
 
         return created;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });

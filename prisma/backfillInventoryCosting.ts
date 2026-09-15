@@ -14,7 +14,7 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { config } from "dotenv";
 import { resolve } from "path";
-import { recostProducts } from "../src/lib/inventoryCosting";
+import { recostProducts, costCustomLineItems } from "../src/lib/inventoryCosting";
 
 config({ path: resolve(__dirname, "../.env") });
 
@@ -50,6 +50,12 @@ async function main() {
       console.log(`  ${done}/${productIds.length} products recosted`);
     }
   }
+
+  // Custom (no-catalog) line items are invisible to recostProducts (it's keyed by productId) — a
+  // separate global sweep costs every such line at its own net rate (assumed 0% margin), see
+  // costCustomLineItems() in src/lib/inventoryCosting.ts for the reasoning.
+  await costCustomLineItems(prisma as unknown as Prisma.TransactionClient);
+  console.log("Custom (no-catalog) line items costed at their own net rate.");
 
   const afterInvoice = await prisma.invoiceItem.groupBy({ by: ["costSource"], _count: { _all: true }, _sum: { quantity: true } });
   console.log("\nDone. InvoiceItem costSource breakdown:", afterInvoice.map((r) => ({ costSource: r.costSource, items: r._count._all, qty: r._sum.quantity })));

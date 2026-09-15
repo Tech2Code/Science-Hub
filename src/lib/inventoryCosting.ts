@@ -157,3 +157,53 @@ export async function recostProducts(tx: TxClient, productIds: Iterable<string>)
     `;
   }
 }
+
+// A line item with no productId ("just for this document" custom item, e.g. a one-off product
+// name typed directly rather than picked from the catalog) has no purchase-bill history to look
+// up at all — recostProducts() above never even sees these rows, since it's keyed by productId.
+// Rather than leaving costPrice permanently NULL (silently understating COGS, since the dashboard
+// then credits 100% margin to a line that might have cost the business plenty), this assumes a
+// deliberately conservative 0%-margin estimate: the line's own NET rate (its total, which is
+// already GST-inclusive and net of any discount, minus its own gstAmount, divided by quantity) —
+// i.e. "assume this custom item was bought at exactly what it sold for". This can't be derived
+// from anything else (no product, no purchase bill), so it's the most honest default available;
+// costSource "custom" marks it as an assumption rather than a real (or even fallback) cost, same
+// spirit as costSource "fallback" for a catalog product sold before its first purchase bill.
+// Idempotent — only touches rows that don't already have a cost (WHERE "costSource" IS NULL /
+// "costPrice" IS NULL), so re-running (e.g. the backfill script) never overwrites a real cost.
+export async function costCustomLineItems(
+  tx: TxClient,
+  scope: { invoiceId?: string; returnId?: string } = {},
+): Promise<void> {
+  if (scope.invoiceId) {
+    await tx.$executeRaw`
+      UPDATE "InvoiceItem"
+      SET "costPrice" = ("total" - "gstAmount") / NULLIF("quantity", 0), "costSource" = 'custom'
+      WHERE "invoiceId" = ${scope.invoiceId} AND "productId" IS NULL AND "costSource" IS NULL
+    `;
+  }
+  if (scope.returnId) {
+    await tx.$executeRaw`
+      UPDATE "ReturnItem"
+      SET "costPrice" = ("total" - "gstAmount") / NULLIF("quantity", 0)
+      WHERE "returnId" = ${scope.returnId} AND "productId" IS NULL AND "costPrice" IS NULL
+    `;
+  }
+  if (!scope.invoiceId && !scope.returnId) {
+    // No scope given — used only by the one-off historical backfill, sweeping every document.
+    await tx.$executeRaw`
+      UPDATE "InvoiceItem" ii
+      SET "costPrice" = (ii."total" - ii."gstAmount") / NULLIF(ii."quantity", 0), "costSource" = 'custom'
+      FROM "Invoice" i
+      WHERE ii."invoiceId" = i.id AND i."deletedAt" IS NULL
+        AND ii."productId" IS NULL AND ii."costSource" IS NULL
+    `;
+    await tx.$executeRaw`
+      UPDATE "ReturnItem" ri
+      SET "costPrice" = (ri."total" - ri."gstAmount") / NULLIF(ri."quantity", 0)
+      FROM "Return" r
+      WHERE ri."returnId" = r.id AND r."deletedAt" IS NULL
+        AND ri."productId" IS NULL AND ri."costPrice" IS NULL
+    `;
+  }
+}

@@ -12,6 +12,7 @@ import { getIndianFinancialYear } from "@/lib/documentNumbering";
 
 class InvoiceConflictError extends Error {}
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
+import { costCustomLineItems } from "@/lib/inventoryCosting";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { checkCustomerCreditLimit, type CreditLimitCheck } from "@/lib/creditLimit";
@@ -331,6 +332,9 @@ export async function PUT(
           createdByUserId: auth.session.user.id,
         }
       );
+      // Custom (no-catalog) line items have no product for batchAdjustStock/recostProducts to
+      // ever see — cost them separately at their own net rate (see costCustomLineItems).
+      await costCustomLineItems(tx, { invoiceId: inv.id });
       const warnings = updatedProducts
         .filter((p) => p.stock < 0)
         .map((p) => `${p.name} (stock: ${p.stock})`);
