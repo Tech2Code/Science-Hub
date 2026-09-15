@@ -422,7 +422,7 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
   const salesRows = canSeeSales
     ? await prisma.$queryRaw<Array<{
         month: Date; verifiedItemGross: number; verifiedItemGst: number; verifiedCogs: number;
-        unverifiedItemGross: number; unverifiedItemGst: number;
+        unverifiedItemGross: number; unverifiedItemGst: number; unverifiedCogs: number;
         costedQty: number; estimatedQty: number; uncostedQty: number;
       }>>`
         SELECT date_trunc('month', i."date" + interval '330 minutes') AS month,
@@ -431,6 +431,12 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
                COALESCE(SUM(CASE WHEN ii."costSource" IN ('ledger', 'custom-provided') THEN ii."costPrice" * ii."quantity" ELSE 0 END), 0) AS "verifiedCogs",
                COALESCE(SUM(CASE WHEN ii."costSource" IN ('fallback', 'custom') OR ii."costSource" IS NULL THEN ii."total" ELSE 0 END), 0) AS "unverifiedItemGross",
                COALESCE(SUM(CASE WHEN ii."costSource" IN ('fallback', 'custom') OR ii."costSource" IS NULL THEN ii."gstAmount" ELSE 0 END), 0) AS "unverifiedItemGst",
+               -- Estimated-only: 'fallback' rows are already costed at Product.purchasePrice (a
+               -- static, possibly-stale field, not real purchase history) and 'custom' rows at
+               -- their own 0%-margin sale rate — both real numbers already sitting on the row, just
+               -- not trustworthy enough to count as Verified. Surfaced separately as "Estimated
+               -- Profit" on the dashboard, never blended into the Verified figures above.
+               COALESCE(SUM(CASE WHEN ii."costSource" IN ('fallback', 'custom') OR ii."costSource" IS NULL THEN ii."costPrice" * ii."quantity" ELSE 0 END), 0) AS "unverifiedCogs",
                COALESCE(SUM(CASE WHEN ii."costSource" IN ('ledger', 'custom-provided') THEN ii."quantity" ELSE 0 END), 0) AS "costedQty",
                COALESCE(SUM(CASE WHEN ii."costSource" IN ('fallback', 'custom') THEN ii."quantity" ELSE 0 END), 0) AS "estimatedQty",
                COALESCE(SUM(CASE WHEN ii."costPrice" IS NULL THEN ii."quantity" ELSE 0 END), 0) AS "uncostedQty"
@@ -473,14 +479,15 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
   const returnRows = canSeeSales
     ? await prisma.$queryRaw<Array<{
         month: Date; verifiedReturnGross: number; verifiedReturnGst: number; verifiedReturnCogs: number;
-        unverifiedReturnGross: number; unverifiedReturnGst: number;
+        unverifiedReturnGross: number; unverifiedReturnGst: number; unverifiedReturnCogs: number;
       }>>`
         SELECT date_trunc('month', r."date" + interval '330 minutes') AS month,
                COALESCE(SUM(CASE WHEN ri."costSource" IN ('ledger', 'custom-provided') THEN ri."total" ELSE 0 END), 0) AS "verifiedReturnGross",
                COALESCE(SUM(CASE WHEN ri."costSource" IN ('ledger', 'custom-provided') THEN ri."gstAmount" ELSE 0 END), 0) AS "verifiedReturnGst",
                COALESCE(SUM(CASE WHEN ri."costSource" IN ('ledger', 'custom-provided') THEN ri."costPrice" * ri."quantity" ELSE 0 END), 0) AS "verifiedReturnCogs",
                COALESCE(SUM(CASE WHEN ri."costSource" IN ('fallback', 'custom') OR ri."costSource" IS NULL THEN ri."total" ELSE 0 END), 0) AS "unverifiedReturnGross",
-               COALESCE(SUM(CASE WHEN ri."costSource" IN ('fallback', 'custom') OR ri."costSource" IS NULL THEN ri."gstAmount" ELSE 0 END), 0) AS "unverifiedReturnGst"
+               COALESCE(SUM(CASE WHEN ri."costSource" IN ('fallback', 'custom') OR ri."costSource" IS NULL THEN ri."gstAmount" ELSE 0 END), 0) AS "unverifiedReturnGst",
+               COALESCE(SUM(CASE WHEN ri."costSource" IN ('fallback', 'custom') OR ri."costSource" IS NULL THEN ri."costPrice" * ri."quantity" ELSE 0 END), 0) AS "unverifiedReturnCogs"
         FROM "Return" r
         JOIN "ReturnItem" ri ON ri."returnId" = r."id"
         WHERE r."deletedAt" IS NULL
@@ -589,11 +596,20 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
     const otherExpenses = purchaseTransportByMonth.get(key) ?? 0;
 
     // UNVERIFIED — revenue (ex-GST) from lines with no real cost yet, net of any returns of those
-    // same unverified sales. Deliberately has no "cost"/"profit" figure alongside it — inventing
-    // one would be exactly the guessing this split exists to avoid.
+    // same unverified sales. No "cost"/"profit" figure is blended in here — inventing one would be
+    // exactly the guessing this split exists to avoid.
     const unverifiedReturnGross = Number(r?.unverifiedReturnGross) || 0;
     const unverifiedReturnGst = Number(r?.unverifiedReturnGst) || 0;
     const unverifiedRevenue = (unverifiedItemGross - unverifiedItemGst) - (unverifiedReturnGross - unverifiedReturnGst);
+
+    // ESTIMATED PROFIT — a separate, clearly-not-verified figure for the unverified bucket above,
+    // using whatever cost each row already got costed at (Product.purchasePrice for 'fallback' rows
+    // — a static field that may be stale/never revisited, not real purchase history; the sale's own
+    // rate for 'custom' rows, i.e. always 0 margin by construction). Never blended into grossProfit —
+    // shown only so an all-guessed number is visible on request instead of no number at all.
+    const unverifiedCogs = Number(s?.unverifiedCogs) || 0;
+    const unverifiedReturnCogs = Number(r?.unverifiedReturnCogs) || 0;
+    const estimatedProfit = unverifiedRevenue - (unverifiedCogs - unverifiedReturnCogs);
 
     return {
       month: label,
@@ -609,6 +625,7 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
       otherExpenses,
       grossProfit: netSalesAfterReturns - netCogs - otherExpenses,
       unverifiedRevenue,
+      estimatedProfit,
       costedQty: Number(s?.costedQty) || 0,
       estimatedQty: Number(s?.estimatedQty) || 0,
       uncostedQty: Number(s?.uncostedQty) || 0,
@@ -633,13 +650,14 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
       otherExpenses: acc.otherExpenses + m.otherExpenses,
       grossProfit: acc.grossProfit + m.grossProfit,
       unverifiedRevenue: acc.unverifiedRevenue + m.unverifiedRevenue,
+      estimatedProfit: acc.estimatedProfit + m.estimatedProfit,
       costedQty: acc.costedQty + m.costedQty,
       estimatedQty: acc.estimatedQty + m.estimatedQty,
       uncostedQty: acc.uncostedQty + m.uncostedQty,
       totalSales: acc.totalSales + m.totalSales,
       totalPurchases: acc.totalPurchases + m.totalPurchases,
     }),
-    { grossSales: 0, gst: 0, netSales: 0, returnNet: 0, netSalesAfterReturns: 0, cogs: 0, returnCogs: 0, netCogs: 0, otherExpenses: 0, grossProfit: 0, unverifiedRevenue: 0, costedQty: 0, estimatedQty: 0, uncostedQty: 0, totalSales: 0, totalPurchases: 0 },
+    { grossSales: 0, gst: 0, netSales: 0, returnNet: 0, netSalesAfterReturns: 0, cogs: 0, returnCogs: 0, netCogs: 0, otherExpenses: 0, grossProfit: 0, unverifiedRevenue: 0, estimatedProfit: 0, costedQty: 0, estimatedQty: 0, uncostedQty: 0, totalSales: 0, totalPurchases: 0 },
   );
 
   return {

@@ -28,6 +28,7 @@ interface FinancialFigures {
   otherExpenses: number;         // Purchase Bill's own transport/freight charge — not tied to any product's cost
   grossProfit: number;           // netSalesAfterReturns - netCogs - otherExpenses — the headline "Actual Profit"
   unverifiedRevenue: number;     // ex-GST revenue with no verified cost yet, net of returns of those same sales — deliberately has no profit figure alongside it
+  estimatedProfit: number;       // unverifiedRevenue minus a GUESSED cost (Product.purchasePrice for fallback rows, 0%-margin for custom rows) — shown separately, never blended into grossProfit
   costedQty: number;    // qty sold with a real weighted-average cost
   estimatedQty: number; // qty sold using Product.purchasePrice as a placeholder (no purchase history yet)
   uncostedQty: number;  // qty sold with no product cost at all (legacy, never recomputed)
@@ -118,7 +119,7 @@ export default function DashboardPage() {
   const financials = data?.financials ?? null;
   const EMPTY_FIN: FinancialFigures = {
     grossSales: 0, gst: 0, netSales: 0, returnNet: 0, netSalesAfterReturns: 0,
-    cogs: 0, returnCogs: 0, netCogs: 0, otherExpenses: 0, grossProfit: 0, unverifiedRevenue: 0,
+    cogs: 0, returnCogs: 0, netCogs: 0, otherExpenses: 0, grossProfit: 0, unverifiedRevenue: 0, estimatedProfit: 0,
     costedQty: 0, estimatedQty: 0, uncostedQty: 0,
     totalSales: 0, totalPurchases: 0,
   };
@@ -309,7 +310,10 @@ export default function DashboardPage() {
 
         {!loading && hasUnverifiedRevenue && (
           <div className={styles.financialsWarn}>
-            <strong>₹{fmt(finSelected.unverifiedRevenue)} of revenue this period has no verified cost yet</strong> — it&apos;s excluded from Gross Profit above (not counted as profit, not counted as loss). This happens when a product was sold before any real purchase bill for it existed, or a custom item&apos;s cost was never confirmed. To fix it: record the real purchase bill for that product (even backdated), or edit the custom item to give its real cost — the next recompute will pick it up automatically.
+            <strong>{fmt(finSelected.unverifiedRevenue)} of revenue this period has no verified cost yet</strong> — it&apos;s excluded from Gross Profit above (not counted as profit, not counted as loss). This happens when a product was sold before any real purchase bill for it existed, or a custom item&apos;s cost was never confirmed. To fix it: record the real purchase bill for that product (even backdated), or edit the custom item to give its real cost — the next recompute will pick it up automatically.
+            <div className={styles.estimatedProfitLine}>
+              Estimated profit on this revenue (using each product&apos;s stored Purchase Price, which may be outdated — not real purchase history): <strong>{fmt(finSelected.estimatedProfit)}</strong>. This is a guess, not counted in Gross Profit above.
+            </div>
           </div>
         )}
 

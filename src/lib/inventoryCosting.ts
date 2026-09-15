@@ -125,16 +125,27 @@ export async function recostProducts(tx: TxClient, productIds: Iterable<string>)
       if (ev.kind === "return") {
         const hadStock = runningQty > 0;
         const avgAtReturn = hadStock ? runningValue / runningQty : fallbackCost;
-        runningQty += ev.quantity;
-        runningValue += ev.quantity * avgAtReturn;
+        // Only a ledger-backed return actually adjusts the running pool — a fallback-costed one
+        // (no real stock on hand at the time) has no real value to add back, so folding its guessed
+        // cost into runningValue would contaminate every later real purchase's weighted average.
+        if (hadStock) {
+          runningQty += ev.quantity;
+          runningValue += ev.quantity * avgAtReturn;
+        }
         returnUpdates.push({ id: ev.returnItemId!, costPrice: avgAtReturn, costSource: hadStock ? "ledger" : "fallback" });
         continue;
       }
       // sale
       const hasStock = runningQty > 0;
       const cost = hasStock ? runningValue / runningQty : fallbackCost;
-      runningQty -= ev.quantity;
-      runningValue -= ev.quantity * cost;
+      // Only a ledger-backed sale actually depletes the running pool — a fallback-costed one (sold
+      // before any real purchase existed) has no real value/qty to remove, so decrementing anyway
+      // would carry its guessed cost forward and skew the very next real purchase's weighted
+      // average, even though that average is later labeled "ledger"/verified.
+      if (hasStock) {
+        runningQty -= ev.quantity;
+        runningValue -= ev.quantity * cost;
+      }
       saleUpdates.push({ id: ev.invoiceItemId!, costPrice: cost, costSource: hasStock ? "ledger" : "fallback" });
     }
   }

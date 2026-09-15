@@ -214,6 +214,43 @@
   display: inline-block;
 }
 
+.customCostRow {
+  margin-top: 0.3rem;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.customCostLabel {
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: var(--c-text-4);
+  white-space: nowrap;
+}
+
+.customCostInput {
+  width: 100%;
+  min-width: 4rem;
+  max-width: 5.5rem;
+  box-sizing: border-box;
+  text-align: right;
+  font-weight: 400;
+}
+
+.customCostHintUnconfirmed {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--c-amber-text);
+  white-space: nowrap;
+}
+
+.customCostHintConfirmed {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--c-green-text);
+  white-space: nowrap;
+}
+
 .costWarningHint {
   position: absolute;
   top: -0.7rem;

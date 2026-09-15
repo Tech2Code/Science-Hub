@@ -6,10 +6,16 @@ export interface InvoiceLineItem {
   qty: number; price: number; gstRate: number;
   hsn: string; discountPercent: number;
   // Only set on a "just for this invoice" custom line (no productId) when the user typed in what
-  // it actually cost them at add-time — see QuickAddProductModal.tsx. Without this, a custom
-  // item's COGS is assumed at 0% margin (its own sale rate) since there's no product to look up a
-  // real purchase cost from; this lets the user override that assumption with the real number.
+  // it actually cost them — either at add-time (see QuickAddProductModal.tsx) or later via the
+  // items table's own "Confirm real cost" control. Without this, a custom item's COGS is assumed
+  // at 0% margin (its own sale rate) since there's no product to look up a real purchase cost
+  // from; this lets the user override that assumption with the real number.
   customCostPrice?: number;
+  // Informational only (never sent back to the server as-is) — read from the loaded invoice item's
+  // own costSource so the table can show whether a custom line's cost is already confirmed
+  // ('custom-provided') or still an unconfirmed 0%-margin guess ('custom'/null). A catalog-linked
+  // item's costSource always comes from real purchase history and is never shown here.
+  costSource?: string | null;
 }
 
 // Stable per-row id (not array index) so removing a row can't make React reuse another row's focus/input state.

@@ -82,6 +82,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
         unit: outcome.unit, qty: outcome.qty, price: parseFloat(rate) || 0,
         gstRate: parseFloat(outcome.gstRate) || 0, hsn: outcome.hsn, discountPercent: parseFloat(discountPercent) || 0,
         customCostPrice: outcome.purchasePriceNum,
+        costSource: "custom-provided",
       }]);
       return;
     }
@@ -210,6 +211,34 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
 
   function clearPriceDraft(key: string) {
     setPriceDrafts((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
+
+  // Lets a custom (no-catalog) line's real cost be set or corrected after the fact — e.g. an item
+  // added without a confirmed cost, or an existing invoice's custom line whose cost was never
+  // confirmed at all — without deleting and re-adding it via the quick-add popup. Same draft-buffer
+  // pattern as price/qty above so a trailing "." isn't stripped mid-keystroke.
+  const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
+
+  function handleCustomCostChange(idx: number, key: string, raw: string) {
+    const cleaned = raw.replace(/[^\d.]/g, "");
+    if ((cleaned.match(/\./g) ?? []).length > 1) return;
+    setCostDrafts((prev) => ({ ...prev, [key]: raw }));
+    if (cleaned.trim() === "") {
+      setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, customCostPrice: undefined, costSource: null } : item)));
+      return;
+    }
+    const parsed = parseFloat(cleaned);
+    if (isNaN(parsed)) return;
+    setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, customCostPrice: parsed, costSource: "custom-provided" } : item)));
+  }
+
+  function clearCostDraft(key: string) {
+    setCostDrafts((prev) => {
       if (!(key in prev)) return prev;
       const next = { ...prev };
       delete next[key];
@@ -350,6 +379,25 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
                     <td className={styles.tdIndex}>{idx + 1}</td>
                     <td className={styles.tdProduct}>
                       <div className={styles.tdProductInner} title={item.productName}>{item.productName}</div>
+                      {!item.productId && (
+                        <div className={styles.customCostRow}>
+                          <span className={styles.customCostLabel}>Cost ₹</span>
+                          <Input
+                            sz="sm" type="text" inputMode="decimal"
+                            value={costDrafts[item.key] ?? (item.customCostPrice != null ? String(item.customCostPrice) : "")}
+                            onChange={(e) => handleCustomCostChange(idx, item.key, e.target.value)}
+                            onBlur={() => clearCostDraft(item.key)}
+                            aria-label={`Real cost for ${item.productName}`}
+                            placeholder="unconfirmed"
+                            className={styles.customCostInput}
+                          />
+                          {item.costSource === "custom-provided" ? (
+                            <span className={styles.customCostHintConfirmed}>✓ confirmed</span>
+                          ) : (
+                            <span className={styles.customCostHintUnconfirmed}>not verified</span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className={styles.tdCenter}>
                       <Input
