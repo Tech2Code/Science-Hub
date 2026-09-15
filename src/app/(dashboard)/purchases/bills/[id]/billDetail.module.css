@@ -322,16 +322,20 @@
 }
 
 /* Explicit widths, shared by header and every body row, so <th>/<td> always resolve
-   to the same box — table-layout: auto let rows size cells independently and drift. */
+   to the same box — table-layout: auto let rows size cells independently and drift.
+   colGst (single IGST column) and colGstHalf×2 (CGST+SGST) are sized so the tax
+   portion of the row totals the same 20% either way — see itemColCount in the
+   items-table JSX for why the column count itself differs by isInterState. */
 .colNum       { width: 4%; }
-.colItem      { width: 24%; }
-.colHsn       { width: 9%; }
-.colQty       { width: 7%; }
-.colRate      { width: 11%; }
-.colDiscount  { width: 11%; }
-.colGstRate   { width: 8%; }
-.colGstAmt    { width: 12%; }
-.colTotal     { width: 14%; }
+.colItem      { width: 20%; }
+.colHsn       { width: 8%; }
+.colQty       { width: 6%; }
+.colRate      { width: 10%; }
+.colDiscount  { width: 10%; }
+.colTaxable   { width: 10%; }
+.colGst       { width: 20%; }
+.colGstHalf   { width: 10%; }
+.colTotal     { width: 12%; }
 
 /* !important needed on <th>: global `.table-base th { text-align: left; }` has higher
    specificity (0,1,1) than this class alone and would otherwise silently win. */
@@ -357,11 +361,6 @@
 .qtyCell {
   text-align: right;
   font-weight: 500;
-}
-
-.gstAmtCell {
-  text-align: right;
-  color: var(--c-text-3);
 }
 
 .totalCell {

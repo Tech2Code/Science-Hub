@@ -576,7 +576,9 @@ export default function PurchaseBillDetailPage() {
         </div>
       </div>
 
-      {/* Items table — mirrors the #/Item/Qty/List Price/Discount/GST %/GST Amt/Total columns below.
+      {/* Items table — mirrors the #/Item/HSN/Qty/List Price/Discount/Taxable Amount/CGST/SGST/Total
+          columns below (the intra-state, 10-column shape — the more common case; an inter-state bill
+          collapses CGST+SGST into one IGST column, but the skeleton doesn't need to distinguish that).
           Header uses the real sectionHeaderRow (1rem/1.25rem padding + divider); rows use the
           same 0.75rem/1rem padding as the real table's <td>, so nothing sits flush on the card edge. */}
       <div className="card">
@@ -586,14 +588,15 @@ export default function PurchaseBillDetailPage() {
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className={styles.skTableRow}>
             <Sk w={20} h={12} r={3} />
-            <Sk w="20%" h={12} r={3} />
-            <Sk w="9%" h={12} r={3} />
-            <Sk w="7%" h={12} r={3} />
-            <Sk w="10%" h={12} r={3} />
-            <Sk w="10%" h={12} r={3} />
+            <Sk w="18%" h={12} r={3} />
             <Sk w="8%" h={12} r={3} />
-            <Sk w="10%" h={12} r={3} />
-            <Sk w="10%" h={12} r={3} />
+            <Sk w="6%" h={12} r={3} />
+            <Sk w="9%" h={12} r={3} />
+            <Sk w="9%" h={12} r={3} />
+            <Sk w="9%" h={12} r={3} />
+            <Sk w="9%" h={12} r={3} />
+            <Sk w="9%" h={12} r={3} />
+            <Sk w="11%" h={12} r={3} />
           </div>
         ))}
       </div>
@@ -1277,77 +1280,134 @@ export default function PurchaseBillDetailPage() {
           </h3>
         </div>
         <div className={styles.tableScroll}>
-          <table className={`table-base ${styles.itemsTable}`}>
-            <colgroup>
-              <col className={styles.colNum} />
-              <col className={styles.colItem} />
-              <col className={styles.colHsn} />
-              <col className={styles.colQty} />
-              <col className={styles.colRate} />
-              <col className={styles.colDiscount} />
-              <col className={styles.colGstRate} />
-              <col className={styles.colGstAmt} />
-              <col className={styles.colTotal} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Item</th>
-                <th>HSN/SAC</th>
-                <th className={styles.textRight}>Qty</th>
-                <th className={styles.textRight}>List Price</th>
-                <th className={styles.textRight}>Discount</th>
-                <th className={styles.textRight}>GST %</th>
-                <th className={styles.textRight}>GST Amt</th>
-                <th className={styles.textRight}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bill.items.map((item, idx) => (
-                <tr key={item.id}>
-                  <td data-mobile-hide className={styles.textMuted}>{idx + 1}</td>
-                  <td data-mobile-full>
-                    <div className={styles.itemName}>{item.name}</div>
-                    <div className={styles.itemUnit}>{item.unit}</div>
-                  </td>
-                  <td data-label="HSN/SAC" className={styles.textMuted}>{item.hsn || "—"}</td>
-                  <td data-label="Qty" className={styles.qtyCell}>{item.quantity}</td>
-                  <td data-label="List Price" className={styles.textRight}>₹{fmt(item.purchasePrice)}</td>
-                  <td data-label="Discount" className={`${styles.textRight} ${styles.textMuted}`}>{item.discountPercent > 0 ? `${item.discountPercent}% (−₹${fmt(item.discountAmount)})` : "—"}</td>
-                  <td data-label="GST %" className={`${styles.textRight} ${styles.textMuted}`}>{item.gstRate}%</td>
-                  <td data-label="GST Amt" className={styles.gstAmtCell}>₹{fmt(item.gstAmount)}</td>
-                  <td data-label="Total" className={styles.totalCell}>₹{fmt(item.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              {!!bill.transportCharge && bill.transportCharge > 0 && (
-                <tr>
-                  <td colSpan={8} className={`${styles.textRight} ${styles.textMuted}`}>Transport Charge</td>
-                  <td className={`${styles.textRight} ${styles.textMuted}`}>₹{fmt(bill.transportCharge)}</td>
-                </tr>
-              )}
-              {!!bill.transportChargeGstAmount && bill.transportChargeGstAmount > 0 && (
-                <tr>
-                  <td colSpan={8} className={`${styles.textRight} ${styles.textMuted}`}>Transport GST {bill.transportChargeGstRate}%</td>
-                  <td className={`${styles.textRight} ${styles.textMuted}`}>₹{fmt(bill.transportChargeGstAmount)}</td>
-                </tr>
-              )}
-              {bill.roundOff !== 0 && (
-                <tr>
-                  <td colSpan={8} className={`${styles.textRight} ${styles.textMuted}`}>Round Off</td>
-                  <td className={`${styles.textRight} ${styles.textMuted}`}>{bill.roundOff > 0 ? "+" : "−"}₹{fmt(Math.abs(bill.roundOff))}</td>
-                </tr>
-              )}
-              <tr className={styles.tfootRow}>
-                <td colSpan={8} className={styles.tfootLabelCell}>Grand Total</td>
-                <td className={styles.tfootValueCell}>₹{fmt(bill.total)}</td>
-              </tr>
-              <tr>
-                <td colSpan={9} className={styles.amountInWordsCell}>{amountInWordsINR(bill.total)}</td>
-              </tr>
-            </tfoot>
-          </table>
+          {/* Column count/last-column colSpan below both depend on isInterState (IGST = 1 tax
+              column, CGST+SGST = 2) — see itemColCount, used to keep the tfoot's merged label
+              cells aligned with however many item columns are actually rendered. */}
+          {(() => {
+            const itemColCount = bill.isInterState ? 9 : 10;
+            const footColSpan = itemColCount - 1;
+            return (
+              <table className={`table-base ${styles.itemsTable}`}>
+                <colgroup>
+                  <col className={styles.colNum} />
+                  <col className={styles.colItem} />
+                  <col className={styles.colHsn} />
+                  <col className={styles.colQty} />
+                  <col className={styles.colRate} />
+                  <col className={styles.colDiscount} />
+                  <col className={styles.colTaxable} />
+                  {bill.isInterState
+                    ? <col className={styles.colGst} />
+                    : <><col className={styles.colGstHalf} /><col className={styles.colGstHalf} /></>}
+                  <col className={styles.colTotal} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Item</th>
+                    <th>HSN/SAC</th>
+                    <th className={styles.textRight}>Qty</th>
+                    <th className={styles.textRight}>List Price</th>
+                    <th className={styles.textRight}>Discount</th>
+                    <th className={styles.textRight}>Taxable Amount</th>
+                    {bill.isInterState
+                      ? <th className={styles.textRight}>IGST</th>
+                      : <><th className={styles.textRight}>CGST</th><th className={styles.textRight}>SGST</th></>}
+                    <th className={styles.textRight}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bill.items.map((item, idx) => {
+                    const taxable = item.quantity * item.purchasePrice - item.discountAmount;
+                    const halfRate = item.gstRate / 2;
+                    const halfGst = item.gstAmount / 2;
+                    return (
+                      <tr key={item.id}>
+                        <td data-mobile-hide className={styles.textMuted}>{idx + 1}</td>
+                        <td data-mobile-full>
+                          <div className={styles.itemName}>{item.name}</div>
+                          <div className={styles.itemUnit}>{item.unit}</div>
+                        </td>
+                        <td data-label="HSN/SAC" className={styles.textMuted}>{item.hsn || "—"}</td>
+                        <td data-label="Qty" className={styles.qtyCell}>{item.quantity}</td>
+                        <td data-label="List Price" className={styles.textRight}>₹{fmt(item.purchasePrice)}</td>
+                        <td data-label="Discount" className={`${styles.textRight} ${styles.textMuted}`}>{item.discountPercent > 0 ? `${item.discountPercent}% (−₹${fmt(item.discountAmount)})` : "—"}</td>
+                        <td data-label="Taxable Amount" className={styles.textRight}>₹{fmt(taxable)}</td>
+                        {bill.isInterState ? (
+                          <td data-label="IGST" className={`${styles.textRight} ${styles.textMuted}`}>{item.gstRate}% (₹{fmt(item.gstAmount)})</td>
+                        ) : (
+                          <>
+                            <td data-label="CGST" className={`${styles.textRight} ${styles.textMuted}`}>{halfRate}% (₹{fmt(halfGst)})</td>
+                            <td data-label="SGST" className={`${styles.textRight} ${styles.textMuted}`}>{halfRate}% (₹{fmt(halfGst)})</td>
+                          </>
+                        )}
+                        <td data-label="Total" className={styles.totalCell}>₹{fmt(item.total)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  {!!bill.transportCharge && bill.transportCharge > 0 && (
+                    <tr>
+                      <td colSpan={footColSpan} className={`${styles.textRight} ${styles.textMuted}`}>Transport Charge</td>
+                      <td className={`${styles.textRight} ${styles.textMuted}`}>₹{fmt(bill.transportCharge)}</td>
+                    </tr>
+                  )}
+                  {!!bill.transportChargeGstAmount && bill.transportChargeGstAmount > 0 && (
+                    <tr>
+                      <td colSpan={footColSpan} className={`${styles.textRight} ${styles.textMuted}`}>Transport GST {bill.transportChargeGstRate}%</td>
+                      <td className={`${styles.textRight} ${styles.textMuted}`}>₹{fmt(bill.transportChargeGstAmount)}</td>
+                    </tr>
+                  )}
+                  {/* Subtotal/GST below fold in Transportation Charges' own taxable value and GST
+                      (shown split out on the informational rows above) — otherwise this would
+                      silently under-report the tax actually charged, same reasoning as the PDF's
+                      #bill-print-area summary block below. */}
+                  <tr>
+                    <td colSpan={footColSpan} className={`${styles.textRight} ${styles.textMuted}`}>Subtotal</td>
+                    <td className={`${styles.textRight} ${styles.textMuted}`}>₹{fmt(bill.subtotal + (bill.transportCharge ?? 0))}</td>
+                  </tr>
+                  <tr>
+                    <td colSpan={footColSpan} className={`${styles.textRight} ${styles.textMuted}`}>GST</td>
+                    <td className={`${styles.textRight} ${styles.textMuted}`}>₹{fmt(bill.taxAmount + (bill.transportChargeGstAmount ?? 0))}</td>
+                  </tr>
+                  {bill.discount > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={footColSpan} className={`${styles.textRight} ${styles.textMuted}`}>Discount</td>
+                        <td className={`${styles.textRight} ${styles.textMuted}`}>−₹{fmt(bill.discount)}</td>
+                      </tr>
+                      <tr>
+                        <td colSpan={footColSpan} className={`${styles.textRight} ${styles.textMuted}`}>Taxable Value</td>
+                        <td className={`${styles.textRight} ${styles.textMuted}`}>₹{fmt(bill.subtotal - bill.discount)}</td>
+                      </tr>
+                    </>
+                  )}
+                  {bill.roundOff !== 0 && (
+                    <tr>
+                      <td colSpan={footColSpan} className={`${styles.textRight} ${styles.textMuted}`}>Round Off</td>
+                      <td className={`${styles.textRight} ${styles.textMuted}`}>{bill.roundOff > 0 ? "+" : "−"}₹{fmt(Math.abs(bill.roundOff))}</td>
+                    </tr>
+                  )}
+                  <tr className={styles.tfootRow}>
+                    <td colSpan={footColSpan} className={styles.tfootLabelCell}>Grand Total</td>
+                    <td className={styles.tfootValueCell}>₹{fmt(bill.total)}</td>
+                  </tr>
+                  <tr>
+                    <td colSpan={footColSpan} className={`${styles.textRight} ${styles.textMuted}`}>Paid</td>
+                    <td className={styles.tfootPaidValueCell}>₹{fmt(bill.paidAmount)}</td>
+                  </tr>
+                  <tr>
+                    <td colSpan={footColSpan} className={styles.tfootLabelCell}>Balance Due</td>
+                    <td className={styles.tfootValueCell}>₹{fmt(balance)}</td>
+                  </tr>
+                  <tr>
+                    <td colSpan={itemColCount} className={styles.amountInWordsCell}>{amountInWordsINR(bill.total)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            );
+          })()}
         </div>
       </div>
 
