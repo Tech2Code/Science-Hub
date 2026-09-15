@@ -142,12 +142,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       {
         // Mirrors /api/invoices/[id] and the POST route — without it, duplicate-product lines silently merge into one ledger entry.
         const seenProductIds = new Set<string>();
-        for (const item of items as { productId?: string }[]) {
-          if (!item.productId) continue;
-          if (seenProductIds.has(item.productId)) {
-            return NextResponse.json({ error: "Each product can only appear once per purchase bill — combine duplicate lines into a single quantity instead." }, { status: 400 });
+        const seenCustomNames = new Set<string>();
+        for (const item of items as { productId?: string; name?: string }[]) {
+          if (item.productId) {
+            if (seenProductIds.has(item.productId)) {
+              return NextResponse.json({ error: "Each product can only appear once per purchase bill — combine duplicate lines into a single quantity instead." }, { status: 400 });
+            }
+            seenProductIds.add(item.productId);
+            continue;
           }
-          seenProductIds.add(item.productId);
+          const key = (item.name ?? "").trim().toLowerCase();
+          if (key && seenCustomNames.has(key)) {
+            return NextResponse.json({ error: `"${item.name}" appears more than once as a custom item — combine duplicate lines into a single quantity instead.` }, { status: 400 });
+          }
+          if (key) seenCustomNames.add(key);
         }
       }
       // Discount is applied to the line's gross amount before GST, same as

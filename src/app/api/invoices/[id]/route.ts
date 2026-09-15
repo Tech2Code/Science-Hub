@@ -155,12 +155,22 @@ export async function PUT(
     }
     {
       const seenProductIds = new Set<string>();
-      for (const item of items as { productId?: string }[]) {
-        if (!item.productId) continue; // unlinked custom items (e.g. "Delivery Charges") can repeat freely
-        if (seenProductIds.has(item.productId)) {
-          return NextResponse.json({ error: "Each product can only appear once per invoice — combine duplicate lines into a single quantity instead." }, { status: 400 });
+      const seenCustomNames = new Set<string>();
+      for (const item of items as { productId?: string; name?: string }[]) {
+        if (item.productId) {
+          if (seenProductIds.has(item.productId)) {
+            return NextResponse.json({ error: "Each product can only appear once per invoice — combine duplicate lines into a single quantity instead." }, { status: 400 });
+          }
+          seenProductIds.add(item.productId);
+          continue;
         }
-        seenProductIds.add(item.productId);
+        // Same reasoning as POST /api/invoices — a custom item's name must stay unique within the
+        // invoice so a later return can match it back unambiguously (ReturnItem.sourceInvoiceItemId).
+        const key = (item.name ?? "").trim().toLowerCase();
+        if (key && seenCustomNames.has(key)) {
+          return NextResponse.json({ error: `"${item.name}" appears more than once as a custom item — combine duplicate lines into a single quantity instead.` }, { status: 400 });
+        }
+        if (key) seenCustomNames.add(key);
       }
     }
     for (const item of items as { productId?: string; name?: string; hsn?: string; unit?: string }[]) {
@@ -195,6 +205,7 @@ export async function PUT(
     const invoiceItems = items.map((item: {
       productId?: string; name?: string; qty?: number; quantity?: number;
       price: number; gstRate: number; unit?: string; hsn?: string; discountPercent?: number;
+      costPrice?: number | string;
     }) => {
       const product = item.productId ? productMap.get(item.productId) : undefined;
       const quantity = parseFloat(String(item.qty ?? item.quantity ?? 1));
@@ -205,6 +216,16 @@ export async function PUT(
         lineBreakdown({ qty: quantity, price, gstRate, discountPercent });
       subtotal += itemSubtotal;
       totalGst += gstAmount;
+
+      // See POST /api/invoices — a custom (no-catalog) line can carry a user-typed real cost from
+      // the quick-add popup, set directly instead of left for costCustomLineItems()'s 0%-margin
+      // assumption.
+      let providedCost: number | null = null;
+      if (!item.productId && item.costPrice !== undefined && item.costPrice !== null && item.costPrice !== "") {
+        const parsed = parseFloat(String(item.costPrice));
+        if (Number.isFinite(parsed) && parsed >= 0 && parsed <= MAX_MONEY_VALUE) providedCost = parsed;
+      }
+
       return {
         productId: item.productId || null,
         name: product?.name || (item.name ?? "").trim() || "Unknown Product",
@@ -217,6 +238,7 @@ export async function PUT(
         gstRate,
         gstAmount,
         total: itemTotal,
+        ...(providedCost !== null ? { costPrice: providedCost, costSource: "custom-provided" } : {}),
       };
     });
 

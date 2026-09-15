@@ -44,7 +44,7 @@ export async function POST(
     const { id } = await params;
     const body = await request.json();
     const { items, notes, date, idempotencyKey } = body as {
-      items: { productId: string; name: string; quantity: number; price: number; discountPercent?: number }[];
+      items: { productId: string; invoiceItemId?: string; name: string; quantity: number; price: number; discountPercent?: number }[];
       notes?: string;
       date?: string;
       idempotencyKey?: string;
@@ -127,6 +127,13 @@ export async function POST(
     // the client-supplied value.
     const discountByProduct = new Map(invoice.items.map((it) => [it.productId, it.discountPercent]));
 
+    // Only meaningful for a custom (no-catalog) line — lets its cost be looked up exactly from the
+    // specific InvoiceItem it reverses (see ReturnItem.sourceInvoiceItemId in schema.prisma /
+    // costCustomLineItems in src/lib/inventoryCosting.ts) instead of guessed by matching item name.
+    // Validated against this invoice's own item ids rather than trusted outright — a client-supplied
+    // id pointing at an unrelated invoice's line must not silently borrow that line's cost.
+    const validInvoiceItemIds = new Set(invoice.items.map((it) => it.id));
+
     // The original invoice line's discount % is carried forward so a return's taxable value is
     // computed net of it — otherwise the credit note would refund the pre-discount gross price.
     const computedItems = items.map((item) => {
@@ -135,7 +142,8 @@ export async function POST(
         ? discountByProduct.get(item.productId)!
         : Math.min(100, Math.max(0, item.discountPercent ?? 0));
       const { discountAmount, taxable, gstAmt, total } = lineBreakdown({ qty: item.quantity, price: item.price, gstRate, discountPercent });
-      return { ...item, gstRate, discountPercent, discountAmount, taxable, gstAmt, total };
+      const sourceInvoiceItemId = item.invoiceItemId && validInvoiceItemIds.has(item.invoiceItemId) ? item.invoiceItemId : null;
+      return { ...item, gstRate, discountPercent, discountAmount, taxable, gstAmt, total, sourceInvoiceItemId };
     });
 
     const subtotal = computedItems.reduce((s, i) => s + i.taxable, 0);
@@ -230,6 +238,7 @@ export async function POST(
             items: {
               create: computedItems.map((item) => ({
                 productId: item.productId || null,
+                sourceInvoiceItemId: item.sourceInvoiceItemId,
                 name: item.name,
                 quantity: item.quantity,
                 price: item.price,

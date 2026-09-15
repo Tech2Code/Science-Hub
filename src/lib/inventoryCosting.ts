@@ -190,6 +190,42 @@ export async function costCustomLineItems(
     `;
   }
   if (scope.returnId) {
+    // A custom return line has no productId — if the original sale had a real user-provided cost
+    // (costSource 'custom-provided'), it would otherwise be silently discarded in favor of
+    // re-deriving an 0%-margin assumption from the return's OWN price fields.
+    // Tier 1 — exact: sourceInvoiceItemId (see schema.prisma) unambiguously identifies the specific
+    // InvoiceItem this return reverses, set at return-creation time. No guessing involved.
+    await tx.$executeRaw`
+      UPDATE "ReturnItem" ri
+      SET "costPrice" = (
+        SELECT ii."costPrice" FROM "InvoiceItem" ii
+        WHERE ii.id = ri."sourceInvoiceItemId" AND ii."costSource" = 'custom-provided'
+      )
+      WHERE ri."returnId" = ${scope.returnId} AND ri."productId" IS NULL AND ri."costPrice" IS NULL
+        AND ri."sourceInvoiceItemId" IS NOT NULL
+        AND EXISTS (SELECT 1 FROM "InvoiceItem" ii2 WHERE ii2.id = ri."sourceInvoiceItemId" AND ii2."costSource" = 'custom-provided')
+    `;
+    // Tier 2 — legacy fallback: a return created before sourceInvoiceItemId existed has no exact
+    // link, so fall back to matching by name within the same invoice (ambiguous only if that
+    // invoice has two custom lines sharing a name — the closest available link otherwise).
+    await tx.$executeRaw`
+      UPDATE "ReturnItem" ri
+      SET "costPrice" = (
+        SELECT ii."costPrice" FROM "InvoiceItem" ii
+        JOIN "Return" r ON r."invoiceId" = ii."invoiceId"
+        WHERE r.id = ri."returnId" AND ii."productId" IS NULL
+          AND ii."name" = ri."name" AND ii."costSource" = 'custom-provided'
+        ORDER BY ii.id LIMIT 1
+      )
+      WHERE ri."returnId" = ${scope.returnId} AND ri."productId" IS NULL AND ri."costPrice" IS NULL
+        AND EXISTS (
+          SELECT 1 FROM "InvoiceItem" ii2
+          JOIN "Return" r2 ON r2."invoiceId" = ii2."invoiceId"
+          WHERE r2.id = ri."returnId" AND ii2."productId" IS NULL
+            AND ii2."name" = ri."name" AND ii2."costSource" = 'custom-provided'
+        )
+    `;
+    // Tier 3 — no real cost found by either link: assume 0% margin from the return's own rate.
     await tx.$executeRaw`
       UPDATE "ReturnItem"
       SET "costPrice" = ("total" - "gstAmount") / NULLIF("quantity", 0)
@@ -198,12 +234,58 @@ export async function costCustomLineItems(
   }
   if (!scope.invoiceId && !scope.returnId) {
     // No scope given — used only by the one-off historical backfill, sweeping every document.
+    // One-time upgrade: give an old return row (created before sourceInvoiceItemId existed) that
+    // exact link retroactively, but ONLY where the name match is unique within its invoice — an
+    // invoice with two custom lines sharing a name stays on the Tier 2 (ambiguous) path below
+    // rather than risk silently wiring up the wrong one.
+    await tx.$executeRaw`
+      UPDATE "ReturnItem" ri
+      SET "sourceInvoiceItemId" = (
+        SELECT ii."id" FROM "InvoiceItem" ii
+        JOIN "Return" r ON r."invoiceId" = ii."invoiceId"
+        WHERE r.id = ri."returnId" AND ii."productId" IS NULL AND ii."name" = ri."name"
+      )
+      WHERE ri."productId" IS NULL AND ri."sourceInvoiceItemId" IS NULL
+        AND (
+          SELECT COUNT(*) FROM "InvoiceItem" ii3
+          JOIN "Return" r3 ON r3."invoiceId" = ii3."invoiceId"
+          WHERE r3.id = ri."returnId" AND ii3."productId" IS NULL AND ii3."name" = ri."name"
+        ) = 1
+    `;
     await tx.$executeRaw`
       UPDATE "InvoiceItem" ii
       SET "costPrice" = (ii."total" - ii."gstAmount") / NULLIF(ii."quantity", 0), "costSource" = 'custom'
       FROM "Invoice" i
       WHERE ii."invoiceId" = i.id AND i."deletedAt" IS NULL
         AND ii."productId" IS NULL AND ii."costSource" IS NULL
+    `;
+    // Same 3-tier preference as the scoped branch above: exact sourceInvoiceItemId link first,
+    // then legacy name-matching, then the return's own 0%-margin assumption.
+    await tx.$executeRaw`
+      UPDATE "ReturnItem" ri
+      SET "costPrice" = (
+        SELECT ii."costPrice" FROM "InvoiceItem" ii
+        WHERE ii.id = ri."sourceInvoiceItemId" AND ii."costSource" = 'custom-provided'
+      )
+      WHERE ri."productId" IS NULL AND ri."costPrice" IS NULL AND ri."sourceInvoiceItemId" IS NOT NULL
+        AND EXISTS (SELECT 1 FROM "InvoiceItem" ii2 WHERE ii2.id = ri."sourceInvoiceItemId" AND ii2."costSource" = 'custom-provided')
+    `;
+    await tx.$executeRaw`
+      UPDATE "ReturnItem" ri
+      SET "costPrice" = (
+        SELECT ii."costPrice" FROM "InvoiceItem" ii
+        JOIN "Return" r ON r."invoiceId" = ii."invoiceId"
+        WHERE r.id = ri."returnId" AND r."deletedAt" IS NULL AND ii."productId" IS NULL
+          AND ii."name" = ri."name" AND ii."costSource" = 'custom-provided'
+        ORDER BY ii.id LIMIT 1
+      )
+      WHERE ri."productId" IS NULL AND ri."costPrice" IS NULL
+        AND EXISTS (
+          SELECT 1 FROM "InvoiceItem" ii2
+          JOIN "Return" r2 ON r2."invoiceId" = ii2."invoiceId"
+          WHERE r2.id = ri."returnId" AND r2."deletedAt" IS NULL AND ii2."productId" IS NULL
+            AND ii2."name" = ri."name" AND ii2."costSource" = 'custom-provided'
+        )
     `;
     await tx.$executeRaw`
       UPDATE "ReturnItem" ri

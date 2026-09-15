@@ -119,12 +119,25 @@ export async function POST(request: NextRequest) {
     }
     {
       const seenProductIds = new Set<string>();
-      for (const item of items as { productId: string }[]) {
-        if (!item.productId) continue; // unlinked custom items (e.g. "Delivery Charges") can repeat freely
-        if (seenProductIds.has(item.productId)) {
-          return NextResponse.json({ error: "Each product can only appear once per invoice — combine duplicate lines into a single quantity instead." }, { status: 400 });
+      const seenCustomNames = new Set<string>();
+      for (const item of items as { productId?: string; name?: string }[]) {
+        if (item.productId) {
+          if (seenProductIds.has(item.productId)) {
+            return NextResponse.json({ error: "Each product can only appear once per invoice — combine duplicate lines into a single quantity instead." }, { status: 400 });
+          }
+          seenProductIds.add(item.productId);
+          continue;
         }
-        seenProductIds.add(item.productId);
+        // A custom (no-catalog) item can't be traced back to its purchase/sale history by
+        // productId, so cost-matching for a return relies on the item name being unique within the
+        // invoice (see ReturnItem.sourceInvoiceItemId / costCustomLineItems in
+        // src/lib/inventoryCosting.ts) — two custom lines sharing a name would make that ambiguous,
+        // same reason catalog products are deduped by productId above.
+        const key = (item.name ?? "").trim().toLowerCase();
+        if (key && seenCustomNames.has(key)) {
+          return NextResponse.json({ error: `"${item.name}" appears more than once as a custom item — combine duplicate lines into a single quantity instead.` }, { status: 400 });
+        }
+        if (key) seenCustomNames.add(key);
       }
     }
     for (const item of items as { productId?: string; name?: string; hsn?: string; unit?: string }[]) {
@@ -185,6 +198,7 @@ export async function POST(request: NextRequest) {
       hsn?: string;
       unit?: string;
       discountPercent?: number;
+      costPrice?: number | string;
     }) => {
       const product = item.productId ? productMap.get(item.productId) : undefined;
       const quantity = parseFloat(String(item.quantity ?? item.qty ?? 1));
@@ -196,6 +210,17 @@ export async function POST(request: NextRequest) {
 
       subtotal += itemSubtotal;
       totalGst += gstAmount;
+
+      // A custom (no-catalog) line can carry a user-typed real cost from the quick-add popup —
+      // set directly here rather than left for costCustomLineItems()'s 0%-margin assumption, which
+      // only ever fills in rows still missing a cost (see src/lib/inventoryCosting.ts). Ignored for
+      // a catalog-linked item — its cost comes from real purchase history via recostProducts(),
+      // never from a client-supplied value.
+      let providedCost: number | null = null;
+      if (!item.productId && item.costPrice !== undefined && item.costPrice !== null && item.costPrice !== "") {
+        const parsed = parseFloat(String(item.costPrice));
+        if (Number.isFinite(parsed) && parsed >= 0 && parsed <= MAX_MONEY_VALUE) providedCost = parsed;
+      }
 
       return {
         productId: item.productId || null,
@@ -209,6 +234,7 @@ export async function POST(request: NextRequest) {
         gstRate,
         gstAmount,
         total: itemTotal,
+        ...(providedCost !== null ? { costPrice: providedCost, costSource: "custom-provided" } : {}),
       };
     });
 

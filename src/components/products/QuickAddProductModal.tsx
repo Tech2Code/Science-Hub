@@ -42,6 +42,10 @@ interface QuickAddOutcomeBase {
   discountPercent: string;
   /** List Price × Discount % — the derived net rate. */
   purchasePriceNum: number;
+  /** Only meaningful when skipCatalog is true and entityLabel is "invoice" — what the user says
+   *  this item actually cost them, so COGS doesn't have to assume 0% margin. Undefined/empty means
+   *  they didn't provide one. */
+  customCost?: string;
 }
 
 // Discriminated on skipCatalog so `product` is only reachable (and required) in the branch where
@@ -63,9 +67,9 @@ interface QuickAddProductModalProps {
   initialName: string;
 }
 
-const EMPTY_FORM = { name: "", unit: "", quantity: "1", listPrice: "", discountPercent: "", gstRate: "18", salePrice: "", hsn: "", skipCatalog: false };
+const EMPTY_FORM = { name: "", unit: "", quantity: "1", listPrice: "", discountPercent: "", gstRate: "18", salePrice: "", hsn: "", skipCatalog: false, customCost: "" };
 
-type QuickAddErrors = Partial<Record<"name" | "listPrice" | "unit" | "gstRate" | "quantity", string>>;
+type QuickAddErrors = Partial<Record<"name" | "listPrice" | "unit" | "gstRate" | "quantity" | "customCost", string>>;
 
 // Shared "search a product or add a custom one" quick-add popup — used identically by the New/Edit
 // Invoice and New/Edit Purchase Bill line-item tables (InvoiceLineItemsCard.tsx / PurchaseBillItemsTable.tsx)
@@ -131,6 +135,14 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
       listPrice: validate(form.listPrice, rules.required("List price is required."), rules.nonNegativeNumber("List price cannot be negative.")) ?? undefined,
       unit: validate(form.unit, rules.required("Unit is required.")) ?? undefined,
       gstRate: validate(form.gstRate, rules.required("GST rate is required."), rules.percentRange(100, "GST rate must be between 0 and 100%.")) ?? undefined,
+      // Required only for an invoice's "skip catalog" custom item — that's the one case with no
+      // other way to know the real cost (a catalog item's cost comes from purchase history; a
+      // purchase-bill's own custom item already IS its cost, via List Price/Discount % above).
+      // Leaving it optional let every blank submission silently fall back to a 0%-margin
+      // assumption with no visible signal that the profit figure was ever a guess.
+      customCost: (form.skipCatalog && entityLabel === "invoice")
+        ? (validate(form.customCost, rules.required("Enter what this cost you (0 if it was free)."), rules.nonNegativeNumber("Cost cannot be negative.")) ?? undefined)
+        : undefined,
     };
     if (Object.values(errs).some(Boolean)) { setErrors(errs); return; }
     setErrors({});
@@ -142,6 +154,7 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
         skipCatalog: true, name: form.name.trim(), quantity: form.quantity, qty,
         unit: form.unit.trim() || defaultUnit, hsn: form.hsn.trim(), gstRate: form.gstRate,
         listPrice: form.listPrice, discountPercent: form.discountPercent, purchasePriceNum,
+        customCost: entityLabel === "invoice" ? form.customCost.trim() || undefined : undefined,
       });
       toast({ type: "success", title: "Item added", message: `"${form.name.trim()}" added to this ${entityLabel} only.` });
       onClose();
@@ -285,6 +298,20 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
                   type="text" inputMode="decimal" placeholder="0.00"
                   value={form.salePrice}
                   onChange={(e) => setForm((p) => ({ ...p, salePrice: e.target.value.replace(/[^\d.]/g, "") }))}
+                />
+              </FormField>
+            )}
+            {form.skipCatalog && entityLabel === "invoice" && (
+              <FormField
+                label="Your Cost (₹)"
+                required
+                error={errors.customCost}
+                hint="What this actually cost you — there's no product history to look this up from since it's not in the catalog. Enter 0 if it was genuinely free."
+              >
+                <Input
+                  type="text" inputMode="decimal" placeholder="0.00"
+                  value={form.customCost}
+                  onChange={(e) => { setForm((p) => ({ ...p, customCost: e.target.value.replace(/[^\d.]/g, "") })); setErrors((p) => ({ ...p, customCost: undefined })); }}
                 />
               </FormField>
             )}

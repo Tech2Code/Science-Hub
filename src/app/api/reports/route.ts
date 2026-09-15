@@ -379,19 +379,22 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
   const fyStart = istMonthBoundsUtc(fyYear, 3).start;      // Apr 1 (IST) of the FY
   const fyEnd = istMonthBoundsUtc(fyYear + 1, 3).start;    // Apr 1 (IST) of the next FY
 
-  // Sales side, bucketed by IST month. costedQty = costSource 'ledger' (real WAC), estimatedQty =
-  // costSource 'fallback' (Product.purchasePrice placeholder — sold before any qualifying purchase
-  // existed; auto-upgrades to 'ledger' the moment a qualifying purchase is recorded), uncostedQty =
-  // costPrice still NULL (a legacy row from before this column existed, never recomputed since).
+  // Sales side, bucketed by IST month. costedQty = a REAL cost ('ledger' from actual purchase
+  // history, or 'custom-provided' from a user-typed real cost on a custom item). estimatedQty = an
+  // ASSUMPTION stood in for a real cost ('fallback' = Product.purchasePrice placeholder, sold
+  // before any qualifying purchase existed — auto-upgrades to 'ledger' once one is recorded;
+  // 'custom' = a custom item's own 0%-margin guess, see costCustomLineItems in
+  // src/lib/inventoryCosting.ts). uncostedQty = costPrice still NULL (a legacy row from before
+  // these columns existed, never recomputed since — every row gets SOME costSource going forward).
   const salesRows = canSeeSales
     ? await prisma.$queryRaw<Array<{ month: Date; itemGross: number; itemGst: number; cogs: number; costedQty: number; estimatedQty: number; uncostedQty: number }>>`
         SELECT date_trunc('month', i."date" + interval '330 minutes') AS month,
                COALESCE(SUM(ii."total"), 0) AS "itemGross",
                COALESCE(SUM(ii."gstAmount"), 0) AS "itemGst",
                COALESCE(SUM(COALESCE(ii."costPrice", 0) * ii."quantity"), 0) AS cogs,
-               COALESCE(SUM(CASE WHEN ii."costSource" = 'ledger' THEN ii."quantity" ELSE 0 END), 0) AS "costedQty",
-               COALESCE(SUM(CASE WHEN ii."costSource" = 'fallback' THEN ii."quantity" ELSE 0 END), 0) AS "estimatedQty",
-               COALESCE(SUM(CASE WHEN ii."costPrice" IS NULL AND ii."productId" IS NOT NULL THEN ii."quantity" ELSE 0 END), 0) AS "uncostedQty"
+               COALESCE(SUM(CASE WHEN ii."costSource" IN ('ledger', 'custom-provided') THEN ii."quantity" ELSE 0 END), 0) AS "costedQty",
+               COALESCE(SUM(CASE WHEN ii."costSource" IN ('fallback', 'custom') THEN ii."quantity" ELSE 0 END), 0) AS "estimatedQty",
+               COALESCE(SUM(CASE WHEN ii."costPrice" IS NULL THEN ii."quantity" ELSE 0 END), 0) AS "uncostedQty"
         FROM "Invoice" i
         JOIN "InvoiceItem" ii ON ii."invoiceId" = i."id"
         WHERE i."deletedAt" IS NULL

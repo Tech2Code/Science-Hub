@@ -172,12 +172,22 @@ export async function POST(req: NextRequest) {
     {
       // Mirrors /api/invoices — without it, duplicate-product lines silently merge into one ledger entry, losing per-line audit granularity.
       const seenProductIds = new Set<string>();
-      for (const item of items as { productId?: string }[]) {
-        if (!item.productId) continue; // unlinked custom items (e.g. "Delivery Charges") can repeat freely
-        if (seenProductIds.has(item.productId)) {
-          return NextResponse.json({ error: "Each product can only appear once per purchase bill — combine duplicate lines into a single quantity instead." }, { status: 400 });
+      const seenCustomNames = new Set<string>();
+      for (const item of items as { productId?: string; name?: string }[]) {
+        if (item.productId) {
+          if (seenProductIds.has(item.productId)) {
+            return NextResponse.json({ error: "Each product can only appear once per purchase bill — combine duplicate lines into a single quantity instead." }, { status: 400 });
+          }
+          seenProductIds.add(item.productId);
+          continue;
         }
-        seenProductIds.add(item.productId);
+        // A custom item's name should stay unique within the bill for the same reason two lines of
+        // the same catalog product must be combined — keeps every line item unambiguous.
+        const key = (item.name ?? "").trim().toLowerCase();
+        if (key && seenCustomNames.has(key)) {
+          return NextResponse.json({ error: `"${item.name}" appears more than once as a custom item — combine duplicate lines into a single quantity instead.` }, { status: 400 });
+        }
+        if (key) seenCustomNames.add(key);
       }
     }
     if (typeof notes === "string" && notes.length > 2000) {

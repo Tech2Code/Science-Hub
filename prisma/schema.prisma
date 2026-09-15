@@ -316,6 +316,15 @@ model ReturnItem {
   return          Return   @relation(fields: [returnId], references: [id], onDelete: Cascade)
   productId       String?
   product         Product? @relation(fields: [productId], references: [id])
+  // Only meaningful for a custom (no-catalog) line — the specific InvoiceItem this return actually
+  // reverses, so its cost (incl. a user-provided "custom-provided" cost, see
+  // src/lib/inventoryCosting.ts) can be looked up exactly instead of guessed by matching item name
+  // within the invoice (ambiguous if the same invoice has two custom lines sharing a name). Plain
+  // id reference, no FK relation object — mirrors ActivityLog.entityId's loose-reference pattern,
+  // since invoices are never hard-deleted (see the Bin's GST-retention exemption) so staleness risk
+  // is negligible. Null on rows created before this column existed or for a catalog-linked item
+  // (which already has an unambiguous productId to key its own cost off).
+  sourceInvoiceItemId String?
   name            String
   quantity        Float
   price           Float

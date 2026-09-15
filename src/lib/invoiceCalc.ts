@@ -5,6 +5,11 @@ export interface InvoiceLineItem {
   productId: string; productName: string; unit: string;
   qty: number; price: number; gstRate: number;
   hsn: string; discountPercent: number;
+  // Only set on a "just for this invoice" custom line (no productId) when the user typed in what
+  // it actually cost them at add-time — see QuickAddProductModal.tsx. Without this, a custom
+  // item's COGS is assumed at 0% margin (its own sale rate) since there's no product to look up a
+  // real purchase cost from; this lets the user override that assumption with the real number.
+  customCostPrice?: number;
 }
 
 // Stable per-row id (not array index) so removing a row can't make React reuse another row's focus/input state.

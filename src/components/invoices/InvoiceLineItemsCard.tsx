@@ -75,10 +75,12 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
     if (outcome.skipCatalog) {
       const listPriceNum = parseFloat(outcome.listPrice) || 0;
       const discountPercentNum = Math.min(100, Math.max(0, parseFloat(outcome.discountPercent) || 0));
+      const customCostPrice = outcome.customCost ? parseFloat(outcome.customCost) : undefined;
       setItems((prev) => [...prev, {
         key: makeInvoiceLineItemKey(), productId: "", productName: outcome.name,
         unit: outcome.unit, qty: outcome.qty, price: listPriceNum,
         gstRate: parseFloat(outcome.gstRate) || 0, hsn: outcome.hsn, discountPercent: discountPercentNum,
+        ...(customCostPrice !== undefined && !isNaN(customCostPrice) ? { customCostPrice } : {}),
       }]);
       return;
     }
