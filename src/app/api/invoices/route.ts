@@ -8,7 +8,6 @@ import { deriveDefaultPrefix, computeNextNumber, numberFormatDbFilter, getIndian
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
-import { costCustomLineItems } from "@/lib/inventoryCosting";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { MAX_MONEY_VALUE, MAX_QUANTITY, istDayStartUtc, istTodayStartUtc } from "@/lib/validation";
@@ -128,11 +127,9 @@ export async function POST(request: NextRequest) {
           seenProductIds.add(item.productId);
           continue;
         }
-        // A custom (no-catalog) item can't be traced back to its purchase/sale history by
-        // productId, so cost-matching for a return relies on the item name being unique within the
-        // invoice (see ReturnItem.sourceInvoiceItemId / costCustomLineItems in
-        // src/lib/inventoryCosting.ts) — two custom lines sharing a name would make that ambiguous,
-        // same reason catalog products are deduped by productId above.
+        // A custom (no-catalog) item's name should stay unique within the invoice for the same
+        // reason two lines of the same catalog product must be combined — keeps every printed line
+        // item unambiguous instead of two rows with the same name and different rates/quantities.
         const key = (item.name ?? "").trim().toLowerCase();
         if (key && seenCustomNames.has(key)) {
           return NextResponse.json({ error: `"${item.name}" appears more than once as a custom item — combine duplicate lines into a single quantity instead.` }, { status: 400 });
@@ -198,7 +195,6 @@ export async function POST(request: NextRequest) {
       hsn?: string;
       unit?: string;
       discountPercent?: number;
-      costPrice?: number | string;
     }) => {
       const product = item.productId ? productMap.get(item.productId) : undefined;
       const quantity = parseFloat(String(item.quantity ?? item.qty ?? 1));
@@ -210,17 +206,6 @@ export async function POST(request: NextRequest) {
 
       subtotal += itemSubtotal;
       totalGst += gstAmount;
-
-      // A custom (no-catalog) line can carry a user-typed real cost from the quick-add popup —
-      // set directly here rather than left for costCustomLineItems()'s 0%-margin assumption, which
-      // only ever fills in rows still missing a cost (see src/lib/inventoryCosting.ts). Ignored for
-      // a catalog-linked item — its cost comes from real purchase history via recostProducts(),
-      // never from a client-supplied value.
-      let providedCost: number | null = null;
-      if (!item.productId && item.costPrice !== undefined && item.costPrice !== null && item.costPrice !== "") {
-        const parsed = parseFloat(String(item.costPrice));
-        if (Number.isFinite(parsed) && parsed >= 0 && parsed <= MAX_MONEY_VALUE) providedCost = parsed;
-      }
 
       return {
         productId: item.productId || null,
@@ -234,7 +219,6 @@ export async function POST(request: NextRequest) {
         gstRate,
         gstAmount,
         total: itemTotal,
-        ...(providedCost !== null ? { costPrice: providedCost, costSource: "custom-provided" } : {}),
       };
     });
 
@@ -291,9 +275,6 @@ export async function POST(request: NextRequest) {
           await tx.businessSettings.update({ where: { id: "singleton" }, data: { nextInvoiceNumberOverride: null } });
         }
 
-        // costPrice/costSource are left unset here — batchAdjustStock() below triggers
-        // recostProducts() (src/lib/inventoryCosting.ts), which fills them in for every item of
-        // every affected product via a full weighted-average-cost replay, once these rows exist.
         const inv = await tx.invoice.create({
           data: {
             invoiceNumber,
@@ -330,9 +311,6 @@ export async function POST(request: NextRequest) {
           })),
           { type: "sale", reference: inv.invoiceNumber, createdByUserId: user.id }
         );
-        // Custom (no-catalog) line items have no product for batchAdjustStock/recostProducts to
-        // ever see — cost them separately at their own net rate (see costCustomLineItems).
-        await costCustomLineItems(tx, { invoiceId: inv.id });
         const warnings = updatedProducts
           .filter((p) => p.stock < 0)
           .map((p) => `${p.name} (stock: ${p.stock})`);

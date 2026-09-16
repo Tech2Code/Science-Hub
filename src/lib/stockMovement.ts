@@ -1,5 +1,4 @@
 import { Prisma } from "@prisma/client";
-import { recostProducts } from "@/lib/inventoryCosting";
 
 type TxClient = Prisma.TransactionClient;
 
@@ -89,13 +88,6 @@ export async function batchAdjustStock(
       createdByUserId: movement.createdByUserId ?? null,
     })),
   });
-
-  // Every stock-affecting mutation (sale, purchase, return, and every edit/delete/restore of any
-  // of those) funnels through this one function — so this is the single place that needs to
-  // trigger a cost recompute for the touched products, rather than every call site remembering to
-  // do it itself. See src/lib/inventoryCosting.ts for why a full chronological replay (not an
-  // incremental patch) runs on every call.
-  await recostProducts(tx, updated.map((p) => p.id));
 
   return updated;
 }

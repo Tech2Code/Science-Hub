@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
-import { PeriodFilter, defaultPeriod, periodLabel, type PeriodValue } from "@/components/dashboard/PeriodFilter";
+import { PeriodFilter, defaultPeriod, periodLabel, periodToQuery, type PeriodValue } from "@/components/dashboard/PeriodFilter";
 import { StatusBadge } from "@/components/ui/Badge";
 import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { useFetch } from "@/lib/useCache";
@@ -14,27 +14,11 @@ import styles from "./dashboardHome.module.css";
 interface RecentInvoice { id: string; invoiceNumber: string; date: string; customerName: string; total: number; paidAmount: number; status: string; }
 interface RecentBill { id: string; billNumber: string; billDate: string; vendorName: string; total: number; paidAmount: number; status: string; }
 interface FinancialFigures {
-  // Actual Profit section — VERIFIED ONLY (costSource 'ledger'/'custom-provided' — a real cost,
-  // never a guess). A line whose cost is still an assumption ('fallback'/'custom') contributes
-  // nothing here — its revenue shows up in unverifiedRevenue instead, never blended in.
-  grossSales: number;            // verified sales incl. GST (incl. transport)
-  gst: number;                   // output GST on verified sales
-  netSales: number;              // grossSales - gst
-  returnNet: number;             // credit notes' own ex-GST value (verified returns only)
-  netSalesAfterReturns: number;  // netSales - returnNet
-  cogs: number;                  // real cost of goods sold (WAC, from src/lib/inventoryCosting.ts) + sale transport charge at assumed 0% margin
-  returnCogs: number;            // cost of the returned quantity
-  netCogs: number;                // cogs - returnCogs
-  otherExpenses: number;         // Purchase Bill's own transport/freight charge — not tied to any product's cost
-  grossProfit: number;           // netSalesAfterReturns - netCogs - otherExpenses — the headline "Actual Profit"
-  unverifiedRevenue: number;     // ex-GST revenue with no verified cost yet, net of returns of those same sales — deliberately has no profit figure alongside it
-  estimatedProfit: number;       // unverifiedRevenue minus a GUESSED cost (Product.purchasePrice for fallback rows, 0%-margin for custom rows) — shown separately, never blended into grossProfit
-  costedQty: number;    // qty sold with a real weighted-average cost
-  estimatedQty: number; // qty sold using Product.purchasePrice as a placeholder (no purchase history yet)
-  uncostedQty: number;  // qty sold with no product cost at all (legacy, never recomputed)
-  // Cash Flow section — simple totals (verified + unverified together), deliberately not netted against each other
+  // Cash Flow section — simple totals, deliberately not netted against each other.
   totalSales: number;
+  gstSales: number;      // GST portion already included within totalSales
   totalPurchases: number;
+  gstPurchases: number;  // GST portion already included within totalPurchases
 }
 interface FinancialMonth extends FinancialFigures { month: string; future: boolean; }
 interface DashboardFinancials {
@@ -98,9 +82,6 @@ type Tone = "blue" | "amber" | "red" | "green" | "neutral";
 export default function DashboardPage() {
   // Financial Summary period: a financial year + (whole year | a month). Default = current FY, full year.
   const [finPeriod, setFinPeriod] = useState<PeriodValue>(defaultPeriod());
-  // "How your profit is calculated" is a collapsible accordion under the Actual Profit tiles —
-  // starts open since it was always-visible before this was made collapsible.
-  const [profitBreakdownOpen, setProfitBreakdownOpen] = useState(true);
   // Fetch is scoped to the chosen FY (so a past FY refetches). Month drill-down within the loaded FY
   // is done client-side from financials.monthly, so switching months is instant with no refetch.
   const { data, loading, error } = useFetch<CombinedDashboard>(`/api/reports?type=combined-dashboard&fy=${finPeriod.fyStartYear}`);
@@ -117,12 +98,7 @@ export default function DashboardPage() {
   const canWrite = role !== "manager";
 
   const financials = data?.financials ?? null;
-  const EMPTY_FIN: FinancialFigures = {
-    grossSales: 0, gst: 0, netSales: 0, returnNet: 0, netSalesAfterReturns: 0,
-    cogs: 0, returnCogs: 0, netCogs: 0, otherExpenses: 0, grossProfit: 0, unverifiedRevenue: 0, estimatedProfit: 0,
-    costedQty: 0, estimatedQty: 0, uncostedQty: 0,
-    totalSales: 0, totalPurchases: 0,
-  };
+  const EMPTY_FIN: FinancialFigures = { totalSales: 0, gstSales: 0, totalPurchases: 0, gstPurchases: 0 };
   // periodLabel() builds the same en-IN/IST short month label ("Sep 2026") the server uses for
   // financials.monthly[].month, so a chosen month matches its row exactly. "Full year" → FY total.
   const finPeriodLabel = periodLabel(finPeriod);
@@ -133,13 +109,18 @@ export default function DashboardPage() {
     financials == null ? EMPTY_FIN
     : finPeriod.month0 === "all" ? financials.total
     : finMonth ?? EMPTY_FIN;   // a month with no data shows zeros, not the FY total
-  // Gross Profit Margin = (Gross Profit / Net Sales After Returns) × 100. Guard divide-by-zero.
-  const marginPct = finSelected.netSalesAfterReturns > 0 ? (finSelected.grossProfit / finSelected.netSalesAfterReturns) * 100 : null;
-  // Actual Profit only ever counts VERIFIED lines (real cost, never a guess) — this flags when
-  // some revenue this period has no verified cost yet (incl. legacy uncosted rows, a subset of
-  // this), so it's excluded from Gross Profit above rather than silently blended in.
-  const hasUnverifiedRevenue = finSelected.unverifiedRevenue > 0;
   const cashFlowNet = finSelected.totalSales - finSelected.totalPurchases;
+
+  // The real Net GST Payable — same figure and same computation (buildGstFilingReport) as the GST
+  // Filing report's own "Net GST Payable (Rounded)", not a client-side approximation, so the two
+  // can never disagree. Gated the same way GST Filing itself is (admin, or both Sales Reports AND
+  // Purchase Reports access) — stricter than the rest of this Cash Flow section, since this is the
+  // real tax-liability figure, not a simple total. `null` skips the fetch entirely for a user who
+  // clearly lacks access, instead of firing a request that will only 403.
+  const canSeeGstPayable = role === "admin" || (sections.includes("reports_sales") && sections.includes("reports_purchases"));
+  const { data: gstPayableData, loading: gstPayableLoading } = useFetch<{ netGstPayable: number }>(
+    canSeeGstPayable ? `/api/reports?type=net-gst-payable&${periodToQuery(finPeriod)}` : null
+  );
 
   const quickActionSections = [
     {
@@ -254,115 +235,9 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* ── Actual Profit: net sales → returns → COGS → gross profit, whole financial year ── */}
-      {canSeeSales && (
-      <div {...animateSection(3, `card ${styles.financialsCard}`)}>
-        <div className={styles.financialsHeader}>
-          <div>
-            <h2 className={styles.cardHeaderTitle}>Actual Profit</h2>
-            <div className={styles.financialsSub}>
-              {loading ? "—" : (finPeriod.month0 === "all" ? "Full year" : "Month")}
-              {" · "}{finPeriodLabel}
-            </div>
-          </div>
-          <PeriodFilter value={finPeriod} onChange={setFinPeriod} disabled={loading} className={styles.financialsSelectWrap} />
-        </div>
-
-        {/* Compact financial tiles — verified-only; see the "Unverified Revenue" note below */}
-        <div className={styles.finTileGrid}>
-          <FinTile
-            label="Verified Sales" tone="blue" loading={loading}
-            value={fmt(finSelected.grossSales)}
-            help="Incl. GST"
-            info="Total invoice value (incl. GST, incl. transport charges) for lines with a REAL, verified cost — see Unverified Revenue below for the rest."
-          />
-          <FinTile
-            label="GST Collected" tone="neutral" loading={loading}
-            value={fmt(finSelected.gst)}
-            help="GST within verified sales"
-            info="The GST portion included in verified sales (incl. transport charge GST)."
-          />
-          <FinTile
-            label="Net Sales" tone="blue" loading={loading}
-            value={fmt(finSelected.netSalesAfterReturns)}
-            help="After GST & returns"
-            info="Verified Sales, minus GST, minus the value of any credit notes (returns) on verified sales."
-          />
-          <FinTile
-            label="COGS" tone="amber" loading={loading}
-            value={fmt(finSelected.netCogs)}
-            help="Real cost of goods actually sold"
-            info="Actual weighted-average cost of the goods sold (from real purchase-bill history), plus any transport charge billed to the customer (assumed at 0% margin), minus the cost of any returned quantity."
-          />
-          <FinTile
-            label="Gross Profit" tone={finSelected.grossProfit < 0 ? "red" : "green"} loading={loading}
-            value={fmt(finSelected.grossProfit)}
-            help="Verified only — no guessing"
-            info="Net Sales (after returns) minus Net Cost of Goods Sold — computed ONLY from lines with a real, verified cost. Never includes a guessed/assumed cost."
-          />
-          <FinTile
-            label="Profit Margin" tone={finSelected.grossProfit < 0 ? "red" : "green"} loading={loading}
-            value={marginPct == null ? "—" : `${marginPct.toFixed(2)}%`}
-            help="Gross Profit ÷ Net Sales"
-            info="Gross Profit divided by Net Sales (after returns), shown as a percentage."
-          />
-        </div>
-
-        {!loading && hasUnverifiedRevenue && (
-          <div className={styles.financialsWarn}>
-            <strong>{fmt(finSelected.unverifiedRevenue)} of revenue this period has no verified cost yet</strong> — it&apos;s excluded from Gross Profit above (not counted as profit, not counted as loss). This happens when a product was sold before any real purchase bill for it existed, or a custom item&apos;s cost was never confirmed. To fix it: record the real purchase bill for that product (even backdated), or edit the custom item to give its real cost — the next recompute will pick it up automatically.
-            <div className={styles.estimatedProfitLine}>
-              Estimated profit on this revenue (using each product&apos;s stored Purchase Price, which may be outdated — not real purchase history): <strong>{fmt(finSelected.estimatedProfit)}</strong>. This is a guess, not counted in Gross Profit above.
-            </div>
-          </div>
-        )}
-
-        {/* How your profit is calculated — collapsible, every step in order */}
-        <div className={styles.calcBreakdown}>
-          <button
-            type="button"
-            className={styles.calcToggle}
-            aria-expanded={profitBreakdownOpen}
-            aria-controls="profit-breakdown-panel"
-            onClick={() => setProfitBreakdownOpen((v) => !v)}
-          >
-            <span>How your profit is calculated</span>
-            <svg
-              className={`${styles.calcToggleIcon} ${profitBreakdownOpen ? styles.calcToggleIconOpen : ""}`}
-              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
-          <div id="profit-breakdown-panel" className={`${styles.calcAccordion} ${profitBreakdownOpen ? styles.calcAccordionOpen : ""}`}>
-            <div className={styles.calcAccordionInner}>
-              <div className={styles.calcAccordionContent}>
-                <div className={styles.calcRow}><span>Verified Sales <em>(incl. GST)</em></span><span>{loading ? "—" : fmt(finSelected.grossSales)}</span></div>
-                <div className={styles.calcRow}><span>− GST</span><span className={styles.calcNeg}>{loading ? "—" : `− ${fmt(finSelected.gst)}`}</span></div>
-                <div className={`${styles.calcRow} ${styles.calcSubtotal}`}><span>= Net Sales</span><span>{loading ? "—" : fmt(finSelected.netSales)}</span></div>
-                <div className={styles.calcRow}><span>− Sales Returns <em>(credit notes, ex-GST)</em></span><span className={styles.calcNeg}>{loading ? "—" : `− ${fmt(finSelected.returnNet)}`}</span></div>
-                <div className={`${styles.calcRow} ${styles.calcSubtotal}`}><span>= Net Sales After Returns</span><span>{loading ? "—" : fmt(finSelected.netSalesAfterReturns)}</span></div>
-                <div className={styles.calcRow}><span>− COGS <em>(cost of goods sold, incl. sale transport at 0% margin)</em></span><span className={styles.calcNeg}>{loading ? "—" : `− ${fmt(finSelected.cogs)}`}</span></div>
-                <div className={styles.calcRow}><span>+ Cost of Returned Goods</span><span>{loading ? "—" : `+ ${fmt(finSelected.returnCogs)}`}</span></div>
-                <div className={styles.calcRow}><span>− Other Business Expenses <em>(purchase transport/freight)</em></span><span className={styles.calcNeg}>{loading ? "—" : `− ${fmt(finSelected.otherExpenses)}`}</span></div>
-                <div className={`${styles.calcRow} ${styles.calcTotal}`}>
-                  <span>= Gross Profit</span>
-                  <span className={finSelected.grossProfit < 0 ? styles.calcLoss : styles.calcProfit}>{loading ? "—" : fmt(finSelected.grossProfit)}</span>
-                </div>
-                <div className={styles.financialsNote}>
-                  Only lines with a REAL, verified cost are included here — a product&apos;s real weighted-average purchase cost (from actual purchase-bill history) or a custom item&apos;s confirmed cost. Nothing here is ever a guess; see the note above if some revenue this period is still excluded for that reason.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-      )}
-
       {/* ── Cash Flow: total money in vs total money out, simple totals (not profit) ── */}
       {(canSeeSales || canSeePurchases) && (
-      <div {...animateSection(4, `card ${styles.financialsCard}`)}>
+      <div {...animateSection(3, `card ${styles.financialsCard}`)}>
         <div className={styles.financialsHeader}>
           <div>
             <h2 className={styles.cardHeaderTitle}>Cash Flow</h2>
@@ -379,16 +254,32 @@ export default function DashboardPage() {
             <FinTile
               label="Total Sales" tone="blue" loading={loading}
               value={fmt(finSelected.totalSales)}
-              help="Money billed to customers"
+              help={`Incl. ${fmt(finSelected.gstSales)} GST`}
               info="Total invoice value including GST — the simple total billed, with nothing netted out."
+            />
+          )}
+          {canSeeSales && (
+            <FinTile
+              label="GST Collected" tone="neutral" loading={loading}
+              value={fmt(finSelected.gstSales)}
+              help="Within Total Sales"
+              info="The GST portion already included in Total Sales (CGST+SGST or IGST, plus GST on any transport charge)."
             />
           )}
           {canSeePurchases && (
             <FinTile
               label="Total Purchases" tone="amber" loading={loading}
               value={fmt(finSelected.totalPurchases)}
-              help="Money billed by vendors"
+              help={`Incl. ${fmt(finSelected.gstPurchases)} GST`}
               info="Total purchase bill value including GST — everything bought in the period, whether or not it has sold yet."
+            />
+          )}
+          {canSeePurchases && (
+            <FinTile
+              label="GST Paid (ITC)" tone="neutral" loading={loading}
+              value={fmt(finSelected.gstPurchases)}
+              help="Within Total Purchases"
+              info="The GST portion already included in Total Purchases — this is reclaimable input tax credit, not a real cost. For the actual net amount payable to the government, see the GST Filing report."
             />
           )}
           {canSeeSales && canSeePurchases && (
@@ -399,16 +290,40 @@ export default function DashboardPage() {
               info="Total Sales minus Total Purchases. This is a simple cash comparison, not profit — see the note below."
             />
           )}
+          {canSeeSales && canSeePurchases && canSeeGstPayable && (
+            <FinTile
+              label="Net GST Payable"
+              // Positive = owed to the government (needs attention); negative = excess input
+              // credit, i.e. nothing due this period (a comfortable position) — same red/green
+              // convention as the other tiles above, just flipped since a negative number here is
+              // the good outcome, not a bad one.
+              tone={
+                !gstPayableData ? "neutral"
+                : gstPayableData.netGstPayable > 0 ? "red"
+                : gstPayableData.netGstPayable < 0 ? "green"
+                : "neutral"
+              }
+              loading={gstPayableLoading}
+              value={gstPayableData ? fmt(gstPayableData.netGstPayable) : "—"}
+              help={
+                !gstPayableData ? "Same figure as GST Filing"
+                : gstPayableData.netGstPayable > 0 ? "Owed to the government"
+                : gstPayableData.netGstPayable < 0 ? "Excess input credit — nothing due"
+                : "Nothing due this period"
+              }
+              info="The actual net GST payable for this period — output tax minus credit notes minus input tax credit, rounded. This is the exact same figure (and computation) as the GST Filing report's own Net GST Payable (Rounded), not an approximation. A negative value means excess input tax credit — nothing owed, and green rather than red since that's the favorable outcome."
+            />
+          )}
         </div>
 
         <div className={styles.financialsNote}>
-          This is a simple cash comparison — total billed vs total spent — not profit. A bulk purchase of stock that hasn&apos;t sold yet will show up here as a big spend with nothing to offset it; that&apos;s expected for a cash-flow view. For real profit (which correctly excludes unsold stock), see Actual Profit above.
+          This is a simple cash comparison — total billed vs total spent — not profit. A bulk purchase of stock that hasn&apos;t sold yet will show up here as a big spend with nothing to offset it; that&apos;s expected for a cash-flow view. &quot;GST Collected&quot; and &quot;GST Paid (ITC)&quot; above are just the portion included in each total, not netted against each other — see &quot;Net GST Payable&quot; for the real amount owed (only shown with Sales Reports + Purchase Reports access, since it&apos;s the same figure as the GST Filing report).
         </div>
       </div>
       )}
 
       {/* Recent invoices & bills */}
-      <div {...animateSection(5, styles.recentGrid)}>
+      <div {...animateSection(4, styles.recentGrid)}>
         <div className="card">
           <div className={styles.cardHeader}>
             <h2 className={styles.cardHeaderTitle}>Recent Invoices</h2>
@@ -472,7 +387,7 @@ export default function DashboardPage() {
           </div>
         </div>
       ) : ((data?.lowStockCount ?? 0) > 0 || (data?.outOfStockCount ?? 0) > 0) && (
-        <div {...animateSection(6, `card ${styles.lowStockCard}`)}>
+        <div {...animateSection(5, `card ${styles.lowStockCard}`)}>
           <div className={styles.lowStockIconWrap}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--c-red)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </div>

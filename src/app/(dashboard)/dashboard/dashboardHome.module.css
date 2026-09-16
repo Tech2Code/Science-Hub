@@ -476,97 +476,6 @@
   .finTileGrid { grid-template-columns: 1fr; }
 }
 
-/* ── "How your profit is calculated" breakdown — collapsible, smooth-height accordion ── */
-.calcBreakdown {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--c-border);
-  border-radius: 0.75rem;
-  padding: 0.5rem 0.9rem;
-}
-.calcToggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  width: 100%;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.15rem 0 0.35rem;
-  font: inherit;
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: var(--c-text-3);
-  transition: color 150ms ease;
-}
-.calcToggle:hover { color: var(--c-text-2); }
-.calcToggle:focus-visible { outline: 2px solid var(--c-blue); outline-offset: 2px; border-radius: 0.25rem; }
-.calcToggleIcon {
-  flex-shrink: 0;
-  transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-.calcToggleIconOpen { transform: rotate(180deg); }
-/* Grid-track height animates from 0fr → 1fr — no JS height measurement needed, and it degrades
-   gracefully to fully-open content if grid-template-rows transitions aren't supported. */
-.calcAccordion {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 280ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-.calcAccordionOpen { grid-template-rows: 1fr; }
-.calcAccordionInner { overflow: hidden; min-height: 0; }
-.calcAccordionContent { padding-top: 0.1rem; }
-.calcRow {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.32rem 0;
-  font-size: 0.8125rem;
-  color: var(--c-text-2);
-}
-.calcRow > span:first-child {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-.calcRow > span:last-child {
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  font-weight: 600;
-  color: var(--c-text);
-}
-.calcRow em { font-style: normal; color: var(--c-text-3); font-size: 0.72rem; }
-.calcNeg { color: var(--c-text-2) !important; }
-.calcSubtotal {
-  border-top: 1px dashed var(--c-border-md);
-  margin-top: 0.15rem;
-  padding-top: 0.45rem;
-  font-weight: 600;
-  color: var(--c-text);
-}
-.calcTotal {
-  border-top: 2px solid var(--c-border-md);
-  margin-top: 0.15rem;
-  padding-top: 0.5rem;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--c-text);
-}
-.calcProfit { color: var(--c-green-text, #16a34a) !important; }
-.calcLoss { color: var(--c-red-text, #dc2626) !important; }
-.calcAside {
-  border-top: 1px dashed var(--c-border);
-  margin-top: 0.15rem;
-  padding-top: 0.45rem;
-  font-size: 0.78rem;
-  color: var(--c-text-3);
-}
-.calcAside > span:last-child { color: var(--c-text-2); }
-
 .infoDot {
   display: inline-flex;
   align-items: center;
@@ -584,23 +493,6 @@
   flex-shrink: 0;
 }
 .infoDot:focus-visible { outline: 2px solid var(--c-blue); outline-offset: 1px; }
-
-.financialsWarn {
-  font-size: 0.75rem;
-  line-height: 1.45;
-  color: var(--c-amber-text, #b45309);
-  background: var(--c-amber-bg, rgba(217, 119, 6, 0.1));
-  border: 1px solid var(--c-amber, rgba(217, 119, 6, 0.3));
-  border-radius: 0.5rem;
-  padding: 0.55rem 0.75rem;
-}
-
-.estimatedProfitLine {
-  margin-top: 0.4rem;
-  padding-top: 0.4rem;
-  border-top: 1px dashed var(--c-amber, rgba(217, 119, 6, 0.3));
-  color: var(--c-text-3);
-}
 
 .financialsNote {
   font-size: 0.72rem;

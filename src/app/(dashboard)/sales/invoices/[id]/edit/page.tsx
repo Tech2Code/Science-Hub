@@ -43,7 +43,7 @@ interface InvoiceData {
   isInterState: boolean; placeOfSupply?: string; reverseCharge?: boolean; dueDate?: string; notes?: string;
   transportCharge?: number; transportChargeGstRate?: number;
   customer: Customer;
-  items: Array<{ productId: string | null; name: string; unit: string; quantity: number; price: number; gstRate: number; hsn?: string; discountPercent?: number; costPrice?: number | null; costSource?: string | null; }>;
+  items: Array<{ productId: string | null; name: string; unit: string; quantity: number; price: number; gstRate: number; hsn?: string; discountPercent?: number; }>;
 }
 
 type CustomerForm = { name: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; gstin: string };
@@ -361,14 +361,6 @@ export default function EditInvoicePage() {
         gstRate: item.gstRate,
         hsn: item.hsn ?? "",
         discountPercent: item.discountPercent ?? 0,
-        // Only carry the existing cost forward as "confirmed" when it really was — otherwise
-        // resaving this invoice (for any unrelated change) would send it back on every custom
-        // line, including ones that were never actually confirmed, silently promoting a 0%-margin
-        // guess into "custom-provided". An already-confirmed cost must survive an unrelated save
-        // (previously it didn't: customCostPrice was never populated from the loaded invoice at
-        // all, so ANY save silently downgraded a confirmed custom cost back to unconfirmed).
-        customCostPrice: item.costSource === "custom-provided" && item.costPrice != null ? item.costPrice : undefined,
-        costSource: item.costSource ?? null,
       }));
       const rc = invoice.reverseCharge ?? false;
       const transportChargeVal = invoice.transportCharge && invoice.transportCharge > 0 ? String(invoice.transportCharge) : "";
@@ -467,7 +459,7 @@ export default function EditInvoicePage() {
         isInterState,
         placeOfSupply,
         reverseCharge,
-        items: items.map((i) => ({ productId: i.productId || null, name: i.productName, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent, costPrice: i.customCostPrice })),
+        items: items.map((i) => ({ productId: i.productId || null, name: i.productName, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent })),
         notes,
         date: invoiceDate || undefined,
         dueDate: dueDate || undefined,

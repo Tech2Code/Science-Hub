@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getReportSummary, getReportOutstanding, getReportStock } from "@/lib/db";
 import { prisma } from "@/lib/prisma";
-import { requireSession, requireSectionAccess } from "@/lib/apiAuth";
+import { requireSession, requireSectionAccess, requireGstFilingAccess } from "@/lib/apiAuth";
 import { parsePageParams } from "@/lib/listQuery";
-import { istDayStartUtc, istDayEndUtc, istMonthStartUtc, istNextMonthStartUtc, istTodayStartUtc, istMonthBoundsUtc } from "@/lib/validation";
+import { istDayStartUtc, istDayEndUtc, istMonthStartUtc, istNextMonthStartUtc, istTodayStartUtc, istMonthBoundsUtc, toIstDateStr } from "@/lib/validation";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
+import { buildGstFilingReport } from "@/lib/gstFiling";
 import { Prisma } from "@prisma/client";
 
 // A reporting period selected via the two dropdowns (Financial Year + Month):
@@ -19,12 +20,6 @@ type PeriodInput =
   | undefined;
 
 const FY_LABEL = (startYear: number) => `FY ${startYear}-${String(startYear + 1).slice(2)}`;
-
-// Financial year START year for a given IST month: Jan–Mar (month0 0–2) belong to the PREVIOUS
-// April's FY, Apr–Dec (3–11) to the current year's FY.
-function fyStartYearOfMonth(year: number, month0: number): number {
-  return month0 >= 3 ? year : year - 1;
-}
 
 // Parses the period from the query string:
 //   ?period=all                    → all time
@@ -372,37 +367,12 @@ async function getCombinedDashboard(canSeeSales: boolean, canSeePurchases: boole
   };
 }
 
-// Financial-year figures for TWO separate, deliberately-not-mixed dashboard sections:
-//
-//   1. ACTUAL PROFIT — real gross profit, fully netted:
-//        Net Sales (ex-GST)  =  Gross Sales (incl. transport) − GST
-//        − Sales Returns     =  credit notes' own (ex-GST) value, so a returned sale isn't counted as revenue
-//        − Net COGS          =  SUM(sold qty × InvoiceItem.costPrice) − SUM(returned qty × ReturnItem.costPrice)
-//                                (Invoice's own transport charge is folded in here too, at an
-//                                assumed 0% margin — its own net amount counted as its cost)
-//        − Other Business Expenses = Purchase Bill's own transport/freight charge — a real cost of
-//                                acquiring stock that isn't tied to any one product's per-unit cost
-//        = Gross Profit
-//      costPrice/ReturnItem.costPrice are maintained by src/lib/inventoryCosting.ts's weighted-
-//      average-cost (WAC) replay, triggered on every stock-affecting mutation — never derived here.
-//
-//      VERIFIED vs UNVERIFIED: costSource distinguishes a REAL cost ("ledger" from actual purchase
-//      history, "custom-provided" from a user-typed real cost) from an ASSUMPTION ("fallback" =
-//      Product.purchasePrice placeholder because no qualifying purchase existed yet, "custom" = a
-//      0%-margin guess). Every figure above is computed TWICE — once over only the "real" lines
-//      (verifiedGrossProfit, the headline number) and once counting revenue from the "assumed"
-//      lines separately (unverifiedRevenue) — so a guessed cost can never quietly inflate or
-//      understate the profit the business actually relies on. A month can show ₹0 verified profit
-//      with real revenue sitting in unverifiedRevenue instead — that's deliberate: it means "we
-//      don't know this month's margin yet", not "there was no margin".
-//
-//   2. CASH FLOW — deliberately simple, no matching/netting at all: total money billed to
-//      customers (Invoice.total, GST-inclusive) vs total money billed by vendors (PurchaseBill.total,
-//      GST-inclusive) for the period. This is NOT profit — a bulk purchase of stock that hasn't sold
-//      yet will show as a big "spend" here with nothing to offset it, which is the correct read for
-//      a cash-flow view but would be a wrong read for profit (that's what section 1 is for).
-//
-// Both bucketed by IST calendar month (+330-minute shift before date_trunc, same reasoning as
+// Cash Flow — total money billed to customers (Invoice.total, GST-inclusive) vs total money billed
+// by vendors (PurchaseBill.total, GST-inclusive) for a financial year, bucketed by IST calendar
+// month. Deliberately simple, no matching/netting at all: a bulk purchase of stock that hasn't sold
+// yet will show as a big "spend" here with nothing to offset it, which is the correct read for a
+// cash-flow view (this is not profit).
+// Bucketed by IST calendar month (+330-minute shift before date_trunc, same reasoning as
 // getGstSummary) so a document created in the IST-vs-UTC gap around a month boundary lands right.
 async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boolean, fyStartYear?: number) {
   const now = new Date();
@@ -412,59 +382,14 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
   const fyStart = istMonthBoundsUtc(fyYear, 3).start;      // Apr 1 (IST) of the FY
   const fyEnd = istMonthBoundsUtc(fyYear + 1, 3).start;    // Apr 1 (IST) of the next FY
 
-  // Sales side, bucketed by IST month. costedQty = a REAL cost ('ledger' from actual purchase
-  // history, or 'custom-provided' from a user-typed real cost on a custom item). estimatedQty = an
-  // ASSUMPTION stood in for a real cost ('fallback' = Product.purchasePrice placeholder, sold
-  // before any qualifying purchase existed — auto-upgrades to 'ledger' once one is recorded;
-  // 'custom' = a custom item's own 0%-margin guess, see costCustomLineItems in
-  // src/lib/inventoryCosting.ts). uncostedQty = costPrice still NULL (a legacy row from before
-  // these columns existed, never recomputed since — every row gets SOME costSource going forward).
+  // gstSales/gstPurchases are the GST portion already included within total/spend (not a separate
+  // "net GST payable" figure — that already exists, correctly resolvability-filtered, on the GST
+  // Filing page; duplicating that computation here would risk the two disagreeing).
   const salesRows = canSeeSales
-    ? await prisma.$queryRaw<Array<{
-        month: Date; verifiedItemGross: number; verifiedItemGst: number; verifiedCogs: number;
-        unverifiedItemGross: number; unverifiedItemGst: number; unverifiedCogs: number;
-        costedQty: number; estimatedQty: number; uncostedQty: number;
-      }>>`
-        SELECT date_trunc('month', i."date" + interval '330 minutes') AS month,
-               COALESCE(SUM(CASE WHEN ii."costSource" IN ('ledger', 'custom-provided') THEN ii."total" ELSE 0 END), 0) AS "verifiedItemGross",
-               COALESCE(SUM(CASE WHEN ii."costSource" IN ('ledger', 'custom-provided') THEN ii."gstAmount" ELSE 0 END), 0) AS "verifiedItemGst",
-               COALESCE(SUM(CASE WHEN ii."costSource" IN ('ledger', 'custom-provided') THEN ii."costPrice" * ii."quantity" ELSE 0 END), 0) AS "verifiedCogs",
-               COALESCE(SUM(CASE WHEN ii."costSource" IN ('fallback', 'custom') OR ii."costSource" IS NULL THEN ii."total" ELSE 0 END), 0) AS "unverifiedItemGross",
-               COALESCE(SUM(CASE WHEN ii."costSource" IN ('fallback', 'custom') OR ii."costSource" IS NULL THEN ii."gstAmount" ELSE 0 END), 0) AS "unverifiedItemGst",
-               -- Estimated-only: 'fallback' rows are already costed at Product.purchasePrice (a
-               -- static, possibly-stale field, not real purchase history) and 'custom' rows at
-               -- their own 0%-margin sale rate — both real numbers already sitting on the row, just
-               -- not trustworthy enough to count as Verified. Surfaced separately as "Estimated
-               -- Profit" on the dashboard, never blended into the Verified figures above.
-               COALESCE(SUM(CASE WHEN ii."costSource" IN ('fallback', 'custom') OR ii."costSource" IS NULL THEN ii."costPrice" * ii."quantity" ELSE 0 END), 0) AS "unverifiedCogs",
-               COALESCE(SUM(CASE WHEN ii."costSource" IN ('ledger', 'custom-provided') THEN ii."quantity" ELSE 0 END), 0) AS "costedQty",
-               COALESCE(SUM(CASE WHEN ii."costSource" IN ('fallback', 'custom') THEN ii."quantity" ELSE 0 END), 0) AS "estimatedQty",
-               COALESCE(SUM(CASE WHEN ii."costPrice" IS NULL THEN ii."quantity" ELSE 0 END), 0) AS "uncostedQty"
-        FROM "Invoice" i
-        JOIN "InvoiceItem" ii ON ii."invoiceId" = i."id"
-        WHERE i."deletedAt" IS NULL
-          AND i."date" >= ${fyStart} AND i."date" < ${fyEnd}
-        GROUP BY month
-      `
-    : [];
-
-  // Transport/freight charged to the customer is a separate INVOICE-level line (its own charge +
-  // GST), so it must be summed per-invoice — NOT inside the item JOIN above, where it'd be counted
-  // once per line and inflated on multi-item invoices. It's real sale revenue with no product cost,
-  // so its net (charge, ex-GST) flows straight into net sales AND gross profit, and its GST into
-  // GST collected. Grouped by the same IST month bucket.
-  // roundOff is summed here too (invoice-grouped, no item JOIN) rather than in salesRows above —
-  // it's a per-INVOICE column, and summing it through the item JOIN would multiply it once per line
-  // on any multi-item invoice. Without it, grossSales silently drops each invoice's own commercial
-  // rounding adjustment (up to ~±₹0.5 each, see computeRoundOff) and never quite matches the invoice's
-  // own stored `total` — the exact discrepancy this section's "total billed, nothing netted out" claim
-  // (and the Sales Overview's Revenue figure, which sums `total` directly) promises not to have.
-  const transportRows = canSeeSales
-    ? await prisma.$queryRaw<Array<{ month: Date; transport: number; transportGst: number; roundOff: number }>>`
+    ? await prisma.$queryRaw<Array<{ month: Date; gross: number; gst: number }>>`
         SELECT date_trunc('month', "date" + interval '330 minutes') AS month,
-               COALESCE(SUM("transportCharge"), 0) AS transport,
-               COALESCE(SUM("transportChargeGstAmount"), 0) AS "transportGst",
-               COALESCE(SUM("roundOff"), 0) AS "roundOff"
+               COALESCE(SUM("total"), 0) AS gross,
+               COALESCE(SUM("cgst") + SUM("sgst") + SUM("igst") + SUM("transportChargeGstAmount"), 0) AS gst
         FROM "Invoice"
         WHERE "deletedAt" IS NULL
           AND "date" >= ${fyStart} AND "date" < ${fyEnd}
@@ -472,68 +397,11 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
       `
     : [];
 
-  // Sales Returns (credit notes) — bucketed by the RETURN's own date, not the original invoice's,
-  // since that's the month the revenue/COGS actually reverses in. Netted out of both revenue (its
-  // own ex-GST value) and COGS (the returned qty's cost, captured on ReturnItem.costPrice) so a
-  // returned sale isn't counted as either profit or loss.
-  const returnRows = canSeeSales
-    ? await prisma.$queryRaw<Array<{
-        month: Date; verifiedReturnGross: number; verifiedReturnGst: number; verifiedReturnCogs: number;
-        unverifiedReturnGross: number; unverifiedReturnGst: number; unverifiedReturnCogs: number;
-      }>>`
-        SELECT date_trunc('month', r."date" + interval '330 minutes') AS month,
-               COALESCE(SUM(CASE WHEN ri."costSource" IN ('ledger', 'custom-provided') THEN ri."total" ELSE 0 END), 0) AS "verifiedReturnGross",
-               COALESCE(SUM(CASE WHEN ri."costSource" IN ('ledger', 'custom-provided') THEN ri."gstAmount" ELSE 0 END), 0) AS "verifiedReturnGst",
-               COALESCE(SUM(CASE WHEN ri."costSource" IN ('ledger', 'custom-provided') THEN ri."costPrice" * ri."quantity" ELSE 0 END), 0) AS "verifiedReturnCogs",
-               COALESCE(SUM(CASE WHEN ri."costSource" IN ('fallback', 'custom') OR ri."costSource" IS NULL THEN ri."total" ELSE 0 END), 0) AS "unverifiedReturnGross",
-               COALESCE(SUM(CASE WHEN ri."costSource" IN ('fallback', 'custom') OR ri."costSource" IS NULL THEN ri."gstAmount" ELSE 0 END), 0) AS "unverifiedReturnGst",
-               COALESCE(SUM(CASE WHEN ri."costSource" IN ('fallback', 'custom') OR ri."costSource" IS NULL THEN ri."costPrice" * ri."quantity" ELSE 0 END), 0) AS "unverifiedReturnCogs"
-        FROM "Return" r
-        JOIN "ReturnItem" ri ON ri."returnId" = r."id"
-        WHERE r."deletedAt" IS NULL
-          AND r."date" >= ${fyStart} AND r."date" < ${fyEnd}
-        GROUP BY month
-      `
-    : [];
-
-  // Return.roundOff is a per-RETURN column (same shape as Invoice.roundOff above) — summed
-  // separately, ungrouped by item, for the same reason: through the ReturnItem JOIN above it would
-  // multiply once per line on any multi-item credit note.
-  const returnRoundOffRows = canSeeSales
-    ? await prisma.$queryRaw<Array<{ month: Date; roundOff: number }>>`
-        SELECT date_trunc('month', "date" + interval '330 minutes') AS month,
-               COALESCE(SUM("roundOff"), 0) AS "roundOff"
-        FROM "Return"
-        WHERE "deletedAt" IS NULL
-          AND "date" >= ${fyStart} AND "date" < ${fyEnd}
-        GROUP BY month
-      `
-    : [];
-
-  // Total purchase spend (GST-inclusive bill totals) — the Cash Flow section's "money paid out"
-  // side. Deliberately NOT netted against COGS/profit — see the function-level comment above.
   const spendRows = canSeePurchases
-    ? await prisma.$queryRaw<Array<{ month: Date; spend: number }>>`
+    ? await prisma.$queryRaw<Array<{ month: Date; spend: number; gst: number }>>`
         SELECT date_trunc('month', "billDate" + interval '330 minutes') AS month,
-               COALESCE(SUM("total"), 0) AS spend
-        FROM "PurchaseBill"
-        WHERE "deletedAt" IS NULL AND "status" <> 'cancelled'
-          AND "billDate" >= ${fyStart} AND "billDate" < ${fyEnd}
-        GROUP BY month
-      `
-    : [];
-
-  // Purchase Bill's own transport/freight charge (what's paid to get stock delivered) — a real
-  // business expense, but it isn't tied to any one product's per-unit cost (it's a bill-level
-  // charge, and allocating it across that bill's items would need a whole extra layer). Rather
-  // than silently dropping it from Actual Profit (which would overstate margin by exactly this
-  // amount every time a bill carries freight), it's subtracted as its own "Other Business
-  // Expenses" line — full amount, ex-GST (the GST paid on it is reclaimable input credit, not a
-  // real cost, matching how every other cost figure here is ex-GST).
-  const purchaseTransportRows = canSeePurchases
-    ? await prisma.$queryRaw<Array<{ month: Date; transport: number }>>`
-        SELECT date_trunc('month', "billDate" + interval '330 minutes') AS month,
-               COALESCE(SUM("transportCharge"), 0) AS transport
+               COALESCE(SUM("total"), 0) AS spend,
+               COALESCE(SUM("taxAmount") + SUM("transportChargeGstAmount"), 0) AS gst
         FROM "PurchaseBill"
         WHERE "deletedAt" IS NULL AND "status" <> 'cancelled'
           AND "billDate" >= ${fyStart} AND "billDate" < ${fyEnd}
@@ -543,12 +411,8 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
 
   // Key each SQL bucket by its IST year-month so we can line it up against the fixed 12-month grid.
   const keyOf = (d: Date) => new Date(d).toLocaleString("en-IN", { month: "2-digit", year: "numeric", timeZone: "UTC" });
-  const salesByMonth = new Map(salesRows.map((r) => [keyOf(r.month), r]));
-  const transportByMonth = new Map(transportRows.map((r) => [keyOf(r.month), r]));
-  const returnByMonth = new Map(returnRows.map((r) => [keyOf(r.month), r]));
-  const returnRoundOffByMonth = new Map(returnRoundOffRows.map((r) => [keyOf(r.month), Number(r.roundOff) || 0]));
-  const spendByMonth = new Map(spendRows.map((r) => [keyOf(r.month), Number(r.spend) || 0]));
-  const purchaseTransportByMonth = new Map(purchaseTransportRows.map((r) => [keyOf(r.month), Number(r.transport) || 0]));
+  const salesByMonth = new Map(salesRows.map((r) => [keyOf(r.month), { gross: Number(r.gross) || 0, gst: Number(r.gst) || 0 }]));
+  const spendByMonth = new Map(spendRows.map((r) => [keyOf(r.month), { spend: Number(r.spend) || 0, gst: Number(r.gst) || 0 }]));
 
   const monthly = Array.from({ length: 12 }, (_, i) => {
     const monthIndex0 = (3 + i) % 12;                       // Apr(3) … Mar(2)
@@ -556,82 +420,14 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
     const { start } = istMonthBoundsUtc(year, monthIndex0);
     const label = start.toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
     const key = start.toLocaleString("en-IN", { month: "2-digit", year: "numeric", timeZone: "Asia/Kolkata" });
-    const s = salesByMonth.get(key);
-    const t = transportByMonth.get(key);
-    const r = returnByMonth.get(key);
-    const transport = Number(t?.transport) || 0;            // freight charged, ex-GST
-    const transportGst = Number(t?.transportGst) || 0;      // GST on that freight
-    const invoiceRoundOff = Number(t?.roundOff) || 0;       // each invoice's own commercial-rounding adjustment
-
-    const verifiedItemGross = Number(s?.verifiedItemGross) || 0;
-    const verifiedItemGst = Number(s?.verifiedItemGst) || 0;
-    const unverifiedItemGross = Number(s?.unverifiedItemGross) || 0;
-    const unverifiedItemGst = Number(s?.unverifiedItemGst) || 0;
-
-    // Cash Flow's Total Sales must match the invoice's own stored total regardless of whether its
-    // cost is verified yet — so it's built from BOTH buckets, unlike everything below.
-    const fullGrossSales = verifiedItemGross + unverifiedItemGross + transport + transportGst + invoiceRoundOff;
-
-    // VERIFIED — Actual Profit's headline figures use ONLY lines with a real cost (costSource
-    // 'ledger'/'custom-provided'). Transport charge is folded in here regardless (assumed 0%
-    // margin is a deliberate accounting policy, not a guess about an unknown margin — see
-    // src/lib/inventoryCosting.ts's costCustomLineItems).
-    const grossSales = verifiedItemGross + transport + transportGst + invoiceRoundOff;
-    const gst = verifiedItemGst + transportGst;
-    const netSales = grossSales - gst;
-    const cogs = (Number(s?.verifiedCogs) || 0) + transport;
-
-    const returnGross = Number(r?.verifiedReturnGross) || 0;
-    const returnGst = Number(r?.verifiedReturnGst) || 0;
-    const returnRoundOff = returnRoundOffByMonth.get(key) ?? 0;
-    const returnNet = returnGross - returnGst + returnRoundOff; // credit note's own ex-GST value, incl. its own roundOff
-    const returnCogs = Number(r?.verifiedReturnCogs) || 0;
-
-    const netSalesAfterReturns = netSales - returnNet;
-    const netCogs = cogs - returnCogs;
-    // Purchase Bill's own transport/freight — a real expense, but not tied to any one product's
-    // cost (see purchaseTransportRows above) — subtracted as a separate "Other Business Expenses"
-    // line rather than folded into netCogs, so the COGS figure itself still reads as "cost of the
-    // goods actually sold" and this stays visibly its own line in the calculation breakdown.
-    const otherExpenses = purchaseTransportByMonth.get(key) ?? 0;
-
-    // UNVERIFIED — revenue (ex-GST) from lines with no real cost yet, net of any returns of those
-    // same unverified sales. No "cost"/"profit" figure is blended in here — inventing one would be
-    // exactly the guessing this split exists to avoid.
-    const unverifiedReturnGross = Number(r?.unverifiedReturnGross) || 0;
-    const unverifiedReturnGst = Number(r?.unverifiedReturnGst) || 0;
-    const unverifiedRevenue = (unverifiedItemGross - unverifiedItemGst) - (unverifiedReturnGross - unverifiedReturnGst);
-
-    // ESTIMATED PROFIT — a separate, clearly-not-verified figure for the unverified bucket above,
-    // using whatever cost each row already got costed at (Product.purchasePrice for 'fallback' rows
-    // — a static field that may be stale/never revisited, not real purchase history; the sale's own
-    // rate for 'custom' rows, i.e. always 0 margin by construction). Never blended into grossProfit —
-    // shown only so an all-guessed number is visible on request instead of no number at all.
-    const unverifiedCogs = Number(s?.unverifiedCogs) || 0;
-    const unverifiedReturnCogs = Number(r?.unverifiedReturnCogs) || 0;
-    const estimatedProfit = unverifiedRevenue - (unverifiedCogs - unverifiedReturnCogs);
-
+    const sales = salesByMonth.get(key);
+    const spend = spendByMonth.get(key);
     return {
       month: label,
-      // Actual Profit section — verified-only; this IS the headline number.
-      grossSales,
-      gst,
-      netSales,
-      returnNet,
-      netSalesAfterReturns,
-      cogs,
-      returnCogs,
-      netCogs,
-      otherExpenses,
-      grossProfit: netSalesAfterReturns - netCogs - otherExpenses,
-      unverifiedRevenue,
-      estimatedProfit,
-      costedQty: Number(s?.costedQty) || 0,
-      estimatedQty: Number(s?.estimatedQty) || 0,
-      uncostedQty: Number(s?.uncostedQty) || 0,
-      // Cash Flow section — simple totals (verified + unverified both), no netting against each other.
-      totalSales: fullGrossSales,
-      totalPurchases: spendByMonth.get(key) ?? 0,
+      totalSales: sales?.gross ?? 0,
+      gstSales: sales?.gst ?? 0,
+      totalPurchases: spend?.spend ?? 0,
+      gstPurchases: spend?.gst ?? 0,
       // Months that haven't happened yet stay at zero but are still returned so the selector shows the full FY.
       future: start > now,
     };
@@ -639,25 +435,12 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
 
   const total = monthly.reduce(
     (acc, m) => ({
-      grossSales: acc.grossSales + m.grossSales,
-      gst: acc.gst + m.gst,
-      netSales: acc.netSales + m.netSales,
-      returnNet: acc.returnNet + m.returnNet,
-      netSalesAfterReturns: acc.netSalesAfterReturns + m.netSalesAfterReturns,
-      cogs: acc.cogs + m.cogs,
-      returnCogs: acc.returnCogs + m.returnCogs,
-      netCogs: acc.netCogs + m.netCogs,
-      otherExpenses: acc.otherExpenses + m.otherExpenses,
-      grossProfit: acc.grossProfit + m.grossProfit,
-      unverifiedRevenue: acc.unverifiedRevenue + m.unverifiedRevenue,
-      estimatedProfit: acc.estimatedProfit + m.estimatedProfit,
-      costedQty: acc.costedQty + m.costedQty,
-      estimatedQty: acc.estimatedQty + m.estimatedQty,
-      uncostedQty: acc.uncostedQty + m.uncostedQty,
       totalSales: acc.totalSales + m.totalSales,
+      gstSales: acc.gstSales + m.gstSales,
       totalPurchases: acc.totalPurchases + m.totalPurchases,
+      gstPurchases: acc.gstPurchases + m.gstPurchases,
     }),
-    { grossSales: 0, gst: 0, netSales: 0, returnNet: 0, netSalesAfterReturns: 0, cogs: 0, returnCogs: 0, netCogs: 0, otherExpenses: 0, grossProfit: 0, unverifiedRevenue: 0, estimatedProfit: 0, costedQty: 0, estimatedQty: 0, uncostedQty: 0, totalSales: 0, totalPurchases: 0 },
+    { totalSales: 0, gstSales: 0, totalPurchases: 0, gstPurchases: 0 },
   );
 
   return {
@@ -763,6 +546,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ...combined, financials });
     }
     if (type === "gst-summary")        return NextResponse.json(await getGstSummary(startDate, endDate));
+    if (type === "net-gst-payable") {
+      // The exact same authoritative figure the GST Filing report shows as "Net GST Payable
+      // (Rounded)" — reused via buildGstFilingReport() itself (never a separate reimplementation)
+      // so the Dashboard's Cash Flow tile can never drift from what the business actually files.
+      // Gated identically to /api/gst-filing (not just sales_overview/purchase_overview, which the
+      // rest of the Cash Flow section uses) since this is the real tax-liability number, not a
+      // simple total.
+      const gate = await requireGstFilingAccess();
+      if (!gate.ok) return gate.response;
+      const period = parsePeriodParam(searchParams);
+      const { start, end } = resolvePeriod(period, new Date());
+      if (!start || !end) {
+        return NextResponse.json({ error: "A specific financial year or month is required" }, { status: 400 });
+      }
+      // resolvePeriod()'s `end` is the EXCLUSIVE start of the next period — back up 1ms to land on
+      // the period's own last inclusive calendar day before converting to a date-only string.
+      const report = await buildGstFilingReport(toIstDateStr(start), toIstDateStr(new Date(end.getTime() - 1)));
+      return NextResponse.json({
+        netGstPayable: report.summary.netGstPayable,
+        rawNetGstPayable: report.summary.rawNetGstPayable,
+        netGstPayableRoundOff: report.summary.netGstPayableRoundOff,
+      });
+    }
 
     return NextResponse.json({ error: `Unknown report type: ${type}` }, { status: 400 });
   } catch (error) {

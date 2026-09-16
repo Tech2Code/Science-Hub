@@ -9,7 +9,6 @@ import { QuickAddProductModal, type QuickAddOutcome } from "@/components/product
 import { animateSection } from "@/lib/animateSection";
 import { useDropUp } from "@/lib/useDropUp";
 import { lineBreakdown, makeInvoiceLineItemKey, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
-import { resolveQuickAddLineRate } from "@/lib/purchaseBillForm";
 import styles from "./InvoiceLineItemsCard.module.css";
 
 const QUICK_ADD_UNITS = ["Nos", "Pcs", "Kg", "500g", "250g", "100g", "g", "Ltr", "500ml", "250ml", "ml", "Box", "Pkt", "Set", "Mtr", "Dozen"];
@@ -66,23 +65,20 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
     setShowProductDropdown(false);
   }
 
-  // A custom "just for this invoice" item has no product record, so its cost is always List Price
-  // × Discount % (purchasePriceNum) — mandatory on the popup, never a guess. Its own line rate
-  // comes from the popup's required Selling Price, via the same divergence-aware resolution
-  // addProduct() below uses for an existing product: sold at exactly its cost (List Price ×
-  // Discount %) shows the vendor breakdown on the line; sold at any other price is a flat rate
-  // with the discount column left at 0%. A newly-created CATALOG product goes through the same
-  // logic via addProduct() — the popup's Selling Price must reach this invoice's line, not just
-  // sit unused on the new product's own catalog record.
+  // A custom "just for this invoice" item has no product record to carry a Selling Price on, so its
+  // line is priced straight off the popup's List Price/Discount % (there's no other rate to use).
+  // But a newly-created CATALOG product goes through the same divergence-aware pricing as picking
+  // an existing product (addProduct() above) — the popup lets the user type a Selling Price
+  // distinct from the vendor's List Price/Discount terms, and that must reach this invoice's line,
+  // not just sit unused on the new product's own catalog record.
   function handleQuickAddOutcome(outcome: QuickAddOutcome) {
     if (outcome.skipCatalog) {
-      const { rate, discountPercent } = resolveQuickAddLineRate(outcome.listPrice, outcome.discountPercent, outcome.salePrice ?? "0");
+      const listPriceNum = parseFloat(outcome.listPrice) || 0;
+      const discountPercentNum = Math.min(100, Math.max(0, parseFloat(outcome.discountPercent) || 0));
       setItems((prev) => [...prev, {
         key: makeInvoiceLineItemKey(), productId: "", productName: outcome.name,
-        unit: outcome.unit, qty: outcome.qty, price: parseFloat(rate) || 0,
-        gstRate: parseFloat(outcome.gstRate) || 0, hsn: outcome.hsn, discountPercent: parseFloat(discountPercent) || 0,
-        customCostPrice: outcome.purchasePriceNum,
-        costSource: "custom-provided",
+        unit: outcome.unit, qty: outcome.qty, price: listPriceNum,
+        gstRate: parseFloat(outcome.gstRate) || 0, hsn: outcome.hsn, discountPercent: discountPercentNum,
       }]);
       return;
     }
@@ -211,34 +207,6 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
 
   function clearPriceDraft(key: string) {
     setPriceDrafts((prev) => {
-      if (!(key in prev)) return prev;
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-  }
-
-  // Lets a custom (no-catalog) line's real cost be set or corrected after the fact — e.g. an item
-  // added without a confirmed cost, or an existing invoice's custom line whose cost was never
-  // confirmed at all — without deleting and re-adding it via the quick-add popup. Same draft-buffer
-  // pattern as price/qty above so a trailing "." isn't stripped mid-keystroke.
-  const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
-
-  function handleCustomCostChange(idx: number, key: string, raw: string) {
-    const cleaned = raw.replace(/[^\d.]/g, "");
-    if ((cleaned.match(/\./g) ?? []).length > 1) return;
-    setCostDrafts((prev) => ({ ...prev, [key]: raw }));
-    if (cleaned.trim() === "") {
-      setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, customCostPrice: undefined, costSource: null } : item)));
-      return;
-    }
-    const parsed = parseFloat(cleaned);
-    if (isNaN(parsed)) return;
-    setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, customCostPrice: parsed, costSource: "custom-provided" } : item)));
-  }
-
-  function clearCostDraft(key: string) {
-    setCostDrafts((prev) => {
       if (!(key in prev)) return prev;
       const next = { ...prev };
       delete next[key];
@@ -379,25 +347,6 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
                     <td className={styles.tdIndex}>{idx + 1}</td>
                     <td className={styles.tdProduct}>
                       <div className={styles.tdProductInner} title={item.productName}>{item.productName}</div>
-                      {!item.productId && (
-                        <div className={styles.customCostRow}>
-                          <span className={styles.customCostLabel}>Cost ₹</span>
-                          <Input
-                            sz="sm" type="text" inputMode="decimal"
-                            value={costDrafts[item.key] ?? (item.customCostPrice != null ? String(item.customCostPrice) : "")}
-                            onChange={(e) => handleCustomCostChange(idx, item.key, e.target.value)}
-                            onBlur={() => clearCostDraft(item.key)}
-                            aria-label={`Real cost for ${item.productName}`}
-                            placeholder="unconfirmed"
-                            className={styles.customCostInput}
-                          />
-                          {item.costSource === "custom-provided" ? (
-                            <span className={styles.customCostHintConfirmed}>✓ confirmed</span>
-                          ) : (
-                            <span className={styles.customCostHintUnconfirmed}>not verified</span>
-                          )}
-                        </div>
-                      )}
                     </td>
                     <td className={styles.tdCenter}>
                       <Input

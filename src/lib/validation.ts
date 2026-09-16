@@ -164,9 +164,24 @@ export function validateCustomerInput(input: {
     validate(input.city ?? "", rules.minLength(2), rules.maxLength(100)) ||
     validate(input.pincode ?? "", rules.pincode()) ||
     validate(input.gstin ?? "", rules.gstin()) ||
-    validate(String(input.creditLimit ?? ""), rules.nonNegativeNumber("Credit limit must be 0 or more.")) ||
+    validateCreditLimitInput(input.creditLimit) ||
     null
   );
+}
+
+// Same "Infinity"/garbage-value class of gap MAX_MONEY_VALUE closes for price/purchasePrice/
+// listPrice elsewhere — a bare `rules.nonNegativeNumber()` lets "Infinity" through since
+// `parseFloat("Infinity") >= 0` is true, and parseCreditLimit() below would then silently treat
+// that non-finite value as "no limit" (unlimited credit) instead of rejecting it outright, which is
+// the opposite of what a credit-limit control should fail open to.
+function validateCreditLimitInput(value: string | number | null | undefined): string | null {
+  const str = String(value ?? "").trim();
+  if (!str) return null; // blank means "no limit" — parseCreditLimit()'s own contract
+  const n = parseFloat(str);
+  if (!Number.isFinite(n) || n < 0 || n > MAX_MONEY_VALUE) {
+    return "Credit limit must be a valid amount between 0 and 10 crore.";
+  }
+  return null;
 }
 
 // Parses a customer form's creditLimit string into a nullable Float for storage — blank/whitespace means "no limit".

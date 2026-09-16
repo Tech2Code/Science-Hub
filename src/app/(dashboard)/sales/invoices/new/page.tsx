@@ -412,7 +412,7 @@ export default function NewInvoicePage() {
       isInterState,
       placeOfSupply,
       reverseCharge,
-      items: items.map((i) => ({ productId: i.productId || null, name: i.productName, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent, costPrice: i.customCostPrice })),
+      items: items.map((i) => ({ productId: i.productId || null, name: i.productName, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent })),
       notes, dueDate: dueDate || undefined,
       customerId,
       transportCharge: effectiveTransportCharge,

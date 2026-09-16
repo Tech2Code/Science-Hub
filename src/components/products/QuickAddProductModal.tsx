@@ -40,13 +40,8 @@ interface QuickAddOutcomeBase {
   gstRate: string;
   listPrice: string;
   discountPercent: string;
-  /** List Price × Discount % — the derived net rate. Doubles as the item's real cost when
-   *  skipCatalog is true and entityLabel is "invoice" (see purchasePriceNum below), the same way
-   *  it's already the purchase-bill custom item's cost — no separate "cost" field to type. */
+  /** List Price × Discount % — the derived net rate. */
   purchasePriceNum: number;
-  /** Only meaningful when skipCatalog is true and entityLabel is "invoice" — what to charge the
-   *  customer, now required there (there's no product to carry a Selling Price on otherwise). */
-  salePrice?: string;
 }
 
 // Discriminated on skipCatalog so `product` is only reachable (and required) in the branch where
@@ -70,7 +65,7 @@ interface QuickAddProductModalProps {
 
 const EMPTY_FORM = { name: "", unit: "", quantity: "1", listPrice: "", discountPercent: "", gstRate: "18", salePrice: "", hsn: "", skipCatalog: false };
 
-type QuickAddErrors = Partial<Record<"name" | "listPrice" | "unit" | "gstRate" | "quantity" | "salePrice", string>>;
+type QuickAddErrors = Partial<Record<"name" | "listPrice" | "unit" | "gstRate" | "quantity", string>>;
 
 // Shared "search a product or add a custom one" quick-add popup — used identically by the New/Edit
 // Invoice and New/Edit Purchase Bill line-item tables (InvoiceLineItemsCard.tsx / PurchaseBillItemsTable.tsx)
@@ -87,12 +82,13 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
   const [errors, setErrors] = useState<QuickAddErrors>({});
   const [saving, setSaving] = useState(false);
 
-  // Catalog name-similarity check — a custom item (especially "don't save to catalog") that's
-  // actually the same product as an existing catalog entry can never have its cost linked to that
-  // product's real purchase/sale history (see src/lib/inventoryCosting.ts — cost matching is keyed
-  // on productId, never on name). This is a soft nudge only: it never auto-links or blocks
-  // submission, since a name match can be coincidental (two genuinely different products sharing a
-  // name) or the catalog entry might be the wrong one — the user decides.
+  // Catalog name-similarity check — a "just for this document" custom item never touches the
+  // matching catalog product's real stock: it doesn't decrement/increment Product.stock, doesn't
+  // appear in that product's Stock Movement ledger, and doesn't count toward its low-stock alerts.
+  // If it's actually the same product as one already in the catalog under a similar name, adding it
+  // here instead of picking it from the list silently leaves that product's real inventory count
+  // wrong. This is a soft nudge only: it never auto-links or blocks submission, since a name match
+  // can be coincidental (two genuinely different products sharing a name) — the user decides.
   const debouncedName = useDebouncedValue(form.name, 400);
   const [similarProducts, setSimilarProducts] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => {
@@ -136,14 +132,6 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
       listPrice: validate(form.listPrice, rules.required("List price is required."), rules.nonNegativeNumber("List price cannot be negative.")) ?? undefined,
       unit: validate(form.unit, rules.required("Unit is required.")) ?? undefined,
       gstRate: validate(form.gstRate, rules.required("GST rate is required."), rules.percentRange(100, "GST rate must be between 0 and 100%.")) ?? undefined,
-      // Required only for an invoice's "skip catalog" custom item — the one case with no product
-      // to carry a Selling Price on otherwise. The item's cost is never a separate typed field: it
-      // reuses List Price × Discount % above (purchasePriceNum), exactly like a purchase-bill
-      // custom item already does — so cost is never left blank/guessed, without asking for a
-      // second number.
-      salePrice: (form.skipCatalog && entityLabel === "invoice")
-        ? (validate(form.salePrice, rules.required("Selling price is required."), rules.nonNegativeNumber("Selling price cannot be negative.")) ?? undefined)
-        : undefined,
     };
     if (Object.values(errs).some(Boolean)) { setErrors(errs); return; }
     setErrors({});
@@ -155,7 +143,6 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
         skipCatalog: true, name: form.name.trim(), quantity: form.quantity, qty,
         unit: form.unit.trim() || defaultUnit, hsn: form.hsn.trim(), gstRate: form.gstRate,
         listPrice: form.listPrice, discountPercent: form.discountPercent, purchasePriceNum,
-        salePrice: entityLabel === "invoice" ? form.salePrice.trim() : undefined,
       });
       toast({ type: "success", title: "Item added", message: `"${form.name.trim()}" added to this ${entityLabel} only.` });
       onClose();
@@ -232,9 +219,9 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
             />
           </FormField>
           {debouncedName.trim().length >= 3 && similarProducts.length > 0 && (
-            <div className={styles.similarHint}>
+            <div className={styles.similarHint} role="status" aria-live="polite">
               Similar item{similarProducts.length > 1 ? "s" : ""} already in your catalog: {similarProducts.map((p) => `"${p.name}"`).join(", ")}.
-              {" "}If this is the same product, cancel and pick it from the item list instead — a custom item here can never link to its purchase/sale cost history.
+              {" "}If this is the same product, cancel and pick it from the item list instead — a custom item here won&apos;t update that product&apos;s real stock count.
             </div>
           )}
           <div className={styles.grid2}>
@@ -283,26 +270,22 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
                 onChange={(e) => { setForm((p) => ({ ...p, gstRate: e.target.value.replace(/[^\d.]/g, "") })); setErrors((p) => ({ ...p, gstRate: undefined })); }}
               />
             </FormField>
-            {(!form.skipCatalog || entityLabel === "invoice") && (
+            {!form.skipCatalog && (
               <FormField
                 label="Selling Price (₹)"
-                required={form.skipCatalog}
-                error={errors.salePrice}
                 hint={
-                  form.skipCatalog
-                    ? "What to charge the customer. Its cost is List Price × Discount % above (₹" + fmtCurrency(purchasePriceNum) + ") — there's no product history to look up otherwise, so this is treated as the real cost, not a guess."
-                    : salePriceBelowCost
-                      ? `Selling price is lower than purchase price (₹${fmtCurrency(purchasePriceNum)})`
-                      : purchasePriceNum > 0
-                        ? `Defaults to purchase price ₹${fmtCurrency(purchasePriceNum)} (+₹${fmtCurrency(gstAmount)} GST = ₹${fmtCurrency(landedCost)} landed cost) if left blank`
-                        : "Defaults to purchase price (before GST) if left blank"
+                  salePriceBelowCost
+                    ? `Selling price is lower than purchase price (₹${fmtCurrency(purchasePriceNum)})`
+                    : purchasePriceNum > 0
+                      ? `Defaults to purchase price ₹${fmtCurrency(purchasePriceNum)} (+₹${fmtCurrency(gstAmount)} GST = ₹${fmtCurrency(landedCost)} landed cost) if left blank`
+                      : "Defaults to purchase price (before GST) if left blank"
                 }
-                hintWarning={!form.skipCatalog && salePriceBelowCost}
+                hintWarning={salePriceBelowCost}
               >
                 <Input
                   type="text" inputMode="decimal" placeholder="0.00"
                   value={form.salePrice}
-                  onChange={(e) => { setForm((p) => ({ ...p, salePrice: e.target.value.replace(/[^\d.]/g, "") })); setErrors((p) => ({ ...p, salePrice: undefined })); }}
+                  onChange={(e) => setForm((p) => ({ ...p, salePrice: e.target.value.replace(/[^\d.]/g, "") }))}
                 />
               </FormField>
             )}

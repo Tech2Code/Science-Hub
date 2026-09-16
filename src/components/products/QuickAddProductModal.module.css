@@ -20,7 +20,7 @@
   line-height: 1.45;
   color: var(--c-amber-text, #b45309);
   background: var(--c-amber-bg, rgba(217, 119, 6, 0.1));
-  border: 1px solid var(--c-amber, rgba(217, 119, 6, 0.3));
+  border: 1px solid var(--c-amber-border, rgba(217, 119, 6, 0.3));
   border-radius: 0.5rem;
   padding: 0.55rem 0.75rem;
 }

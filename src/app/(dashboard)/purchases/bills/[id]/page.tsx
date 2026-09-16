@@ -15,6 +15,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
 import { rules, validate, toIstDateStr, isFutureIstDate } from "@/lib/validation";
+import { splitGstForDisplay } from "@/lib/roundOff";
 import { bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
@@ -726,7 +727,7 @@ export default function PurchaseBillDetailPage() {
           {bill.items.map((item, idx) => {
             const rowBg = idx % 2 === 1 ? "var(--bp-bg2)" : "var(--bp-bg)";
             const halfRate = item.gstRate / 2;
-            const halfGst = item.gstAmount / 2;
+            const { cgst: itemCgst, sgst: itemSgst } = splitGstForDisplay(item.gstAmount);
             const td = (content: React.ReactNode, align: "left" | "right" = "left", width?: number) => (
               <td style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", textAlign: align, width, background: rowBg }}>{content}</td>
             );
@@ -764,7 +765,7 @@ export default function PurchaseBillDetailPage() {
                 {bill.isInterState ? (
                   td(`${item.gstRate}% (₹${fmt(item.gstAmount)})`, "right")
                 ) : (
-                  <>{td(`${halfRate}% (₹${fmt(halfGst)})`, "right")}{td(`${halfRate}% (₹${fmt(halfGst)})`, "right")}</>
+                  <>{td(`${halfRate}% (₹${fmt(itemCgst)})`, "right")}{td(`${halfRate}% (₹${fmt(itemSgst)})`, "right")}</>
                 )}
                 {td(fmt(item.total), "right")}
               </tr>
@@ -775,7 +776,7 @@ export default function PurchaseBillDetailPage() {
             const tcGst = bill.transportChargeGstAmount ?? 0;
             const tcRate = bill.transportChargeGstRate ?? 0;
             const tcHalfRate = tcRate / 2;
-            const tcHalfGst = tcGst / 2;
+            const { cgst: tcCgst, sgst: tcSgst } = splitGstForDisplay(tcGst);
             const tcTd = (content: React.ReactNode, bold = false) => (
               <td style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", textAlign: "right", background: "var(--bp-bg)", fontWeight: bold ? 700 : undefined, color: bold ? "var(--bp-tx)" : undefined, whiteSpace: "nowrap" }}>
                 {content}
@@ -789,7 +790,7 @@ export default function PurchaseBillDetailPage() {
                 {tcTd(fmt(tcTaxable))}
                 {bill.isInterState
                   ? tcTd(`${tcRate}% (₹${fmt(tcGst)})`)
-                  : <>{tcTd(`${tcHalfRate}% (₹${fmt(tcHalfGst)})`)}{tcTd(`${tcHalfRate}% (₹${fmt(tcHalfGst)})`)}</>}
+                  : <>{tcTd(`${tcHalfRate}% (₹${fmt(tcCgst)})`)}{tcTd(`${tcHalfRate}% (₹${fmt(tcSgst)})`)}</>}
                 {tcTd(fmt(tcTaxable + tcGst), true)}
               </tr>
             );
@@ -1320,7 +1321,7 @@ export default function PurchaseBillDetailPage() {
                   {bill.items.map((item, idx) => {
                     const taxable = item.quantity * item.purchasePrice - item.discountAmount;
                     const halfRate = item.gstRate / 2;
-                    const halfGst = item.gstAmount / 2;
+                    const { cgst: itemCgstM, sgst: itemSgstM } = splitGstForDisplay(item.gstAmount);
                     return (
                       <tr key={item.id}>
                         <td data-mobile-hide className={styles.textMuted}>{idx + 1}</td>
@@ -1337,8 +1338,8 @@ export default function PurchaseBillDetailPage() {
                           <td data-label="IGST" className={`${styles.textRight} ${styles.textMuted}`}>{item.gstRate}% (₹{fmt(item.gstAmount)})</td>
                         ) : (
                           <>
-                            <td data-label="CGST" className={`${styles.textRight} ${styles.textMuted}`}>{halfRate}% (₹{fmt(halfGst)})</td>
-                            <td data-label="SGST" className={`${styles.textRight} ${styles.textMuted}`}>{halfRate}% (₹{fmt(halfGst)})</td>
+                            <td data-label="CGST" className={`${styles.textRight} ${styles.textMuted}`}>{halfRate}% (₹{fmt(itemCgstM)})</td>
+                            <td data-label="SGST" className={`${styles.textRight} ${styles.textMuted}`}>{halfRate}% (₹{fmt(itemSgstM)})</td>
                           </>
                         )}
                         <td data-label="Total" className={styles.totalCell}>₹{fmt(item.total)}</td>

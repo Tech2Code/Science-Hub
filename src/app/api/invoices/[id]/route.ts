@@ -12,7 +12,6 @@ import { getIndianFinancialYear } from "@/lib/documentNumbering";
 
 class InvoiceConflictError extends Error {}
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
-import { costCustomLineItems } from "@/lib/inventoryCosting";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { checkCustomerCreditLimit, type CreditLimitCheck } from "@/lib/creditLimit";
@@ -164,8 +163,8 @@ export async function PUT(
           seenProductIds.add(item.productId);
           continue;
         }
-        // Same reasoning as POST /api/invoices — a custom item's name must stay unique within the
-        // invoice so a later return can match it back unambiguously (ReturnItem.sourceInvoiceItemId).
+        // Same reasoning as POST /api/invoices — a custom item's name should stay unique within
+        // the invoice so two rows never share a name with different rates/quantities.
         const key = (item.name ?? "").trim().toLowerCase();
         if (key && seenCustomNames.has(key)) {
           return NextResponse.json({ error: `"${item.name}" appears more than once as a custom item — combine duplicate lines into a single quantity instead.` }, { status: 400 });
@@ -205,7 +204,6 @@ export async function PUT(
     const invoiceItems = items.map((item: {
       productId?: string; name?: string; qty?: number; quantity?: number;
       price: number; gstRate: number; unit?: string; hsn?: string; discountPercent?: number;
-      costPrice?: number | string;
     }) => {
       const product = item.productId ? productMap.get(item.productId) : undefined;
       const quantity = parseFloat(String(item.qty ?? item.quantity ?? 1));
@@ -216,16 +214,6 @@ export async function PUT(
         lineBreakdown({ qty: quantity, price, gstRate, discountPercent });
       subtotal += itemSubtotal;
       totalGst += gstAmount;
-
-      // See POST /api/invoices — a custom (no-catalog) line can carry a user-typed real cost from
-      // the quick-add popup, set directly instead of left for costCustomLineItems()'s 0%-margin
-      // assumption.
-      let providedCost: number | null = null;
-      if (!item.productId && item.costPrice !== undefined && item.costPrice !== null && item.costPrice !== "") {
-        const parsed = parseFloat(String(item.costPrice));
-        if (Number.isFinite(parsed) && parsed >= 0 && parsed <= MAX_MONEY_VALUE) providedCost = parsed;
-      }
-
       return {
         productId: item.productId || null,
         name: product?.name || (item.name ?? "").trim() || "Unknown Product",
@@ -238,7 +226,6 @@ export async function PUT(
         gstRate,
         gstAmount,
         total: itemTotal,
-        ...(providedCost !== null ? { costPrice: providedCost, costSource: "custom-provided" } : {}),
       };
     });
 
@@ -311,11 +298,6 @@ export async function PUT(
 
       await tx.invoiceItem.deleteMany({ where: { invoiceId: id } });
 
-      // costPrice/costSource are left unset here — batchAdjustStock() below (for the new items)
-      // triggers recostProducts() (src/lib/inventoryCosting.ts), which replays every affected
-      // product's full purchase/sale/return history in document-date order and fills them in —
-      // correctly re-costing a backdated edit and everything that comes after it, not just this
-      // invoice's own lines.
       const inv = await tx.invoice.update({
         where: { id },
         data: {
@@ -354,9 +336,6 @@ export async function PUT(
           createdByUserId: auth.session.user.id,
         }
       );
-      // Custom (no-catalog) line items have no product for batchAdjustStock/recostProducts to
-      // ever see — cost them separately at their own net rate (see costCustomLineItems).
-      await costCustomLineItems(tx, { invoiceId: inv.id });
       const warnings = updatedProducts
         .filter((p) => p.stock < 0)
         .map((p) => `${p.name} (stock: ${p.stock})`);

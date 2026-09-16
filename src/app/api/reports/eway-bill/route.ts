@@ -1,27 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/apiAuth";
+import { requireGstFilingAccess } from "@/lib/apiAuth";
 import { istDayStartUtc, istDayEndUtc } from "@/lib/validation";
 import { EWAY_BILL_THRESHOLD } from "@/lib/ewayBill";
-
-// Same all-or-nothing gate as /api/gst-filing — this report merges sales + purchase data.
-async function requireGstFilingAccess() {
-  const auth = await requireSession();
-  if (!auth.ok) return auth;
-  const { role, sections } = auth.session.user;
-  if (role === "admin") return auth;
-  const userSections = Array.isArray(sections) ? sections : [];
-  if (!userSections.includes("reports_sales") || !userSections.includes("reports_purchases")) {
-    return {
-      ok: false as const,
-      response: NextResponse.json(
-        { error: "E-way Bill report requires both Sales Reports and Purchase Reports access." },
-        { status: 403 }
-      ),
-    };
-  }
-  return auth;
-}
 
 export async function GET(request: NextRequest) {
   try {

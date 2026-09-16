@@ -42,6 +42,29 @@ export async function requireWriteAccess(): Promise<AuthResult> {
   return auth;
 }
 
+// Sales+Purchase data merge here despite sitting behind separate permissions — an all-or-nothing
+// gate avoids handing a partial, misleading filing package to a user with only one half. Shared by
+// /api/gst-filing and any other route that surfaces the same real net-GST-payable figure (e.g. the
+// Dashboard's Cash Flow tile), so that figure is never shown more broadly than the actual filing
+// report itself is.
+export async function requireGstFilingAccess(): Promise<AuthResult> {
+  const auth = await requireSession();
+  if (!auth.ok) return auth;
+  const { role, sections } = auth.session.user;
+  if (role === "admin") return auth;
+  const userSections = Array.isArray(sections) ? sections : [];
+  if (!userSections.includes("reports_sales") || !userSections.includes("reports_purchases")) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "GST Filing requires both Sales Reports and Purchase Reports access." },
+        { status: 403 }
+      ),
+    };
+  }
+  return auth;
+}
+
 // Enforces section-level access. Admin always passes.
 // Other roles need the section in their token.
 export async function requireSectionAccess(section: ProtectedSection): Promise<AuthResult> {

@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
-import { recostProducts } from "@/lib/inventoryCosting";
 import { deleteAttachmentBlob, isPurchaseBillBlobUrl } from "@/lib/blobStorage";
 import { computeRoundOff } from "@/lib/roundOff";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
@@ -357,17 +356,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             createdByUserId: auth.session.user.id,
           }
         );
-      } else if (parsedBillDate && items === undefined) {
-        // billDate-only edit (no item/stock change of its own, so batchAdjustStock — and the recost
-        // it triggers — never runs above). The WAC cost ledger is ordered by each purchase's own
-        // billDate, so backdating/postdating this bill can still reorder it relative to other
-        // purchases/sales of the same product and change every downstream costPrice — recost
-        // explicitly rather than leaving it stale until an unrelated stock event happens to do it.
-        const currentItems = await tx.purchaseBillItem.findMany({
-          where: { purchaseBillId: id },
-          select: { productId: true },
-        });
-        await recostProducts(tx, currentItems.map((item) => item.productId).filter((pid): pid is string => !!pid));
       }
 
       return updated;
@@ -380,7 +368,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     await logActivity(auth.session.user.id, "update_purchase_bill", `Updated purchase bill ${bill.billNumber}`, bill.id, "purchase_bill");
     revalidateTag("purchase-bills", { expire: 0 });
-    if (isCancelling || isUncancelling || items !== undefined || parsedBillDate) {
+    if (isCancelling || isUncancelling || items !== undefined) {
       revalidateTag("products", { expire: 0 });
       revalidateTag("reports", { expire: 0 });
     }

@@ -44,7 +44,7 @@ interface ReturnRecord {
   items: { id: string; name: string; quantity: number; price: number; discountPercent?: number; gstRate: number; gstAmount: number; total: number; productId: string | null }[];
 }
 interface ReturnFormItem {
-  invoiceItemId: string; productId: string; name: string; price: number; discountPercent: number; selected: boolean; qty: number; maxQty: number; qtyText: string;
+  productId: string; name: string; price: number; discountPercent: number; selected: boolean; qty: number; maxQty: number; qtyText: string;
 }
 interface Invoice {
   id: string; invoiceNumber: string; date: string; dueDate?: string; createdAt: string;
@@ -461,7 +461,6 @@ export default function InvoiceDetailPage() {
       }
     }
     setReturnItems(invoice.items.map(item => ({
-      invoiceItemId: item.id,
       productId: item.productId,
       name: item.name,
       price: item.price,
@@ -512,7 +511,7 @@ export default function InvoiceDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: selected.map(ri => ({ productId: ri.productId, invoiceItemId: ri.invoiceItemId, name: ri.name, quantity: ri.qty, price: ri.price, discountPercent: ri.discountPercent })),
+          items: selected.map(ri => ({ productId: ri.productId, name: ri.name, quantity: ri.qty, price: ri.price, discountPercent: ri.discountPercent })),
           notes: returnNotes || undefined,
           date: returnDate || undefined,
           idempotencyKey: returnIdempotency.key(),
