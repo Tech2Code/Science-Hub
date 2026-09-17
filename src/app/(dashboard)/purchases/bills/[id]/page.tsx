@@ -1028,6 +1028,9 @@ export default function PurchaseBillDetailPage() {
               {showPayForm ? "Hide Payment" : "Record Payment"}
             </Button>
           )}
+          <Button variant="secondary" size="sm" title="Discard the cached PDF and download a freshly generated copy" aria-label="Regenerate PDF" onClick={() => handleDownloadPdf(true)} disabled={pdfDownloading}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          </Button>
           <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             View
@@ -1035,9 +1038,6 @@ export default function PurchaseBillDetailPage() {
           <Button variant="secondary" size="sm" onClick={() => handleDownloadPdf(false)} disabled={pdfDownloading}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             {pdfDownloading ? "Generating…" : "PDF"}
-          </Button>
-          <Button variant="secondary" size="sm" title="Discard the cached PDF and download a freshly generated copy" aria-label="Regenerate PDF" onClick={() => handleDownloadPdf(true)} disabled={pdfDownloading}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
           </Button>
           {/* Share PDF button */}
           <div className={styles.shareWrap} ref={shareContainerRef}>
