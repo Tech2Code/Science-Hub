@@ -1,6 +1,8 @@
 // Shared client-side helpers for the Rate List new/edit forms — kept in one
 // place so the two forms can't drift apart, mirroring purchaseBillForm.ts.
 
+import { MAX_MONEY_VALUE } from "@/lib/validation";
+
 export interface RateListLineItem {
   key: string;
   name: string;
@@ -76,7 +78,7 @@ export function validateAndBuildRateListItems(items: unknown): { error: string }
     if (!unit) return { error: "Every item must have a unit" };
     if (unit.length > 50) return { error: "Item unit is too long (max 50 characters)" };
     if (brand.length > 100) return { error: "Item brand is too long (max 100 characters)" };
-    if (!(listRate >= 0)) return { error: "Every item's list rate must be 0 or more" };
+    if (!(listRate >= 0 && listRate <= MAX_MONEY_VALUE)) return { error: "Every item's list rate must be a valid, reasonable amount" };
     const isNetRate = Boolean(raw.isNetRate);
     const discountPercent = isNetRate ? 0 : Math.min(100, Math.max(0, parseFloat(String(raw.discountPercent ?? 0)) || 0));
     const amount = isNetRate ? listRate : Math.round((listRate - (listRate * discountPercent) / 100) * 100) / 100;

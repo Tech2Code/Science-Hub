@@ -68,7 +68,12 @@ describe("validateAndBuildRateListItems", () => {
 
   it("rejects a negative list rate", () => {
     const result = validateAndBuildRateListItems([{ name: "Beaker", unit: "Nos", listRate: -5 }]);
-    expect(result).toEqual({ error: "Every item's list rate must be 0 or more" });
+    expect(result).toEqual({ error: "Every item's list rate must be a valid, reasonable amount" });
+  });
+
+  it("rejects a list rate above MAX_MONEY_VALUE (closes the same 'Infinity'-string gap every other money field guards against)", () => {
+    const result = validateAndBuildRateListItems([{ name: "Beaker", unit: "Nos", listRate: "Infinity" }]);
+    expect(result).toEqual({ error: "Every item's list rate must be a valid, reasonable amount" });
   });
 
   it("accepts a list rate of exactly 0", () => {
