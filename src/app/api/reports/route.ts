@@ -84,14 +84,19 @@ async function getAvailableFinancialYears(): Promise<{ years: { startYear: numbe
   return { years };
 }
 
-async function getSalesDashboard(period?: PeriodInput) {
+// kpiOnly=true skips recentInvoices/topCustomers/monthlyRevenue — every one of those fields is
+// period-independent (always "current FY"/"latest 10"/"top 5 all-time"), so the client's period-
+// scoped KPI refetch (Sales Overview's `scoped` fetch, alongside its own period-independent `base`
+// fetch) only ever reads the KPI fields below and was previously paying for this heavy work twice
+// per page load for no reason.
+async function getSalesDashboard(period?: PeriodInput, kpiOnly = false) {
   const now = new Date();
   const { start: periodStart, end: periodEnd, label: periodLabel } = resolvePeriod(period, now);
   const todayStart = istTodayStartUtc(now);
   // Date filter reused by both the period-scoped revenue and collected aggregates so all figures share one range.
   const periodDateWhere = periodStart && periodEnd ? { date: { gte: periodStart, lt: periodEnd } } : {};
 
-  const [revenueAgg, collectedAgg, outstandingAgg, overdueCount, recentInvoices, topCustomerAggs] = await Promise.all([
+  const [revenueAgg, collectedAgg, outstandingAgg, overdueCount] = await Promise.all([
     prisma.invoice.aggregate({
       where: { deletedAt: null, ...periodDateWhere },
       // subtotal/cgst/sgst/igst/transportCharge/transportChargeGstAmount summed alongside total
@@ -118,60 +123,76 @@ async function getSalesDashboard(period?: PeriodInput) {
     prisma.invoice.count({
       where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart }, ...periodDateWhere },
     }),
-    // createdAt, not date — matches invoiceNumber's creation-order sequence and stays immune to a
-    // later backdate (see buildInvoiceOrderBy()'s comment in db.ts for the full reasoning).
-    prisma.invoice.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-      include: { customer: { select: { name: true } } },
-    }),
-    // Top 5 computed by the DB (groupBy + orderBy + take) instead of fetching every customer's invoices to sort in JS. Excludes soft-deleted customers from the ranking.
-    prisma.invoice.groupBy({
-      by: ["customerId"],
-      where: { deletedAt: null, customer: { deletedAt: null } },
-      _sum: { total: true, paidAmount: true },
-      orderBy: { _sum: { total: "desc" } },
-      take: 5,
-    }),
   ]);
 
   const outstandingBalance = outstandingAgg._sum.balanceDue ?? 0;
 
-  const topCustomerNames = await prisma.customer.findMany({
-    where: { id: { in: topCustomerAggs.map((c) => c.customerId) } },
-    select: { id: true, name: true },
-  });
-  const topCustomerNameMap = new Map(topCustomerNames.map((c) => [c.id, c.name]));
-  const topCustomers = topCustomerAggs.map((c) => ({
-    id: c.customerId,
-    name: topCustomerNameMap.get(c.customerId) ?? "Unknown",
-    totalBilled: c._sum.total ?? 0,
-    totalPaid: c._sum.paidAmount ?? 0,
-  }));
+  let topCustomers: { id: string; name: string; totalBilled: number; totalPaid: number }[] = [];
+  let monthlyRevenue: { month: string; total: number }[] = [];
+  let fyLabel = "";
+  let recentInvoices: { id: string; invoiceNumber: string; date: Date; customerName: string; total: number; paidAmount: number; status: string }[] = [];
+  // Everything below is period-independent (always "latest 10"/"top 5 all-time"/"current FY"), so a
+  // kpiOnly call (the client's period-scoped KPI refetch) skips it entirely rather than recomputing
+  // the exact same values the page's other, period-independent fetch already computed.
+  if (!kpiOnly) {
+    const [recentInvoicesRaw, topCustomerAggs] = await Promise.all([
+      // createdAt, not date — matches invoiceNumber's creation-order sequence and stays immune to a
+      // later backdate (see buildInvoiceOrderBy()'s comment in db.ts for the full reasoning).
+      prisma.invoice.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        include: { customer: { select: { name: true } } },
+      }),
+      // Top 5 computed by the DB (groupBy + orderBy + take) instead of fetching every customer's invoices to sort in JS. Excludes soft-deleted customers from the ranking.
+      prisma.invoice.groupBy({
+        by: ["customerId"],
+        where: { deletedAt: null, customer: { deletedAt: null } },
+        _sum: { total: true, paidAmount: true },
+        orderBy: { _sum: { total: "desc" } },
+        take: 5,
+      }),
+    ]);
+    recentInvoices = recentInvoicesRaw.map((inv) => ({
+      id: inv.id, invoiceNumber: inv.invoiceNumber, date: inv.date,
+      customerName: inv.customer.name, total: inv.total, paidAmount: inv.paidAmount, status: inv.status,
+    }));
 
-  // Financial year monthly revenue (Apr–Mar) — IST-aware (see istMonthBoundsUtc), so a document
-  // created in the ~5.5-hour IST-vs-server-UTC gap around a month boundary lands in the right bucket.
-  const fyYear = getIndianFinancialYear(now);
-  const fyLabel = `FY ${fyYear}-${String(fyYear + 1).slice(2)}`;
-  const fyStart = istMonthBoundsUtc(fyYear, 3).start;
-  const fyEnd = istMonthBoundsUtc(fyYear + 1, 3).start;
-  // One query for the whole FY, grouped in JS — 12 "parallel" per-month aggregates would still serialize through the pooled connection_limit=1 DB anyway.
-  const fyInvoices = await prisma.invoice.findMany({
-    where: { deletedAt: null, date: { gte: fyStart, lt: fyEnd } },
-    select: { date: true, total: true },
-  });
-  const monthlyRevenue: { month: string; total: number }[] = Array.from({ length: 12 }, (_, i) => {
-    const monthIndex0 = (3 + i) % 12;
-    const year = fyYear + Math.floor((3 + i) / 12);
-    const { start: d, end } = istMonthBoundsUtc(year, monthIndex0);
-    const label = d.toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
-    if (d > now) return { month: label, total: 0 };
-    const total = fyInvoices
-      .filter((inv) => inv.date >= d && inv.date < end)
-      .reduce((sum, inv) => sum + inv.total, 0);
-    return { month: label, total };
-  });
+    const topCustomerNames = await prisma.customer.findMany({
+      where: { id: { in: topCustomerAggs.map((c) => c.customerId) } },
+      select: { id: true, name: true },
+    });
+    const topCustomerNameMap = new Map(topCustomerNames.map((c) => [c.id, c.name]));
+    topCustomers = topCustomerAggs.map((c) => ({
+      id: c.customerId,
+      name: topCustomerNameMap.get(c.customerId) ?? "Unknown",
+      totalBilled: c._sum.total ?? 0,
+      totalPaid: c._sum.paidAmount ?? 0,
+    }));
+
+    // Financial year monthly revenue (Apr–Mar) — IST-aware (see istMonthBoundsUtc), so a document
+    // created in the ~5.5-hour IST-vs-server-UTC gap around a month boundary lands in the right bucket.
+    const fyYear = getIndianFinancialYear(now);
+    fyLabel = `FY ${fyYear}-${String(fyYear + 1).slice(2)}`;
+    const fyStart = istMonthBoundsUtc(fyYear, 3).start;
+    const fyEnd = istMonthBoundsUtc(fyYear + 1, 3).start;
+    // One query for the whole FY, grouped in JS — 12 "parallel" per-month aggregates would still serialize through the pooled connection_limit=1 DB anyway.
+    const fyInvoices = await prisma.invoice.findMany({
+      where: { deletedAt: null, date: { gte: fyStart, lt: fyEnd } },
+      select: { date: true, total: true },
+    });
+    monthlyRevenue = Array.from({ length: 12 }, (_, i) => {
+      const monthIndex0 = (3 + i) % 12;
+      const year = fyYear + Math.floor((3 + i) / 12);
+      const { start: d, end } = istMonthBoundsUtc(year, monthIndex0);
+      const label = d.toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+      if (d > now) return { month: label, total: 0 };
+      const total = fyInvoices
+        .filter((inv) => inv.date >= d && inv.date < end)
+        .reduce((sum, inv) => sum + inv.total, 0);
+      return { month: label, total };
+    });
+  }
 
   // Taxable value has no separate bill-level discount to net out (unlike PurchaseBill) — item-level
   // discounts are already baked into `subtotal` at create time. GST = the three tax columns +
@@ -189,22 +210,20 @@ async function getSalesDashboard(period?: PeriodInput) {
     overdueCount,                                    // always as-of-now
     monthlyRevenue,
     fyLabel,
-    recentInvoices: recentInvoices.map((inv) => ({
-      id: inv.id, invoiceNumber: inv.invoiceNumber, date: inv.date,
-      customerName: inv.customer.name, total: inv.total, paidAmount: inv.paidAmount, status: inv.status,
-    })),
+    recentInvoices,
     topCustomers,
   };
 }
 
-async function getPurchaseDashboard(period?: PeriodInput) {
+// kpiOnly mirrors getSalesDashboard's own flag — see its comment above.
+async function getPurchaseDashboard(period?: PeriodInput, kpiOnly = false) {
   const now = new Date();
   const { start: periodStart, end: periodEnd, label: periodLabel } = resolvePeriod(period, now);
   const todayStart = istTodayStartUtc(now);
   // billDate range reused by both the period-scoped spend and paid aggregates so all figures share one range.
   const periodDateWhere = periodStart && periodEnd ? { billDate: { gte: periodStart, lt: periodEnd } } : {};
 
-  const [spendAgg, paidAgg, payableAgg, overdueCount, recentBills, topVendorAggs] = await Promise.all([
+  const [spendAgg, paidAgg, payableAgg, overdueCount] = await Promise.all([
     prisma.purchaseBill.aggregate({
       where: { deletedAt: null, status: { not: "cancelled" }, ...periodDateWhere },
       // subtotal/discount/taxAmount/transportCharge/transportChargeGstAmount summed alongside total
@@ -231,59 +250,74 @@ async function getPurchaseDashboard(period?: PeriodInput) {
     prisma.purchaseBill.count({
       where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart }, ...periodDateWhere },
     }),
-    // createdAt, not billDate — matches billNumber's creation-order sequence and stays immune to a
-    // later backdate (see buildBillOrderBy()'s comment in purchaseBillQuery.ts for the full reasoning).
-    prisma.purchaseBill.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-      include: { vendor: { select: { name: true } } },
-    }),
-    // Same fix as getSalesDashboard's topCustomers — DB-side groupBy + take(5); cancelled bills excluded since their stock effect was reversed.
-    prisma.purchaseBill.groupBy({
-      by: ["vendorId"],
-      where: { deletedAt: null, status: { not: "cancelled" }, vendor: { deletedAt: null } },
-      _sum: { total: true, paidAmount: true },
-      orderBy: { _sum: { total: "desc" } },
-      take: 5,
-    }),
   ]);
 
   const payableBalance = payableAgg._sum.balanceDue ?? 0;
 
-  const topVendorNames = await prisma.vendor.findMany({
-    where: { id: { in: topVendorAggs.map((v) => v.vendorId) } },
-    select: { id: true, name: true },
-  });
-  const topVendorNameMap = new Map(topVendorNames.map((v) => [v.id, v.name]));
-  const topVendors = topVendorAggs.map((v) => ({
-    id: v.vendorId,
-    name: topVendorNameMap.get(v.vendorId) ?? "Unknown",
-    totalBilled: v._sum.total ?? 0,
-    totalPaid: v._sum.paidAmount ?? 0,
-  }));
+  let topVendors: { id: string; name: string; totalBilled: number; totalPaid: number }[] = [];
+  let monthlySpend: { month: string; total: number }[] = [];
+  let fyLabelP = "";
+  let recentBills: { id: string; billNumber: string; billDate: Date; vendorName: string; total: number; paidAmount: number; status: string }[] = [];
+  // Everything below is period-independent (always "latest 10"/"top 5 all-time"/"current FY") — see
+  // getSalesDashboard's matching comment for why a kpiOnly call skips it entirely.
+  if (!kpiOnly) {
+    const [recentBillsRaw, topVendorAggs] = await Promise.all([
+      // createdAt, not billDate — matches billNumber's creation-order sequence and stays immune to a
+      // later backdate (see buildBillOrderBy()'s comment in purchaseBillQuery.ts for the full reasoning).
+      prisma.purchaseBill.findMany({
+        where: { deletedAt: null },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        include: { vendor: { select: { name: true } } },
+      }),
+      // Same fix as getSalesDashboard's topCustomers — DB-side groupBy + take(5); cancelled bills excluded since their stock effect was reversed.
+      prisma.purchaseBill.groupBy({
+        by: ["vendorId"],
+        where: { deletedAt: null, status: { not: "cancelled" }, vendor: { deletedAt: null } },
+        _sum: { total: true, paidAmount: true },
+        orderBy: { _sum: { total: "desc" } },
+        take: 5,
+      }),
+    ]);
+    recentBills = recentBillsRaw.map((b) => ({
+      id: b.id, billNumber: b.billNumber, billDate: b.billDate,
+      vendorName: b.vendor.name, total: b.total, paidAmount: b.paidAmount, status: b.status,
+    }));
 
-  // Financial year monthly spend (Apr–Mar) — IST-aware, same reasoning as monthlyRevenue above.
-  const fyYearP = getIndianFinancialYear(now);
-  const fyLabelP = `FY ${fyYearP}-${String(fyYearP + 1).slice(2)}`;
-  const fyStartP = istMonthBoundsUtc(fyYearP, 3).start;
-  const fyEndP = istMonthBoundsUtc(fyYearP + 1, 3).start;
-  // Same fix as monthlyRevenue — one query for the whole FY, grouped in JS.
-  const fyBills = await prisma.purchaseBill.findMany({
-    where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: fyStartP, lt: fyEndP } },
-    select: { billDate: true, total: true },
-  });
-  const monthlySpend: { month: string; total: number }[] = Array.from({ length: 12 }, (_, i) => {
-    const monthIndex0 = (3 + i) % 12;
-    const year = fyYearP + Math.floor((3 + i) / 12);
-    const { start: d, end } = istMonthBoundsUtc(year, monthIndex0);
-    const label = d.toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
-    if (d > now) return { month: label, total: 0 };
-    const total = fyBills
-      .filter((b) => b.billDate >= d && b.billDate < end)
-      .reduce((sum, b) => sum + b.total, 0);
-    return { month: label, total };
-  });
+    const topVendorNames = await prisma.vendor.findMany({
+      where: { id: { in: topVendorAggs.map((v) => v.vendorId) } },
+      select: { id: true, name: true },
+    });
+    const topVendorNameMap = new Map(topVendorNames.map((v) => [v.id, v.name]));
+    topVendors = topVendorAggs.map((v) => ({
+      id: v.vendorId,
+      name: topVendorNameMap.get(v.vendorId) ?? "Unknown",
+      totalBilled: v._sum.total ?? 0,
+      totalPaid: v._sum.paidAmount ?? 0,
+    }));
+
+    // Financial year monthly spend (Apr–Mar) — IST-aware, same reasoning as monthlyRevenue above.
+    const fyYearP = getIndianFinancialYear(now);
+    fyLabelP = `FY ${fyYearP}-${String(fyYearP + 1).slice(2)}`;
+    const fyStartP = istMonthBoundsUtc(fyYearP, 3).start;
+    const fyEndP = istMonthBoundsUtc(fyYearP + 1, 3).start;
+    // Same fix as monthlyRevenue — one query for the whole FY, grouped in JS.
+    const fyBills = await prisma.purchaseBill.findMany({
+      where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: fyStartP, lt: fyEndP } },
+      select: { billDate: true, total: true },
+    });
+    monthlySpend = Array.from({ length: 12 }, (_, i) => {
+      const monthIndex0 = (3 + i) % 12;
+      const year = fyYearP + Math.floor((3 + i) / 12);
+      const { start: d, end } = istMonthBoundsUtc(year, monthIndex0);
+      const label = d.toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+      if (d > now) return { month: label, total: 0 };
+      const total = fyBills
+        .filter((b) => b.billDate >= d && b.billDate < end)
+        .reduce((sum, b) => sum + b.total, 0);
+      return { month: label, total };
+    });
+  }
 
   // Unlike Invoice, PurchaseBill has its own bill-level `discount` netted out of the taxable value
   // (before GST) — see the create route's `subtotal + taxAmount - discount + transportCharge + ...`
@@ -302,10 +336,7 @@ async function getPurchaseDashboard(period?: PeriodInput) {
     overdueBillsCount: overdueCount,              // always as-of-now
     monthlySpend,
     fyLabel: fyLabelP,
-    recentBills: recentBills.map((b) => ({
-      id: b.id, billNumber: b.billNumber, billDate: b.billDate,
-      vendorName: b.vendor.name, total: b.total, paidAmount: b.paidAmount, status: b.status,
-    })),
+    recentBills,
     topVendors,
   };
 }
@@ -529,8 +560,9 @@ export async function GET(request: NextRequest) {
     }
     if (type === "stock")              return NextResponse.json(await getReportStock());
     if (type === "financial-years")    return NextResponse.json(await getAvailableFinancialYears());
-    if (type === "sales-dashboard")    return NextResponse.json(await getSalesDashboard(parsePeriodParam(searchParams)));
-    if (type === "purchase-dashboard") return NextResponse.json(await getPurchaseDashboard(parsePeriodParam(searchParams)));
+    const kpiOnly = searchParams.get("kpiOnly") === "1";
+    if (type === "sales-dashboard")    return NextResponse.json(await getSalesDashboard(parsePeriodParam(searchParams), kpiOnly));
+    if (type === "purchase-dashboard") return NextResponse.json(await getPurchaseDashboard(parsePeriodParam(searchParams), kpiOnly));
     if (type === "combined-dashboard") {
       const role = auth.session.user.role;
       const sections = Array.isArray(auth.session.user.sections) ? auth.session.user.sections : [];

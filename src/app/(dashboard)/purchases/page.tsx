@@ -117,7 +117,9 @@ export default function PurchaseDashboardPage() {
   //             so changing the KPI period never refetches or re-renders them.
   //  • scoped → changes with the FY+month selection; only its four KPI figures are read.
   const baseUrl = "/api/reports?type=purchase-dashboard";
-  const scopedUrl = `/api/reports?type=purchase-dashboard&${periodToQuery(period)}`;
+  // kpiOnly=1 — only the 4 KPI figures below are ever read from `scoped` (see comment above); every
+  // other field it would otherwise compute is period-independent and already covered by `base`.
+  const scopedUrl = `/api/reports?type=purchase-dashboard&kpiOnly=1&${periodToQuery(period)}`;
   const { data: base, loading: baseLoading } = useFetch<PurchaseDashboard>(baseUrl);
   const { data: scoped, loading: scopedLoading } = useFetch<PurchaseDashboard>(scopedUrl);
   const loading = baseLoading;                 // chart/lists skeletons follow the base fetch
