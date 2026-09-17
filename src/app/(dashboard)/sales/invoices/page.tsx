@@ -13,6 +13,8 @@ import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenerator";
 import { withCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
+import { bulkDownloadPdfsAsZip, sanitizeZipEntryName } from "@/lib/bulkPdfDownload";
+import { MONTH_NAMES } from "@/lib/dateFilter";
 import { bustCachePrefix } from "@/lib/useCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -111,6 +113,9 @@ export default function InvoicesPage() {
   const [pdfDialogInvoice, setPdfDialogInvoice] = useState<Invoice | null>(null);
   const [pdfDialogLoading, setPdfDialogLoading] = useState(false);
   const [openingEditId, setOpeningEditId] = useState<string | null>(null);
+  const [bulkDownloading, setBulkDownloading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
+  const bulkBusyRef = useRef(false);
   const toast = useToast();
   const router = useRouter();
 
@@ -192,6 +197,55 @@ export default function InvoicesPage() {
     setPdfDialogInvoice(null);
   }
 
+  // Downloads every invoice for the currently selected Month+Year filter as one ZIP of individual PDFs
+  // (each still goes through the same cache invoice detail pages use, so a repeat download is fast).
+  async function handleBulkDownload() {
+    if (bulkBusyRef.current) return;
+    if (!month || !year) {
+      toast({ type: "error", title: "Select a period", message: "Choose a month and year first to bulk download." });
+      return;
+    }
+    bulkBusyRef.current = true;
+    setBulkDownloading(true);
+    setBulkProgress({ done: 0, total: 0 });
+    try {
+      const params = new URLSearchParams();
+      if (filter !== "All") params.set("status", filter);
+      params.set("month", month);
+      params.set("year", year);
+      params.set("sort", "oldest");
+      params.set("page", "1");
+      params.set("pageSize", "2000");
+      const res = await fetch(`/api/invoices?${params.toString()}`);
+      const json: InvoiceListResponse | null = await res.json().catch(() => null);
+      const list = json?.data ?? [];
+      if (!res.ok || list.length === 0) {
+        toast({ type: "error", title: "Nothing to download", message: "No invoices found for the selected period." });
+        return;
+      }
+      setBulkProgress({ done: 0, total: list.length });
+      const monthLabel = MONTH_NAMES[Number(month)];
+      const { succeeded, failed } = await bulkDownloadPdfsAsZip(
+        list.map((inv) => ({ ...inv, fileName: `${sanitizeZipEntryName(inv.invoiceNumber)}.pdf` })),
+        (item) => generatePdfViaIframe(item, ["ORIGINAL COPY"]),
+        `Invoices_${monthLabel}_${year}.zip`,
+        (done, total) => setBulkProgress({ done, total }),
+      );
+      if (succeeded === 0) {
+        toast({ type: "error", title: "Download failed", message: "Could not generate any invoice PDFs." });
+      } else if (failed.length > 0) {
+        toast({ type: "error", title: "Partial download", message: `${succeeded} downloaded, ${failed.length} failed — try again for those.` });
+      } else {
+        toast({ type: "success", title: "Downloaded", message: `${succeeded} invoice${succeeded === 1 ? "" : "s"} zipped and downloaded.` });
+      }
+    } catch {
+      toast({ type: "error", title: "Download failed", message: "Network error." });
+    } finally {
+      setBulkDownloading(false);
+      bulkBusyRef.current = false;
+    }
+  }
+
   const debouncedSearch = useDebouncedValue(search, 300);
   const pageSize = showAll ? 2000 : PAGE_SIZE;
 
@@ -267,6 +321,9 @@ export default function InvoicesPage() {
     />
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
     {openingEditId && <OverlayLoader text="Opening editor…" />}
+    {bulkDownloading && (
+      <OverlayLoader text={bulkProgress.total > 0 ? `Preparing ZIP… ${bulkProgress.done}/${bulkProgress.total}` : "Fetching invoices…"} />
+    )}
 
     <PdfCopyDialog
       open={!!pdfDialogInvoice}
@@ -342,6 +399,16 @@ export default function InvoicesPage() {
               onMonthChange={(v) => { setMonth(v); setPage(1); }}
               onYearChange={(v) => { setYear(v); setPage(1); }}
             />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!month || !year || bulkDownloading}
+              title={!month || !year ? "Select a month and year to bulk download" : "Download all invoices for this period as a ZIP of PDFs"}
+              onClick={handleBulkDownload}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Bulk Download (ZIP)
+            </Button>
           </div>
           {data && (
             <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />

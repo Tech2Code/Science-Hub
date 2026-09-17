@@ -7,6 +7,9 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useFetch, bustCachePrefix } from "@/lib/useCache";
 import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenerator";
 import { withCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
+import { bulkZipDownload, sanitizeZipEntryName } from "@/lib/bulkPdfDownload";
+import { MONTH_NAMES } from "@/lib/dateFilter";
+import { BulkDownloadOptionsDialog, type BulkDownloadOptions } from "@/components/dialogs/BulkDownloadOptionsDialog";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { SearchField } from "@/components/ui/SearchField";
 import { OverlayLoader } from "@/components/ui/Spinner";
@@ -109,6 +112,10 @@ export default function PurchasesPage() {
   const pdfBusyRef = useRef(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewBill, setPdfPreviewBill] = useState<{ number: string; vendor: string } | null>(null);
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [bulkDownloading, setBulkDownloading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
+  const bulkBusyRef = useRef(false);
   const toast = useToast();
 
   useEffect(() => {
@@ -162,6 +169,109 @@ export default function PurchasesPage() {
     } finally {
       setPdfLoading(null);
       pdfBusyRef.current = false;
+    }
+  }
+
+  // Downloads every bill for the currently selected Month+Year filter as one ZIP — the confirm
+  // dialog lets the user pick the generated PDF, the vendor's uploaded attachment, or both, per bill.
+  async function handleBulkDownload(opts: BulkDownloadOptions) {
+    if (bulkBusyRef.current) return;
+    if (!month || !year) {
+      toast({ type: "error", title: "Select a period", message: "Choose a month and year first to bulk download." });
+      return;
+    }
+    bulkBusyRef.current = true;
+    setBulkDialogOpen(false);
+    setBulkDownloading(true);
+    setBulkProgress({ done: 0, total: 0 });
+    try {
+      const params = new URLSearchParams();
+      if (filter !== "All") params.set("status", filter);
+      params.set("month", month);
+      params.set("year", year);
+      params.set("sort", "oldest");
+      params.set("page", "1");
+      params.set("pageSize", "2000");
+      const res = await fetch(`/api/purchase-bills?${params.toString()}`);
+      const json: PurchaseBillListResponse | null = await res.json().catch(() => null);
+      const list = json?.data ?? [];
+      if (!res.ok || list.length === 0) {
+        toast({ type: "error", title: "Nothing to download", message: "No purchase bills found for the selected period." });
+        return;
+      }
+      setBulkProgress({ done: 0, total: list.length });
+      const monthLabel = MONTH_NAMES[Number(month)];
+      // Only nested into Bills/Attachments subfolders when both are included — keeps a single-option
+      // download flat, matching the plain "<BillNo>.pdf" naming already shipped for the PDF-only case.
+      const nestInFolders = opts.includePdfs && opts.includeAttachments;
+
+      let pdfFailed = 0;
+      let attachmentsIncluded = 0;
+      let attachmentsMissing = 0;
+      let attachmentsFailed = 0;
+
+      const { entriesZipped } = await bulkZipDownload(
+        list,
+        async (b) => {
+          const entries: { name: string; blob: Blob }[] = [];
+          const baseName = sanitizeZipEntryName(b.billNumber);
+
+          if (opts.includePdfs) {
+            const blob = await generatePdfViaIframe(b);
+            if (blob) {
+              entries.push({ name: nestInFolders ? `Bills/${baseName}.pdf` : `${baseName}.pdf`, blob });
+            } else {
+              pdfFailed++;
+            }
+          }
+
+          if (opts.includeAttachments) {
+            if (!b.attachmentUrl) {
+              attachmentsMissing++;
+            } else {
+              try {
+                const attRes = await fetch(purchaseBillAttachmentByIdHref(b.id, b.attachmentName || "attachment"));
+                if (attRes.ok) {
+                  const attBlob = await attRes.blob();
+                  const attName = sanitizeZipEntryName(b.attachmentName || "attachment");
+                  entries.push({ name: nestInFolders ? `Attachments/${baseName} - ${attName}` : `${baseName} - ${attName}`, blob: attBlob });
+                  attachmentsIncluded++;
+                } else {
+                  attachmentsFailed++;
+                }
+              } catch {
+                attachmentsFailed++;
+              }
+            }
+          }
+
+          return entries;
+        },
+        `PurchaseBills_${monthLabel}_${year}.zip`,
+        (done, total) => setBulkProgress({ done, total }),
+      );
+
+      if (entriesZipped === 0) {
+        toast({ type: "error", title: "Download failed", message: "Nothing could be generated for this period." });
+      } else {
+        const parts: string[] = [];
+        if (opts.includePdfs) {
+          const pdfOk = list.length - pdfFailed;
+          parts.push(`${pdfOk} PDF${pdfOk === 1 ? "" : "s"}${pdfFailed ? ` (${pdfFailed} failed)` : ""}`);
+        }
+        if (opts.includeAttachments) {
+          const bits = [`${attachmentsIncluded} attachment${attachmentsIncluded === 1 ? "" : "s"}`];
+          if (attachmentsMissing) bits.push(`${attachmentsMissing} bill${attachmentsMissing === 1 ? "" : "s"} had none`);
+          if (attachmentsFailed) bits.push(`${attachmentsFailed} failed`);
+          parts.push(bits.join(", "));
+        }
+        toast({ type: "success", title: "Downloaded", message: `${parts.join(" · ")} zipped and downloaded.` });
+      }
+    } catch {
+      toast({ type: "error", title: "Download failed", message: "Network error." });
+    } finally {
+      setBulkDownloading(false);
+      bulkBusyRef.current = false;
     }
   }
 
@@ -237,6 +347,16 @@ export default function PurchasesPage() {
     />
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
     {openingEdit && <OverlayLoader text="Opening editor…" />}
+    {bulkDownloading && (
+      <OverlayLoader text={bulkProgress.total > 0 ? `Preparing ZIP… ${bulkProgress.done}/${bulkProgress.total}` : "Fetching bills…"} />
+    )}
+
+    <BulkDownloadOptionsDialog
+      open={bulkDialogOpen}
+      loading={bulkDownloading}
+      onConfirm={handleBulkDownload}
+      onCancel={() => setBulkDialogOpen(false)}
+    />
 
     {pdfPreviewUrl && pdfPreviewBill && (
       <PdfPreviewModal
@@ -308,6 +428,16 @@ export default function PurchasesPage() {
               onMonthChange={(v) => { setMonth(v); setPage(1); }}
               onYearChange={(v) => { setYear(v); setPage(1); }}
             />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!month || !year || bulkDownloading}
+              title={!month || !year ? "Select a month and year to bulk download" : "Download all bills for this period — choose PDFs, attachments, or both"}
+              onClick={() => setBulkDialogOpen(true)}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Bulk Download (ZIP)
+            </Button>
           </div>
           {data && (
             <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll(v => !v); setPage(1); }} />
