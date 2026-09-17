@@ -72,6 +72,7 @@ model ActivityLog {
 
   @@index([userId])
   @@index([createdAt])
+  @@index([entityId, action])
 }
 
 model Customer {
