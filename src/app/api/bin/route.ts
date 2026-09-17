@@ -143,30 +143,40 @@ export async function GET(req: NextRequest) {
         orderBy: { deletedAt: "desc" },
         take: retainedLimit,
       }),
+      // These 5 types are naturally bounded by the 30-day auto-purge window under ordinary use — the
+      // take cap here is a safety net against a one-off bulk-delete session (e.g. a large product
+      // import undone in one go) leaving this route to fetch everything for up to 30 days, not a
+      // normal-usage pagination limit, so it deliberately reuses the generous MAX_RETAINED_LIMIT
+      // rather than DEFAULT_RETAINED_LIMIT and has no "Load more" UI.
       prisma.customer.findMany({
         where: { deletedAt: { not: null }, id: { in: explicitlyDeletedCustomerIds } },
         select: { id: true, name: true, phone: true, city: true, deletedAt: true },
         orderBy: { deletedAt: "desc" },
+        take: MAX_RETAINED_LIMIT,
       }),
       prisma.product.findMany({
         where: { deletedAt: { not: null } },
         select: { id: true, name: true, sku: true, price: true, deletedAt: true },
         orderBy: { deletedAt: "desc" },
+        take: MAX_RETAINED_LIMIT,
       }),
       prisma.brand.findMany({
         where: { deletedAt: { not: null } },
         select: { id: true, name: true, deletedAt: true },
         orderBy: { deletedAt: "desc" },
+        take: MAX_RETAINED_LIMIT,
       }),
       prisma.category.findMany({
         where: { deletedAt: { not: null } },
         select: { id: true, name: true, deletedAt: true },
         orderBy: { deletedAt: "desc" },
+        take: MAX_RETAINED_LIMIT,
       }),
       prisma.vendor.findMany({
         where: { deletedAt: { not: null }, id: { in: explicitlyDeletedVendorIds } },
         select: { id: true, name: true, company: true, phone: true, deletedAt: true },
         orderBy: { deletedAt: "desc" },
+        take: MAX_RETAINED_LIMIT,
       }),
       prisma.purchaseBill.findMany({
         where: { deletedAt: { not: null } },
@@ -187,6 +197,7 @@ export async function GET(req: NextRequest) {
         where: { deletedAt: { not: null } },
         select: { id: true, title: true, deletedAt: true, _count: { select: { items: true } } },
         orderBy: { deletedAt: "desc" },
+        take: MAX_RETAINED_LIMIT,
       }),
       Promise.all([
         prisma.invoice.count({ where: { deletedAt: { not: null } } }),
