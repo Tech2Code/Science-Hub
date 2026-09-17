@@ -176,10 +176,14 @@ export async function POST(request: NextRequest) {
     // Fetch product details for each item (custom/unlinked items have no productId)
     const productIds = items.map((item: { productId?: string }) => item.productId).filter(Boolean);
     const products = await prisma.product.findMany({
-      where: { id: { in: productIds } },
+      where: { id: { in: productIds }, deletedAt: null },
     });
 
     const productMap = new Map(products.map((p) => [p.id, p]));
+    const missingProductId = (productIds as string[]).find((id) => !productMap.has(id));
+    if (missingProductId) {
+      return NextResponse.json({ error: "One or more selected products could not be found — they may have been deleted. Please remove and re-add the item." }, { status: 400 });
+    }
 
     // Calculate totals
     let subtotal = 0;

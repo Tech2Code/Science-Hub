@@ -195,8 +195,12 @@ export async function PUT(
 
     // Fetch product info for names/units (custom/unlinked items have no productId)
     const productIds = items.map((i: { productId?: string }) => i.productId).filter(Boolean);
-    const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+    const products = await prisma.product.findMany({ where: { id: { in: productIds }, deletedAt: null } });
     const productMap = new Map(products.map((p) => [p.id, p]));
+    const missingProductId = (productIds as string[]).find((pid) => !productMap.has(pid));
+    if (missingProductId) {
+      return NextResponse.json({ error: "One or more selected products could not be found — they may have been deleted. Please remove and re-add the item." }, { status: 400 });
+    }
 
     let subtotal = 0;
     let totalGst = 0;
@@ -257,7 +261,16 @@ export async function PUT(
     if (paidAmount >= total) newStatus = "paid";
     else if (paidAmount > 0) newStatus = "partial";
 
-    const { invoice, stockWarnings, creditCheck } = await prisma.$transaction(async (tx) => {
+    // Credit-limit check below needs the same Serializable isolation + P2034 retry the create route
+    // uses — otherwise two concurrent edits/creates for the same customer can each read the same
+    // outstanding balance under a weaker isolation level and jointly breach the limit without either
+    // ever seeing a conflict (the write-skew anomaly only Serializable/SSI catches).
+    // An arrow function expression (not a hoisted function declaration) so TypeScript's control-flow
+    // narrowing of existingBase/existing/auth.session (checked via early returns above) carries into
+    // this closure — a function declaration loses that narrowing since TS treats it as callable from
+    // anywhere due to hoisting.
+    const attemptEdit = async () => {
+      return prisma.$transaction(async (tx) => {
       // Excludes this invoice's own (pre-edit) balance from "current outstanding", then adds back
       // its post-edit balance — an edit that only rearranges this invoice's own items shouldn't
       // double-count it. Checked inside this same transaction (not before it) so a concurrent edit/
@@ -341,7 +354,22 @@ export async function PUT(
         .map((p) => `${p.name} (stock: ${p.stock})`);
 
       return { invoice: inv, stockWarnings: warnings, creditCheck };
-    }, { timeout: 20000, maxWait: 10000 });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });
+    };
+
+    const maxAttempts = 5;
+    let editResult: Awaited<ReturnType<typeof attemptEdit>> | undefined;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        editResult = await attemptEdit();
+        break;
+      } catch (error) {
+        const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+        if (isWriteConflict && attempt < maxAttempts) continue;
+        throw error;
+      }
+    }
+    const { invoice, stockWarnings, creditCheck } = editResult!;
 
     revalidateTag("invoices", { expire: 0 });
     revalidateTag("products", { expire: 0 });
