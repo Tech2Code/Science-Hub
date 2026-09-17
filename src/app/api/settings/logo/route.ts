@@ -15,7 +15,10 @@ function matchesDeclaredType(bytes: Uint8Array, type: string): boolean {
     case "image/png":
       return hex(0) === "89" && hex(1) === "50" && hex(2) === "4e" && hex(3) === "47";
     case "image/webp":
-      return hex(0) === "52" && hex(1) === "49" && hex(2) === "46" && hex(3) === "46"; // RIFF (WEBP checked at offset 8, close enough to rule out spoofing)
+      // RIFF container (bytes 0-3) alone also matches .wav/.avi — check the "WEBP" fourcc at
+      // offset 8-11 too, or a spoofed non-image RIFF file would pass as a valid logo upload.
+      return hex(0) === "52" && hex(1) === "49" && hex(2) === "46" && hex(3) === "46"
+        && hex(8) === "57" && hex(9) === "45" && hex(10) === "42" && hex(11) === "50";
     default:
       return false;
   }

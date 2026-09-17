@@ -22,10 +22,16 @@ function matchesDeclaredType(bytes: Uint8Array, type: string): boolean {
       // offset 8-11 too, or a spoofed non-image RIFF file would pass as a valid attachment.
       return hex(0) === "52" && hex(1) === "49" && hex(2) === "46" && hex(3) === "46"
         && hex(8) === "57" && hex(9) === "45" && hex(10) === "42" && hex(11) === "50";
-    case "image/heic":
-      // ISO base media "ftyp" box — brand bytes vary (heic/heix/mif1/…), so
-      // just confirm the container marker rather than every known brand.
-      return hex(4) === "66" && hex(5) === "74" && hex(6) === "79" && hex(7) === "70";
+    case "image/heic": {
+      // ISO base media "ftyp" box: bytes 4-7 = "ftyp", bytes 8-11 = the 4-char major brand.
+      // Checking the container marker alone also matches any other ISO-BMFF file (.mp4/.mov/.avif/…)
+      // with a spoofed Content-Type — check the brand too against the real-world HEIC/HEIF brand set
+      // (iOS Camera writes "heic"; burst/Live Photo sequences use "heix"/"hevc"/"mif1"/"msf1"/etc.).
+      const isFtyp = hex(4) === "66" && hex(5) === "74" && hex(6) === "79" && hex(7) === "70";
+      if (!isFtyp) return false;
+      const brand = String.fromCharCode(bytes[8] ?? 0, bytes[9] ?? 0, bytes[10] ?? 0, bytes[11] ?? 0);
+      return ["heic", "heix", "heim", "heis", "hevc", "hevx", "hevm", "hevs", "mif1", "msf1"].includes(brand);
+    }
     default:
       return false;
   }
