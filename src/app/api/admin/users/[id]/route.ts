@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { logActivity } from "@/lib/activity";
 import { validateUserInput } from "@/lib/validation";
 import { requireAdmin, requireSession } from "@/lib/apiAuth";
+import { rateLimit } from "@/lib/rateLimit";
 
 const USER_SELECT = {
   id: true,
@@ -92,6 +93,12 @@ export async function PUT(
       // If admin is editing another user, skip current-password check.
       // If editing own account (or non-admin editing self), require currentPassword.
       if (isSelf) {
+        // A session/cookie thief who doesn't know the real password could otherwise brute-force
+        // currentPassword here with no login-page throttle to stop them.
+        const limit = rateLimit(`profile-password:${session.user.id}`, 10, 15 * 60 * 1000);
+        if (!limit.allowed) {
+          return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
+        }
         if (!currentPassword) {
           return NextResponse.json(
             { error: "currentPassword is required when changing your own password" },

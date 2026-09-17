@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { logActivity } from "@/lib/activity";
 import { rules, validate } from "@/lib/validation";
+import { rateLimit } from "@/lib/rateLimit";
 
 const USER_SELECT = {
   id: true,
@@ -100,6 +101,13 @@ export async function PUT(request: NextRequest) {
     // Password change logic
     let hashedPassword: string | undefined;
     if (newPassword !== undefined) {
+      // A session/cookie thief who doesn't know the real password could otherwise brute-force
+      // currentPassword here with no login-page throttle to stop them — same shape as auth.ts's own limiter.
+      const limit = rateLimit(`profile-password:${currentUser.id}`, 10, 15 * 60 * 1000);
+      if (!limit.allowed) {
+        return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
+      }
+
       if (newPassword.length < 8) {
         return NextResponse.json(
           { error: "New password must be at least 8 characters" },

@@ -330,6 +330,15 @@ function MoreMenu() {
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
+  // Once we've rendered as "authenticated" at least once, a later transient "loading" status (e.g.
+  // triggered by an in-app `update()` call after saving your own profile — see MyProfileCard) must
+  // never replace the whole shell with the full-page loader again; that's only for the true initial
+  // load. State (not a ref) since the render itself branches on this value.
+  const [hasAuthenticatedOnce, setHasAuthenticatedOnce] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-way latch: flips true the first time we're authenticated, never resets, so this can't loop
+    if (status === "authenticated" && !hasAuthenticatedOnce) setHasAuthenticatedOnce(true);
+  }, [status, hasAuthenticatedOnce]);
   const { branding } = useBranding();
   const logoSrc = branding.logoUrl || "/logo.png";
   const router = useRouter();
@@ -372,7 +381,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (active) active.scrollIntoView({ behavior: "auto", block: "nearest" });
   }, [pathname, sidebarOpen]);
 
-  if (status === "loading") {
+  if (status === "loading" && !hasAuthenticatedOnce) {
     return (
       <div className={styles.loadingScreen}>
         <div className={styles.loadingInner}>
@@ -489,7 +498,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
         <div className={styles.userBlock}>
           <div className={[styles.userBlockRow, (!mobile && !sidebarOpen) ? styles.userBlockRowCollapsed : ""].join(" ")}>
-            <Link href="/admin" onClick={handleNavClick} className={[styles.plainLink, styles.userBlockLink].join(" ")}>
+            <Link href={session?.user?.role === "admin" ? "/admin" : "/profile"} onClick={handleNavClick} className={[styles.plainLink, styles.userBlockLink].join(" ")}>
               <div className={[styles.userRow, styles.userRowLink].join(" ")}>
                 <div className={styles.avatarWrap}>
                   <div className={[styles.userAvatar, session?.user?.role === "admin" ? styles.roleAdmin : styles.roleStaff].join(" ")}>
@@ -542,11 +551,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 </svg>
               </button>
             )}
-            {currentNav && (() => {
-              const Icon = NavIcons[currentNav.iconKey];
+            {(() => {
+              const iconKey = currentNav?.iconKey ?? (pathname.startsWith("/profile") ? "admin" : undefined);
+              if (!iconKey) return null;
+              const Icon = NavIcons[iconKey];
               return <Icon className={styles.pageIcon} />;
             })()}
-            <span className={styles.pageLabel}>{currentNav?.label ?? "Dashboard"}</span>
+            <span className={styles.pageLabel}>{currentNav?.label ?? (pathname.startsWith("/profile") ? "My Profile" : "Dashboard")}</span>
           </div>
 
           <GlobalSearch mobile={mobile} />
@@ -554,7 +565,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <div className={styles.topbarRight}>
             <NotificationBell />
             {condensed ? <MoreMenu /> : <><AccentPicker /><ThemeToggle /></>}
-            <Link href="/admin" className={styles.plainLink}>
+            <Link href={session?.user?.role === "admin" ? "/admin" : "/profile"} className={styles.plainLink}>
               <div className={[styles.userChip, styles.userChipLink].join(" ")}>
                 <div className={styles.avatarWrap}>
                   <div className={[styles.topbarAvatar, session?.user?.role === "admin" ? styles.roleAdmin : styles.roleStaff].join(" ")}>
