@@ -87,12 +87,12 @@ export function BulkDownloadOptionsDialog({ open, loading = false, onConfirm, on
   const both = includePdfs && includeAttachments;
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true">
+    <div className={styles.overlay} role="dialog" aria-modal="true" aria-labelledby="bulk-download-dialog-title">
       <div className={styles.backdrop} onClick={onCancel} />
       <div className={styles.center}>
         <div className={styles.dialog} ref={dialogRef} tabIndex={-1}>
           <div className={styles.body}>
-            <h2 className={styles.title}>Bulk Download</h2>
+            <h2 id="bulk-download-dialog-title" className={styles.title}>Bulk Download</h2>
             <p className={styles.subtitle}>Choose what to include for every bill in this period.</p>
 
             <div className={styles.options}>

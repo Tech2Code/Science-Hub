@@ -17,7 +17,8 @@
 .btn:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-blue) 45%, transparent);
 }
-.btn:disabled {
+.btn:disabled,
+.btn[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -55,14 +56,14 @@
   color: #fff;
   border: 1px solid transparent;
 }
-.primary:hover:not(:disabled) { background: var(--c-blue-h); }
+.primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--c-blue-h); }
 
 .secondary {
   background: var(--c-bg-card);
   color: var(--c-text-2);
   border: 1px solid var(--c-border);
 }
-.secondary:hover:not(:disabled) {
+.secondary:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--c-bg-sub);
   color: var(--c-text);
   border-color: var(--c-border-md);
@@ -73,14 +74,14 @@
   color: #fff;
   border: 1px solid transparent;
 }
-.danger:hover:not(:disabled) { background: var(--c-red-h); }
+.danger:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--c-red-h); }
 
 .dangerOutline {
   background: transparent;
   color: var(--c-red);
   border: 1px solid var(--c-red-border);
 }
-.dangerOutline:hover:not(:disabled) {
+.dangerOutline:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--c-red-bg);
   border-color: var(--c-red);
 }
@@ -90,14 +91,14 @@
   color: var(--c-blue);
   border: 1px solid var(--c-blue-border);
 }
-.editOutline:hover:not(:disabled) { background: var(--c-blue-bg); }
+.editOutline:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--c-blue-bg); }
 
 .viewOutline {
   background: transparent;
   color: var(--c-text-3);
   border: 1px solid var(--c-border);
 }
-.viewOutline:hover:not(:disabled) {
+.viewOutline:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--c-bg-sub);
   color: var(--c-text);
 }
@@ -107,7 +108,7 @@
   color: var(--c-text-3);
   border: 1px solid transparent;
 }
-.ghost:hover:not(:disabled) {
+.ghost:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--c-bg-sub);
   color: var(--c-text);
 }
@@ -117,7 +118,7 @@
   color: #fff;
   border: 1px solid transparent;
 }
-.greenPrimary:hover:not(:disabled) { background: var(--c-green-h); }
+.greenPrimary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--c-green-h); }
 
 /* ── Full-screen loading overlay ─── */
 .overlay {

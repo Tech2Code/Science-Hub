@@ -84,12 +84,12 @@ export function PdfCopyDialog({ open, loading = false, onConfirm, onCancel }: Pr
   }
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true">
+    <div className={styles.overlay} role="dialog" aria-modal="true" aria-labelledby="pdf-copy-dialog-title">
       <div className={styles.backdrop} onClick={onCancel} />
       <div className={styles.center}>
         <div className={styles.dialog} ref={dialogRef} tabIndex={-1}>
           <div className={styles.body}>
-            <h2 className={styles.title}>Download Invoice PDF</h2>
+            <h2 id="pdf-copy-dialog-title" className={styles.title}>Download Invoice PDF</h2>
             <p className={styles.subtitle}>Choose which copies to include in the download.</p>
 
             <div className={styles.options}>

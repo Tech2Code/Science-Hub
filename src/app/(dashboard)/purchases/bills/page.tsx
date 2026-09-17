@@ -251,8 +251,11 @@ export default function PurchasesPage() {
         (done, total) => setBulkProgress({ done, total }),
       );
 
+      const truncated = (json?.total ?? list.length) > list.length;
       if (entriesZipped === 0) {
         toast({ type: "error", title: "Download failed", message: "Nothing could be generated for this period." });
+      } else if (truncated) {
+        toast({ type: "error", title: "Partial download", message: `Only the first ${list.length} of ${json?.total} matching bills were zipped (limit ${list.length}/request) — refine the filter (e.g. by status) and download the rest separately.` });
       } else {
         const parts: string[] = [];
         if (opts.includePdfs) {
@@ -431,9 +434,16 @@ export default function PurchasesPage() {
             <Button
               variant="secondary"
               size="sm"
-              disabled={!month || !year || bulkDownloading}
+              disabled={bulkDownloading}
+              ariaDisabled={!month || !year}
               title={!month || !year ? "Select a month and year to bulk download" : "Download all bills for this period — choose PDFs, attachments, or both"}
-              onClick={() => setBulkDialogOpen(true)}
+              onClick={() => {
+                if (!month || !year) {
+                  toast({ type: "error", title: "Select a period", message: "Choose a month and year first to bulk download." });
+                  return;
+                }
+                setBulkDialogOpen(true);
+              }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Bulk Download (ZIP)

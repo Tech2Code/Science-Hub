@@ -26,6 +26,11 @@ interface ButtonProps extends React.AriaAttributes {
   loadingText?: string;
   success?: boolean;
   disabled?: boolean;
+  // Same visual/cursor treatment as `disabled`, but keeps the button in the tab order and lets
+  // onClick still fire — use when the reason it's unavailable needs to reach a keyboard user too
+  // (e.g. a toast explaining what to pick first), since a native `disabled` button is unfocusable
+  // and its `title` tooltip never surfaces without a mouse hover.
+  ariaDisabled?: boolean;
   fullScreen?: boolean;
   onClick?: (e: React.MouseEvent) => void;
   type?: "button" | "submit" | "reset";
@@ -47,6 +52,7 @@ export function Button({
   loadingText = "Please wait…",
   success = false,
   disabled = false,
+  ariaDisabled = false,
   fullScreen = false,
   onClick,
   type = "button",
@@ -117,6 +123,7 @@ export function Button({
         type={type}
         form={form}
         disabled={disabled || loading}
+        aria-disabled={ariaDisabled || undefined}
         onClick={onClick}
         className={cls}
         style={style}

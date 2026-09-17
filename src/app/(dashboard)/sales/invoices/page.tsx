@@ -224,6 +224,7 @@ export default function InvoicesPage() {
         return;
       }
       setBulkProgress({ done: 0, total: list.length });
+      const truncated = (json?.total ?? list.length) > list.length;
       const monthLabel = MONTH_NAMES[Number(month)];
       const { succeeded, failed } = await bulkDownloadPdfsAsZip(
         list.map((inv) => ({ ...inv, fileName: `${sanitizeZipEntryName(inv.invoiceNumber)}.pdf` })),
@@ -233,6 +234,8 @@ export default function InvoicesPage() {
       );
       if (succeeded === 0) {
         toast({ type: "error", title: "Download failed", message: "Could not generate any invoice PDFs." });
+      } else if (truncated) {
+        toast({ type: "error", title: "Partial download", message: `Only the first ${list.length} of ${json?.total} matching invoices were zipped (limit ${list.length}/request) — refine the filter (e.g. by status) and download the rest separately.` });
       } else if (failed.length > 0) {
         toast({ type: "error", title: "Partial download", message: `${succeeded} downloaded, ${failed.length} failed — try again for those.` });
       } else {
@@ -402,7 +405,8 @@ export default function InvoicesPage() {
             <Button
               variant="secondary"
               size="sm"
-              disabled={!month || !year || bulkDownloading}
+              disabled={bulkDownloading}
+              ariaDisabled={!month || !year}
               title={!month || !year ? "Select a month and year to bulk download" : "Download all invoices for this period as a ZIP of PDFs"}
               onClick={handleBulkDownload}
             >
