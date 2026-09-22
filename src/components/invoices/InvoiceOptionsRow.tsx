@@ -15,6 +15,13 @@ interface InvoiceOptionsRowProps {
   onToggleInterState: () => void;
   reverseCharge: boolean;
   onToggleReverseCharge: () => void;
+  // Manually entered after generating the E-way Bill on the govt NIC portal — this app has no
+  // GSP/API integration to generate one itself, so this is just a place to record the number.
+  // Only rendered once the invoice crosses the E-way Bill value threshold (see src/lib/ewayBill.ts).
+  showEwayBillNumber: boolean;
+  ewayBillNumber: string;
+  onEwayBillNumberChange: (value: string) => void;
+  ewayBillNumberError?: string;
   dueDate: string;
   onDueDateChange: (date: string) => void;
   minDueDate?: string;
@@ -38,6 +45,7 @@ export function InvoiceOptionsRow({
   placeOfSupply, onPlaceOfSupplyChange,
   isInterState, onToggleInterState,
   reverseCharge, onToggleReverseCharge,
+  showEwayBillNumber, ewayBillNumber, onEwayBillNumberChange, ewayBillNumberError,
   dueDate, onDueDateChange, minDueDate,
   invoiceDate, onInvoiceDateChange, maxInvoiceDate,
   transportChargeEnabled, onToggleTransportCharge, transportCharge, onTransportChargeChange,
@@ -81,6 +89,20 @@ export function InvoiceOptionsRow({
             className={`${styles.dueDateInput} ${styles.dueDateDateInput}`}
           />
         </div>
+        {showEwayBillNumber && (
+          <div className={styles.dueDateRow}>
+            <label className={styles.dueDateLabel}>E-way Bill No.</label>
+            <Input
+              type="text"
+              inputMode="numeric"
+              maxLength={12}
+              value={ewayBillNumber}
+              onChange={(e) => onEwayBillNumberChange(e.target.value.replace(/\D/g, ""))}
+              placeholder="12-digit number"
+              className={`${styles.dueDateInput} ${styles.dueDateDateInput}`}
+            />
+          </div>
+        )}
         <label className={styles.switchLabel}>
           <Switch checked={isInterState} onChange={onToggleInterState} aria-label="Inter-state supply (IGST)" />
           <span className={styles.switchText}>Inter-state supply (IGST)</span>
@@ -127,6 +149,11 @@ export function InvoiceOptionsRow({
       {transportChargeEnabled && transportChargeError && (
         <p style={{ color: "var(--c-red, #dc2626)", fontSize: "0.8rem", margin: "0.25rem 0 0" }} role="alert">
           {transportChargeError}
+        </p>
+      )}
+      {showEwayBillNumber && ewayBillNumberError && (
+        <p style={{ color: "var(--c-red, #dc2626)", fontSize: "0.8rem", margin: "0.25rem 0 0" }} role="alert">
+          {ewayBillNumberError}
         </p>
       )}
     </div>

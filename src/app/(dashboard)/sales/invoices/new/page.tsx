@@ -20,6 +20,7 @@ import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { useEntitySearch } from "@/lib/useEntitySearch";
 import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
 import { computeInvoiceTotals, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
+import { EWAY_BILL_THRESHOLD } from "@/lib/ewayBill";
 import styles from "./new.module.css";
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
@@ -69,6 +70,8 @@ export default function NewInvoicePage() {
   const [placeOfSupply, setPlaceOfSupply] = useState("");
   const [businessState, setBusinessState] = useState("");
   const [reverseCharge, setReverseCharge] = useState(false);
+  const [ewayBillNumber, setEwayBillNumber] = useState("");
+  const [ewayBillNumberError, setEwayBillNumberError] = useState<string | undefined>(undefined);
   const [items, setItems] = useState<LineItem[]>([]);
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -100,7 +103,7 @@ export default function NewInvoicePage() {
   useEffect(() => {
     const draft = loadFormDraft<{
       customerId: string; customerSearch: string; isInterState: boolean; placeOfSupply: string;
-      reverseCharge: boolean; items: LineItem[]; notes: string; dueDate: string;
+      reverseCharge: boolean; ewayBillNumber: string; items: LineItem[]; notes: string; dueDate: string;
       transportChargeEnabled: boolean; transportCharge: string; transportChargeGstRate: string;
     }>(DRAFT_KEY);
     const v = draft?.values;
@@ -115,7 +118,7 @@ export default function NewInvoicePage() {
   function restoreDraft() {
     const draft = loadFormDraft<{
       customerId: string; customerSearch: string; isInterState: boolean; placeOfSupply: string;
-      reverseCharge: boolean; items: LineItem[]; notes: string; dueDate: string;
+      reverseCharge: boolean; ewayBillNumber: string; items: LineItem[]; notes: string; dueDate: string;
       transportChargeEnabled: boolean; transportCharge: string; transportChargeGstRate: string;
     }>(DRAFT_KEY);
     if (draft?.values) {
@@ -125,6 +128,7 @@ export default function NewInvoicePage() {
       setIsInterState(!!v.isInterState);
       setPlaceOfSupply(v.placeOfSupply ?? "");
       setReverseCharge(!!v.reverseCharge);
+      setEwayBillNumber(v.ewayBillNumber ?? "");
       setItems(v.items ?? []);
       setNotes(v.notes ?? "");
       setDueDate(v.dueDate ?? "");
@@ -148,7 +152,7 @@ export default function NewInvoicePage() {
   }
 
   useFormDraft(DRAFT_KEY, {
-    customerId, customerSearch, isInterState, placeOfSupply, reverseCharge,
+    customerId, customerSearch, isInterState, placeOfSupply, reverseCharge, ewayBillNumber,
     items, notes, dueDate, transportChargeEnabled, transportCharge, transportChargeGstRate,
   }, !draftReady || saving);
 
@@ -350,6 +354,10 @@ export default function NewInvoicePage() {
   const missingTransportAmount = transportChargeEnabled && (!transportCharge.trim() || effectiveTransportCharge <= 0);
   const missingTransportGstRate = transportChargeEnabled && !transportChargeGstRate.trim();
   const missingTransportCharge = missingTransportAmount || missingTransportGstRate;
+  // Field only appears once the invoice crosses the E-way Bill threshold — stays visible after
+  // that even if items are later removed and the total dips back below it, so a number already
+  // typed in doesn't silently disappear (and become impossible to clear) mid-edit.
+  const eligibleForEwayBill = grandTotal >= EWAY_BILL_THRESHOLD || !!ewayBillNumber.trim();
 
   function validateCustomCustomer(): boolean {
     const errs = validateForm(customCustomer, {
@@ -372,6 +380,13 @@ export default function NewInvoicePage() {
     if (items.length === 0) { toast({ type: "error", title: "Check form", message: "Add at least one item." }); return; }
     if (!placeOfSupply) { toast({ type: "error", title: "Check form", message: "Select place of supply." }); return; }
     if (dueDate && dueDate < todayStr) { toast({ type: "error", title: "Check form", message: "Due date cannot be in the past." }); return; }
+    const ewayErr = validate(ewayBillNumber, rules.ewayBillNumber());
+    if (ewayErr) {
+      setEwayBillNumberError(ewayErr);
+      toast({ type: "error", title: "Check form", message: ewayErr });
+      return;
+    }
+    setEwayBillNumberError(undefined);
     if (missingTransportAmount) {
       setTransportChargeError("Enter the transport charge amount.");
       toast({ type: "error", title: "Check form", message: "Enter the transport charge amount." });
@@ -412,6 +427,7 @@ export default function NewInvoicePage() {
       isInterState,
       placeOfSupply,
       reverseCharge,
+      ewayBillNumber: ewayBillNumber.trim() || undefined,
       items: items.map((i) => ({ productId: i.productId || null, name: i.productName, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent })),
       notes, dueDate: dueDate || undefined,
       customerId,
@@ -758,6 +774,10 @@ export default function NewInvoicePage() {
               onToggleInterState={() => setIsInterState((v) => !v)}
               reverseCharge={reverseCharge}
               onToggleReverseCharge={() => setReverseCharge((v) => !v)}
+              showEwayBillNumber={eligibleForEwayBill}
+              ewayBillNumber={ewayBillNumber}
+              onEwayBillNumberChange={(v) => { setEwayBillNumber(v); setEwayBillNumberError(undefined); }}
+              ewayBillNumberError={ewayBillNumberError}
               dueDate={dueDate}
               onDueDateChange={setDueDate}
               minDueDate={todayStr}

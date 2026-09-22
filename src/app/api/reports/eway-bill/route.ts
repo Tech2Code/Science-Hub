@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const [invoices, bills] = await Promise.all([
       prisma.invoice.findMany({
         where: { deletedAt: null, total: { gte: EWAY_BILL_THRESHOLD }, ...(dateFilter && { date: dateFilter }) },
-        select: { id: true, invoiceNumber: true, date: true, placeOfSupply: true, isInterState: true, total: true, customer: { select: { name: true } } },
+        select: { id: true, invoiceNumber: true, date: true, placeOfSupply: true, isInterState: true, total: true, ewayBillNumber: true, customer: { select: { name: true } } },
         orderBy: { date: "asc" },
       }),
       prisma.purchaseBill.findMany({
@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
       sales: invoices.map((inv) => ({
         id: inv.id, invoiceNumber: inv.invoiceNumber, date: inv.date, customerName: inv.customer.name,
         placeOfSupply: inv.placeOfSupply, isInterState: inv.isInterState, total: inv.total,
+        ewayBillNumber: inv.ewayBillNumber,
       })),
       purchases: bills.map((b) => ({
         id: b.id, billNumber: b.billNumber, billDate: b.billDate, vendorName: b.vendor.name,

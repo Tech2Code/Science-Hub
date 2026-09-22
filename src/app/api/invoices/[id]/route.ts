@@ -52,7 +52,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, expectedUpdatedAt, date, transportCharge, transportChargeGstRate, customerId, overrideCreditLimit } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, ewayBillNumber, expectedUpdatedAt, date, transportCharge, transportChargeGstRate, customerId, overrideCreditLimit } = body;
 
     const existingBase = await prisma.invoice.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
     if (!existingBase) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -66,11 +66,15 @@ export async function PUT(
     if (typeof notes === "string" && notes.length > 2000) {
       return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
     }
+    if (ewayBillNumber !== undefined && ewayBillNumber !== null && String(ewayBillNumber).trim() && !/^\d{12}$/.test(String(ewayBillNumber).trim())) {
+      return NextResponse.json({ error: "E-way Bill number must be 12 digits." }, { status: 400 });
+    }
 
     // Notes-only update. `status` is never accepted from the client — it's always derived from paidAmount vs. total.
     if (!items) {
       const data: Record<string, unknown> = {};
       if (notes !== undefined) data.notes = notes;
+      if (ewayBillNumber !== undefined) data.ewayBillNumber = ewayBillNumber ? String(ewayBillNumber).trim() : null;
       const invoice = await prisma.invoice.update({ where: { id }, data });
       revalidateTag("invoices", { expire: 0 });
       revalidateTag("reports", { expire: 0 });
@@ -318,6 +322,7 @@ export async function PUT(
           isInterState: inter,
           placeOfSupply: String(placeOfSupply).trim(),
           reverseCharge: Boolean(reverseCharge),
+          ewayBillNumber: ewayBillNumber ? String(ewayBillNumber).trim() : null,
           ...(parsedInvoiceDate ? { date: parsedInvoiceDate } : {}),
           dueDate: parsedDueDate ?? null,
           notes: notes ?? null,

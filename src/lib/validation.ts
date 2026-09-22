@@ -92,6 +92,9 @@ export const rules = {
   pincode: (msg = "Enter a valid 6-digit pincode."): Validator =>
     (v) => !v.trim() || /^\d{6}$/.test(v.trim()) ? null : msg,
 
+  ewayBillNumber: (msg = "E-way Bill number must be 12 digits."): Validator =>
+    (v) => !v.trim() || /^\d{12}$/.test(v.trim()) ? null : msg,
+
   positiveNumber: (msg = "Enter a value greater than 0."): Validator =>
     (v) => !v.trim() || (parseFloat(v) > 0) ? null : msg,
 

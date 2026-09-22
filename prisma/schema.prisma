@@ -204,6 +204,10 @@ model Invoice {
   isInterState  Boolean       @default(false)
   placeOfSupply String?
   reverseCharge Boolean       @default(false)
+  // Manually entered after generating the E-way Bill on the govt NIC portal (this app has no
+  // GSP/API integration to generate one itself) — 12-digit numeric, optional, printed on the
+  // invoice once set. See src/lib/ewayBill.ts for the ₹50,000 threshold this is paired with.
+  ewayBillNumber String?
   // Optional transport/freight charge — shown as its own line on the printed
   // invoice, with its own GST rate/amount, kept separate from cgst/sgst/igst
   // (which stay a pure sum of item-level tax) rather than folded into the

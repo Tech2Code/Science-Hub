@@ -48,7 +48,7 @@ interface ReturnFormItem {
 }
 interface Invoice {
   id: string; invoiceNumber: string; date: string; dueDate?: string; createdAt: string;
-  status: string; isInterState: boolean; placeOfSupply?: string; reverseCharge?: boolean;
+  status: string; isInterState: boolean; placeOfSupply?: string; reverseCharge?: boolean; ewayBillNumber?: string | null;
   createdBy?: { name: string } | null;
   customer: { name: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; gstin: string; updatedAt?: string; };
   items: InvoiceItem[];
@@ -1508,7 +1508,7 @@ export default function InvoiceDetailPage() {
                   <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Invoice No.</td>
                   <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", fontWeight: 700, color: "var(--inv-tx)" }}>{invoice.invoiceNumber}</td>
                   <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Invoice Date</td>
-                  <td colSpan={5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)" }}>
+                  <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)" }}>
                     {formatDate(invoice.date)}
                   </td>
                 </tr>
@@ -1518,7 +1518,7 @@ export default function InvoiceDetailPage() {
                     {invoice.dueDate ? formatDate(invoice.dueDate) : "—"}
                   </td>
                   <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Place of Supply</td>
-                  <td colSpan={5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)" }}>
+                  <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)" }}>
                     {invoice.placeOfSupply || invoice.customer.state || "—"}
                   </td>
                 </tr>
@@ -1531,10 +1531,22 @@ export default function InvoiceDetailPage() {
                     {invoice.isInterState ? "Inter-state (IGST)" : "Intra-state (CGST+SGST)"}
                   </td>
                   <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, background: "var(--inv-bg2)" }}>Reverse Charge</td>
-                  <td colSpan={5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)", fontWeight: 600 }}>
+                  <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)", fontWeight: 600 }}>
                     {invoice.reverseCharge ? "Yes" : "No"}
                   </td>
                 </tr>
+                {invoice.ewayBillNumber && (
+                  <tr>
+                    <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>E-way Bill No.</td>
+                    <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)", fontWeight: 600, fontFamily: "monospace" }}>
+                      {invoice.ewayBillNumber}
+                    </td>
+                    {/* Filler — completes the row to the table's real total width (allCols: 12/14,
+                        same constant the header/totals rows use), so the right edge stays bordered
+                        instead of blank. */}
+                    <td colSpan={invoice.isInterState ? 6 : 7} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px" }} />
+                  </tr>
+                )}
 
                 {/* ── Buyer: Bill To / Ship To ── */}
                 <tr>

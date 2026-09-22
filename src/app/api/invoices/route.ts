@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     const user = auth.session.user;
 
     const body = await request.json();
-    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, transportCharge, transportChargeGstRate, idempotencyKey, overrideCreditLimit } = body;
+    const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, ewayBillNumber, transportCharge, transportChargeGstRate, idempotencyKey, overrideCreditLimit } = body;
     const { customerId } = body;
 
     if (!items || items.length === 0) {
@@ -81,6 +81,9 @@ export async function POST(request: NextRequest) {
     }
     if (!placeOfSupply || !String(placeOfSupply).trim()) {
       return NextResponse.json({ error: "Place of supply is required" }, { status: 400 });
+    }
+    if (ewayBillNumber !== undefined && ewayBillNumber !== null && String(ewayBillNumber).trim() && !/^\d{12}$/.test(String(ewayBillNumber).trim())) {
+      return NextResponse.json({ error: "E-way Bill number must be 12 digits." }, { status: 400 });
     }
 
     // Never trust the client's isInterState flag; derive it server-side (fall back to client's value only if business state isn't configured).
@@ -300,6 +303,7 @@ export async function POST(request: NextRequest) {
             isInterState: Boolean(isInterState),
             placeOfSupply: String(placeOfSupply).trim(),
             reverseCharge: Boolean(reverseCharge),
+            ewayBillNumber: ewayBillNumber ? String(ewayBillNumber).trim() : null,
             idempotencyKey: idempotencyKey || null,
             items: { create: invoiceItems },
           },

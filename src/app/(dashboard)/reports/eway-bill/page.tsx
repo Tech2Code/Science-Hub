@@ -15,10 +15,20 @@ import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { formatDate } from "@/lib/formatDate";
+import { Badge } from "@/components/ui/Badge";
 import type { Column } from "@/components/ui/Table";
 import styles from "./ewayBill.module.css";
 
-const ROW_COLUMNS: Column[] = [
+const SALES_ROW_COLUMNS: Column[] = [
+  { label: "Doc No.", mobile: "full" },
+  { label: "Date", mobile: "label" },
+  { label: "Party", mobile: "label" },
+  { label: "Place of Supply", mobile: "label" },
+  { label: "Movement", mobile: "label" },
+  { label: "Value", cls: "table-th-right", mobile: "label" },
+  { label: "E-way Bill", mobile: "label" },
+];
+const PURCHASE_ROW_COLUMNS: Column[] = [
   { label: "Doc No.", mobile: "full" },
   { label: "Date", mobile: "label" },
   { label: "Party", mobile: "label" },
@@ -29,7 +39,7 @@ const ROW_COLUMNS: Column[] = [
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-interface SalesRow { id: string; invoiceNumber: string; date: string; customerName: string; placeOfSupply: string | null; isInterState: boolean; total: number; }
+interface SalesRow { id: string; invoiceNumber: string; date: string; customerName: string; placeOfSupply: string | null; isInterState: boolean; total: number; ewayBillNumber: string | null; }
 interface PurchaseRow { id: string; billNumber: string; billDate: string; vendorName: string; placeOfSupply: string | null; isInterState: boolean; total: number; }
 interface EwayBillReport { threshold: number; sales: SalesRow[]; purchases: PurchaseRow[]; }
 
@@ -123,10 +133,10 @@ export default function EwayBillReportPage() {
     setExporting(true);
     try {
       const rows = [
-        ...sortedSales.map((r) => ["Sales", r.invoiceNumber, formatDate(r.date), r.customerName, r.placeOfSupply || "", r.isInterState ? "Inter-State" : "Intra-State", r.total]),
-        ...sortedPurchases.map((r) => ["Purchase", r.billNumber, formatDate(r.billDate), r.vendorName, r.placeOfSupply || "", r.isInterState ? "Inter-State" : "Intra-State", r.total]),
+        ...sortedSales.map((r) => ["Sales", r.invoiceNumber, formatDate(r.date), r.customerName, r.placeOfSupply || "", r.isInterState ? "Inter-State" : "Intra-State", r.total, r.ewayBillNumber || "Pending"]),
+        ...sortedPurchases.map((r) => ["Purchase", r.billNumber, formatDate(r.billDate), r.vendorName, r.placeOfSupply || "", r.isInterState ? "Inter-State" : "Intra-State", r.total, ""]),
       ];
-      await downloadXlsx("Eway-Bill-Eligibility", "E-way Bill", ["Type", "Doc No.", "Date", "Party", "Place of Supply", "Movement", "Value"], rows);
+      await downloadXlsx("Eway-Bill-Eligibility", "E-way Bill", ["Type", "Doc No.", "Date", "Party", "Place of Supply", "Movement", "Value", "E-way Bill No."], rows);
     } catch {
       toast({ type: "error", title: "Failed", message: "Could not export Excel." });
     } finally {
@@ -176,14 +186,14 @@ export default function EwayBillReportPage() {
           <table className="table-base">
             <thead>
               <tr>
-                <th>Invoice No.</th><th>Date</th><th>Customer</th><th>Place of Supply</th><th>Movement</th><th className="table-th-right">Value</th>
+                <th>Invoice No.</th><th>Date</th><th>Customer</th><th>Place of Supply</th><th>Movement</th><th className="table-th-right">Value</th><th>E-way Bill</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton columns={ROW_COLUMNS} rows={4} />
+                <TableSkeleton columns={SALES_ROW_COLUMNS} rows={4} />
               ) : visibleSales.length === 0 ? (
-                <tr><td colSpan={6} className={styles.emptyCell}>No qualifying invoices in this period.</td></tr>
+                <tr><td colSpan={7} className={styles.emptyCell}>No qualifying invoices in this period.</td></tr>
               ) : visibleSales.map((r) => (
                 <tr key={r.id}>
                   <td data-mobile-full><Link href={`/sales/invoices/${r.id}`} className={styles.docLink}>{r.invoiceNumber}</Link></td>
@@ -192,6 +202,9 @@ export default function EwayBillReportPage() {
                   <td data-label="Place of Supply">{r.placeOfSupply || "—"}</td>
                   <td data-label="Movement">{r.isInterState ? "Inter-State" : "Intra-State"}</td>
                   <td data-label="Value" className="table-td-right">{fmt(r.total)}</td>
+                  <td data-label="E-way Bill">
+                    {r.ewayBillNumber ? <Badge variant="paid">{r.ewayBillNumber}</Badge> : <Badge variant="partial">Pending</Badge>}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -217,7 +230,7 @@ export default function EwayBillReportPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton columns={ROW_COLUMNS} rows={4} />
+                <TableSkeleton columns={PURCHASE_ROW_COLUMNS} rows={4} />
               ) : visiblePurchases.length === 0 ? (
                 <tr><td colSpan={6} className={styles.emptyCell}>No qualifying bills in this period.</td></tr>
               ) : visiblePurchases.map((r) => (
