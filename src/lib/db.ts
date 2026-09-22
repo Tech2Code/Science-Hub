@@ -53,7 +53,7 @@ export interface InvoiceListFilters {
   dateRange?: { gte: Date; lt: Date };
 }
 
-// Matches invoice number, customer name, and item/product/brand/category via nested-relation filter.
+// Matches invoice number, E-way Bill number, customer name, and item/product/brand/category via nested-relation filter.
 function buildInvoiceWhere(filters: InvoiceListFilters): Prisma.InvoiceWhereInput {
   const { status, customerId, search, dateRange } = filters;
   const where: Prisma.InvoiceWhereInput = { deletedAt: null };
@@ -72,6 +72,7 @@ function buildInvoiceWhere(filters: InvoiceListFilters): Prisma.InvoiceWhereInpu
     const q = search.trim();
     where.OR = [
       { invoiceNumber: { contains: q, mode: "insensitive" } },
+      { ewayBillNumber: { contains: q, mode: "insensitive" } },
       { customer: { name: { contains: q, mode: "insensitive" } } },
       { items: { some: { OR: [
         { name: { contains: q, mode: "insensitive" } },
