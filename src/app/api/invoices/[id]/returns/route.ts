@@ -81,6 +81,21 @@ export async function POST(
         return NextResponse.json({ error: `Invalid discount for ${item.name}` }, { status: 400 });
       }
     }
+    {
+      // A product appearing twice in one request would otherwise be checked against the same
+      // static "remaining returnable" baseline independently for each line, letting their combined
+      // quantity exceed what's actually returnable — reject outright, same rule invoices/purchase
+      // bills already enforce at create time.
+      const seenProductIds = new Set<string>();
+      for (const item of items) {
+        if (item.productId) {
+          if (seenProductIds.has(item.productId)) {
+            return NextResponse.json({ error: "Each product can only appear once per credit note — combine duplicate lines into a single quantity instead." }, { status: 400 });
+          }
+          seenProductIds.add(item.productId);
+        }
+      }
+    }
 
     const invoice = await prisma.invoice.findUnique({
       where: { id },
@@ -114,35 +129,10 @@ export async function POST(
       returnDate = istDayStartUtc(toIstDateStr(parsedDate));
     }
 
-    // GST rate is inherited from the matching invoice line — a credit note can't invent its own rate; falls back to the invoice's blended rate defensively.
-    const rateByProduct = new Map(invoice.items.map((it) => [it.productId, it.gstRate]));
+    // Blended-rate fallback for the rare case a line's productId has no matching invoice line at
+    // all (the quantity cap below will reject such a line anyway, since it has 0 invoiced qty) —
+    // computed from the pre-transaction snapshot since it's never actually load-bearing.
     const effectiveRate = invoice.subtotal > 0 ? ((invoice.cgst + invoice.sgst + invoice.igst) / invoice.subtotal) * 100 : 0;
-
-    // Discount % is inherited from the matching invoice line the same way GST rate is above — a
-    // credit note can't be allowed to invent its own discount, or a client-supplied value (however
-    // range-clamped) could zero out a real return's taxable value, or understate a discount and
-    // let a return silently consume more of the paid-amount cap than it should. Only a custom
-    // (non-catalog) item, which has no productId to trace back to an invoice line, falls back to
-    // the client-supplied value.
-    const discountByProduct = new Map(invoice.items.map((it) => [it.productId, it.discountPercent]));
-
-    // The original invoice line's discount % is carried forward so a return's taxable value is
-    // computed net of it — otherwise the credit note would refund the pre-discount gross price.
-    const computedItems = items.map((item) => {
-      const gstRate = (item.productId ? rateByProduct.get(item.productId) : undefined) ?? effectiveRate;
-      const discountPercent = item.productId && discountByProduct.has(item.productId)
-        ? discountByProduct.get(item.productId)!
-        : Math.min(100, Math.max(0, item.discountPercent ?? 0));
-      const { discountAmount, taxable, gstAmt, total } = lineBreakdown({ qty: item.quantity, price: item.price, gstRate, discountPercent });
-      return { ...item, gstRate, discountPercent, discountAmount, taxable, gstAmt, total };
-    });
-
-    const subtotal = computedItems.reduce((s, i) => s + i.taxable, 0);
-    const totalGst = computedItems.reduce((s, i) => s + i.gstAmt, 0);
-    const cgst = invoice.isInterState ? 0 : totalGst / 2;
-    const sgst = invoice.isInterState ? 0 : totalGst / 2;
-    const igst = invoice.isInterState ? totalGst : 0;
-    const { roundOff, roundedTotal: creditNoteTotal } = computeRoundOff(subtotal + totalGst);
 
     // Credit note numbering follows the same configurable FY-based pattern as invoices/bills, generated in the same Serializable transaction with retry-on-conflict.
     const biz = await getBusinessSettings();
@@ -160,8 +150,41 @@ export async function POST(
         // own `existingReturnTotal` re-check exists to prevent from the other direction.
         const currentInvoice = await tx.invoice.findUniqueOrThrow({
           where: { id },
-          select: { paidAmount: true, items: { select: { productId: true, quantity: true } } },
+          select: {
+            paidAmount: true,
+            items: { select: { productId: true, quantity: true, price: true, gstRate: true, discountPercent: true } },
+          },
         });
+
+        // Price, GST rate, and discount % are all inherited from the matching invoice line — a
+        // credit note can't invent its own values for any of the three, or it could refund more
+        // (or less) than what was actually charged for the returned goods. Rebuilt from this same
+        // in-transaction re-read (not the pre-transaction `invoice.items` snapshot) so a concurrent
+        // invoice-item edit landing in the gap can't leave a return computed from stale numbers.
+        // Only a custom (non-catalog) item, which has no productId to trace back to an invoice
+        // line, falls back to the client-supplied price/discount.
+        const rateByProduct = new Map(currentInvoice.items.map((it) => [it.productId, it.gstRate]));
+        const discountByProduct = new Map(currentInvoice.items.map((it) => [it.productId, it.discountPercent]));
+        const priceByProduct = new Map(currentInvoice.items.map((it) => [it.productId, it.price]));
+
+        const computedItems = items.map((item) => {
+          const gstRate = (item.productId ? rateByProduct.get(item.productId) : undefined) ?? effectiveRate;
+          const discountPercent = item.productId && discountByProduct.has(item.productId)
+            ? discountByProduct.get(item.productId)!
+            : Math.min(100, Math.max(0, item.discountPercent ?? 0));
+          const price = item.productId && priceByProduct.has(item.productId)
+            ? priceByProduct.get(item.productId)!
+            : item.price;
+          const { discountAmount, taxable, gstAmt, total } = lineBreakdown({ qty: item.quantity, price, gstRate, discountPercent });
+          return { ...item, price, gstRate, discountPercent, discountAmount, taxable, gstAmt, total };
+        });
+
+        const subtotal = computedItems.reduce((s, i) => s + i.taxable, 0);
+        const totalGst = computedItems.reduce((s, i) => s + i.gstAmt, 0);
+        const cgst = inv.isInterState ? 0 : totalGst / 2;
+        const sgst = inv.isInterState ? 0 : totalGst / 2;
+        const igst = inv.isInterState ? totalGst : 0;
+        const { roundOff, roundedTotal: creditNoteTotal } = computeRoundOff(subtotal + totalGst);
 
         const existingReturns = await tx.return.findMany({
           where: { invoiceId: id, deletedAt: null },
@@ -288,7 +311,7 @@ export async function POST(
     await logActivity(
       auth.session.user.id,
       "create_return",
-      `Credit note ${ret!.creditNoteNumber} recorded for invoice ${invoice.invoiceNumber} (${invoice.customer.name}) — ${itemSummary} | Total: ₹${creditNoteTotal.toFixed(2)}`,
+      `Credit note ${ret!.creditNoteNumber} recorded for invoice ${invoice.invoiceNumber} (${invoice.customer.name}) — ${itemSummary} | Total: ₹${ret!.total.toFixed(2)}`,
       id,
       "invoice"
     );

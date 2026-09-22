@@ -21,6 +21,7 @@ import { usePincodeAutofill } from "@/lib/usePincodeLookup";
 import { InvoiceOptionsRow } from "@/components/invoices/InvoiceOptionsRow";
 import { InvoiceLineItemsCard } from "@/components/invoices/InvoiceLineItemsCard";
 import { computeInvoiceTotals, makeInvoiceLineItemKey, type InvoiceLineItem, type InvoiceProduct } from "@/lib/invoiceCalc";
+import { splitGstForDisplay } from "@/lib/roundOff";
 import { EWAY_BILL_THRESHOLD } from "@/lib/ewayBill";
 import { animateSection } from "@/lib/animateSection";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
@@ -868,8 +869,12 @@ export default function EditInvoicePage() {
                     <span className={styles.discountValue}>−₹{discountTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 )}
-                {Object.entries(taxBreakdown).map(([rate, amt]) =>
-                  isInterState ? (
+                {Object.entries(taxBreakdown).map(([rate, amt]) => {
+                  // Split via the shared helper (same one the saved/printed invoice uses) instead of
+                  // a naive amt/2 — otherwise an odd-paisa group total (e.g. ₹10.01) shows CGST+SGST
+                  // summing to ₹10.02 in this preview, disagreeing with what actually gets saved.
+                  const { cgst: groupCgst, sgst: groupSgst } = splitGstForDisplay(amt);
+                  return isInterState ? (
                     <div key={rate} className={styles.summaryRow}>
                       <span>IGST {rate}%</span>
                       <span>₹{amt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -878,15 +883,15 @@ export default function EditInvoicePage() {
                     <div key={rate} className={styles.summaryGstGroup}>
                       <div className={styles.summaryRow}>
                         <span>CGST {Number(rate) / 2}%</span>
-                        <span>₹{(amt / 2).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span>₹{groupCgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                       <div className={styles.summaryRow}>
                         <span>SGST {Number(rate) / 2}%</span>
-                        <span>₹{(amt / 2).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span>₹{groupSgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                     </div>
-                  )
-                )}
+                  );
+                })}
                 {effectiveTransportCharge > 0 && (
                   <>
                     <div className={styles.summaryRow}>
@@ -899,18 +904,21 @@ export default function EditInvoicePage() {
                           <span>Transport IGST {effectiveTransportGstRate}%</span>
                           <span>₹{transportChargeGstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
-                      ) : (
-                        <div className={styles.summaryGstGroup}>
-                          <div className={styles.summaryRow}>
-                            <span>Transport CGST {effectiveTransportGstRate / 2}%</span>
-                            <span>₹{(transportChargeGstAmount / 2).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      ) : (() => {
+                        const { cgst: transportCgst, sgst: transportSgst } = splitGstForDisplay(transportChargeGstAmount);
+                        return (
+                          <div className={styles.summaryGstGroup}>
+                            <div className={styles.summaryRow}>
+                              <span>Transport CGST {effectiveTransportGstRate / 2}%</span>
+                              <span>₹{transportCgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className={styles.summaryRow}>
+                              <span>Transport SGST {effectiveTransportGstRate / 2}%</span>
+                              <span>₹{transportSgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
                           </div>
-                          <div className={styles.summaryRow}>
-                            <span>Transport SGST {effectiveTransportGstRate / 2}%</span>
-                            <span>₹{(transportChargeGstAmount / 2).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          </div>
-                        </div>
-                      )
+                        );
+                      })()
                     )}
                   </>
                 )}

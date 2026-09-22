@@ -825,7 +825,9 @@ export default function PurchaseBillDetailPage() {
                     </tr>
                     <tr>
                       <td style={bpLabelCell}>Taxable Value</td>
-                      <td style={bpValueCell}>₹{fmt(bill.subtotal - bill.discount)}</td>
+                      {/* Must include transport charge like "Subtotal" above does, or this row plus
+                          "GST" (which already includes transport GST) won't foot to "Total" below. */}
+                      <td style={bpValueCell}>₹{fmt(bill.subtotal + (bill.transportCharge ?? 0) - bill.discount)}</td>
                     </tr>
                   </>
                 )}
@@ -1380,7 +1382,7 @@ export default function PurchaseBillDetailPage() {
                       </tr>
                       <tr>
                         <td colSpan={footColSpan} className={`${styles.textRight} ${styles.textMuted}`}>Taxable Value</td>
-                        <td className={`${styles.textRight} ${styles.textMuted}`}>₹{fmt(bill.subtotal - bill.discount)}</td>
+                        <td className={`${styles.textRight} ${styles.textMuted}`}>₹{fmt(bill.subtotal + (bill.transportCharge ?? 0) - bill.discount)}</td>
                       </tr>
                     </>
                   )}

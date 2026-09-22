@@ -16,8 +16,15 @@ export async function GET(request: NextRequest) {
     const dateRange = monthYearToDateRange(searchParams.get("month") ?? "", searchParams.get("year") ?? "");
 
     const where = buildBillWhere({ status, dateRange });
+    // Every other purchase-spend aggregation in the app (Purchase Reports Summary/Category, GST
+    // Filing's purchase register, the Purchase/Combined Dashboards) excludes cancelled bills from
+    // money totals — a cancelled bill keeps its `total`/`paidAmount` for audit, but "spend" should
+    // never count it. `buildBillWhere()` itself leaves cancelled bills in on the "All" tab (status
+    // unset) by design, since the list view must still show them — so the stats aggregate gets its
+    // own narrower where, excluding cancelled unless the user explicitly asked for the Cancelled tab.
+    const aggWhere = status === "cancelled" ? where : { ...where, status: where.status ?? { not: "cancelled" as const } };
     const [agg, overdueCount, years] = await Promise.all([
-      prisma.purchaseBill.aggregate({ where, _sum: { total: true, paidAmount: true } }),
+      prisma.purchaseBill.aggregate({ where: aggWhere, _sum: { total: true, paidAmount: true } }),
       // Nested AND (not merged into `where`) so a status tab's own meaning isn't overwritten by the overdue condition's status constraint.
       prisma.purchaseBill.count({ where: { AND: [where, { status: { notIn: ["paid", "cancelled"] }, dueDate: { lt: istTodayStartUtc() } }] } }),
       prisma.$queryRaw<{ year: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM "billDate")::int AS year FROM "PurchaseBill" WHERE "deletedAt" IS NULL ORDER BY year DESC`,

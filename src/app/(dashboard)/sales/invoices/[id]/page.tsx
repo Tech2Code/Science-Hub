@@ -1713,7 +1713,11 @@ export default function InvoiceDetailPage() {
                   const discountAmount = item.discountAmount ?? 0;
                   const grossValue = item.quantity * item.price;
                   const taxable = grossValue - discountAmount;
-                  const halfGst = item.gstAmount / 2;
+                  // Same helper the invoice/credit-note footers already use to split a combined GST
+                  // amount for display — a naive item.gstAmount/2 independently rounds each half and
+                  // can print a row whose own CGST+SGST don't foot to that row's own Amount column
+                  // (e.g. gstAmount=10.01 -> both halves round to 5.01, printing 10.02).
+                  const { cgst: itemCgst, sgst: itemSgst } = splitGstForDisplay(item.gstAmount);
                   const halfRate = item.gstRate / 2;
                   const rowBg = idx % 2 === 1 ? "var(--inv-bg2)" : "var(--inv-bg)";
                   const c = (content: React.ReactNode, align: "left" | "right" | "center" = "center", bold = false, width?: string, nowrap = false) => (
@@ -1766,7 +1770,7 @@ export default function InvoiceDetailPage() {
                       {c(fmt(taxable), "right", false, undefined, true)}
                       {invoice.isInterState
                         ? <>{c(`${item.gstRate}%`, "center", false, "4.5%", true)}{c(fmt(item.gstAmount), "right", false, undefined, true)}</>
-                        : <>{c(`${halfRate}%`, "center", false, "4.5%", true)}{c(fmt(halfGst), "right", false, undefined, true)}{c(`${halfRate}%`, "center", false, "4.5%", true)}{c(fmt(halfGst), "right", false, undefined, true)}</>}
+                        : <>{c(`${halfRate}%`, "center", false, "4.5%", true)}{c(fmt(itemCgst), "right", false, undefined, true)}{c(`${halfRate}%`, "center", false, "4.5%", true)}{c(fmt(itemSgst), "right", false, undefined, true)}</>}
                       {c(fmt(item.total), "right", true, undefined, true)}
                     </tr>
                   );

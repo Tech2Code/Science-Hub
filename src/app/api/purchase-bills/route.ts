@@ -242,7 +242,20 @@ export async function POST(req: NextRequest) {
     // discount does. If a vendor's bill-level discount is meant to be GST-relevant (i.e. should
     // lower the taxable value, not just the cash total), this calculation needs to change; until
     // then this is deliberately unmodified from its existing behavior.
-    const payAmt = payment?.amount ?? 0;
+    // Unlike every dedicated payment route (invoice/purchase-bill payment POST/PUT), this inline
+    // payment accepted at bill-creation time had no validation at all — a negative amount would
+    // silently pass through Math.min() below into `paidAmount` with no backing PurchasePayment row
+    // (the `paidAmount > 0` guard around the payments.create block skips it), desyncing the bill's
+    // stored paidAmount from the real sum of its payments. Same regex/`>0` shape the dedicated
+    // payment routes already use.
+    let payAmt = 0;
+    if (payment && payment.amount !== undefined && payment.amount !== null) {
+      const amountStr = (typeof payment.amount === "string" || typeof payment.amount === "number") ? String(payment.amount).trim() : "";
+      if (!/^\d+(\.\d+)?$/.test(amountStr) || parseFloat(amountStr) <= 0) {
+        return NextResponse.json({ error: "Valid payment amount is required" }, { status: 400 });
+      }
+      payAmt = parseFloat(amountStr);
+    }
     const { roundOff, roundedTotal: billTotal } = computeRoundOff(subtotal + taxAmount - parsedDiscount + transportChargeVal + transportChargeGstAmountVal);
     if (billTotal < 0) return NextResponse.json({ error: "Discount cannot exceed the bill total" }, { status: 400 });
     const paidAmount = Math.min(payAmt, billTotal);

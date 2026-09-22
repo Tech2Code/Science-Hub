@@ -494,12 +494,19 @@ async function getGstSummary(startDate?: string, endDate?: string) {
   // timezone) — bucketing with a bare date_trunc('month', "date") groups by UTC month, which
   // silently reassigns anything created IST 00:00-05:29 to the previous month's bucket. Shift by
   // the IST offset before truncating so the grouping matches the IST calendar month instead.
+  // Invoice.cgst/sgst/igst are item-tax-only by design — a transport charge's own GST lives in the
+  // separate transportChargeGstAmount column (see schema notes) and must be folded in here the same
+  // way every other sales-GST aggregation in this app already does (getSalesDashboard's revenueGst,
+  // getDashboardFinancials' gstSales, buildGstFilingReport's outputTax), or this report silently
+  // under-states taxable turnover/output tax vs. GST Filing's Net GST Payable for any period
+  // containing a transport-charged invoice. Routed per-row by isInterState, same split the invoice
+  // create/edit routes themselves apply (half to CGST/half to SGST intra-state, all to IGST inter-state).
   const rows = await prisma.$queryRaw<Array<{ month: Date; taxableValue: number; cgst: number; sgst: number; igst: number }>>`
     SELECT date_trunc('month', "date" + interval '330 minutes') AS month,
-           COALESCE(SUM("subtotal"), 0) AS "taxableValue",
-           COALESCE(SUM("cgst"), 0) AS cgst,
-           COALESCE(SUM("sgst"), 0) AS sgst,
-           COALESCE(SUM("igst"), 0) AS igst
+           COALESCE(SUM("subtotal") + SUM("transportCharge"), 0) AS "taxableValue",
+           COALESCE(SUM("cgst") + SUM(CASE WHEN "isInterState" THEN 0 ELSE "transportChargeGstAmount" / 2 END), 0) AS cgst,
+           COALESCE(SUM("sgst") + SUM(CASE WHEN "isInterState" THEN 0 ELSE "transportChargeGstAmount" / 2 END), 0) AS sgst,
+           COALESCE(SUM("igst") + SUM(CASE WHEN "isInterState" THEN "transportChargeGstAmount" ELSE 0 END), 0) AS igst
     FROM "Invoice"
     WHERE "deletedAt" IS NULL
       ${gte ? Prisma.sql`AND "date" >= ${gte}` : Prisma.empty}

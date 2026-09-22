@@ -259,10 +259,16 @@ export async function PUT(
 
     const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + totalGst + transportChargeVal + transportChargeGstAmountVal);
 
-    // Recalculate status based on paidAmount
+    // Recalculate status based on paidAmount — the +0.01 tolerance matches every other
+    // status-derivation site in the app (invoice/purchase-bill payment POST/PUT/DELETE, and the
+    // sibling PUT /api/purchase-bills/[id] edit route itself). paidAmount is an aggregate SUM of
+    // arbitrary-precision Payment.amount floats while `total` is rounded to the nearest whole
+    // rupee, so without this tolerance a sub-paisa IEEE-754 summation artifact could flip an
+    // already fully-paid invoice back to "partial" purely from float noise on an edit that never
+    // touched payments at all (e.g. just editing notes or a line item's HSN).
     const paidAmount = existing.paidAmount;
     let newStatus = "unpaid";
-    if (paidAmount >= total) newStatus = "paid";
+    if (paidAmount + 0.01 >= total) newStatus = "paid";
     else if (paidAmount > 0) newStatus = "partial";
 
     // Credit-limit check below needs the same Serializable isolation + P2034 retry the create route
