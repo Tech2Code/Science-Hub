@@ -22,6 +22,8 @@ import { amountInWordsINR } from "@/lib/numberToWords";
 import { splitGstForDisplay } from "@/lib/roundOff";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { useIsAdmin } from "@/lib/useIsAdmin";
+import { ReassignOwnerModal } from "@/components/dialogs/ReassignOwnerModal";
 import { formatDate, formatDateTime } from "@/lib/formatDate";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { useDirty } from "@/lib/useDirty";
@@ -49,7 +51,7 @@ interface ReturnFormItem {
 interface Invoice {
   id: string; invoiceNumber: string; date: string; dueDate?: string; createdAt: string;
   status: string; isInterState: boolean; placeOfSupply?: string; reverseCharge?: boolean; ewayBillNumber?: string | null;
-  createdBy?: { name: string } | null;
+  createdBy?: { id: string; name: string } | null;
   customer: { name: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; gstin: string; updatedAt?: string; };
   items: InvoiceItem[];
   payments: Payment[];
@@ -203,6 +205,9 @@ function InvoiceSkeleton() {
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const canWrite = useCanWrite();
+  const isAdmin = useIsAdmin();
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [reassigning, setReassigning] = useState(false);
   const paymentIdempotency = useIdempotencyKey();
   const returnIdempotency = useIdempotencyKey();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -868,6 +873,30 @@ export default function InvoiceDetailPage() {
     setSendingEmail(false);
   }
 
+  async function handleReassign(targetUserId: string) {
+    setReassigning(true);
+    try {
+      const res = await fetch(`/api/invoices/${id}/reassign`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: targetUserId }),
+      });
+      if (res.ok) {
+        setReassignOpen(false);
+        bustCache(`/api/invoices/${id}`);
+        bustCachePrefix("/api/invoices");
+        load(true);
+        toast({ type: "success", title: "Reassigned", message: "Invoice creator updated." });
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to reassign invoice." });
+      }
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Please try again." });
+    }
+    setReassigning(false);
+  }
+
   async function handleDelete() {
     setDeleting(true);
     try {
@@ -1005,6 +1034,18 @@ export default function InvoiceDetailPage() {
           </FormField>
         </form>
       </Modal>
+      {invoice.createdBy?.id && (
+        <ReassignOwnerModal
+          open={reassignOpen}
+          onClose={() => setReassignOpen(false)}
+          entityLabel="Invoice"
+          documentLabel={invoice.invoiceNumber}
+          currentUserId={invoice.createdBy.id}
+          currentUserName={invoice.createdBy.name}
+          saving={reassigning}
+          onSave={handleReassign}
+        />
+      )}
       <PdfCopyDialog
         open={pdfCopyDialogOpen}
         loading={pdfDownloading}
@@ -1084,6 +1125,9 @@ export default function InvoiceDetailPage() {
                 {invoice.createdBy?.name && <>Created by {invoice.createdBy.name}</>}
                 {invoice.createdAt && <> · {formatDateTime(invoice.createdAt)}</>}
               </div>
+            )}
+            {isAdmin && invoice.createdBy?.id && (
+              <button type="button" className={styles.linkButton} onClick={() => setReassignOpen(true)}>Reassign</button>
             )}
           </div>
           <div className={styles.toolbarActions}>

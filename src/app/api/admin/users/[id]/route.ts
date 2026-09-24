@@ -189,11 +189,28 @@ export async function DELETE(
       }
     }
 
-    // Prevent deletion if the user has created invoices (FK constraint on Invoice.userId)
-    const invoiceCount = await prisma.invoice.count({ where: { userId: id } });
-    if (invoiceCount > 0) {
+    // Prevent deletion if the user has created invoices/purchase bills/rate lists — all three
+    // have a required (non-nullable) FK to User with no onDelete override, so deleting the user
+    // row while any exist would otherwise surface as a raw, unhandled Prisma FK error instead of
+    // this clear message. Counts are returned structured (not just baked into the message) so the
+    // client can offer a "reassign, then delete" flow instead of just showing an error.
+    const [invoiceCount, purchaseBillCount, rateListCount] = await Promise.all([
+      prisma.invoice.count({ where: { userId: id } }),
+      prisma.purchaseBill.count({ where: { createdByUserId: id } }),
+      prisma.rateList.count({ where: { createdByUserId: id } }),
+    ]);
+    if (invoiceCount > 0 || purchaseBillCount > 0 || rateListCount > 0) {
+      const parts: string[] = [];
+      if (invoiceCount > 0) parts.push(`${invoiceCount} invoice(s)`);
+      if (purchaseBillCount > 0) parts.push(`${purchaseBillCount} purchase bill(s)`);
+      if (rateListCount > 0) parts.push(`${rateListCount} rate list(s)`);
       return NextResponse.json(
-        { error: `Cannot delete "${targetUser.name}" — they have created ${invoiceCount} invoice(s). Delete those invoices first or reassign them.` },
+        {
+          error: `Cannot delete "${targetUser.name}" — they have created ${parts.join(", ")}. Reassign them to another user first.`,
+          invoiceCount,
+          purchaseBillCount,
+          rateListCount,
+        },
         { status: 400 }
       );
     }

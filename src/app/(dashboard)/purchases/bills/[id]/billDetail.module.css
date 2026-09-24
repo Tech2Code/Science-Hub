@@ -41,6 +41,17 @@
   color: var(--c-text-3);
   margin-top: 0.25rem;
 }
+.linkButtonSmall {
+  display: block;
+  background: none;
+  border: none;
+  color: var(--c-blue);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0;
+  margin-top: 0.25rem;
+  text-decoration: underline;
+}
 
 .shareIconMargin { margin-right: 0.375rem; }
 .inlineFlex { display: inline-flex; }

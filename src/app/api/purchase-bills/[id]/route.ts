@@ -26,7 +26,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const auth = await requireSession();
     if (!auth.ok) return auth.response;
     const { id } = await params;
-    const bill = await prisma.purchaseBill.findFirst({ where: { id, deletedAt: null }, include: BILL_INCLUDE });
+    // No deletedAt filter (matches getInvoice()'s behavior) — a bin (soft-deleted) bill's own
+    // detail page must still load so its admin-only "Reassign" action stays reachable without
+    // going through the all-or-nothing bulk "Reassign & Delete" flow.
+    const bill = await prisma.purchaseBill.findUnique({ where: { id }, include: BILL_INCLUDE });
     if (!bill) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
     return NextResponse.json(bill);
   } catch {

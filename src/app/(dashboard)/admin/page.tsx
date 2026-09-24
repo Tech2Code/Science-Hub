@@ -12,6 +12,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
 import { useToast } from "@/components/ui/Toast";
+import { bustCachePrefix } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { useScrollToHash } from "@/lib/useScrollToHash";
 import { useDirty } from "@/lib/useDirty";
@@ -72,6 +73,10 @@ const ACTION_META: Record<string, { label: string; color: string; bg: string; bo
   empty_bin:              { label: "Bin Emptied",            color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
   clear_activity_log:     { label: "Activity Log Cleared",   color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
   manual_stock_adjustment:{ label: "Stock Adjusted",         color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
+  reassign_invoice:       { label: "Invoice Reassigned",     color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
+  reassign_purchase_bill: { label: "Bill Reassigned",        color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
+  reassign_rate_list:     { label: "Rate List Reassigned",   color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
+  reassign_user_documents:{ label: "Documents Reassigned",   color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -161,6 +166,13 @@ export default function AdminPage() {
   const [editFieldErrors, setEditFieldErrors] = useState<{ name?: string; email?: string; newPassword?: string }>({});
   const [deleteConfirm, setDeleteConfirm] = useState<User | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  // Populated when DELETE is blocked because the user has created invoices/purchase bills/rate
+  // lists — offers a "reassign everything to another user, then delete" flow instead of just an
+  // error, so clearing this block never requires opening each document individually.
+  const [reassignDeleteTarget, setReassignDeleteTarget] = useState<User | null>(null);
+  const [deleteBlockers, setDeleteBlockers] = useState<{ invoiceCount: number; purchaseBillCount: number; rateListCount: number } | null>(null);
+  const [reassignTargetId, setReassignTargetId] = useState("");
+  const [reassigningAndDeleting, setReassigningAndDeleting] = useState(false);
 
   // ── Activity Log ─────────────────────────────────────────────
   const [logs, setLogs] = useState<ActivityLog[]>([]);
@@ -306,17 +318,67 @@ export default function AdminPage() {
       const res = await fetch(`/api/admin/users/${target.id}`, { method: "DELETE" });
       const data = await res.json();
       setDeleteLoading(false);
-      setDeleteConfirm(null);
       if (!res.ok) {
+        // Blocked by attached documents — hand off to the reassign-and-delete flow instead of
+        // just showing an error, so this never requires opening each document individually.
+        if (data.invoiceCount > 0 || data.purchaseBillCount > 0 || data.rateListCount > 0) {
+          setDeleteConfirm(null);
+          setReassignDeleteTarget(target);
+          setDeleteBlockers({ invoiceCount: data.invoiceCount ?? 0, purchaseBillCount: data.purchaseBillCount ?? 0, rateListCount: data.rateListCount ?? 0 });
+          setReassignTargetId("");
+          return;
+        }
+        setDeleteConfirm(null);
         toast({ type: "error", title: "Delete failed", message: data.error ?? "Could not delete user." });
         return;
       }
+      setDeleteConfirm(null);
       setUsers(prev => prev.filter(u => u.id !== target.id));
       toast({ type: "success", title: "User deleted", message: `"${target.name}" removed.` });
     } catch {
       setDeleteLoading(false);
       setDeleteConfirm(null);
       toast({ type: "error", title: "Delete failed", message: "Network error. Please try again." });
+    }
+  }
+
+  async function reassignAndDelete() {
+    if (!reassignDeleteTarget || !reassignTargetId) return;
+    const target = reassignDeleteTarget;
+    setReassigningAndDeleting(true);
+    try {
+      const reassignRes = await fetch(`/api/admin/users/${target.id}/reassign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId: reassignTargetId }),
+      });
+      const reassignData = await reassignRes.json().catch(() => ({}));
+      if (!reassignRes.ok) {
+        setReassigningAndDeleting(false);
+        toast({ type: "error", title: "Reassign failed", message: reassignData.error ?? "Could not reassign documents." });
+        return;
+      }
+      const delRes = await fetch(`/api/admin/users/${target.id}`, { method: "DELETE" });
+      const delData = await delRes.json().catch(() => ({}));
+      setReassigningAndDeleting(false);
+      if (!delRes.ok) {
+        toast({ type: "error", title: "Delete failed", message: delData.error ?? "Documents were reassigned, but the user could not be deleted." });
+        return;
+      }
+      if (reassignData.invoiceCount > 0) bustCachePrefix("/api/invoices");
+      if (reassignData.purchaseBillCount > 0) bustCachePrefix("/api/purchase-bills");
+      if (reassignData.rateListCount > 0) bustCachePrefix("/api/rate-lists");
+      setUsers(prev => prev.filter(u => u.id !== target.id));
+      setReassignDeleteTarget(null);
+      setDeleteBlockers(null);
+      toast({
+        type: "success",
+        title: "User deleted",
+        message: `Reassigned ${reassignData.invoiceCount ?? 0} invoice(s), ${reassignData.purchaseBillCount ?? 0} purchase bill(s), ${reassignData.rateListCount ?? 0} rate list(s) and removed "${target.name}".`,
+      });
+    } catch {
+      setReassigningAndDeleting(false);
+      toast({ type: "error", title: "Failed", message: "Network error. Please try again." });
     }
   }
 
@@ -399,6 +461,47 @@ export default function AdminPage() {
         confirmLabel="Delete" variant="danger" loading={deleteLoading}
         onConfirm={deleteUser} onCancel={() => setDeleteConfirm(null)}
       />
+
+      <Modal
+        open={!!reassignDeleteTarget}
+        title="Reassign & Delete"
+        subtitle={reassignDeleteTarget?.name}
+        onClose={() => { if (!reassigningAndDeleting) { setReassignDeleteTarget(null); setDeleteBlockers(null); } }}
+        variant="fullscreen"
+        maxWidth="28rem"
+        footer={
+          <>
+            <Button
+              type="button" variant="secondary" disabled={reassigningAndDeleting}
+              onClick={() => { setReassignDeleteTarget(null); setDeleteBlockers(null); }}
+            >Cancel</Button>
+            <Button
+              type="button" variant="danger" loading={reassigningAndDeleting}
+              disabled={reassigningAndDeleting || !reassignTargetId}
+              onClick={reassignAndDelete}
+            >Reassign &amp; Delete</Button>
+          </>
+        }
+      >
+        <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "var(--c-text-2)" }}>
+          &quot;{reassignDeleteTarget?.name}&quot; has created{" "}
+          {[
+            deleteBlockers?.invoiceCount ? `${deleteBlockers.invoiceCount} invoice(s)` : null,
+            deleteBlockers?.purchaseBillCount ? `${deleteBlockers.purchaseBillCount} purchase bill(s)` : null,
+            deleteBlockers?.rateListCount ? `${deleteBlockers.rateListCount} rate list(s)` : null,
+          ].filter(Boolean).join(", ")}. Choose another user to reassign all of them to — this user will then be deleted.
+        </p>
+        <FormField label="Reassign to">
+          <Select value={reassignTargetId} onChange={(e) => setReassignTargetId(e.target.value)} disabled={reassigningAndDeleting}>
+            <option value="">Select a user…</option>
+            {/* Managers are read-only and can't create documents in normal use — excluded as a
+                reassign target, same reasoning as ReassignOwnerModal's per-document picker. */}
+            {users.filter(u => u.id !== reassignDeleteTarget?.id && u.role !== "manager").map(u => (
+              <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+            ))}
+          </Select>
+        </FormField>
+      </Modal>
 
       <ConfirmDialog
         open={!!logDeleteConfirm}

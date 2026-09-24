@@ -28,6 +28,8 @@ import { formatFileSize } from "@/lib/formatFileSize";
 import { purchaseBillAttachmentByIdHref } from "@/lib/attachmentHref";
 import { AttachmentIcon } from "@/components/purchases/AttachmentIcon";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { useIsAdmin } from "@/lib/useIsAdmin";
+import { ReassignOwnerModal } from "@/components/dialogs/ReassignOwnerModal";
 import { formatDate, formatDateTime } from "@/lib/formatDate";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { useDirty } from "@/lib/useDirty";
@@ -91,6 +93,9 @@ export default function PurchaseBillDetailPage() {
   const toast   = useToast();
   const router  = useRouter();
   const canWrite = useCanWrite();
+  const isAdmin = useIsAdmin();
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [reassigning, setReassigning] = useState(false);
   const paymentIdempotency = useIdempotencyKey();
 
   const [bill,    setBill]    = useState<PurchaseBill | null>(null);
@@ -493,6 +498,29 @@ export default function PurchaseBillDetailPage() {
     }
     setUncancelling(false);
     setConfirmUncancel(false);
+  }
+
+  async function handleReassign(targetUserId: string) {
+    setReassigning(true);
+    try {
+      const res = await fetch(`/api/purchase-bills/${id}/reassign`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: targetUserId }),
+      });
+      if (res.ok) {
+        setReassignOpen(false);
+        bustCachePrefix("/api/purchase-bills");
+        load();
+        toast({ type: "success", title: "Reassigned", message: "Bill creator updated." });
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to reassign bill." });
+      }
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Please try again." });
+    }
+    setReassigning(false);
   }
 
   async function handleDelete() {
@@ -900,6 +928,19 @@ export default function PurchaseBillDetailPage() {
       onCancel={() => { if (!deletingPayment) setPaymentDeleteConfirm(null); }}
     />
 
+    {bill.createdBy?.id && (
+      <ReassignOwnerModal
+        open={reassignOpen}
+        onClose={() => setReassignOpen(false)}
+        entityLabel="Purchase Bill"
+        documentLabel={bill.billNumber}
+        currentUserId={bill.createdBy.id}
+        currentUserName={bill.createdBy.name}
+        saving={reassigning}
+        onSave={handleReassign}
+      />
+    )}
+
     <Modal
       open={editingPayment !== null}
       title="Edit Payment"
@@ -1003,6 +1044,9 @@ export default function PurchaseBillDetailPage() {
               {bill.createdBy?.name && <>Created by {bill.createdBy.name}</>}
               {bill.createdAt && <> · {formatDateTime(bill.createdAt)}</>}
             </div>
+          )}
+          {isAdmin && bill.createdBy?.id && (
+            <button type="button" className={styles.linkButtonSmall} onClick={() => setReassignOpen(true)}>Reassign</button>
           )}
         </div>
         <div className={styles.toolbarActions}>

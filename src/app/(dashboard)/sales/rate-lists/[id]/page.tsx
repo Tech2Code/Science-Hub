@@ -19,6 +19,8 @@ import { RateListPrintArea } from "@/components/rateLists/RateListPrintArea";
 import { downloadXlsx } from "@/lib/downloadXlsx";
 import { fmtCurrency } from "@/lib/rateListForm";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { useIsAdmin } from "@/lib/useIsAdmin";
+import { ReassignOwnerModal } from "@/components/dialogs/ReassignOwnerModal";
 import { bustCachePrefix } from "@/lib/useCache";
 import { formatDateTime } from "@/lib/formatDate";
 import { useMenuA11y } from "@/lib/useMenuA11y";
@@ -30,7 +32,7 @@ interface RateListItem {
 }
 interface RateList {
   id: string; title: string; note: string | null; createdAt: string; updatedAt: string;
-  createdBy: { name: string };
+  createdBy: { id: string; name: string };
   items: RateListItem[];
 }
 interface BusinessSettings {
@@ -56,6 +58,9 @@ export default function RateListDetailPage() {
   const router = useRouter();
   const toast = useToast();
   const canWrite = useCanWrite();
+  const isAdmin = useIsAdmin();
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [reassigning, setReassigning] = useState(false);
 
   const [rateList, setRateList] = useState<RateList | null>(null);
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
@@ -269,6 +274,30 @@ export default function RateListDetailPage() {
     setSendingEmail(false);
   }
 
+  async function handleReassign(targetUserId: string) {
+    if (!rateList) return;
+    setReassigning(true);
+    try {
+      const res = await fetch(`/api/rate-lists/${rateList.id}/reassign`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: targetUserId }),
+      });
+      if (res.ok) {
+        setReassignOpen(false);
+        bustCachePrefix("/api/rate-lists");
+        load();
+        toast({ type: "success", title: "Reassigned", message: "Rate list creator updated." });
+      } else {
+        const d = await res.json().catch(() => ({}));
+        toast({ type: "error", title: "Failed", message: d?.error ?? "Failed to reassign rate list." });
+      }
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Please try again." });
+    }
+    setReassigning(false);
+  }
+
   async function handleDelete() {
     if (!rateList) return;
     setDeleting(true);
@@ -364,6 +393,17 @@ export default function RateListDetailPage() {
       />
     )}
 
+    <ReassignOwnerModal
+      open={reassignOpen}
+      onClose={() => setReassignOpen(false)}
+      entityLabel="Rate List"
+      documentLabel={rateList.title}
+      currentUserId={rateList.createdBy.id}
+      currentUserName={rateList.createdBy.name}
+      saving={reassigning}
+      onSave={handleReassign}
+    />
+
     <ConfirmDialog
       open={confirmDelete}
       title="Move to Bin"
@@ -411,6 +451,9 @@ export default function RateListDetailPage() {
           <div className={styles.metaText}>
             {rateList.items.length} item{rateList.items.length === 1 ? "" : "s"} · Created by {rateList.createdBy.name} · {formatDateTime(rateList.createdAt)}
           </div>
+          {isAdmin && (
+            <button type="button" className={styles.linkButtonSmall} onClick={() => setReassignOpen(true)}>Reassign</button>
+          )}
         </div>
         <div className={styles.toolbarActions}>
           {canWrite && (

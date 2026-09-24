@@ -74,6 +74,17 @@
   color: var(--c-text-3);
   margin-top: 0.25rem;
 }
+.linkButton {
+  display: block;
+  background: none;
+  border: none;
+  color: var(--c-blue);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0;
+  margin-top: 0.25rem;
+  text-decoration: underline;
+}
 .inlineFlex { display: inline-flex; }
 .shareWrap { position: relative; }
 .shareOverlay { position: fixed; inset: 0; z-index: 99; }

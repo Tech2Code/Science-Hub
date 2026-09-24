@@ -15,11 +15,14 @@ export async function GET(
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
-    const rateList = await prisma.rateList.findFirst({
-      where: { id, deletedAt: null },
+    // No deletedAt filter (matches getInvoice()'s/the purchase-bill GET's behavior) — a bin
+    // (soft-deleted) rate list's own detail page must still load so its admin-only "Reassign"
+    // action stays reachable without going through the all-or-nothing bulk "Reassign & Delete" flow.
+    const rateList = await prisma.rateList.findUnique({
+      where: { id },
       include: {
         items: { orderBy: { serialNo: "asc" } },
-        createdBy: { select: { name: true } },
+        createdBy: { select: { id: true, name: true } },
       },
     });
     if (!rateList) return NextResponse.json({ error: "Rate list not found" }, { status: 404 });
@@ -64,7 +67,7 @@ export async function PUT(
           note: typeof note === "string" ? note.trim() || null : null,
           items: { create: itemsResult.items },
         },
-        include: { items: { orderBy: { serialNo: "asc" } }, createdBy: { select: { name: true } } },
+        include: { items: { orderBy: { serialNo: "asc" } }, createdBy: { select: { id: true, name: true } } },
       });
     });
 
