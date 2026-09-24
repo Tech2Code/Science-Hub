@@ -150,7 +150,7 @@
 }
 
 .colName {
-  width: 150px;
+  width: 200px;
 }
 
 .colDetails {
@@ -158,11 +158,11 @@
 }
 
 .colDeletedOn {
-  width: 110px;
+  width: 120px;
 }
 
 .colDeletedBy {
-  width: 110px;
+  width: 140px;
 }
 
 .colExpires {
