@@ -249,6 +249,7 @@ export async function POST(
             notes: notes || null,
             subtotal, cgst, sgst, igst, roundOff, total: creditNoteTotal,
             idempotencyKey: idempotencyKey || null,
+            createdByUserId: userId,
             items: {
               create: computedItems.map((item) => ({
                 productId: item.productId || null,

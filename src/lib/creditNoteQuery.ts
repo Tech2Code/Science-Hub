@@ -8,7 +8,7 @@ export interface CreditNoteListFilters {
   dateRange?: { gte: Date; lt: Date };
 }
 
-// Matches credit note number, invoice number, and customer name — no formatted-date
+// Matches credit note number, invoice number, customer name, and creator name — no formatted-date
 // text match (e.g. "25 jul") since that has no clean server-side equivalent.
 export function buildReturnWhere(filters: CreditNoteListFilters): Prisma.ReturnWhereInput {
   const { search, dateRange } = filters;
@@ -20,6 +20,7 @@ export function buildReturnWhere(filters: CreditNoteListFilters): Prisma.ReturnW
       { creditNoteNumber: { contains: q, mode: "insensitive" } },
       { invoice: { invoiceNumber: { contains: q, mode: "insensitive" } } },
       { invoice: { customer: { name: { contains: q, mode: "insensitive" } } } },
+      { createdBy: { name: { contains: q, mode: "insensitive" } } },
     ];
   }
   return where;

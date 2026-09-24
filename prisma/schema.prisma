@@ -26,6 +26,7 @@ model User {
   resetTokens           PasswordResetToken[]
   purchaseBillsCreated  PurchaseBill[]       @relation("PurchaseBillCreator")
   stockMovementsCreated StockMovement[]      @relation("StockMovementCreator")
+  returnsCreated         Return[]             @relation("ReturnCreator")
   sectionPermissions    SectionPermission[]
   rateLists             RateList[]
   notificationDismissals NotificationDismissal[]
@@ -295,6 +296,12 @@ model Return {
   // Same reasoning as Invoice.idempotencyKey — blocks a retried/duplicated create POST from
   // consuming a second credit-note number and double-restoring stock.
   idempotencyKey   String?      @unique
+  // Who recorded this credit note — nullable since it predates this column (2026-09-24); pre-existing
+  // rows are backfilled best-effort from their matching ActivityLog "create_return" entry (see
+  // prisma/backfillReturnCreatedBy.ts), the same lookup the credit-notes list route used to do live,
+  // on every request, before this column existed.
+  createdByUserId String?
+  createdBy        User?        @relation("ReturnCreator", fields: [createdByUserId], references: [id])
 
   @@index([invoiceId])
   @@index([deletedAt])

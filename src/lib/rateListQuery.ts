@@ -5,7 +5,11 @@ export type RateListSort = "newest" | "oldest" | "title_az" | "title_za";
 export function buildRateListWhere(search?: string | null): Prisma.RateListWhereInput {
   const where: Prisma.RateListWhereInput = { deletedAt: null };
   if (search?.trim()) {
-    where.title = { contains: search.trim(), mode: "insensitive" };
+    const q = search.trim();
+    where.OR = [
+      { title: { contains: q, mode: "insensitive" } },
+      { createdBy: { name: { contains: q, mode: "insensitive" } } },
+    ];
   }
   return where;
 }
