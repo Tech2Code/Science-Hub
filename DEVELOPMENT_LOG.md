@@ -455,6 +455,36 @@ Both passes were live-verified against the real dev database via a scripted Play
 
 ---
 
+## Era 22 — Manager read-only sweep and an 8-specialist bug hunt + fix pass (2026-10-06 → 2026-10-07, uncommitted as of writing)
+
+See `CLAUDE.md` Features Completed #67 and #68 for the full write-ups. This is a summary for the log's own continuity.
+
+**#67, manager read-only sweep.** Edit/Delete/New/Email actions that a manager could see, though the API already rejected them, are now hidden. A central route guard in `DashboardShell.tsx` covers `/new`, `/edit`, `/bin`, `/settings`, `/admin` and section-gated paths. Credit Notes is now gated by `reports_sales`.
+
+**#68, the bug hunt.** Eight read-only specialist agents (security, api, database, react, ui, performance, nextjs, typescript) each audited one field and produced about 56 deduplicated findings. The user approved fixing all of them except one. Six fixer agents then worked in parallel, each owning a disjoint set of files so none of them edited the same file.
+
+**Product decisions made along the way:**
+- Fractional-quantity stock truncation (`::integer` cast vs. `Product.stock Int`) was left unfixed. Decimal-unit items are sold as packed units.
+- Deleting an invoice that has active credit notes is **blocked** rather than auto-reversing the returns' stock.
+- A custom (no `productId`) return line must match an invoice line by name and price.
+
+**The bugs that mattered most:**
+- **Silent field wipes.** The invoice-edit Bill To modal wiped customer credit limits, and the bill-form vendor modal reactivated inactive vendors and erased their notes. Both were partial-update PUTs that wrote every field unconditionally.
+- **Stock double-counting.** Deleting an invoice that had credit notes restored stock twice, and a credit note could still be recorded against a binned invoice.
+- **Stale role in the JWT.** A demoted admin kept admin access for up to 8 hours.
+- **Account takeover path.** An email change needed no password, so a stolen session plus forgot-password was enough to take over an account.
+- **Under-reported credit notes.** A credit note dated after its invoice's filing period was dropped from GSTR-1 and Net GST Payable.
+
+**Live-verified 2026-10-07** with a scripted Playwright run against the dev server and dev DB, logged in as `dev@admin.com`:
+- Every check asserted the server's specific error message, not just a 4xx status. An early run had shown 400s that came from unrelated validation, so a status code alone wasn't proof.
+- Stock levels were tracked after each step.
+- A tour of 37 pages, including detail and edit pages, showed no 5xx responses and no page errors.
+- The live run caught one more real issue, the purchase-bill "future date" check running before the "invalid date" check. It was fixed.
+
+**Not yet applied anywhere:** the new migration `20261006120000_add_perf_indexes`, covering Invoice/PurchaseBill `createdAt`/`dueDate`, ActivityLog `(entityType, action)`, and trigram GIN on line-item names.
+
+---
+
 ## Conventions (read this before touching a save/create/delete flow)
 
 - **`OverlayLoader` (`src/components/ui/Spinner.tsx`, `position: fixed; inset: 0; z-index: 9999`) is how this app locks a page or modal during an async action** — not a pile of per-field `disabled` props. Its z-index sits above everything, including an open `Modal`, so it blocks pointer interaction with whatever's underneath regardless of that content's own disabled state. Reach for it on any new save/create flow, gated on that flow's own `saving` boolean.
@@ -482,5 +512,9 @@ Both passes were live-verified against the real dev database via a scripted Play
 - **`prisma generate` fails while the dev server is running** (`EPERM` on the query-engine `.dll.node`) — stop the dev server before any schema change. A generate that races the dev server can leave the client *half-generated* (TS types updated, the embedded runtime `schema.prisma` snapshot stale) — after any retried generate, verify `node_modules/.prisma/client/schema.prisma` actually contains the new columns, don't just trust a "success" message.
 - **`prisma migrate dev` doesn't work in a non-interactive shell** — migrations get hand-written as a timestamped `migration.sql` and applied with `prisma migrate deploy`.
 - **The local `.env` database is not the live/production one** — it holds what looks like the seed script's deterministic dummy data (dozens of rows), not the small number of real rows a live business would have. Confirmed more than once. Any lookup/edit of specific real records has to go through the user directly (Neon console, psql) — never assume a local Prisma query is hitting production.
+- **A stale `.next` can 404 every nested dynamic API route in dev** (found 2026-10-07). Routes such as `/api/invoices/[id]/payment`, `/returns`, `/api/bin/[type]/[id]` and `/[id]/statement` returned Next's HTML 404 page while `[id]/route.ts` itself worked. Fix: stop the dev server, delete `.next`, and restart. No code change is involved.
+- **Scripting against the dev server right after login:** the first few API calls can return 401 until the session cookie settles, so poll `/api/admin/profile` for a 200 before firing requests.
+- **Neon can drop a connection mid-transaction** (`P1017: Server has closed the connection`), and the route then returns 500. This is transient; a retry succeeds. Don't treat a one-off P1017 in a live test as a code bug.
+- **Building locally without touching the DB:** `npm run build` runs `migrate deploy` against `.env`'s database. To check that the app compiles, stop the dev server, delete `.next`, and run `npx next build` instead.
 - **Windows + `npm run build`'s `prebuild` step can `ENOTEMPTY` on `.next/dev`** if the dev server is running concurrently — same root cause as the Prisma one. `npx tsc --noEmit` + targeted `eslint <file>` is an acceptable stand-in when a full build can't run for this reason, *provided* no schema/migration change is part of what's being verified.
 - A pre-commit hook blocks `schema.prisma` changes without a matching migration file — don't try to bypass it; write the migration.
