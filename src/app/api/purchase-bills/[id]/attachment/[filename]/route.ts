@@ -2,14 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { get } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/apiAuth";
-import { getPrivateBlobToken } from "@/lib/blobStorage";
-
-// A CR/LF or quote in a Content-Disposition filename could inject extra headers or break the
-// value — same header-injection class the SMTP send routes already guard against.
-function safeFilename(name: string): string {
-  const cleaned = name.replace(/[\r\n"]/g, "").trim().slice(0, 200);
-  return cleaned || "attachment";
-}
+import { getPrivateBlobToken, attachmentContentDisposition } from "@/lib/blobStorage";
 
 // The [filename] segment is purely cosmetic — it makes the URL itself end in the real filename
 // instead of the fixed word "attachment", since browsers commonly derive a saved file's name from
@@ -24,9 +17,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const bill = await prisma.purchaseBill.findUnique({
       where: { id },
-      select: { attachmentUrl: true, attachmentName: true },
+      select: { attachmentUrl: true, attachmentName: true, deletedAt: true },
     });
-    if (!bill?.attachmentUrl) {
+    // A binned bill's attachment is only reachable by an admin (who manages the Bin) — anyone else
+    // gets the same 404 as a missing attachment rather than a hint that the bill exists.
+    if (!bill?.attachmentUrl || (bill.deletedAt && auth.session.user.role !== "admin")) {
       return NextResponse.json({ error: "Attachment not found" }, { status: 404 });
     }
 
@@ -44,12 +39,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Attachment not found" }, { status: 404 });
     }
 
-    const filename = safeFilename(bill.attachmentName || result.blob.pathname.split("/").pop() || "attachment");
+    const filename = bill.attachmentName || result.blob.pathname.split("/").pop() || "attachment";
 
     return new NextResponse(result.stream, {
       headers: {
         "Content-Type": result.blob.contentType || "application/octet-stream",
-        "Content-Disposition": `inline; filename="${filename}"`,
+        "Content-Disposition": attachmentContentDisposition(filename),
         "Cache-Control": "private, no-store",
       },
     });

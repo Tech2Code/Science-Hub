@@ -76,7 +76,7 @@ export default function CustomersPage() {
   listParams.set("pageSize", String(pageSize));
   const apiUrl = `/api/customers?${listParams.toString()}`;
 
-  const { data, loading, mutate } = useFetch<CustomerListResponse>(apiUrl);
+  const { data, loading, error, mutate } = useFetch<CustomerListResponse>(apiUrl);
   const customers = data?.data ?? [];
   const total = data?.total ?? 0;
   const showSkeleton = loading && !data;
@@ -88,7 +88,15 @@ export default function CustomersPage() {
       message: `Move "${name}" to bin? You can restore it within 30 days.`,
       onConfirm: async () => {
         setDeleting(true);
-        const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
+        let res: Response;
+        try {
+          res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
+        } catch {
+          setDeleting(false);
+          setConfirmState(null);
+          toast({ type: "error", title: "Delete failed", message: "Network error. Please try again." });
+          return;
+        }
         const resBody = await res.json().catch(() => ({}));
         setDeleting(false);
         setConfirmState(null);
@@ -154,6 +162,11 @@ export default function CustomersPage() {
             <tbody>
               {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
+              ) : error ? (
+                <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
+                  <span style={{ color: "var(--c-red-text)" }}>Couldn&apos;t load customers.</span>{" "}
+                  <Button size="sm" variant="secondary" onClick={() => mutate()}>Retry</Button>
+                </td></tr>
               ) : customers.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
                   {search ? "No customers match your search." : "No customers yet. Add one to get started."}

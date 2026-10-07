@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseRateListRows, parseCsvLine, parsePastedRateListText } from "@/lib/rateListImport";
+import { parseRateListRows, parseCsvLine, parsePastedRateListText, parseImportNumber } from "@/lib/rateListImport";
 
 describe("parseCsvLine", () => {
   it("splits a plain comma-separated line", () => {
@@ -93,5 +93,28 @@ describe("parsePastedRateListText", () => {
     const { items } = parsePastedRateListText(text);
     expect(items[0].name).toBe("Widget");
     expect(items[0].listRate).toBe("100");
+  });
+});
+
+describe("parseImportNumber", () => {
+  it("strips a currency prefix, thousands commas and spaces", () => {
+    expect(Number(parseImportNumber("Rs. 1,234.50"))).toBe(1234.5);
+    expect(Number(parseImportNumber("₹500"))).toBe(500);
+    expect(Number(parseImportNumber("INR 2 500"))).toBe(2500);
+    expect(Number(parseImportNumber("1,00,000"))).toBe(100000);
+  });
+
+  it("rejects negative, exponent and multi-dot values instead of mangling them", () => {
+    expect(parseImportNumber("-10")).toBe("");
+    expect(parseImportNumber("1e3")).toBe("");
+    expect(parseImportNumber("1.2.3")).toBe("");
+    expect(parseImportNumber("abc")).toBe("");
+  });
+
+  it("skips a rate list row whose list rate is negative rather than importing it as positive", () => {
+    const { items, skipped } = parseRateListRows([["Name", "List Rate"], ["Widget", "-10"], ["Gadget", "Rs. 1,250"]]);
+    expect(skipped).toBe(1);
+    expect(items).toHaveLength(1);
+    expect(items[0].listRate).toBe("1250");
   });
 });

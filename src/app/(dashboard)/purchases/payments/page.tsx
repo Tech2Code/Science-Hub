@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import { Button } from "@/components/ui/Button";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { SearchField } from "@/components/ui/SearchField";
@@ -95,7 +96,7 @@ export default function PurchasePaymentsPage() {
   listParams.set("pageSize", String(pageSize));
   const apiUrl = `/api/purchase-bills/payments?${listParams.toString()}`;
 
-  const { data, loading } = useFetch<PurchasePaymentListResponse>(apiUrl);
+  const { data, loading, error, mutate } = useFetch<PurchasePaymentListResponse>(apiUrl);
   const { data: stats } = useFetch<PurchasePaymentStats>("/api/purchase-bills/payments/stats");
   const payments = data?.data ?? [];
   const total = data?.total ?? 0;
@@ -140,6 +141,13 @@ export default function PurchasePaymentsPage() {
             <tbody>
               {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
+              ) : error && !loading ? (
+                <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
+                  <div role="alert" className={`error-banner ${styles.loadError}`}>
+                    Couldn&apos;t load payments.
+                    <Button variant="secondary" size="sm" onClick={() => { void mutate(); }}>Retry</Button>
+                  </div>
+                </td></tr>
               ) : payments.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search ? "No payments match your search." : "No purchase payments recorded yet."}

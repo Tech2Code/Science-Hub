@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { requireAdmin } from "@/lib/apiAuth";
 import { deleteAttachmentBlob, isLogoBlobUrl } from "@/lib/blobStorage";
+import { revalidateTag } from "next/cache";
 
 const MAX_SIZE = 2 * 1024 * 1024; // 2 MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
       addRandomSuffix: true,
     });
 
+    revalidateTag("settings", { expire: 0 });
     return NextResponse.json({ url: blob.url });
   } catch (error) {
     console.error("POST /api/settings/logo error:", error);
@@ -68,6 +70,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Invalid url" }, { status: 400 });
     }
     await deleteAttachmentBlob(url);
+    revalidateTag("settings", { expire: 0 });
     return NextResponse.json({ message: "Deleted" });
   } catch (error) {
     console.error("DELETE /api/settings/logo error:", error);

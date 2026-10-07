@@ -32,7 +32,9 @@ export const authOptions: NextAuthOptions = {
           || headers["x-forwarded-for"]?.split(",")[0]?.trim()
           || "unknown";
         const ipLimit = rateLimit(`login:ip:${ip}`, 30, 15 * 60 * 1000);
-        const accountLimit = rateLimit(`login:${email}`, 8, 15 * 60 * 1000);
+        // Keyed by email+IP so an attacker can't lock a real user out of their own account
+        // (login DoS) just by spamming wrong passwords for that email from elsewhere.
+        const accountLimit = rateLimit(`login:${email}:${ip}`, 8, 15 * 60 * 1000);
         if (!ipLimit.allowed || !accountLimit.allowed) return null;
 
         // A DB error must not surface as a message distinct from "wrong password" (would leak which
@@ -113,11 +115,11 @@ export const authOptions: NextAuthOptions = {
       token.tokenVersion = current.tokenVersion;
       token.tvCheckedAt = Date.now();
 
-      if (trigger === "update") {
-        token.name = current.name;
-        token.email = current.email;
-        token.role = current.role;
-      }
+      // Always refresh from the DB on each periodic re-check (not only on update()) so a role
+      // change by an admin propagates within the check interval even if the user never calls update().
+      token.name = current.name;
+      token.email = current.email;
+      token.role = current.role;
       return token;
     },
     async session({ session, token }) {

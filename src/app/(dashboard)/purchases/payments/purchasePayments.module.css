@@ -81,3 +81,12 @@
   --badge-color: var(--c-text-3);
   --badge-border: var(--c-border);
 }
+
+/* Fetch-failure row: error-banner text + Retry button, shown instead of a false empty state. */
+.loadError {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}

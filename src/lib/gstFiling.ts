@@ -37,6 +37,17 @@ export interface CreditNoteRow {
   returnId: string; creditNoteNumber: string; date: Date; invoiceNumber: string; customerName: string; customerGstin: string;
   productName: string; quantity: number; taxableValue: number; gstRate: number;
   cgst: number; sgst: number; igst: number; total: number;
+  // Resolved from the credit note's own original invoice (not from this period's Sales Register),
+  // so a credit note dated in this period is still reported even when its invoice was dated in an
+  // earlier period. placeOfSupply falls back to the customer's state, same as the Sales Register.
+  placeOfSupply: string; reverseCharge: boolean; invoiceDate: Date; invoiceTotal: number;
+}
+
+// Shared by the headline summary below and the GSTR-1 cdnr.csv exporter, so the two can never
+// disagree on which credit notes are actually filed: a credit note needs an assigned number and a
+// place of supply (taken from its own original invoice) that resolves to a recognized GST state/UT.
+export function isCreditNoteFileable(cn: Pick<CreditNoteRow, "creditNoteNumber" | "placeOfSupply">): boolean {
+  return cn.creditNoteNumber !== "—" && isPosResolvable(cn.placeOfSupply);
 }
 
 export interface PurchaseRegisterRow {
@@ -66,6 +77,9 @@ export interface GstFilingReport {
     creditNoteTaxable: number; creditNoteTax: number;
     netOutputTax: number;
     inputTaxable: number; inputTax: number;
+    // Tax paid on bills from vendors with no GSTIN on file — not claimable as ITC, so excluded
+    // from inputTax/netGstPayable, but surfaced separately so it doesn't silently disappear.
+    ineligibleInputTaxable: number; ineligibleInputTax: number;
     rawNetGstPayable: number; netGstPayableRoundOff: number; netGstPayable: number;
   };
   validation: { issues: ValidationIssue[]; errorCount: number; warningCount: number };
@@ -89,7 +103,7 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
       where: { date: { gte: start, lte: end }, deletedAt: null, invoice: { deletedAt: null } },
       include: {
         items: true,
-        invoice: { select: { invoiceNumber: true, isInterState: true, placeOfSupply: true, customer: { select: { name: true, gstin: true, state: true } } } },
+        invoice: { select: { invoiceNumber: true, date: true, total: true, isInterState: true, placeOfSupply: true, reverseCharge: true, customer: { select: { name: true, gstin: true, state: true } } } },
       },
       orderBy: { date: "asc" },
     }),
@@ -277,11 +291,6 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
 
   const b2bSales = salesRegister.filter((r) => r.isB2B);
   const b2cSales = salesRegister.filter((r) => !r.isB2B);
-  // One row per invoice already (salesRegister.push runs once per invoice above), so this is a
-  // safe 1:1 lookup — used below to apply the exact same "was this invoice actually filed"
-  // condition the CDNR CSV uses (see gstr1CsvExport.ts: a credit note is dropped from cdnr.csv
-  // when its invoice isn't in-period or its place-of-supply doesn't resolve).
-  const posOkByInvoiceNumber = new Map(salesRegister.map((r) => [r.invoiceNumber, isPosResolvable(r.placeOfSupply)]));
   const hsnSummary = Array.from(hsnMap.values()).sort((a, b) => a.hsn.localeCompare(b.hsn));
   const hsnSummaryB2B = Array.from(hsnMapB2B.values()).sort((a, b) => a.hsn.localeCompare(b.hsn));
   const hsnSummaryB2C = Array.from(hsnMapB2C.values()).sort((a, b) => a.hsn.localeCompare(b.hsn));
@@ -295,6 +304,14 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
     if (!ret.creditNoteNumber) {
       issues.push(issue("warning", "Sales", `A credit note against invoice ${inv.invoiceNumber} has no credit note number (predates numbering) — assign one before filing.`, inv.invoiceNumber));
     }
+    // Resolved from the credit note's own invoice relation — that invoice may be dated in an
+    // earlier period and so be absent from this period's Sales Register entirely.
+    const cnPos = inv.placeOfSupply ?? inv.customer.state ?? "";
+    if (ret.creditNoteNumber && !cnPos.trim()) {
+      issues.push(issue("warning", "Sales", `Credit note ${ret.creditNoteNumber} (invoice ${inv.invoiceNumber}) has no place of supply recorded — excluded from the Net GST Payable totals (it will also be skipped by the GSTR-1 CSV export).`, ret.creditNoteNumber));
+    } else if (ret.creditNoteNumber && !isPosResolvable(cnPos)) {
+      issues.push(issue("warning", "Sales", `Place of supply "${cnPos}" on credit note ${ret.creditNoteNumber} (invoice ${inv.invoiceNumber}) doesn't match a recognized GST state/UT — excluded from the Net GST Payable totals (it will also be skipped by the GSTR-1 CSV export).`, ret.creditNoteNumber));
+    }
     for (const ri of ret.items) {
       const gstAmt = ri.gstAmount;
       creditNotes.push({
@@ -305,6 +322,7 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
         taxableValue: ri.total - gstAmt, gstRate: ri.gstRate,
         cgst: inv.isInterState ? 0 : gstAmt / 2, sgst: inv.isInterState ? 0 : gstAmt / 2, igst: inv.isInterState ? gstAmt : 0,
         total: ri.total,
+        placeOfSupply: cnPos, reverseCharge: inv.reverseCharge, invoiceDate: inv.date, invoiceTotal: inv.total,
       });
     }
   }
@@ -317,7 +335,7 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
       issues.push(issue("warning", "Purchases", `Vendor GSTIN "${vendorGstin}" on bill ${b.billNumber} is not a valid 15-character GSTIN.`, b.billNumber));
     }
     if (!vendorGstin && b.taxAmount > 0) {
-      issues.push(issue("error", "Purchases", `Bill ${b.billNumber} includes GST (₹${b.taxAmount.toFixed(2)}) but vendor "${b.vendor.name}" has no GSTIN on file — ITC cannot be claimed without one.`, b.billNumber));
+      issues.push(issue("error", "Purchases", `Bill ${b.billNumber} includes GST (₹${b.taxAmount.toFixed(2)}) but vendor "${b.vendor.name}" has no GSTIN on file — ITC cannot be claimed without one (excluded from Input Tax Credit and shown as ineligible ITC instead).`, b.billNumber));
     }
     // Transport/freight charge on a purchase bill is real ITC-eligible tax paid to the vendor —
     // folded into the register's own taxableValue/taxAmount (unlike the sales side, there's no
@@ -337,16 +355,21 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
   const outputSgst = salesRegister.reduce((s, r) => (isPosResolvable(r.placeOfSupply) ? s + r.sgst : s), 0) + transportOutputSgst;
   const outputIgst = salesRegister.reduce((s, r) => (isPosResolvable(r.placeOfSupply) ? s + r.igst : s), 0) + transportOutputIgst;
   const outputTax = outputCgst + outputSgst + outputIgst;
-  // Excludes a credit note with no assigned number, or whose invoice is out-of-period/unresolvable
-  // place-of-supply — the same conditions under which cdnr.csv drops that row (see resolvePos() /
-  // the `if (!invoiceRow) continue` and `if (cn.creditNoteNumber === "—") continue` guards in
-  // gstr1CsvExport.ts) — so "Net GST Payable" never nets out more credit-note tax than the actual
-  // filed CSV accounts for.
-  const filedCreditNotes = creditNotes.filter((r) => r.creditNoteNumber !== "—" && (posOkByInvoiceNumber.get(r.invoiceNumber) ?? false));
+  // Excludes a credit note with no assigned number, or whose own place of supply (resolved from
+  // its original invoice, whatever period that invoice is dated in) doesn't resolve — the same
+  // isCreditNoteFileable() condition cdnr.csv uses in gstr1CsvExport.ts — so "Net GST Payable"
+  // never nets out more (or less) credit-note tax than the actual filed CSV accounts for.
+  const filedCreditNotes = creditNotes.filter(isCreditNoteFileable);
   const creditNoteTaxable = filedCreditNotes.reduce((s, r) => s + r.taxableValue, 0);
   const creditNoteTax = filedCreditNotes.reduce((s, r) => s + r.cgst + r.sgst + r.igst, 0);
-  const inputTaxable = purchaseRegister.reduce((s, r) => s + r.taxableValue, 0);
-  const inputTax = purchaseRegister.reduce((s, r) => s + r.taxAmount, 0);
+  // ITC is only claimable against a vendor GSTIN — a bill from a vendor with no GSTIN on file is
+  // excluded from inputTax/netGstPayable and kept visible as a separate "ineligible" figure.
+  const eligiblePurchases = purchaseRegister.filter((r) => r.vendorGstin.length > 0);
+  const ineligiblePurchases = purchaseRegister.filter((r) => r.vendorGstin.length === 0);
+  const inputTaxable = eligiblePurchases.reduce((s, r) => s + r.taxableValue, 0);
+  const inputTax = eligiblePurchases.reduce((s, r) => s + r.taxAmount, 0);
+  const ineligibleInputTaxable = ineligiblePurchases.reduce((s, r) => s + r.taxableValue, 0);
+  const ineligibleInputTax = ineligiblePurchases.reduce((s, r) => s + r.taxAmount, 0);
   const netOutputTax = outputTax - creditNoteTax;
 
   // Net GST Payable is what the business actually remits (or claims back), so it's rounded to the
@@ -365,6 +388,7 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
       outputTaxable, outputCgst, outputSgst, outputIgst, outputTax,
       creditNoteTaxable, creditNoteTax, netOutputTax,
       inputTaxable, inputTax,
+      ineligibleInputTaxable, ineligibleInputTax,
       rawNetGstPayable, netGstPayableRoundOff, netGstPayable,
     },
     validation: {

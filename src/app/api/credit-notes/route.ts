@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/apiAuth";
+import { requireSectionAccess } from "@/lib/apiAuth";
 import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
 import { buildReturnWhere, buildReturnOrderBy, type CreditNoteSort } from "@/lib/creditNoteQuery";
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireSession();
+    // Same gate as the Credit Notes page (ROUTE_SECTION_MAP), so the list can't be read via the API without it.
+    const auth = await requireSectionAccess("reports_sales");
     if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(request.url);

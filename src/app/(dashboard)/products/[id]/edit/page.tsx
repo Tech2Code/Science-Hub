@@ -71,8 +71,8 @@ export default function EditProductPage() {
   useEffect(() => {
     Promise.all([
       fetch(`/api/products/${id}`, { headers: { "x-no-loader": "1" } }).then((r) => r.json()),
-      fetch("/api/brands?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => d.data ?? []).catch(() => []),
-      fetch("/api/categories?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => d.data ?? []).catch(() => []),
+      fetch("/api/brands?pageSize=5000&slim=1", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => d.data ?? []).catch(() => []),
+      fetch("/api/categories?pageSize=5000&slim=1", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => d.data ?? []).catch(() => []),
     ])
       .then(([product, b, c]) => {
         const listPriceStr = product.listPrice != null ? product.listPrice.toString() : "";
@@ -114,20 +114,27 @@ export default function EditProductPage() {
 
   async function doSave() {
     setConfirmOpen(false); setSaving(true);
-    const res = await fetch(`/api/products/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: form.name, sku: form.sku, hsn: form.hsn, description: form.description, unit: form.unit,
-        price: resolveSellingPrice(form.price, form.purchasePrice), purchasePrice: form.purchasePrice.trim() ? parseFloat(form.purchasePrice) : null,
-        listPrice: form.listPrice.trim() ? parseFloat(form.listPrice) : null,
-        discountPercent: form.discountPercent.trim() ? parseFloat(form.discountPercent) : 0,
-        gstRate: parseFloat(form.gstRate),
-        minStock: parseInt(form.minStock),
-        brandId: form.brandId || null, categoryId: form.categoryId || null,
-        expectedUpdatedAt: loadedUpdatedAt,
-      }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/api/products/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name, sku: form.sku, hsn: form.hsn, description: form.description, unit: form.unit,
+          price: resolveSellingPrice(form.price, form.purchasePrice), purchasePrice: form.purchasePrice.trim() ? parseFloat(form.purchasePrice) : null,
+          listPrice: form.listPrice.trim() ? parseFloat(form.listPrice) : null,
+          discountPercent: form.discountPercent.trim() ? parseFloat(form.discountPercent) : 0,
+          gstRate: parseFloat(form.gstRate),
+          minStock: parseInt(form.minStock),
+          brandId: form.brandId || null, categoryId: form.categoryId || null,
+          expectedUpdatedAt: loadedUpdatedAt,
+        }),
+      });
+    } catch {
+      setSaving(false);
+      toast({ type: "error", title: "Failed", message: "Network error. Please try again." });
+      return;
+    }
     if (res.ok) {
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/products");

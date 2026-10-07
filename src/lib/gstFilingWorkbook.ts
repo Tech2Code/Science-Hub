@@ -134,16 +134,18 @@ export function buildGstFilingWorkbook(report: GstFilingReport): ExcelJS.Workboo
       { label: "Less: Credit Note Taxable Value", value: money(s.creditNoteTaxable) },
       { label: "Less: Credit Note Tax", value: money(s.creditNoteTax) },
       { label: "Net Output Tax", value: money(s.netOutputTax) },
-      { label: "Input Taxable Value (Purchases)", value: money(s.inputTaxable) },
+      { label: "Input Taxable Value (Purchases, ITC-eligible)", value: money(s.inputTaxable) },
       { label: "Input Tax Credit (ITC)", value: money(s.inputTax) },
+      { label: "Ineligible Purchases Taxable Value (vendor has no GSTIN)", value: money(s.ineligibleInputTaxable) },
+      { label: "Ineligible ITC — not claimed (vendor has no GSTIN)", value: money(s.ineligibleInputTax) },
       { label: "Net GST Payable (before round off)", value: money(s.rawNetGstPayable) },
       { label: "Round Off", value: money(s.netGstPayableRoundOff) },
       { label: "Net GST Payable (Rounded)", value: money(s.netGstPayable) },
     ]
   );
   const gstSummarySheet = wb.getWorksheet("GST Summary");
-  // Bold the final "Net GST Payable (Rounded)" row — 14 data rows below the header row (row 1) => row 15.
-  if (gstSummarySheet) gstSummarySheet.getRow(15).font = { bold: true };
+  // Bold the final "Net GST Payable (Rounded)" row — 16 data rows below the header row (row 1) => row 17.
+  if (gstSummarySheet) gstSummarySheet.getRow(17).font = { bold: true };
 
   return wb;
 }

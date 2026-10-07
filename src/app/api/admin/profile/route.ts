@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { logActivity } from "@/lib/activity";
 import { rules, validate } from "@/lib/validation";
 import { rateLimit } from "@/lib/rateLimit";
+import { revalidateTag } from "next/cache";
 
 const USER_SELECT = {
   id: true,
@@ -88,12 +89,32 @@ export async function PUT(request: NextRequest) {
       const emailErr = validate(normalizedEmail, rules.required("Email is required."), rules.email());
       if (emailErr) return NextResponse.json({ error: emailErr }, { status: 400 });
     }
-    if (normalizedEmail !== undefined && normalizedEmail !== currentUser.email) {
+    const emailChanged = normalizedEmail !== undefined && normalizedEmail !== currentUser.email;
+    if (emailChanged) {
       const conflict = await prisma.user.findUnique({ where: { email: normalizedEmail } });
       if (conflict) {
         return NextResponse.json(
-          { error: "A user with that email already exists" },
+          { error: "A user with that email already exists", field: "email" },
           { status: 409 }
+        );
+      }
+      // Changing the login email is an account-takeover vector for a session/cookie thief —
+      // require the current password, same as a password change.
+      const limit = rateLimit(`profile-password:${currentUser.id}`, 10, 15 * 60 * 1000);
+      if (!limit.allowed) {
+        return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
+      }
+      if (!currentPassword) {
+        return NextResponse.json(
+          { error: "Enter your current password to change your email", field: "currentPassword" },
+          { status: 400 }
+        );
+      }
+      const validPw = await bcrypt.compare(currentPassword, currentUser.password);
+      if (!validPw) {
+        return NextResponse.json(
+          { error: "Current password is incorrect", field: "currentPassword" },
+          { status: 401 }
         );
       }
     }
@@ -138,10 +159,13 @@ export async function PUT(request: NextRequest) {
       data: {
         ...(name !== undefined && { name }),
         ...(normalizedEmail !== undefined && { email: normalizedEmail }),
-        ...(hashedPassword !== undefined && { password: hashedPassword, tokenVersion: { increment: 1 } }),
+        ...(hashedPassword !== undefined && { password: hashedPassword }),
+        // Email change also invalidates existing sessions — the client signs the user out after this.
+        ...((hashedPassword !== undefined || emailChanged) && { tokenVersion: { increment: 1 } }),
       },
       select: USER_SELECT,
     });
+    revalidateTag("users", { expire: 0 });
 
     if (hashedPassword !== undefined) {
       await logActivity(currentUser.id, "change_password", `Changed own password`, currentUser.id, "user");

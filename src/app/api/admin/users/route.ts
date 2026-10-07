@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { logActivity } from "@/lib/activity";
 import { validateUserInput } from "@/lib/validation";
 import { requireAdmin } from "@/lib/apiAuth";
+import { revalidateTag } from "next/cache";
 
 const USER_SELECT = {
   id: true,
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
       select: USER_SELECT,
     });
 
+    revalidateTag("users", { expire: 0 });
     const { session } = auth;
     await logActivity(session.user.id, "add_user", `Created user "${validName}" | Role: ${validRole} | Email: ${normalizedEmail}`, user.id, "user");
     return NextResponse.json(user, { status: 201 });

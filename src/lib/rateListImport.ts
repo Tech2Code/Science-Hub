@@ -75,6 +75,19 @@ export function parseCsvLine(line: string): string[] {
 
 const cellAt = (row: string[], idx: number | undefined): string => (idx !== undefined ? (row[idx] ?? "").trim() : "");
 
+/**
+ * Normalizes an imported numeric cell to a plain non-negative decimal string, or "" if it isn't one.
+ * Strips a leading currency prefix ("Rs.", "INR", "₹"), a trailing "%", thousands commas and spaces
+ * (so "Rs. 1,234.50" → "1234.50", "1,00,000" → "100000"), then requires a plain `digits[.digits]`
+ * shape — a negative, exponent ("1e3"), or multi-dot value is rejected rather than having its
+ * stray characters silently stripped into a different, wrong number (e.g. "-10" → "10").
+ * Shared with productImport.ts.
+ */
+export function parseImportNumber(raw: string): string {
+  const s = raw.trim().replace(/^(rs\.?|inr|₹)\s*/i, "").replace(/%$/, "").replace(/[,\s]/g, "");
+  return /^\d+(\.\d+)?$/.test(s) ? s : "";
+}
+
 /** Parses a rows/columns grid into Rate List items, detecting a header by column-name matching or
  *  falling back to a positional guess (either this app's item order or a supplier's printed-table shape). */
 export function parseRateListRows(rows: string[][]): ParsedRateListResult {
@@ -98,7 +111,7 @@ export function parseRateListRows(rows: string[][]): ParsedRateListResult {
   for (const row of dataRows) {
     if (row.every((c) => !c.trim())) continue;
     const name = cellAt(row, cols.name);
-    const listRate = cellAt(row, cols.listRate).replace(/[^\d.]/g, "");
+    const listRate = parseImportNumber(cellAt(row, cols.listRate));
     if (!name || !listRate) { skipped++; continue; }
     const { isNetRate, discountPercent } = cols.discount !== undefined ? parseDiscountCell(cellAt(row, cols.discount)) : { isNetRate: false, discountPercent: "0" };
     items.push({

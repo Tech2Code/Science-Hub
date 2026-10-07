@@ -220,7 +220,20 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
     if (!/^\d*(\.\d{0,3})?$/.test(cleaned)) return;
     setQtyDrafts((prev) => ({ ...prev, [key]: raw }));
     const parsed = parseFloat(cleaned);
-    updateItem(idx, "qty", isNaN(parsed) || parsed <= 0 ? 1 : parsed);
+    // While the draft is empty/"0" (mid-edit), leave the stored qty alone — writing a fallback 1
+    // here made totals show a qty the field didn't. Blur normalizes it (see commitQtyDraft).
+    if (!isNaN(parsed) && parsed > 0) updateItem(idx, "qty", parsed);
+  }
+
+  // On blur: an empty/zero draft falls back to qty 1 (unchanged behavior), then the draft is dropped
+  // so the field shows the stored value again.
+  function commitQtyDraft(idx: number, key: string) {
+    const draft = qtyDrafts[key];
+    if (draft !== undefined) {
+      const parsed = parseFloat(draft.replace(/[^\d.]/g, ""));
+      if (isNaN(parsed) || parsed <= 0) updateItem(idx, "qty", 1);
+    }
+    clearQtyDraft(key);
   }
 
   function clearQtyDraft(key: string) {
@@ -371,7 +384,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
                         sz="sm" type="number" min="1" step="1"
                         value={qtyDrafts[item.key] ?? String(item.qty)}
                         onChange={(e) => handleQtyChange(idx, item.key, e.target.value)}
-                        onBlur={() => clearQtyDraft(item.key)}
+                        onBlur={() => commitQtyDraft(idx, item.key)}
                         aria-label={`Quantity for ${item.productName}`}
                         className={styles.qtyInput}
                       />

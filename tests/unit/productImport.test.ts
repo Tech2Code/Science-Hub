@@ -68,3 +68,24 @@ describe("parsePastedProductText", () => {
     ]);
   });
 });
+
+describe("parseProductRows — Unit Price header and number parsing", () => {
+  it("maps a 'Unit Price' header to price, not unit", () => {
+    const { items } = parseProductRows([
+      ["Name", "Unit", "List Price", "Unit Price"],
+      ["Beaker", "Pcs", "100", "120"],
+    ]);
+    expect(items[0]).toMatchObject({ unit: "Pcs", listPrice: "100", price: "120" });
+  });
+
+  it("parses currency/thousands formatted prices and treats a negative as an empty cell", () => {
+    const { items, skipped } = parseProductRows([
+      ["Name", "List Price", "Selling Price"],
+      ["Beaker", "Rs. 1,234.50", "-10"],
+      ["Flask", "-5", "10"],
+    ]);
+    expect(skipped).toBe(1);
+    expect(Number(items[0].listPrice)).toBe(1234.5);
+    expect(items[0].price).toBe("");
+  });
+});

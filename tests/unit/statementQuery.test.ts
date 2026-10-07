@@ -75,3 +75,33 @@ describe("buildLedger", () => {
     expect(result.closingBalance).toBe(-600);
   });
 });
+
+describe("buildLedger — same IST day ordering", () => {
+  it("puts a same-day invoice before its payment so the running balance never dips negative", () => {
+    // Payment stored at IST midnight (18:30Z the previous UTC day); invoice created at 15:00 IST the same day.
+    const entries: LedgerEntry[] = [
+      entry({ date: new Date("2026-03-09T18:30:00Z"), type: "payment", refId: "pay", debit: 0, credit: 1000 }),
+      entry({ date: new Date("2026-03-10T09:30:00Z"), type: "invoice", refId: "inv", debit: 1000, credit: 0 }),
+    ];
+    const result = buildLedger(entries);
+    expect(result.rows.map((r) => r.refId)).toEqual(["inv", "pay"]);
+    expect(result.rows.every((r) => r.balance >= 0)).toBe(true);
+    expect(result.closingBalance).toBe(0);
+  });
+
+  it("orders a vendor's same-day bill before its payment too", () => {
+    const entries: LedgerEntry[] = [
+      entry({ date: new Date("2026-03-09T18:30:00Z"), type: "purchase_payment", refId: "pp", debit: 500, credit: 0 }),
+      entry({ date: new Date("2026-03-10T09:30:00Z"), type: "purchase_bill", refId: "pb", debit: 0, credit: 500 }),
+    ];
+    expect(buildLedger(entries).rows.map((r) => r.refId)).toEqual(["pb", "pp"]);
+  });
+
+  it("still orders entries on different IST days strictly by date", () => {
+    const entries: LedgerEntry[] = [
+      entry({ date: new Date("2026-03-11T00:00:00Z"), type: "invoice", refId: "later-inv", debit: 100, credit: 0 }),
+      entry({ date: new Date("2026-03-10T09:30:00Z"), type: "payment", refId: "earlier-pay", debit: 0, credit: 50 }),
+    ];
+    expect(buildLedger(entries).rows.map((r) => r.refId)).toEqual(["earlier-pay", "later-inv"]);
+  });
+});

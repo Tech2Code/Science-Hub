@@ -72,7 +72,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         gstin: gstin?.trim() || null, phone: phone?.trim() || null,
         email: email?.trim() || null, address: address?.trim() || null,
         city: city?.trim() || null, state: state?.trim() || null, pincode: pincode?.trim() || null,
-        notes: notes?.trim() || null, isActive: isActive !== false,
+        // Partial editors (e.g. Purchase Bill's inline vendor edit) omit these — leave them untouched
+        // rather than wiping notes / silently reactivating an inactive vendor.
+        ...(notes !== undefined ? { notes: notes?.trim() || null } : {}),
+        ...(isActive !== undefined ? { isActive: isActive !== false } : {}),
       },
     });
     await logActivity(auth.session.user.id, "update_vendor", `Updated vendor "${vendor.name}"`, vendor.id, "vendor");

@@ -103,15 +103,18 @@ export async function POST(req: NextRequest) {
     const vendor = await prisma.vendor.findUnique({ where: { id: vendorId } });
     if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 400 });
 
-    if (billDate && isFutureIstDate(billDate)) {
-      return NextResponse.json({ error: "Bill date cannot be in the future" }, { status: 400 });
-    }
-
     // `billDate` arrives as a plain "YYYY-MM-DD" string (a bill can be entered late for an earlier
     // period, so unlike Invoice this is genuinely user-supplied at creation) — istDayStartUtc()
     // anchors it to the real IST calendar-day boundary. A bare `new Date(billDate)` parses it as
     // UTC midnight, ~5.5 hours before the actual IST day starts.
     const effectiveBillDate = billDate ? istDayStartUtc(billDate) : new Date();
+    if (isNaN(effectiveBillDate.getTime())) {
+      return NextResponse.json({ error: "Invalid bill date" }, { status: 400 });
+    }
+
+    if (billDate && isFutureIstDate(billDate)) {
+      return NextResponse.json({ error: "Bill date cannot be in the future" }, { status: 400 });
+    }
 
     let parsedDueDate: Date | undefined;
     if (dueDate) {
@@ -194,6 +197,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
     }
 
+    // Mirrors /api/invoices — a line pointing at a missing or binned product would otherwise either
+    // fail deep inside batchAdjustStock() or silently restock a product sitting in the Bin.
+    {
+      const productIds = (items as { productId?: string }[]).map((item) => item.productId).filter((v): v is string => !!v);
+      if (productIds.length > 0) {
+        const found = await prisma.product.findMany({ where: { id: { in: productIds }, deletedAt: null }, select: { id: true } });
+        const foundIds = new Set(found.map((p) => p.id));
+        if (productIds.some((pid) => !foundIds.has(pid))) {
+          return NextResponse.json({ error: "One or more selected products could not be found — they may have been deleted. Please remove and re-add the item." }, { status: 400 });
+        }
+      }
+    }
+
+    // One blob belongs to exactly one bill — reusing another bill's attachment URL would let a later
+    // replace/delete on either bill remove the file out from under the other one.
+    if (attachmentUrl) {
+      const owner = await prisma.purchaseBill.findFirst({ where: { attachmentUrl }, select: { id: true } });
+      if (owner) {
+        return NextResponse.json({ error: "This attachment is already linked to another purchase bill. Please upload the file again." }, { status: 400 });
+      }
+    }
+
     // Recompute every item's GST/total server-side so a tampered client total can never persist; discount applies before GST (taxable = gross - discount).
     const computedItems = (items as {
       productId?: string; name: string; quantity: number; hsn?: string;
@@ -258,6 +283,9 @@ export async function POST(req: NextRequest) {
     }
     const { roundOff, roundedTotal: billTotal } = computeRoundOff(subtotal + taxAmount - parsedDiscount + transportChargeVal + transportChargeGstAmountVal);
     if (billTotal < 0) return NextResponse.json({ error: "Discount cannot exceed the bill total" }, { status: 400 });
+    if (payAmt > billTotal + 0.01) {
+      return NextResponse.json({ error: `Payment amount can't exceed the bill total (₹${billTotal.toFixed(2)}).` }, { status: 400 });
+    }
     const paidAmount = Math.min(payAmt, billTotal);
     const status = paidAmount >= billTotal && billTotal > 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
     // Indian FY of the bill's own billDate (not "now"), since a bill can be entered late for an earlier period.

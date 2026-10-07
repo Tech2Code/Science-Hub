@@ -109,7 +109,7 @@ export default function ProductsPage() {
   listParams.set("pageSize", String(pageSize));
   const apiUrl = `/api/products?${listParams.toString()}`;
 
-  const { data, loading, mutate } = useFetch<ProductListResponse>(apiUrl);
+  const { data, loading, error, mutate } = useFetch<ProductListResponse>(apiUrl);
   const { data: stats, mutate: mutateStats } = useFetch<ProductStats>("/api/products/stats");
   const products = data?.data ?? [];
   const total = data?.total ?? 0;
@@ -125,7 +125,15 @@ export default function ProductsPage() {
       message: `Delete "${name}"? This will permanently remove it from your catalog.`,
       onConfirm: async () => {
         setDeleting(true);
-        const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
+        let res: Response;
+        try {
+          res = await fetch(`/api/products/${id}`, { method: "DELETE" });
+        } catch {
+          setDeleting(false);
+          setConfirmState(null);
+          toast({ type: "error", title: "Delete failed", message: "Network error. Please try again." });
+          return;
+        }
         const resBody = await res.json().catch(() => ({}));
         setDeleting(false);
         setConfirmState(null);
@@ -240,6 +248,11 @@ export default function ProductsPage() {
             <tbody>
               {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
+              ) : error ? (
+                <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
+                  <span style={{ color: "var(--c-red-text)" }}>Couldn&apos;t load products.</span>{" "}
+                  <Button size="sm" variant="secondary" onClick={() => mutate()}>Retry</Button>
+                </td></tr>
               ) : products.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
                   {stockFilter === "out" ? "No out-of-stock products." : stockFilter === "low" ? "No low-stock products." : search ? "No products match your search." : "No products yet. Add one to get started."}

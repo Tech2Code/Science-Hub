@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { isLowStock } from "@/lib/stockStatus";
 import { formatDateTime } from "@/lib/formatDate";
+import { useCanWrite } from "@/lib/useCanWrite";
 import type { Column } from "@/components/ui/Table";
 import styles from "./TaxonomyDetailPage.module.css";
 
@@ -46,6 +47,7 @@ export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();
+  const canWrite = useCanWrite();
   const [entity, setEntity] = useState<TaxonomyEntity | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -152,7 +154,7 @@ export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }
             <div className={styles.avatar}>
               <SkeletonSwap loading={loading} w={48} h={48} r={9999}>{entity?.name?.[0]?.toUpperCase()}</SkeletonSwap>
             </div>
-            {renaming ? (
+            {renaming && canWrite ? (
               <div className={styles.renameRow}>
                 <Input
                   sz="sm"
@@ -180,16 +182,18 @@ export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }
             )}
           </div>
           <div className={styles.headerActions}>
-            {!renaming && (
+            {canWrite && !renaming && (
               <Button variant="editOutline" disabled={loading} onClick={startRename}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 Rename
               </Button>
             )}
-            <Button variant="danger" disabled={loading} onClick={() => setConfirmOpen(true)}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
-              Delete
-            </Button>
+            {canWrite && (
+              <Button variant="danger" disabled={loading} onClick={() => setConfirmOpen(true)}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                Delete
+              </Button>
+            )}
           </div>
         </div>
       </div>

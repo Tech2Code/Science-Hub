@@ -18,6 +18,15 @@ export async function GET(request: NextRequest) {
     const { skip, take } = parsePageParams(searchParams, 5000);
 
     const where = buildBrandWhere(search);
+
+    // ?slim=1 — dropdown/picker callers only need { id, name }; skip product counts and the createdBy lookup.
+    if (searchParams.get("slim") === "1") {
+      const [data, total] = await Promise.all([
+        prisma.brand.findMany({ where, orderBy: buildBrandOrderBy(sort), skip, take, select: { id: true, name: true } }),
+        prisma.brand.count({ where }),
+      ]);
+      return NextResponse.json({ data, total });
+    }
     const [brands, total] = await Promise.all([
       prisma.brand.findMany({
         where,
@@ -51,12 +60,13 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let trimmedName = "";
   try {
     const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
-    const trimmedName = typeof body.name === "string" ? body.name.trim() : "";
+    trimmedName = typeof body.name === "string" ? body.name.trim() : "";
 
     if (!trimmedName) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -76,6 +86,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(brand, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      // The unique index covers soft-deleted rows too — point the user at the Bin instead of a
+      // confusing "already exists" when the only clash is a brand they can't see in the list.
+      const clash = trimmedName ? await prisma.brand.findUnique({ where: { name: trimmedName }, select: { deletedAt: true } }).catch(() => null) : null;
+      if (clash?.deletedAt) {
+        return NextResponse.json({ error: `A brand named "${trimmedName}" is in the Recycle Bin — restore it from the Bin instead.` }, { status: 409 });
+      }
       return NextResponse.json({ error: "A brand with this name already exists" }, { status: 409 });
     }
     console.error("POST /api/brands error:", error);

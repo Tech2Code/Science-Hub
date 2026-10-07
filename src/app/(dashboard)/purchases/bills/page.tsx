@@ -297,7 +297,7 @@ export default function PurchasesPage() {
   if (year) statsParams.set("year", year);
   const statsUrl = `/api/purchase-bills/stats?${statsParams.toString()}`;
 
-  const { data, loading, mutate } = useFetch<PurchaseBillListResponse>(apiUrl);
+  const { data, loading, error, mutate } = useFetch<PurchaseBillListResponse>(apiUrl);
   const { data: stats, mutate: mutateStats } = useFetch<PurchaseBillStats>(statsUrl);
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
   const bills = data?.data ?? [];
@@ -323,6 +323,7 @@ export default function PurchasesPage() {
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");
+        bustCachePrefix("/api/vendors");
         invalidateCachedPdf("purchase-bill", target.id);
         toast({ type: "success", title: "Moved to bin", message: `${target.billNumber} moved to bin. You can restore it within 30 days.` });
       } else {
@@ -461,6 +462,13 @@ export default function PurchasesPage() {
             <tbody>
               {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
+              ) : error && !loading ? (
+                <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
+                  <div role="alert" className={`error-banner ${styles.loadError}`}>
+                    Couldn&apos;t load purchase bills.
+                    <Button variant="secondary" size="sm" onClick={() => { void mutate(); }}>Retry</Button>
+                  </div>
+                </td></tr>
               ) : bills.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search.trim() ? `No bills match "${search}".` : (month || year) ? "No purchase bills found for this period." : "No purchase bills yet."}

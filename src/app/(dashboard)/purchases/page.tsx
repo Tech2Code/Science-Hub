@@ -10,6 +10,7 @@ import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { useHasSection } from "@/lib/useHasSection";
 import { formatMonthYear } from "@/lib/formatDate";
 import { PeriodFilter, defaultPeriod, periodToQuery, periodLabel as fmtPeriodLabel, type PeriodValue } from "@/components/dashboard/PeriodFilter";
 import styles from "./purchasesOverview.module.css";
@@ -100,6 +101,7 @@ export default function PurchaseDashboardPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const canWrite = useCanWrite();
+  const canViewReports = useHasSection("reports_purchases");
   useEffect(() => {
     if (!session) return;
     const role = session.user?.role;
@@ -146,7 +148,7 @@ export default function PurchaseDashboardPage() {
           {canWrite && <Button variant="secondary" href="/purchases/vendors/new">+ New Vendor</Button>}
           <Button variant="secondary" href="/purchases/bills">All Bills</Button>
           <Button variant="secondary" href="/purchases/vendors">All Vendors</Button>
-          <Button variant="secondary" href="/reports/purchases">Purchase Reports</Button>
+          {canViewReports && <Button variant="secondary" href="/reports/purchases">Purchase Reports</Button>}
         </div>
       </div>
 

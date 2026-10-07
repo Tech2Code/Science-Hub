@@ -41,7 +41,7 @@
 .input::placeholder { color: var(--c-text-4); }
 .input:focus {
   border-color: var(--c-blue);
-  box-shadow: 0 0 0 3px var(--c-blue-bg);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-blue) 35%, transparent);
 }
 .input::-webkit-search-cancel-button { display: none; }
 

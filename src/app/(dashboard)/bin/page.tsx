@@ -83,6 +83,13 @@ const TYPE_CACHE_PREFIXES: Record<BinType, string[]> = {
   rate_list:     ["/api/rate-lists"],
 };
 
+// Restoring/permanently deleting any item can change a customer's or vendor's derived counts
+// (active invoice/bill counts shown on their list pages), so both are busted regardless of type.
+function bustPartyCaches() {
+  bustCachePrefix("/api/customers");
+  bustCachePrefix("/api/vendors");
+}
+
 function DaysLeftPill({ daysLeft }: { daysLeft: number }) {
   // -1 = invoices/purchase bills/credit notes, exempt from auto-purge
   // because their numbers are legally significant GST document numbers.
@@ -109,13 +116,15 @@ const BIN_COLUMNS: Column[] = [
 ];
 
 function TypeSection({
-  type, items, index, onRestore, onDeleteForever, retainedCounts, loadingMore, onLoadMore,
+  type, items, index, onRestore, onDeleteForever, canDeleteForever, retainedCounts, loadingMore, onLoadMore,
 }: {
   type: BinType;
   items: BinItem[];
   index: number;
   onRestore: (item: BinItem) => void;
   onDeleteForever: (item: BinItem) => void;
+  /** Permanent delete is admin-only server-side (requireAdmin) — hide it for staff. */
+  canDeleteForever: boolean;
   retainedCounts?: RetainedCounts;
   loadingMore?: boolean;
   onLoadMore?: () => void;
@@ -186,7 +195,7 @@ function TypeSection({
                   <Cell col={BIN_COLUMNS[5]}>
                     <div className="table-actions">
                       <Button variant="editOutline" size="sm" onClick={() => onRestore(item)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>Restore</Button>
-                      <Button
+                      {canDeleteForever && (<Button
                         variant="dangerOutline"
                         size="sm"
                         disabled={!!item.protectedReason}
@@ -194,7 +203,7 @@ function TypeSection({
                         onClick={() => onDeleteForever(item)}
                       >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>Delete Forever
-                      </Button>
+                      </Button>)}
                     </div>
                   </Cell>
                 </tr>
@@ -223,7 +232,7 @@ const RETAINED_LOAD_MORE_STEP = 200;
 
 export default function BinPage() {
   const [retainedLimit, setRetainedLimit] = useState(100);
-  const { data, loading, mutate } = useFetch<BinResponse>(`/api/bin?limit=${retainedLimit}`);
+  const { data, loading, error, mutate } = useFetch<BinResponse>(`/api/bin?limit=${retainedLimit}`);
   const items = useMemo(() => data?.items ?? [], [data]);
   // Only the very first load (no data cached yet at any limit) should show the full-page
   // skeleton — bumping the limit via "Load more" re-fetches a new URL but the previous data
@@ -270,6 +279,7 @@ export default function BinPage() {
           if (res.ok) {
             mutate();
             TYPE_CACHE_PREFIXES[item.type].forEach(bustCachePrefix);
+            bustPartyCaches();
             bustNotificationCaches();
             toast({ type: "success", title: "Restored", message: `"${item.name}" restored successfully.` });
           } else {
@@ -309,6 +319,7 @@ export default function BinPage() {
           if (res.ok) {
             mutate();
             TYPE_CACHE_PREFIXES[item.type].forEach(bustCachePrefix);
+            bustPartyCaches();
             bustNotificationCaches();
             toast({ type: "success", title: "Permanently deleted", message: `"${item.name}" has been permanently deleted.` });
           } else {
@@ -436,6 +447,8 @@ export default function BinPage() {
           <p className="page-sub">
             {isInitialLoad
               ? "Loading…"
+              : error && !data
+              ? "Couldn't load bin items"
               : totalCount === 0
               ? "Bin is empty"
               : search.trim()
@@ -481,6 +494,13 @@ export default function BinPage() {
             </table>
           </div>
         </div>
+      ) : error && !loading && !data ? (
+        <div {...animateSection(0, `card ${styles.emptyState}`)}>
+          <div role="alert" className={`error-banner ${styles.loadError}`}>
+            Couldn&apos;t load the recycle bin.
+            <Button variant="secondary" size="sm" onClick={() => { void mutate(); }}>Retry</Button>
+          </div>
+        </div>
       ) : totalCount === 0 ? (
         <div {...animateSection(0, `card ${styles.emptyState}`)}>
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -503,6 +523,7 @@ export default function BinPage() {
             index={i + 1}
             onRestore={handleRestore}
             onDeleteForever={handleDeleteForever}
+            canDeleteForever={isAdmin}
             retainedCounts={RETAINED_TYPES.includes(type) ? data?.retained[type as "invoice" | "purchase_bill" | "return"] : undefined}
             loadingMore={loadingMore}
             onLoadMore={handleLoadMoreRetained}

@@ -84,11 +84,18 @@ export default function EditCustomerPage() {
 
   async function doSave() {
     setConfirmOpen(false); setSaving(true);
-    const res = await fetch(`/api/customers/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, expectedUpdatedAt: loadedUpdatedAt }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/api/customers/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, expectedUpdatedAt: loadedUpdatedAt }),
+      });
+    } catch {
+      setSaving(false);
+      toast({ type: "error", title: "Failed", message: "Network error. Please try again." });
+      return;
+    }
     if (res.ok) {
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/customers");

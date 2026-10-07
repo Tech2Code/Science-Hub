@@ -185,7 +185,7 @@ export default function EditPurchaseBillPage() {
       // the r.ok check, the {error: "..."} body would silently be treated as the bill itself and
       // crash the render below on bill.vendor.name.
       fetch(`/api/purchase-bills/${id}`, { headers: { "x-no-loader": "1" } }).then(r => { if (!r.ok) throw new Error("Failed to load bill."); return r.json(); }),
-      fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
+      fetch("/api/products?pageSize=5000&slim=1", { headers: { "x-no-loader": "1" } }).then(r => r.json()),
     ]).then(([b, p]: [PurchaseBill, { data: PurchaseBillProduct[] }]) => {
       setBill(b);
       setProducts(p.data ?? []);
@@ -236,7 +236,9 @@ export default function EditPurchaseBillPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- markClean is stable-enough for this one-time load
   }, [id]);
 
-  function discardIfUnsaved(url: string | null) {
+  // notifyOnError: only for an in-page Remove — Cancel/replace/stale-draft paths navigate away or
+  // run silently, where a toast would be lost or confusing.
+  function discardIfUnsaved(url: string | null, notifyOnError = false) {
     // Only ever discard a blob that isn't the bill's saved attachment — that
     // one is cleaned up by the PUT route itself once the change is committed.
     if (url && url !== originalAttachmentUrl.current) {
@@ -247,7 +249,13 @@ export default function EditPurchaseBillPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
         keepalive: true,
-      }).catch(() => {});
+      }).then(async (res) => {
+        if (res.ok || !notifyOnError) return;
+        const d = await res.json().catch(() => ({}));
+        toast({ type: "error", title: "Couldn't discard file", message: d.error ?? "The uploaded file could not be removed from storage." });
+      }).catch(() => {
+        if (notifyOnError) toast({ type: "error", title: "Network error", message: "The uploaded file could not be removed from storage." });
+      });
     }
   }
 
@@ -282,7 +290,7 @@ export default function EditPurchaseBillPage() {
   }
 
   function removeAttachment() {
-    discardIfUnsaved(attachmentUrl);
+    discardIfUnsaved(attachmentUrl, true);
     setAttachmentUrl(null);
     setAttachmentName(null);
     setAttachmentSize(null);
@@ -396,6 +404,8 @@ export default function EditPurchaseBillPage() {
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");
+        // The vendor may have changed — both the old and new vendor's bill counts are now stale.
+        bustCachePrefix("/api/vendors");
         bustCache("/api/units");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Bill updated", message: "Changes saved successfully." });

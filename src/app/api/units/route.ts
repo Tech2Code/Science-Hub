@@ -11,10 +11,12 @@ export async function GET() {
     const auth = await requireSession();
     if (!auth.ok) return auth.response;
 
+    // groupBy runs as a real SQL GROUP BY — findMany's `distinct` is applied in Prisma 5's query
+    // engine after streaming every matching row, i.e. every line item ever written.
     const [products, invoiceItems, purchaseBillItems] = await Promise.all([
-      prisma.product.findMany({ where: { deletedAt: null }, select: { unit: true }, distinct: ["unit"] }),
-      prisma.invoiceItem.findMany({ where: { invoice: { deletedAt: null } }, select: { unit: true }, distinct: ["unit"] }),
-      prisma.purchaseBillItem.findMany({ where: { purchaseBill: { deletedAt: null } }, select: { unit: true }, distinct: ["unit"] }),
+      prisma.product.groupBy({ by: ["unit"], where: { deletedAt: null } }),
+      prisma.invoiceItem.groupBy({ by: ["unit"], where: { invoice: { deletedAt: null } } }),
+      prisma.purchaseBillItem.groupBy({ by: ["unit"], where: { purchaseBill: { deletedAt: null } } }),
     ]);
 
     const units = new Set<string>();

@@ -159,6 +159,11 @@ export default function PurchaseReportsPage() {
     setExportingOutstanding(true);
     try {
       const res = await fetch(`/api/purchase-reports?type=outstanding${dateQuery}&page=1&pageSize=2000`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast({ type: "error", title: "Export failed", message: d.error ?? "Could not load outstanding bills." });
+        return;
+      }
       const exportData: OutstandingResponse = await res.json();
       await downloadXlsx(
         "outstanding-bills.xlsx",
@@ -200,6 +205,11 @@ export default function PurchaseReportsPage() {
       const exportParams = new URLSearchParams({ type: "stock-ledger", page: "1", pageSize: "5000" });
       if (debouncedLedgerSearch.trim()) exportParams.set("search", debouncedLedgerSearch.trim());
       const res = await fetch(`/api/purchase-reports?${exportParams.toString()}`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast({ type: "error", title: "Export failed", message: d.error ?? "Could not load the stock ledger." });
+        return;
+      }
       const exportData: { data: LedgerRow[]; total: number } = await res.json();
       await downloadXlsx(
         "stock-movement-ledger.xlsx",
@@ -265,7 +275,7 @@ export default function PurchaseReportsPage() {
       <div {...animateSection(1, `card ${styles.tabsCard}`)}>
         <div className={styles.tabsRow}>
           {(["outstanding", "summary", "category", "ledger"] as Tab[]).map((t) => (
-            <button key={t} className={`${styles.tabBtn} ${tab === t ? styles.active : ""}`} onClick={() => setTab(t)}>
+            <button key={t} type="button" aria-pressed={tab === t} className={`${styles.tabBtn} ${tab === t ? styles.active : ""}`} onClick={() => setTab(t)}>
               {t === "outstanding" ? "Outstanding" : t === "summary" ? "Monthly Summary" : t === "category" ? "By Category" : "Stock Ledger"}
             </button>
           ))}

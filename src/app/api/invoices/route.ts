@@ -172,6 +172,14 @@ export async function POST(request: NextRequest) {
     if (!customer) {
       return NextResponse.json({ error: "Selected customer was not found." }, { status: 400 });
     }
+    // A one-off customer is soft-deleted with no delete_customer log entry; one with that entry was
+    // explicitly moved to the bin and must not receive new invoices (same rule as PUT /api/customers/[id]).
+    if (customer.deletedAt) {
+      const wasExplicitlyDeleted = await prisma.activityLog.findFirst({ where: { entityId: customer.id, entityType: "customer", action: "delete_customer" }, select: { id: true } });
+      if (wasExplicitlyDeleted) {
+        return NextResponse.json({ error: "This customer is in the bin — restore it before creating an invoice for them." }, { status: 400 });
+      }
+    }
 
     // Indian FY (Apr-Mar), derived from "now" since Invoice.date always defaults to creation time.
     const currentYearLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date()));

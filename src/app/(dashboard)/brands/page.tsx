@@ -85,7 +85,7 @@ export default function BrandsPage() {
   listParams.set("pageSize", String(pageSize));
   const apiUrl = `/api/brands?${listParams.toString()}`;
 
-  const { data, loading, mutate } = useFetch<BrandListResponse>(apiUrl);
+  const { data, loading, error, mutate } = useFetch<BrandListResponse>(apiUrl);
   const brands = data?.data ?? [];
   const total = data?.total ?? 0;
   const showSkeleton = loading && !data;
@@ -98,18 +98,25 @@ export default function BrandsPage() {
     if (err) { setAddNameError(err); return; }
     setAddNameError(undefined);
     setSaving(true);
-    const r = await fetch("/api/brands", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
+    let r: Response;
+    try {
+      r = await fetch("/api/brands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+    } catch {
+      toast({ type: "error", title: "Failed", message: "Network error. Please try again." });
+      setSaving(false);
+      return;
+    }
     if (r.ok) {
       setNewName("");
       setAddOpen(false);
       await mutate();
       toast({ type: "success", title: "Brand added", message: `"${name}" added to catalog.` });
     } else {
-      const d = await r.json();
+      const d = await r.json().catch(() => ({}));
       toast({ type: "error", title: "Failed", message: d.error ?? "Failed to add brand" });
     }
     setSaving(false);
@@ -132,11 +139,18 @@ export default function BrandsPage() {
     if (err) { setRenameNameError(err); return; }
     setRenameNameError(undefined);
     setRenaming(true);
-    const r = await fetch(`/api/brands/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, expectedUpdatedAt: editingUpdatedAt }),
-    });
+    let r: Response;
+    try {
+      r = await fetch(`/api/brands/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, expectedUpdatedAt: editingUpdatedAt }),
+      });
+    } catch {
+      setRenaming(false);
+      toast({ type: "error", title: "Rename failed", message: "Network error. Please try again." });
+      return;
+    }
     const d = await r.json().catch(() => ({}));
     setRenaming(false);
     if (r.ok) {
@@ -159,7 +173,15 @@ export default function BrandsPage() {
       message: `Move "${name}" to bin?`,
       onConfirm: async () => {
         setDeleting(true);
-        const res = await fetch(`/api/brands/${id}`, { method: "DELETE" });
+        let res: Response;
+        try {
+          res = await fetch(`/api/brands/${id}`, { method: "DELETE" });
+        } catch {
+          setDeleting(false);
+          setConfirmState(null);
+          toast({ type: "error", title: "Delete failed", message: "Network error. Please try again." });
+          return;
+        }
         const d = await res.json().catch(() => ({}));
         setDeleting(false);
         setConfirmState(null);
@@ -291,6 +313,11 @@ export default function BrandsPage() {
             <tbody>
               {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
+              ) : error ? (
+                <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
+                  <span style={{ color: "var(--c-red-text)" }}>Couldn&apos;t load brands.</span>{" "}
+                  <Button size="sm" variant="secondary" onClick={() => mutate()}>Retry</Button>
+                </td></tr>
               ) : brands.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search ? "No brands match your search." : "No brands yet. Add one above."}

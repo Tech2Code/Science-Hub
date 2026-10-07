@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getProducts, type ProductSort, type ProductStockFilter } from "@/lib/db";
+import { getProducts, getProductsSlim, type ProductSort, type ProductStockFilter } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { validateProductInput, validateNumericField, MAX_MONEY_VALUE } from "@/lib/validation";
@@ -18,6 +18,12 @@ export async function GET(request: NextRequest) {
     const stockFilter = (searchParams.get("stockFilter") ?? undefined) as ProductStockFilter | undefined;
     const sort = (searchParams.get("sort") ?? undefined) as ProductSort | undefined;
     const { skip, take } = parsePageParams(searchParams, 5000);
+
+    // ?slim=1 — line-item pickers only need pricing/stock fields; skip the joins and the createdBy lookup.
+    if (searchParams.get("slim") === "1") {
+      const slim = await getProductsSlim({ search, stockFilter }, sort, skip, take);
+      return NextResponse.json(slim);
+    }
 
     const { data: products, total } = await getProducts({ search, stockFilter }, sort, skip, take);
     const ids = products.map((p) => p.id);

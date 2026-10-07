@@ -2,6 +2,7 @@
 // paste flow and the server-side /api/products/parse-import route (ExcelJS-reduced .xlsx/.csv rows).
 
 import { suggestMinStockForUnit } from "@/lib/productForm";
+import { parseImportNumber } from "@/lib/rateListImport";
 
 export interface ParsedProductRow {
   name: string;
@@ -23,7 +24,8 @@ export interface ParsedProductRow {
 
 type ColumnKey = "name" | "sku" | "hsn" | "unit" | "listPrice" | "discountPercent" | "price" | "gstRate" | "stock" | "minStock" | "brand" | "category";
 
-// Order matters — first match wins, so "List Price"/"Discount"/"Min Stock" are tried before the looser generic "price"/"stock" patterns.
+// Order matters — first match wins, so "List Price"/"Discount"/"Min Stock" are tried before the looser generic "price"/"stock" patterns,
+// and the generic "price"/"rate" pattern is tried before "unit" so a "Unit Price"/"Unit Rate" header maps to price, not unit.
 const COLUMN_PATTERNS: { key: ColumnKey; pattern: RegExp }[] = [
   { key: "sku", pattern: /^sku$|item\s*code|product\s*code/i },
   { key: "hsn", pattern: /hsn/i },
@@ -32,10 +34,10 @@ const COLUMN_PATTERNS: { key: ColumnKey; pattern: RegExp }[] = [
   { key: "gstRate", pattern: /gst|tax\s*rate/i },
   { key: "minStock", pattern: /min(imum)?\s*stock|reorder/i },
   { key: "stock", pattern: /stock|qty|quantity/i },
+  { key: "price", pattern: /sell(ing)?\s*price|price|rate/i },
   { key: "unit", pattern: /unit/i },
   { key: "brand", pattern: /brand/i },
   { key: "category", pattern: /category/i },
-  { key: "price", pattern: /sell(ing)?\s*price|price|rate/i },
   { key: "name", pattern: /name|item|product|description/i },
 ];
 
@@ -78,7 +80,8 @@ export function parseCsvLine(line: string): string[] {
 }
 
 const cellAt = (row: string[], idx: number | undefined): string => (idx !== undefined ? (row[idx] ?? "").trim() : "");
-const numCellAt = (row: string[], idx: number | undefined): string => cellAt(row, idx).replace(/[^\d.]/g, "");
+// Invalid numbers (negative, "1e3", multiple dots...) come back as "" — treated exactly like an empty cell.
+const numCellAt = (row: string[], idx: number | undefined): string => parseImportNumber(cellAt(row, idx));
 
 /** Parses a rows/columns grid into Product rows, detecting a header by column-name matching or falling back to a positional guess by column count. */
 export function parseProductRows(rows: string[][]): { items: ParsedProductRow[]; skipped: number } {

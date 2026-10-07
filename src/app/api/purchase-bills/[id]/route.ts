@@ -61,14 +61,40 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "This purchase bill was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
     }
 
+    // Transport charge/rate feed the total exactly like items/discount do, so they're locked the same way.
     if (
-      (items !== undefined || discount !== undefined) &&
+      (items !== undefined || discount !== undefined || transportCharge !== undefined || transportChargeGstRate !== undefined) &&
       (existing.status === "paid" || existing.status === "cancelled")
     ) {
       return NextResponse.json(
-        { error: `Items and discount on a ${existing.status} bill cannot be edited.` },
+        { error: `Items, discount and transport charge on a ${existing.status} bill cannot be edited.` },
         { status: 400 }
       );
+    }
+
+    // Switching vendor: must exist (otherwise a raw FK error surfaces as a 500), and must not be one
+    // an admin explicitly moved to the Bin. A "just for this bill" one-off vendor is soft-deleted at
+    // creation but never gets a delete_vendor log — same distinction as PUT /api/vendors/[id].
+    if (vendorId !== undefined && vendorId !== null && vendorId !== "" && vendorId !== existing.vendorId) {
+      if (typeof vendorId !== "string") {
+        return NextResponse.json({ error: "Vendor not found" }, { status: 400 });
+      }
+      const newVendor = await prisma.vendor.findUnique({ where: { id: vendorId }, select: { deletedAt: true } });
+      if (!newVendor) return NextResponse.json({ error: "Vendor not found" }, { status: 400 });
+      if (newVendor.deletedAt) {
+        const wasExplicitlyDeleted = await prisma.activityLog.findFirst({ where: { entityId: vendorId, entityType: "vendor", action: "delete_vendor" }, select: { id: true } });
+        if (wasExplicitlyDeleted) {
+          return NextResponse.json({ error: "This vendor is in the bin — restore it before using it on a bill" }, { status: 400 });
+        }
+      }
+    }
+
+    // One blob belongs to exactly one bill — see the matching check in POST /api/purchase-bills.
+    if (attachmentUrl && attachmentUrl !== existing.attachmentUrl) {
+      const owner = await prisma.purchaseBill.findFirst({ where: { attachmentUrl, id: { not: id } }, select: { id: true } });
+      if (owner) {
+        return NextResponse.json({ error: "This attachment is already linked to another purchase bill. Please upload the file again." }, { status: 400 });
+      }
     }
 
     // Bill date is editable but never across an FY boundary — the bill number was already generated for a specific FY.
@@ -160,6 +186,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           if (key) seenCustomNames.add(key);
         }
       }
+      {
+        // Mirrors POST and /api/invoices/[id] — reject lines pointing at a missing or binned product.
+        const productIds = (items as { productId?: string }[]).map((item) => item.productId).filter((v): v is string => !!v);
+        if (productIds.length > 0) {
+          const found = await prisma.product.findMany({ where: { id: { in: productIds }, deletedAt: null }, select: { id: true } });
+          const foundIds = new Set(found.map((p) => p.id));
+          if (productIds.some((pid) => !foundIds.has(pid))) {
+            return NextResponse.json({ error: "One or more selected products could not be found — they may have been deleted. Please remove and re-add the item." }, { status: 400 });
+          }
+        }
+      }
       // Discount is applied to the line's gross amount before GST, same as
       // sales invoices and the POST route above.
       computedItems = (items as {
@@ -225,7 +262,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Status is derived from paidAmount vs total, never trusted verbatim from the client — the one exception is the literal "cancelled" value sent by the dedicated Cancel Bill action.
-    const totalChanged = items !== undefined || parsedDiscount !== undefined;
+    const totalChanged = items !== undefined || parsedDiscount !== undefined
+      || parsedTransportCharge !== undefined || parsedTransportGstRate !== undefined;
+
+    // A lower total can't drop below cash already paid — that would leave the bill claiming more was
+    // paid than it's worth (negative balanceDue) with no matching payment correction.
+    if (totalChanged && total < existing.paidAmount - 0.01) {
+      return NextResponse.json(
+        { error: `Total can't be less than the amount already paid (₹${existing.paidAmount.toFixed(2)}). Edit or delete payments first.` },
+        { status: 400 }
+      );
+    }
     const recomputedStatus = existing.paidAmount + 0.01 >= total ? "paid" : existing.paidAmount > 0 ? "partial" : "unpaid";
     const effectiveStatus = totalChanged
       ? recomputedStatus
@@ -257,6 +304,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           data: { updatedAt: new Date() },
         });
         if (guard.count === 0) throw new BillConflictError();
+      }
+
+      // Claim the cancel/un-cancel transition atomically (same idea as DELETE's `deletedAt: null`
+      // claim) — two concurrent Cancel clicks, or a Cancel racing a Delete, would otherwise each read
+      // the pre-transition status and reverse the same stock twice. Only the request whose
+      // conditional update actually flips the row gets to touch stock.
+      if (isCancelling || isUncancelling) {
+        const transition = await tx.purchaseBill.updateMany({
+          where: isCancelling
+            ? { id, deletedAt: null, status: { not: "cancelled" } }
+            : { id, deletedAt: null, status: "cancelled" },
+          data: { status: effectiveStatus },
+        });
+        if (transition.count !== 1) throw new BillConflictError();
       }
 
       if (items !== undefined) {
@@ -397,14 +458,19 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     // Soft-delete only — bill numbers are part of the GST filing sequence; permanent deletion is admin-only, from the Bin page.
     // Reverse stock added at creation, guarding against double-reversal on a repeated delete call; a cancelled bill already had its stock reversed, so skip it.
     const result = await prisma.$transaction(async (tx) => {
-      const bill = await tx.purchaseBill.findUnique({ where: { id }, select: { billNumber: true, status: true, deletedAt: true } });
-      if (!bill) return null;
+      const existingBill = await tx.purchaseBill.findUnique({ where: { id }, select: { billNumber: true } });
+      if (!existingBill) return null;
 
       const updateResult = await tx.purchaseBill.updateMany({
         where: { id, deletedAt: null },
         data: { deletedAt: new Date() },
       });
-      if (updateResult.count === 0) return { billNumber: bill.billNumber, alreadyDeleted: true };
+      if (updateResult.count === 0) return { billNumber: existingBill.billNumber, alreadyDeleted: true };
+
+      // Status is read AFTER claiming the row (we now hold its row lock), not before — a concurrent
+      // Cancel that committed in between already reversed this bill's stock, and a status read taken
+      // before the claim would miss it and reverse the same stock a second time.
+      const bill = await tx.purchaseBill.findUniqueOrThrow({ where: { id }, select: { billNumber: true, status: true } });
 
       if (bill.status !== "cancelled") {
         const items = await tx.purchaseBillItem.findMany({

@@ -129,9 +129,19 @@ export async function GET(req: NextRequest) {
     const now = Date.now();
 
     // One-off customers/vendors are soft-deleted at creation with no delete_* log entry — exclude them here since the user never asked to delete them.
+    // Scope the log lookup to currently soft-deleted ids — the activity log grows forever, so an
+    // unfiltered findMany over every delete_customer/delete_vendor entry ever written is unbounded.
+    const [softDeletedCustomerRows, softDeletedVendorRows] = await Promise.all([
+      prisma.customer.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
+      prisma.vendor.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
+    ]);
     const [explicitlyDeletedCustomers, explicitlyDeletedVendors] = await Promise.all([
-      prisma.activityLog.findMany({ where: { entityType: "customer", action: "delete_customer" }, select: { entityId: true } }),
-      prisma.activityLog.findMany({ where: { entityType: "vendor", action: "delete_vendor" }, select: { entityId: true } }),
+      softDeletedCustomerRows.length > 0
+        ? prisma.activityLog.findMany({ where: { entityType: "customer", action: "delete_customer", entityId: { in: softDeletedCustomerRows.map((c) => c.id) } }, select: { entityId: true } })
+        : Promise.resolve([] as { entityId: string | null }[]),
+      softDeletedVendorRows.length > 0
+        ? prisma.activityLog.findMany({ where: { entityType: "vendor", action: "delete_vendor", entityId: { in: softDeletedVendorRows.map((v) => v.id) } }, select: { entityId: true } })
+        : Promise.resolve([] as { entityId: string | null }[]),
     ]);
     const explicitlyDeletedCustomerIds = [...new Set(explicitlyDeletedCustomers.map((l) => l.entityId).filter((id): id is string => !!id))];
     const explicitlyDeletedVendorIds = [...new Set(explicitlyDeletedVendors.map((l) => l.entityId).filter((id): id is string => !!id))];

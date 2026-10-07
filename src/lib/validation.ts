@@ -61,6 +61,12 @@ export function istMonthBoundsUtc(year: number, month0: number): { start: Date; 
   return { start, end };
 }
 
+// parseFloat() accepts trailing garbage ("5000abc" -> 5000), so numeric rules first require the whole
+// trimmed string to be a plain non-negative decimal (no sign, exponent, or trailing characters).
+function isPlainDecimal(v: string): boolean {
+  return /^(?:\d+(?:\.\d*)?|\.\d+)$/.test(v.trim());
+}
+
 export const rules = {
   required: (msg = "This field is required."): Validator =>
     (v) => v.trim() ? null : msg,
@@ -96,13 +102,13 @@ export const rules = {
     (v) => !v.trim() || /^\d{12}$/.test(v.trim()) ? null : msg,
 
   positiveNumber: (msg = "Enter a value greater than 0."): Validator =>
-    (v) => !v.trim() || (parseFloat(v) > 0) ? null : msg,
+    (v) => !v.trim() || (isPlainDecimal(v) && parseFloat(v) > 0) ? null : msg,
 
   nonNegativeNumber: (msg = "Value must be 0 or more."): Validator =>
-    (v) => !v.trim() || (parseFloat(v) >= 0) ? null : msg,
+    (v) => !v.trim() || (isPlainDecimal(v) && parseFloat(v) >= 0) ? null : msg,
 
   percentRange: (max = 100, msg?: string): Validator =>
-    (v) => !v.trim() || (parseFloat(v) >= 0 && parseFloat(v) <= max) ? null : (msg ?? `Value must be between 0 and ${max}.`),
+    (v) => !v.trim() || (isPlainDecimal(v) && parseFloat(v) >= 0 && parseFloat(v) <= max) ? null : (msg ?? `Value must be between 0 and ${max}.`),
 
   passwordMatch: (other: string, msg = "Passwords do not match."): Validator =>
     (v) => v === other ? null : msg,
@@ -181,7 +187,7 @@ function validateCreditLimitInput(value: string | number | null | undefined): st
   const str = String(value ?? "").trim();
   if (!str) return null; // blank means "no limit" — parseCreditLimit()'s own contract
   const n = parseFloat(str);
-  if (!Number.isFinite(n) || n < 0 || n > MAX_MONEY_VALUE) {
+  if (!isPlainDecimal(str) || !Number.isFinite(n) || n < 0 || n > MAX_MONEY_VALUE) {
     return "Credit limit must be a valid amount between 0 and 10 crore.";
   }
   return null;
@@ -262,7 +268,8 @@ export function validateUserInput(
     const err = validate(input.email, rules.required("Email is required."), rules.maxLength(254), rules.email());
     if (err) return err;
   }
-  if (input.password !== undefined && input.password.length > 72) {
+  // bcrypt silently truncates past 72 BYTES (not chars) — a multi-byte password can exceed it under 72 chars.
+  if (input.password !== undefined && new TextEncoder().encode(input.password).length > 72) {
     return `${passwordLabel} must be at most 72 characters`;
   }
   if (input.password !== undefined && input.password.length < 8) {

@@ -16,7 +16,8 @@ function matchPages(q: string, session: { user: { role: string; sections: string
   const canSeeSections = (required?: string[]) =>
     !required || isAdmin || required.every((s) => userSections.includes(s));
 
-  const navResults = [...NAV_GROUPS.flatMap((g) => g.items), BIN_NAV]
+  // Managers are read-only and the Bin page redirects them away (same as the sidebar hiding its link).
+  const navResults = [...NAV_GROUPS.flatMap((g) => g.items), ...(role === "manager" ? [] : [BIN_NAV])]
     .filter((item) => !(item.adminOnly && !isAdmin))
     .filter((item) => canSeeSections(item.sectionsRequired ?? (item.sectionRequired ? [item.sectionRequired] : undefined)))
     .filter((item) => item.label.toLowerCase().includes(needle) || item.keywords?.some((k) => k.toLowerCase().includes(needle)))

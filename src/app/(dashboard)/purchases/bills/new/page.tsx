@@ -107,7 +107,7 @@ export default function NewPurchaseBillPage() {
     const prefillVendorId = searchParams.get("vendorId");
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (prefillVendorId) setVendorId(prefillVendorId);
-    fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then((res: { data: PurchaseBillProduct[] }) => setProducts(res.data ?? [])).catch(() => {});
+    fetch("/api/products?pageSize=5000&slim=1", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then((res: { data: PurchaseBillProduct[] }) => setProducts(res.data ?? [])).catch(() => {});
     fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((s) => {
       const numberingUntouched = !s?.purchaseBillNumberPrefix && !s?.nextPurchaseBillNumberOverride && !s?.purchaseBillNumberFormat;
       if (!numberingUntouched || localStorage.getItem(FIRST_BILL_NUDGE_DISMISSED_KEY)) return;
@@ -163,6 +163,7 @@ export default function NewPurchaseBillPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (hasContent) setShowDraftBanner(true);
     else setDraftReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount draft load; discardUnsavedAttachment is only called on the stale-draft path and needs no re-run
   }, []);
 
   function restoreDraft() {
@@ -253,7 +254,9 @@ export default function NewPurchaseBillPage() {
     e.target.value = "";
   }
 
-  function discardUnsavedAttachment(url: string) {
+  // notifyOnError: only for an in-page Remove — Cancel/draft-discard paths navigate away or run
+  // silently, where a toast would be lost or confusing.
+  function discardUnsavedAttachment(url: string, notifyOnError = false) {
     // keepalive: true — Cancel navigates away right after this fires; without it, the browser can
     // abort an in-flight, not-yet-awaited fetch when the page unloads, leaving the blob orphaned.
     fetch("/api/purchase-bills/upload", {
@@ -261,12 +264,18 @@ export default function NewPurchaseBillPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
       keepalive: true,
-    }).catch(() => {});
+    }).then(async (res) => {
+      if (res.ok || !notifyOnError) return;
+      const d = await res.json().catch(() => ({}));
+      toast({ type: "error", title: "Couldn't discard file", message: d.error ?? "The uploaded file could not be removed from storage." });
+    }).catch(() => {
+      if (notifyOnError) toast({ type: "error", title: "Network error", message: "The uploaded file could not be removed from storage." });
+    });
   }
 
   function removeAttachment() {
     // Never saved to a bill yet, so it's safe to discard the blob right away.
-    if (attachmentUrl) discardUnsavedAttachment(attachmentUrl);
+    if (attachmentUrl) discardUnsavedAttachment(attachmentUrl, true);
     setAttachmentUrl(null);
     setAttachmentName(null);
     setAttachmentSize(null);
@@ -369,6 +378,7 @@ export default function NewPurchaseBillPage() {
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");
+        bustCachePrefix("/api/vendors");
         bustCache("/api/units");
         toast({ type: "success", title: "Bill created", message: `${data.billNumber} saved.` });
         router.push(`/purchases/bills/${data.id}`);

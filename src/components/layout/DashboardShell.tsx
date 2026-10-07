@@ -129,6 +129,21 @@ const NavIcons: Record<string, React.FC<{ className?: string }>> = {
 };
 
 const allNavItems = NAV_GROUPS.flatMap((g) => g.items);
+
+// Sub-pages gated by a section that has no sidebar entry of its own (their APIs call requireSectionAccess()).
+const SECTION_GATED_SUBROUTES: [RegExp, ProtectedSection][] = [
+  [/^\/sales\/customers\/[^/]+\/statement$/, "payments_received"],
+  [/^\/purchases\/vendors\/[^/]+\/statement$/, "payments_made"],
+];
+
+/** Sections a non-admin needs to open `pathname` — the same rule the sidebar uses to show/hide a nav item. */
+function requiredSectionsFor(pathname: string): ProtectedSection[] {
+  const nav = allNavItems.find((n) => n.href === pathname);
+  if (nav?.sectionsRequired) return nav.sectionsRequired;
+  if (nav?.sectionRequired) return [nav.sectionRequired];
+  const sub = SECTION_GATED_SUBROUTES.find(([re]) => re.test(pathname));
+  return sub ? [sub[1]] : [];
+}
 // These overview pages must only highlight when exactly on that path, not on sub-pages.
 const EXACT_MATCH_HREFS = new Set(["/dashboard", "/sales", "/purchases"]);
 
@@ -369,6 +384,20 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (status === "unauthenticated") { clearAllCachedPdfs(); router.replace("/login"); }
   }, [status, router]);
 
+  // Central role guard for direct-URL access — covers every create/edit page (incl. ones that never
+  // added their own per-page redirect) so a manager can't even see a write form. Server-side
+  // requireWriteAccess()/requireAdmin() still block the actual mutation regardless.
+  const role = session?.user?.role;
+  const userSections = Array.isArray(session?.user?.sections) ? session.user.sections : [];
+  const routeBlocked = status === "authenticated" && (
+    (role !== "admin" && !requiredSectionsFor(pathname).every((s) => userSections.includes(s))) ||
+    (role === "manager" && (/\/(new|edit)$/.test(pathname) || pathname === "/bin" || pathname.startsWith("/bin/"))) ||
+    (role !== "admin" && (pathname === "/settings" || pathname.startsWith("/settings/") || pathname === "/admin" || pathname.startsWith("/admin/")))
+  );
+  useEffect(() => {
+    if (routeBlocked) router.replace("/dashboard");
+  }, [routeBlocked, router]);
+
   const handleNavClick = useCallback(() => {
     if (isMobile()) setSidebarOpen(false);
   }, []);
@@ -393,6 +422,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     );
   }
   if (status === "unauthenticated") return null;
+  if (routeBlocked) return null;
 
   const currentNav = [...allNavItems, BIN_NAV].find((n) =>
     EXACT_MATCH_HREFS.has(n.href) ? pathname === n.href : pathname === n.href || pathname.startsWith(n.href + "/")

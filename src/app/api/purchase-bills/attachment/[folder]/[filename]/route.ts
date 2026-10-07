@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { get } from "@vercel/blob";
 import { requireSession } from "@/lib/apiAuth";
-import { getPrivateBlobToken } from "@/lib/blobStorage";
-
-// A CR/LF or quote in a Content-Disposition filename could inject extra headers or break the
-// value — same header-injection class the SMTP send routes already guard against.
-function safeFilename(name: string): string {
-  const cleaned = name.replace(/[\r\n"]/g, "").trim().slice(0, 200);
-  return cleaned || "attachment";
-}
+import { getPrivateBlobToken, attachmentContentDisposition } from "@/lib/blobStorage";
 
 // Serves a just-uploaded, not-yet-saved purchase-bill attachment (Edit form previewing a
 // replacement file before Save) — there's no saved PurchaseBill row yet to key off, so this
@@ -54,7 +47,7 @@ export async function GET(
     return new NextResponse(result.stream, {
       headers: {
         "Content-Type": result.blob.contentType || "application/octet-stream",
-        "Content-Disposition": `inline; filename="${safeFilename(filename)}"`,
+        "Content-Disposition": attachmentContentDisposition(filename),
         "Cache-Control": "private, no-store",
       },
     });

@@ -16,6 +16,7 @@ export const ROUTE_SECTION_MAP: Record<string, ProtectedSection> = {
   "/reports/sales": "reports_sales",
   "/reports/purchases": "reports_purchases",
   "/sales/payments": "payments_received",
+  "/sales/credit-notes": "reports_sales",
   "/purchases/payments": "payments_made",
 };
 

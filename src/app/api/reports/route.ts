@@ -19,6 +19,11 @@ type PeriodInput =
   | "current"
   | undefined;
 
+// Lines up a SQL month bucket (date_trunc of the +330-minute IST-shifted instant, so its UTC fields
+// ARE the IST year/month) with an istMonthBoundsUtc() month start (a real instant, read in IST).
+const istMonthKeyOfBucket = (bucket: Date) => new Date(bucket).toLocaleString("en-IN", { month: "2-digit", year: "numeric", timeZone: "UTC" });
+const istMonthKeyOfStart = (start: Date) => start.toLocaleString("en-IN", { month: "2-digit", year: "numeric", timeZone: "Asia/Kolkata" });
+
 const FY_LABEL = (startYear: number) => `FY ${startYear}-${String(startYear + 1).slice(2)}`;
 
 // Parses the period from the query string:
@@ -176,21 +181,25 @@ async function getSalesDashboard(period?: PeriodInput, kpiOnly = false) {
     fyLabel = `FY ${fyYear}-${String(fyYear + 1).slice(2)}`;
     const fyStart = istMonthBoundsUtc(fyYear, 3).start;
     const fyEnd = istMonthBoundsUtc(fyYear + 1, 3).start;
-    // One query for the whole FY, grouped in JS — 12 "parallel" per-month aggregates would still serialize through the pooled connection_limit=1 DB anyway.
-    const fyInvoices = await prisma.invoice.findMany({
-      where: { deletedAt: null, date: { gte: fyStart, lt: fyEnd } },
-      select: { date: true, total: true },
-    });
+    // One query for the whole FY, summed per IST calendar month in Postgres (+330-minute shift
+    // before date_trunc, same bucketing as getDashboardFinancials/getGstSummary) — never loads every
+    // FY invoice row into Node just to bucket it.
+    const fyInvoiceRows = await prisma.$queryRaw<Array<{ month: Date; total: number }>>`
+      SELECT date_trunc('month', "date" + interval '330 minutes') AS month,
+             COALESCE(SUM("total"), 0) AS total
+      FROM "Invoice"
+      WHERE "deletedAt" IS NULL
+        AND "date" >= ${fyStart} AND "date" < ${fyEnd}
+      GROUP BY month
+    `;
+    const fyRevenueByMonth = new Map(fyInvoiceRows.map((r) => [istMonthKeyOfBucket(r.month), Number(r.total) || 0]));
     monthlyRevenue = Array.from({ length: 12 }, (_, i) => {
       const monthIndex0 = (3 + i) % 12;
       const year = fyYear + Math.floor((3 + i) / 12);
-      const { start: d, end } = istMonthBoundsUtc(year, monthIndex0);
+      const { start: d } = istMonthBoundsUtc(year, monthIndex0);
       const label = d.toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
       if (d > now) return { month: label, total: 0 };
-      const total = fyInvoices
-        .filter((inv) => inv.date >= d && inv.date < end)
-        .reduce((sum, inv) => sum + inv.total, 0);
-      return { month: label, total };
+      return { month: label, total: fyRevenueByMonth.get(istMonthKeyOfStart(d)) ?? 0 };
     });
   }
 
@@ -301,21 +310,23 @@ async function getPurchaseDashboard(period?: PeriodInput, kpiOnly = false) {
     fyLabelP = `FY ${fyYearP}-${String(fyYearP + 1).slice(2)}`;
     const fyStartP = istMonthBoundsUtc(fyYearP, 3).start;
     const fyEndP = istMonthBoundsUtc(fyYearP + 1, 3).start;
-    // Same fix as monthlyRevenue — one query for the whole FY, grouped in JS.
-    const fyBills = await prisma.purchaseBill.findMany({
-      where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: fyStartP, lt: fyEndP } },
-      select: { billDate: true, total: true },
-    });
+    // Same fix as monthlyRevenue — one query for the whole FY, summed per IST month in Postgres.
+    const fyBillRows = await prisma.$queryRaw<Array<{ month: Date; total: number }>>`
+      SELECT date_trunc('month', "billDate" + interval '330 minutes') AS month,
+             COALESCE(SUM("total"), 0) AS total
+      FROM "PurchaseBill"
+      WHERE "deletedAt" IS NULL AND "status" <> 'cancelled'
+        AND "billDate" >= ${fyStartP} AND "billDate" < ${fyEndP}
+      GROUP BY month
+    `;
+    const fySpendByMonth = new Map(fyBillRows.map((r) => [istMonthKeyOfBucket(r.month), Number(r.total) || 0]));
     monthlySpend = Array.from({ length: 12 }, (_, i) => {
       const monthIndex0 = (3 + i) % 12;
       const year = fyYearP + Math.floor((3 + i) / 12);
-      const { start: d, end } = istMonthBoundsUtc(year, monthIndex0);
+      const { start: d } = istMonthBoundsUtc(year, monthIndex0);
       const label = d.toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
       if (d > now) return { month: label, total: 0 };
-      const total = fyBills
-        .filter((b) => b.billDate >= d && b.billDate < end)
-        .reduce((sum, b) => sum + b.total, 0);
-      return { month: label, total };
+      return { month: label, total: fySpendByMonth.get(istMonthKeyOfStart(d)) ?? 0 };
     });
   }
 
@@ -547,7 +558,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Enforce the same ProtectedSection gate server-side so a staff/manager without access can't bypass the UI redirect by calling the API directly.
-    if (type === "summary" || type === "outstanding" || type === "gst-summary") {
+    if (type === "summary" || type === "outstanding" || type === "gst-summary" || type === "stock") {
       const gate = await requireSectionAccess("reports_sales");
       if (!gate.ok) return gate.response;
     }

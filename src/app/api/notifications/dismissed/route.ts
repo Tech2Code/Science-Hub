@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
-import { getDismissedNotificationSummary } from "@/lib/notifications";
+import { getDismissedNotificationSummary, filterNotificationSummary } from "@/lib/notifications";
 
 export async function GET() {
   try {
@@ -9,7 +9,7 @@ export async function GET() {
 
     const includeBin = auth.session.user.role !== "manager";
     const summary = await getDismissedNotificationSummary({ includeBin, userId: auth.session.user.id });
-    return NextResponse.json(summary);
+    return NextResponse.json(filterNotificationSummary(summary, auth.session.user));
   } catch (error) {
     console.error("GET /api/notifications/dismissed error:", error);
     return NextResponse.json({ error: "Failed to fetch dismissed notifications" }, { status: 500 });

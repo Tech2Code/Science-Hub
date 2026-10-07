@@ -24,6 +24,79 @@ class CreditLimitExceededError extends Error {
   }
 }
 
+// Thrown from inside the edit transaction for a plain 400 validation failure detected on fresh data.
+class InvoiceEditValidationError extends Error {}
+
+const sameRate = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+const customLineKey = (name: string) => name.trim().toLowerCase();
+
+// A line that already has a (non-deleted) credit note against it can't have its price, discount %,
+// or GST rate changed — the credit note's value was derived from those exact numbers. Catalog lines
+// are matched by productId; custom (unlinked) lines by trimmed, case-insensitive name, the same key
+// POST /api/invoices/[id]/returns uses. The productId quantity floor is enforced separately by
+// assertInvoiceQuantitiesNotBelowReturned(); this also applies the equivalent floor to custom lines.
+async function assertReturnedLinesRatesUnchanged(
+  tx: Prisma.TransactionClient,
+  invoiceId: string,
+  editedItems: { productId: string | null; name: string; unit: string; quantity: number; price: number; discountPercent: number; gstRate: number }[]
+): Promise<void> {
+  const returnItems = await tx.returnItem.findMany({
+    where: { return: { invoiceId, deletedAt: null } },
+    select: { productId: true, name: true, quantity: true },
+  });
+  if (returnItems.length === 0) return;
+
+  const oldItems = await tx.invoiceItem.findMany({
+    where: { invoiceId },
+    select: { productId: true, name: true, price: true, discountPercent: true, gstRate: true },
+  });
+
+  const returnedProductIds = new Set<string>();
+  const returnedCustomQty = new Map<string, { quantity: number; name: string }>();
+  for (const ri of returnItems) {
+    if (ri.productId) {
+      returnedProductIds.add(ri.productId);
+    } else {
+      const key = customLineKey(ri.name);
+      const prev = returnedCustomQty.get(key);
+      returnedCustomQty.set(key, { quantity: (prev?.quantity ?? 0) + ri.quantity, name: prev?.name ?? ri.name });
+    }
+  }
+
+  const errors: string[] = [];
+  const rateChanged = (
+    oldLine: { price: number; discountPercent: number; gstRate: number },
+    edited: { price: number; discountPercent: number; gstRate: number }
+  ) => !sameRate(oldLine.price, edited.price) || !sameRate(oldLine.discountPercent, edited.discountPercent) || !sameRate(oldLine.gstRate, edited.gstRate);
+
+  for (const productId of returnedProductIds) {
+    const oldLine = oldItems.find((it) => it.productId === productId);
+    const edited = editedItems.find((it) => it.productId === productId);
+    // A removed line is already rejected by the quantity floor.
+    if (oldLine && edited && rateChanged(oldLine, edited)) {
+      errors.push(`Cannot change the price, discount, or GST rate of '${edited.name}' — a credit note has already been issued against it. Delete the credit note first to change its rate.`);
+    }
+  }
+
+  for (const [key, returned] of returnedCustomQty) {
+    const oldLine = oldItems.find((it) => !it.productId && customLineKey(it.name) === key);
+    const edited = editedItems.find((it) => !it.productId && customLineKey(it.name) === key);
+    const editedQty = edited?.quantity ?? 0;
+    if (editedQty < returned.quantity) {
+      const unit = edited?.unit ?? "unit(s)";
+      errors.push(
+        `Cannot update invoice. The quantity for '${edited?.name ?? returned.name}' cannot be reduced to ${editedQty} ${unit} because ${returned.quantity} ${unit} has already been returned. Please edit or delete the return entry before reducing the invoice quantity.`
+      );
+      continue;
+    }
+    if (oldLine && edited && rateChanged(oldLine, edited)) {
+      errors.push(`Cannot change the price, discount, or GST rate of '${edited.name}' — a credit note has already been issued against it. Delete the credit note first to change its rate.`);
+    }
+  }
+
+  if (errors.length > 0) throw new InvoiceQuantityValidationError(errors);
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -98,9 +171,17 @@ export async function PUT(
     let resolvedCustomerId = existing.customerId;
     if (customerId && customerId !== existing.customerId) {
       // Not filtered on deletedAt — a one-off customer is soft-deleted at creation but must still be assignable.
-      const customer = await prisma.customer.findUnique({ where: { id: String(customerId) }, select: { id: true } });
+      const customer = await prisma.customer.findUnique({ where: { id: String(customerId) }, select: { id: true, deletedAt: true } });
       if (!customer) {
         return NextResponse.json({ error: "Selected customer not found" }, { status: 400 });
+      }
+      // ...but one that was explicitly moved to the bin (has a delete_customer log entry, which a
+      // one-off customer never gets) must not be re-billed — same rule as PUT /api/customers/[id].
+      if (customer.deletedAt) {
+        const wasExplicitlyDeleted = await prisma.activityLog.findFirst({ where: { entityId: customer.id, entityType: "customer", action: "delete_customer" }, select: { id: true } });
+        if (wasExplicitlyDeleted) {
+          return NextResponse.json({ error: "This customer is in the bin — restore it before assigning invoices to them." }, { status: 400 });
+        }
       }
       resolvedCustomerId = customer.id;
     }
@@ -266,10 +347,10 @@ export async function PUT(
     // rupee, so without this tolerance a sub-paisa IEEE-754 summation artifact could flip an
     // already fully-paid invoice back to "partial" purely from float noise on an edit that never
     // touched payments at all (e.g. just editing notes or a line item's HSN).
-    const paidAmount = existing.paidAmount;
-    let newStatus = "unpaid";
-    if (paidAmount + 0.01 >= total) newStatus = "paid";
-    else if (paidAmount > 0) newStatus = "partial";
+    // Fast-fail against the pre-transaction snapshot; re-checked against a fresh read inside the transaction below.
+    if (total < existing.paidAmount - 0.01) {
+      return NextResponse.json({ error: `Total can't be less than the amount already received (₹${existing.paidAmount.toFixed(2)}). Edit or delete payments first.` }, { status: 400 });
+    }
 
     // Credit-limit check below needs the same Serializable isolation + P2034 retry the create route
     // uses — otherwise two concurrent edits/creates for the same customer can each read the same
@@ -281,6 +362,26 @@ export async function PUT(
     // anywhere due to hoisting.
     const attemptEdit = async () => {
       return prisma.$transaction(async (tx) => {
+      // Re-read paidAmount inside the transaction — a payment recorded/edited/deleted after the
+      // outer snapshot would otherwise leave status (and the total >= paid check) derived from a
+      // stale value. Same reasoning as the in-transaction re-read in the returns route.
+      const fresh = await tx.invoice.findUniqueOrThrow({ where: { id }, select: { paidAmount: true, deletedAt: true } });
+      if (fresh.deletedAt) throw new InvoiceEditValidationError("This invoice is in the bin — restore it before editing");
+      const paidAmount = fresh.paidAmount;
+      if (total < paidAmount - 0.01) {
+        throw new InvoiceEditValidationError(`Total can't be less than the amount already received (₹${paidAmount.toFixed(2)}). Edit or delete payments first.`);
+      }
+      // Recalculate status based on paidAmount — the +0.01 tolerance matches every other
+      // status-derivation site in the app (invoice/purchase-bill payment POST/PUT/DELETE, and the
+      // sibling PUT /api/purchase-bills/[id] edit route itself). paidAmount is an aggregate SUM of
+      // arbitrary-precision Payment.amount floats while `total` is rounded to the nearest whole
+      // rupee, so without this tolerance a sub-paisa IEEE-754 summation artifact could flip an
+      // already fully-paid invoice back to "partial" purely from float noise on an edit that never
+      // touched payments at all (e.g. just editing notes or a line item's HSN).
+      let newStatus = "unpaid";
+      if (paidAmount + 0.01 >= total) newStatus = "paid";
+      else if (paidAmount > 0) newStatus = "partial";
+
       // Excludes this invoice's own (pre-edit) balance from "current outstanding", then adds back
       // its post-edit balance — an edit that only rearranges this invoice's own items shouldn't
       // double-count it. Checked inside this same transaction (not before it) so a concurrent edit/
@@ -302,6 +403,9 @@ export async function PUT(
 
       // Must run before any mutation: a quantity can never drop below what's already been returned against that product.
       await assertInvoiceQuantitiesNotBelowReturned(tx, id, invoiceItems);
+      // A returned line's rate is what the credit note was computed from — changing it would leave
+      // the credit note crediting a different value than the invoice now charges for those units.
+      await assertReturnedLinesRatesUnchanged(tx, id, invoiceItems);
 
       // Restore stock for old items before replacing them — batched into one UPDATE to avoid a per-line round trip.
       const oldItems = await tx.invoiceItem.findMany({
@@ -396,6 +500,9 @@ export async function PUT(
     if (error instanceof InvoiceQuantityValidationError) {
       return NextResponse.json({ error: error.message, errors: error.errors }, { status: 400 });
     }
+    if (error instanceof InvoiceEditValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     if (error instanceof InvoiceConflictError) {
       return NextResponse.json({ error: "This invoice was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
     }
@@ -437,9 +544,14 @@ export async function DELETE(
     const result = await prisma.$transaction(async (tx) => {
       const inv = await tx.invoice.findUnique({
         where: { id },
-        select: { invoiceNumber: true, total: true, customer: { select: { name: true } } },
+        select: { invoiceNumber: true, total: true, deletedAt: true, customer: { select: { name: true } } },
       });
-      if (!inv) return { found: false, alreadyDeleted: false, inv: null };
+      if (!inv) return { found: false, alreadyDeleted: false, inv: null, creditNoteCount: 0 };
+
+      // A credit note's stock/value is tied to this invoice — binning the invoice while a live credit
+      // note still references it would leave the credit note (and its restored stock) orphaned.
+      const creditNoteCount = inv.deletedAt ? 0 : await tx.return.count({ where: { invoiceId: id, deletedAt: null } });
+      if (creditNoteCount > 0) return { found: true, alreadyDeleted: false, inv, creditNoteCount };
 
       const items = await tx.invoiceItem.findMany({
         where: { invoiceId: id },
@@ -450,7 +562,7 @@ export async function DELETE(
         data: { deletedAt: new Date() },
       });
       if (updateResult.count === 0) {
-        return { found: true, alreadyDeleted: true, inv };
+        return { found: true, alreadyDeleted: true, inv, creditNoteCount: 0 };
       }
       await batchAdjustStock(
         tx,
@@ -462,10 +574,13 @@ export async function DELETE(
           createdByUserId: auth.session.user.id,
         }
       );
-      return { found: true, alreadyDeleted: false, inv };
+      return { found: true, alreadyDeleted: false, inv, creditNoteCount: 0 };
     }, { timeout: 20000, maxWait: 10000 });
 
     if (!result.found) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    if (result.creditNoteCount > 0) {
+      return NextResponse.json({ error: `This invoice has ${result.creditNoteCount} credit note(s). Delete the credit note(s) first, then delete the invoice.` }, { status: 400 });
+    }
     if (result.alreadyDeleted) return NextResponse.json({ message: "Invoice already moved to bin" });
 
     revalidateTag("invoices", { expire: 0 });

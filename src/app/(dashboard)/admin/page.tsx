@@ -190,21 +190,38 @@ export default function AdminPage() {
   const LOGS_LIMIT = 10;
   const CLEAR_LOGS_PHRASE = "DELETE ALL";
 
+  // Monotonic id of the latest loadLogs call — a slower, older request (e.g. a previous filter/search)
+  // must not overwrite the results of a newer one when it finally resolves.
+  const logsRequestIdRef = useRef(0);
   const loadLogs = useCallback(async (page: number, userId: string, search: string) => {
+    const requestId = ++logsRequestIdRef.current;
     setLogsLoading(true);
     const offset = (page - 1) * LOGS_LIMIT;
     const qs = new URLSearchParams({ limit: String(LOGS_LIMIT), offset: String(offset) });
     if (userId) qs.set("userId", userId);
     if (search) qs.set("search", search);
-    const res = await fetch(`/api/admin/activity?${qs}`, { headers: { "x-no-loader": "1" } });
-    const data = await res.json();
-    setLogsLoading(false);
-    setLogsLoadedOnce(true);
-    if (res.ok) {
-      setLogs(data.logs);
-      setLogsTotal(data.total);
-      setLogsPage(page);
+    try {
+      const res = await fetch(`/api/admin/activity?${qs}`, { headers: { "x-no-loader": "1" } });
+      const data = await res.json().catch(() => ({}));
+      if (requestId !== logsRequestIdRef.current) return;
+      if (res.ok) {
+        setLogs(data.logs);
+        setLogsTotal(data.total);
+        setLogsPage(page);
+      } else {
+        toast({ type: "error", title: "Couldn't load activity", message: data.error ?? "Please try again." });
+      }
+    } catch {
+      if (requestId !== logsRequestIdRef.current) return;
+      toast({ type: "error", title: "Network error", message: "Couldn't load the activity log. Please try again." });
+    } finally {
+      if (requestId === logsRequestIdRef.current) {
+        setLogsLoading(false);
+        setLogsLoadedOnce(true);
+      }
     }
+    // toast is stable (context-provided); including it would needlessly re-create loadLogs and re-fire the effects keyed on it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -272,8 +289,17 @@ export default function AdminPage() {
       return;
     }
     setAddSaving(true); setAddMsg(null);
-    const res = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(addForm) });
-    const data = await res.json(); setAddSaving(false);
+    let res: Response;
+    let data: { error?: string } & Partial<User>;
+    try {
+      res = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(addForm) });
+      data = await res.json().catch(() => ({}));
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Couldn't reach the server. Please try again." });
+      return;
+    } finally {
+      setAddSaving(false);
+    }
     if (!res.ok) {
       const msg: string = data.error ?? "Failed to add user.";
       if (/email/i.test(msg)) setAddFieldErrors(prev => ({ ...prev, email: msg }));
@@ -281,7 +307,7 @@ export default function AdminPage() {
       else setAddMsg({ type: "err", text: msg });
       return;
     }
-    setUsers(prev => [...prev, data]); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddOpen(false); setAddMsg(null); setAddFieldErrors({});
+    setUsers(prev => [...prev, data as User]); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddOpen(false); setAddMsg(null); setAddFieldErrors({});
     toast({ type: "success", title: "User created", message: `"${data.name}" added to the system.` });
   }
 
@@ -296,8 +322,17 @@ export default function AdminPage() {
     setEditSaving(true); setEditMsg(null);
     const body: Record<string, string> = { name: editForm.name, email: editForm.email, role: editForm.role };
     if (editForm.newPassword) body.newPassword = editForm.newPassword;
-    const res = await fetch(`/api/admin/users/${editUser.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const data = await res.json(); setEditSaving(false);
+    let res: Response;
+    let data: { error?: string } & Partial<User>;
+    try {
+      res = await fetch(`/api/admin/users/${editUser.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      data = await res.json().catch(() => ({}));
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Couldn't reach the server. Please try again." });
+      return;
+    } finally {
+      setEditSaving(false);
+    }
     if (!res.ok) {
       const msg: string = data.error ?? "Could not update user.";
       if (/email/i.test(msg)) setEditFieldErrors({ email: msg });
@@ -306,7 +341,7 @@ export default function AdminPage() {
       else setEditMsg({ type: "err", text: msg });
       return;
     }
-    setUsers(prev => prev.map(u => u.id === data.id ? data : u)); setEditUser(null); setEditMsg(null); setEditFieldErrors({});
+    setUsers(prev => prev.map(u => u.id === data.id ? data as User : u)); setEditUser(null); setEditMsg(null); setEditFieldErrors({});
     toast({ type: "success", title: "User updated", message: `${data.name}'s details saved.` });
   }
 
@@ -453,6 +488,7 @@ export default function AdminPage() {
     <>
     {addSaving && <OverlayLoader text="Creating user…" />}
     {editSaving && <OverlayLoader text="Saving changes…" />}
+    {reassigningAndDeleting && <OverlayLoader text="Reassigning & deleting…" />}
     <div className="page-stack">
       <ConfirmDialog
         open={!!deleteConfirm}
@@ -706,7 +742,7 @@ export default function AdminPage() {
                       </div>
                     </td>
                     <td data-label="Role"><RoleBadge role={u.role} /></td>
-                    <td data-label="Invoices" className={`table-td-right ${styles.invoicesCell}`}>{u._count.invoices}</td>
+                    <td data-label="Invoices" className={`table-td-right ${styles.invoicesCell}`}>{u.role === "manager" ? "—" : u._count.invoices}</td>
                     <td data-label="Joined" className={styles.joinedCell}>
                       {formatDate(u.createdAt)}
                     </td>

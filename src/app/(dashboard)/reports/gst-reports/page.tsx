@@ -32,6 +32,9 @@ interface GstFilingReport {
   summary: {
     outputTaxable: number; outputTax: number; creditNoteTax: number; netOutputTax: number;
     inputTaxable: number; inputTax: number;
+    // GST on bills from vendors without a GSTIN — not claimable as ITC, so excluded from inputTax.
+    // Optional: older server builds don't send it.
+    ineligibleInputTaxable?: number; ineligibleInputTax?: number;
     rawNetGstPayable: number; netGstPayableRoundOff: number; netGstPayable: number;
   };
   validation: { issues: ValidationIssue[]; errorCount: number; warningCount: number };
@@ -183,8 +186,8 @@ export default function GstFilingPage() {
           </div>
         </div>
         <div className={styles.tabsRow}>
-          <button className={`${styles.tabBtn} ${mode === "fy" ? styles.active : ""}`} onClick={() => switchMode("fy")}>Financial Year</button>
-          <button className={`${styles.tabBtn} ${mode === "month" ? styles.active : ""}`} onClick={() => switchMode("month")}>Month</button>
+          <button type="button" aria-pressed={mode === "fy"} className={`${styles.tabBtn} ${mode === "fy" ? styles.active : ""}`} onClick={() => switchMode("fy")}>Financial Year</button>
+          <button type="button" aria-pressed={mode === "month"} className={`${styles.tabBtn} ${mode === "month" ? styles.active : ""}`} onClick={() => switchMode("month")}>Month</button>
         </div>
         <div className={styles.dateFilterRow}>
           {mode === "month" ? (
@@ -283,6 +286,15 @@ export default function GstFilingPage() {
                 { label: "Credit Note Tax", value: fmt(report.summary.creditNoteTax) },
                 { label: "Net Output Tax", value: fmt(report.summary.netOutputTax) },
                 { label: "Input Tax Credit", value: fmt(report.summary.inputTax) },
+                ...((report.summary.ineligibleInputTax ?? 0) > 0
+                  ? [{
+                      label: "Ineligible ITC (vendor without GSTIN)",
+                      value: fmt(report.summary.ineligibleInputTax ?? 0),
+                      sub: report.summary.ineligibleInputTaxable
+                        ? `On taxable ${fmt(report.summary.ineligibleInputTaxable)} · not claimed`
+                        : "Not claimed as input tax credit",
+                    }]
+                  : []),
                 {
                   label: "Net GST Payable (Rounded)",
                   value: fmt(report.summary.netGstPayable),

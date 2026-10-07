@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Modal } from "./Modal";
 import { Button } from "@/components/ui/Button";
 import { Select, FormField } from "@/components/ui/Input";
@@ -31,19 +31,29 @@ interface Props {
 export function ReassignOwnerModal({ open, onClose, entityLabel, documentLabel, currentUserId, currentUserName, saving, onSave }: Props) {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [selectedId, setSelectedId] = useState(currentUserId);
+
+  const loadUsers = useCallback(() => {
+    setLoadingUsers(true);
+    setLoadError(false);
+    fetch("/api/admin/users", { headers: { "x-no-loader": "1" } })
+      .then(async (r) => {
+        const data = await r.json().catch(() => null);
+        // A failed response (403/500) must not silently render as an empty picker.
+        if (!r.ok || !Array.isArray(data)) throw new Error("load failed");
+        setUsers(data);
+      })
+      .catch(() => { setUsers([]); setLoadError(true); })
+      .finally(() => setLoadingUsers(false));
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset-on-open, not a derived-state sync
     setSelectedId(currentUserId);
-    setLoadingUsers(true);
-    fetch("/api/admin/users", { headers: { "x-no-loader": "1" } })
-      .then((r) => r.json())
-      .then((data) => setUsers(Array.isArray(data) ? data : []))
-      .catch(() => setUsers([]))
-      .finally(() => setLoadingUsers(false));
-  }, [open, currentUserId]);
+    loadUsers();
+  }, [open, currentUserId, loadUsers]);
 
   const unchanged = selectedId === currentUserId;
   // Managers are read-only and can't create documents in normal use — excluded as a reassign
@@ -67,7 +77,7 @@ export function ReassignOwnerModal({ open, onClose, entityLabel, documentLabel, 
             type="button"
             variant="primary"
             loading={saving}
-            disabled={saving || loadingUsers || unchanged || !selectedId}
+            disabled={saving || loadingUsers || loadError || unchanged || !selectedId}
             onClick={() => onSave(selectedId)}
           >
             Reassign
@@ -78,6 +88,12 @@ export function ReassignOwnerModal({ open, onClose, entityLabel, documentLabel, 
       <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "var(--c-text-2)" }}>
         Currently created by <strong>{currentUserName}</strong>. This only changes who is recorded as the creator — no other data on this {entityLabel.toLowerCase()} changes.
       </p>
+      {loadError && !loadingUsers ? (
+        <div role="alert" style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.875rem", color: "var(--c-red)" }}>
+          <span>Couldn&apos;t load users.</span>
+          <Button type="button" variant="secondary" size="sm" onClick={loadUsers}>Retry</Button>
+        </div>
+      ) : (
       <FormField label="Reassign to">
         <Select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} disabled={loadingUsers || saving}>
           {loadingUsers && <option value={currentUserId}>Loading users…</option>}
@@ -88,6 +104,7 @@ export function ReassignOwnerModal({ open, onClose, entityLabel, documentLabel, 
           ))}
         </Select>
       </FormField>
+      )}
     </Modal>
   );
 }

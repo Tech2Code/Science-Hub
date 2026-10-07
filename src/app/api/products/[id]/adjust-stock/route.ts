@@ -26,34 +26,48 @@ export async function POST(
       return NextResponse.json({ error: "Reason must be 500 characters or fewer." }, { status: 400 });
     }
 
-    const parsedStock = Number(newStock);
+    // Number(null) and Number("") are both 0 — without this, a blank field would silently zero the
+    // product's stock. Only a real number or a non-empty numeric string is accepted.
+    const isNumericInput =
+      (typeof newStock === "number") ||
+      (typeof newStock === "string" && newStock.trim() !== "");
+    const parsedStock = isNumericInput ? Number(newStock) : NaN;
     if (!Number.isFinite(parsedStock) || !Number.isInteger(parsedStock) || parsedStock < 0) {
       return NextResponse.json({ error: "New stock must be a whole number of 0 or more." }, { status: 400 });
     }
 
-    const product = await prisma.product.findUnique({ where: { id }, select: { name: true, stock: true, unit: true, deletedAt: true } });
+    const product = await prisma.product.findUnique({ where: { id }, select: { name: true, unit: true, deletedAt: true } });
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
     if (product.deletedAt) {
       return NextResponse.json({ error: "This product is in the bin — restore it before adjusting its stock." }, { status: 400 });
     }
 
-    const delta = parsedStock - product.stock;
-    if (delta === 0) {
-      return NextResponse.json({ error: "New stock is the same as the current stock — nothing to adjust." }, { status: 400 });
-    }
-
-    const [updated] = await prisma.$transaction(async (tx) => {
-      return batchAdjustStock(
+    // Current stock is read inside the transaction under a row lock (FOR UPDATE), so a sale/purchase
+    // landing between the read and the write can't make the delta land on a stale baseline — the
+    // result is always exactly the counted `newStock`.
+    const result = await prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<{ stock: number }[]>`SELECT stock FROM "Product" WHERE id = ${id} FOR UPDATE`;
+      if (rows.length === 0) throw new ProductNotFoundError([id]);
+      const previousStock = rows[0].stock;
+      const delta = parsedStock - previousStock;
+      if (delta === 0) return { unchanged: true as const };
+      const [updated] = await batchAdjustStock(
         tx,
         [{ productId: id, quantity: delta }],
         { type: "manual", notes: notes.trim(), createdByUserId: auth.session.user.id }
       );
+      return { unchanged: false as const, updated, previousStock, delta };
     });
+
+    if (result.unchanged) {
+      return NextResponse.json({ error: "New stock is the same as the current stock — nothing to adjust." }, { status: 400 });
+    }
+    const { updated, previousStock, delta } = result;
 
     await logActivity(
       auth.session.user.id,
       "manual_stock_adjustment",
-      `Adjusted stock for "${product.name}" from ${product.stock} to ${parsedStock} ${product.unit || "Nos"} (${delta > 0 ? "+" : ""}${delta}) — ${notes.trim()}`,
+      `Adjusted stock for "${product.name}" from ${previousStock} to ${parsedStock} ${product.unit || "Nos"} (${delta > 0 ? "+" : ""}${delta}) — ${notes.trim()}`,
       id,
       "product"
     );

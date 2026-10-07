@@ -78,13 +78,25 @@ export default function NewCustomerPage() {
     if (hasErrors(newErrors)) { setErrors(newErrors); return; }
     setErrors({});
     setSaving(true);
-    const res = await fetch("/api/customers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, idempotencyKey: idempotency.key() }),
-    });
+    let res: Response;
+    try {
+      res = await fetch("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, idempotencyKey: idempotency.key() }),
+      });
+    } catch {
+      toast({ type: "error", title: "Failed", message: "Network error. Please try again." });
+      setSaving(false);
+      return;
+    }
     if (res.ok) {
-      const created = await res.json();
+      const created = await res.json().catch(() => null);
+      if (!created?.id) {
+        toast({ type: "error", title: "Failed", message: "Unexpected server response. Check the customers list before retrying." });
+        setSaving(false);
+        return;
+      }
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/customers");
       toast({ type: "success", title: "Customer created", message: `"${created.name}" added.` });

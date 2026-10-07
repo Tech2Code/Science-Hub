@@ -3,6 +3,7 @@ import { put } from "@vercel/blob";
 import { randomBytes } from "crypto";
 import { deleteAttachmentBlob, isPurchaseBillBlobUrl, getPrivateBlobToken } from "@/lib/blobStorage";
 import { requireWriteAccess } from "@/lib/apiAuth";
+import { prisma } from "@/lib/prisma";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"];
@@ -90,6 +91,13 @@ export async function DELETE(req: NextRequest) {
     const { url } = await req.json();
     if (typeof url !== "string" || !isPurchaseBillBlobUrl(url)) {
       return NextResponse.json({ error: "Invalid url" }, { status: 400 });
+    }
+    // This endpoint is only for discarding never-saved uploads. Any bill still referencing the URL —
+    // including one in the Bin, which can be restored — owns that file; deleting it here would leave
+    // the bill pointing at a missing attachment.
+    const owner = await prisma.purchaseBill.findFirst({ where: { attachmentUrl: url }, select: { id: true } });
+    if (owner) {
+      return NextResponse.json({ error: "This file is attached to a purchase bill and can't be deleted here." }, { status: 400 });
     }
     await deleteAttachmentBlob(url);
     return NextResponse.json({ message: "Deleted" });

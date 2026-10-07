@@ -46,7 +46,7 @@
   font-size: 0.875rem;
   line-height: 1.4;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .searchInput::-webkit-search-decoration,
@@ -67,6 +67,10 @@
   border-color: var(--c-blue, #3b82f6);
 }
 
+.searchInput:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-blue) 35%, transparent);
+}
+
 .roleTrigger {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--c-border);
@@ -81,6 +85,7 @@
 
 .roleTrigger:focus-visible {
   border-color: var(--c-blue, #3b82f6);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-blue) 35%, transparent);
 }
 
 /* ── Table ──────────────────────────────────────────────── */

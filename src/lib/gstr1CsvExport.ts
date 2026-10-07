@@ -114,9 +114,11 @@ export function buildGstr1CsvFiles(report: GstFilingReport): Gstr1CsvResult {
   const cdnrMap = new Map<string, { row: CreditNoteRow; rate: number; taxableValue: number; pos: string }>();
   for (const cn of report.creditNotes) {
     if (cn.creditNoteNumber === "—") continue; // no number assigned yet — nothing valid to export
-    const invoiceRow = invoiceTotalByNumber.get(cn.invoiceNumber);
-    if (!invoiceRow) continue;
-    const pos = resolvePos(invoiceRow.placeOfSupply, `credit note ${cn.creditNoteNumber}`);
+    // Place of supply comes from the credit note's own original invoice (carried on the row by
+    // buildGstFilingReport), NOT from this period's Sales Register — the invoice may be dated in an
+    // earlier period, and the credit note must still be reported in the period it was issued.
+    // Same condition as isCreditNoteFileable() in gstFiling.ts, so the summary and CSV agree.
+    const pos = resolvePos(cn.placeOfSupply, `credit note ${cn.creditNoteNumber}`);
     if (!pos) continue;
     const key = `${cn.creditNoteNumber}|${cn.gstRate}`;
     const existing = cdnrMap.get(key);
@@ -126,14 +128,11 @@ export function buildGstr1CsvFiles(report: GstFilingReport): Gstr1CsvResult {
   const cdnrCsv = toCsv(
     ["GSTIN/UIN of Recipient", "Receiver Name", "Note Number", "Note Date", "Note Type", "Place Of Supply",
       "Reverse Charge", "Note Supply Type", "Note Value", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount"],
-    Array.from(cdnrMap.values()).map(({ row, rate, taxableValue, pos }) => {
-      const invoiceRow = invoiceTotalByNumber.get(row.invoiceNumber);
-      return [
-        row.customerGstin, neutralizeFormulaCell(row.customerName), row.creditNoteNumber, formatGstDate(row.date), "C", pos,
-        invoiceRow?.reverseCharge ? "Y" : "N", "Regular B2B",
-        round2(creditNoteTotals.get(row.creditNoteNumber) ?? 0), "", rate, round2(taxableValue), "",
-      ];
-    }),
+    Array.from(cdnrMap.values()).map(({ row, rate, taxableValue, pos }) => [
+      row.customerGstin, neutralizeFormulaCell(row.customerName), row.creditNoteNumber, formatGstDate(row.date), "C", pos,
+      row.reverseCharge ? "Y" : "N", "Regular B2B",
+      round2(creditNoteTotals.get(row.creditNoteNumber) ?? 0), "", rate, round2(taxableValue), "",
+    ]),
   );
 
   // ── hsn(b2b).csv / hsn(b2c).csv ────────────────────────────────────────

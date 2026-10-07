@@ -259,11 +259,19 @@ export default function SettingsPage() {
   // untouched section (e.g. a bank number that fails to decrypt) can never block or overwrite another save.
   async function putSettings(overrides: Partial<BusinessSettings> & { gmailAppPassword?: string }) {
     const body = { ...overrides, expectedUpdatedAt: saved.updatedAt || undefined };
-    const res = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    // Never throws: a network failure resolves to a normal {ok:false} result so every per-section
+    // saver's unconditional "reset saving flag" line still runs (no stuck OverlayLoader).
+    let res: Response;
+    try {
+      res = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    } catch {
+      return { ok: false as const, error: "Network error — couldn't reach the server. Please try again.", conflict: false as const };
+    }
     if (res.ok) {
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (!data) return { ok: false as const, error: "Unexpected server response. Please reload and check your settings.", conflict: false as const };
       patchCache("/api/settings", () => data);
-      await clearAllCachedPdfs();
+      await clearAllCachedPdfs().catch(() => {});
       return { ok: true as const, data };
     }
     const d = await res.json().catch(() => ({}));
@@ -614,9 +622,11 @@ export default function SettingsPage() {
       }
     } catch {
       toast({ type: "error", title: "Network error", message: "Could not upload logo." });
+    } finally {
+      // finally (not after the try) — the early `return`s above would otherwise leave the loader stuck.
+      setLogoUploading(false);
+      e.target.value = "";
     }
-    setLogoUploading(false);
-    e.target.value = "";
   }
 
   async function handleRemoveLogo() {

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
@@ -95,7 +96,7 @@ export default function PaymentsPage() {
   listParams.set("pageSize", String(pageSize));
   const apiUrl = `/api/payments?${listParams.toString()}`;
 
-  const { data, loading } = useFetch<PaymentListResponse>(apiUrl);
+  const { data, loading, error, mutate } = useFetch<PaymentListResponse>(apiUrl);
   const { data: stats } = useFetch<PaymentStats>("/api/payments/stats");
   const payments = data?.data ?? [];
   const total = data?.total ?? 0;
@@ -142,6 +143,11 @@ export default function PaymentsPage() {
             <tbody>
               {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
+              ) : error ? (
+                <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
+                  <span style={{ color: "var(--c-red-text)" }}>Couldn&apos;t load payments.</span>{" "}
+                  <Button size="sm" variant="secondary" onClick={() => mutate()}>Retry</Button>
+                </td></tr>
               ) : payments.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search ? "No payments match your search." : "No payments recorded yet."}

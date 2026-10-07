@@ -87,12 +87,23 @@ export async function POST(
       // quantity exceed what's actually returnable — reject outright, same rule invoices/purchase
       // bills already enforce at create time.
       const seenProductIds = new Set<string>();
+      const seenCustomNames = new Set<string>();
       for (const item of items) {
         if (item.productId) {
           if (seenProductIds.has(item.productId)) {
             return NextResponse.json({ error: "Each product can only appear once per credit note — combine duplicate lines into a single quantity instead." }, { status: 400 });
           }
           seenProductIds.add(item.productId);
+        } else {
+          // Same reasoning for a custom (unlinked) line, keyed by name — the only thing that ties it back to its invoice line.
+          const key = customLineKey(String(item.name ?? ""));
+          if (!key) {
+            return NextResponse.json({ error: "Custom return items must have a name" }, { status: 400 });
+          }
+          if (seenCustomNames.has(key)) {
+            return NextResponse.json({ error: `"${item.name}" appears more than once on this credit note — combine duplicate lines into a single quantity instead.` }, { status: 400 });
+          }
+          seenCustomNames.add(key);
         }
       }
     }
@@ -102,6 +113,9 @@ export async function POST(
       include: { customer: true, items: true },
     });
     if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    if (invoice.deletedAt) {
+      return NextResponse.json({ error: "This invoice is in the bin — restore it before recording a return" }, { status: 400 });
+    }
     // TS narrowing on `invoice`/`auth` doesn't carry into the nested attemptCreate function below, so bind locals up front.
     const inv = invoice;
     const userId = auth.session.user.id;
@@ -152,22 +166,54 @@ export async function POST(
           where: { id },
           select: {
             paidAmount: true,
-            items: { select: { productId: true, quantity: true, price: true, gstRate: true, discountPercent: true } },
+            deletedAt: true,
+            items: { select: { productId: true, name: true, quantity: true, price: true, gstRate: true, discountPercent: true } },
           },
         });
+        // Re-checked under the transaction too — the invoice could have been binned after the outer check.
+        if (currentInvoice.deletedAt) {
+          throw new ReturnValidationError("This invoice is in the bin — restore it before recording a return");
+        }
+
+        // Custom (unlinked) invoice lines, keyed by trimmed lowercase name — the only link a custom
+        // return line has back to what was actually invoiced. Rates come from the first matching
+        // line; quantity is summed in case a legacy invoice predates the unique-custom-name rule.
+        const customLines = new Map<string, { price: number; gstRate: number; discountPercent: number; quantity: number }>();
+        for (const it of currentInvoice.items) {
+          if (it.productId) continue;
+          const key = customLineKey(it.name);
+          const prev = customLines.get(key);
+          if (prev) prev.quantity += it.quantity;
+          else customLines.set(key, { price: it.price, gstRate: it.gstRate, discountPercent: it.discountPercent, quantity: it.quantity });
+        }
+        for (const item of items) {
+          if (item.productId) continue;
+          const line = customLines.get(customLineKey(item.name));
+          if (!line) {
+            throw new ReturnValidationError(`"${item.name}" doesn't match any custom item on this invoice.`);
+          }
+          if (Math.abs(line.price - item.price) > 0.005) {
+            throw new ReturnValidationError(`Price for "${item.name}" must match the invoiced price (₹${line.price.toFixed(2)}).`);
+          }
+        }
 
         // Price, GST rate, and discount % are all inherited from the matching invoice line — a
         // credit note can't invent its own values for any of the three, or it could refund more
         // (or less) than what was actually charged for the returned goods. Rebuilt from this same
         // in-transaction re-read (not the pre-transaction `invoice.items` snapshot) so a concurrent
         // invoice-item edit landing in the gap can't leave a return computed from stale numbers.
-        // Only a custom (non-catalog) item, which has no productId to trace back to an invoice
-        // line, falls back to the client-supplied price/discount.
+        // A custom (non-catalog) item has no productId, so it inherits the same three values from
+        // its name-matched unlinked invoice line (validated above) instead.
         const rateByProduct = new Map(currentInvoice.items.map((it) => [it.productId, it.gstRate]));
         const discountByProduct = new Map(currentInvoice.items.map((it) => [it.productId, it.discountPercent]));
         const priceByProduct = new Map(currentInvoice.items.map((it) => [it.productId, it.price]));
 
         const computedItems = items.map((item) => {
+          if (!item.productId) {
+            const line = customLines.get(customLineKey(item.name))!;
+            const { discountAmount, taxable, gstAmt, total } = lineBreakdown({ qty: item.quantity, price: line.price, gstRate: line.gstRate, discountPercent: line.discountPercent });
+            return { ...item, price: line.price, gstRate: line.gstRate, discountPercent: line.discountPercent, discountAmount, taxable, gstAmt, total };
+          }
           const gstRate = (item.productId ? rateByProduct.get(item.productId) : undefined) ?? effectiveRate;
           const discountPercent = item.productId && discountByProduct.has(item.productId)
             ? discountByProduct.get(item.productId)!
@@ -208,14 +254,28 @@ export async function POST(
           invoicedQtyByProduct.set(it.productId, (invoicedQtyByProduct.get(it.productId) ?? 0) + it.quantity);
         }
         const returnedQtyByProduct = new Map<string, number>();
+        const returnedQtyByCustomName = new Map<string, number>();
         for (const r of existingReturns) {
           for (const ri of r.items) {
-            if (!ri.productId) continue;
+            if (!ri.productId) {
+              const key = customLineKey(ri.name);
+              returnedQtyByCustomName.set(key, (returnedQtyByCustomName.get(key) ?? 0) + ri.quantity);
+              continue;
+            }
             returnedQtyByProduct.set(ri.productId, (returnedQtyByProduct.get(ri.productId) ?? 0) + ri.quantity);
           }
         }
         for (const item of items) {
-          if (!item.productId) continue;
+          if (!item.productId) {
+            const key = customLineKey(item.name);
+            const remaining = (customLines.get(key)?.quantity ?? 0) - (returnedQtyByCustomName.get(key) ?? 0);
+            if (item.quantity > remaining) {
+              throw new ReturnValidationError(
+                `Cannot return ${item.quantity} of "${item.name}" — only ${remaining} unit(s) remain returnable on this invoice.`
+              );
+            }
+            continue;
+          }
           const invoicedQty = invoicedQtyByProduct.get(item.productId) ?? 0;
           const alreadyReturned = returnedQtyByProduct.get(item.productId) ?? 0;
           const remaining = invoicedQty - alreadyReturned;
@@ -328,3 +388,8 @@ export async function POST(
 }
 
 class ReturnValidationError extends Error {}
+
+// Same key the invoice create/edit routes use to keep custom item names unique per invoice.
+function customLineKey(name: string): string {
+  return name.trim().toLowerCase();
+}

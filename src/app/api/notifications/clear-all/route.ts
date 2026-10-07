@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/apiAuth";
-import { getAllActiveNotificationIds, type NotificationCategoryKey } from "@/lib/notifications";
+import { getAllActiveNotificationIds, canSeeNotificationCategory, type NotificationCategoryKey } from "@/lib/notifications";
 
 export async function POST() {
   try {
@@ -13,6 +13,7 @@ export async function POST() {
 
     const active = await getAllActiveNotificationIds(userId, includeBin);
     const data = (Object.entries(active) as [NotificationCategoryKey, string[]][])
+      .filter(([category]) => canSeeNotificationCategory(auth.session.user, category))
       .flatMap(([category, ids]) => ids.map((entityId) => ({ userId, category, entityId })));
 
     if (data.length > 0) {

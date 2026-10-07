@@ -87,7 +87,7 @@ export default function RateListsPage() {
   listParams.set("pageSize", String(pageSize));
   const apiUrl = `/api/rate-lists?${listParams.toString()}`;
 
-  const { data, loading, mutate } = useFetch<RateListListResponse>(apiUrl);
+  const { data, loading, error, mutate } = useFetch<RateListListResponse>(apiUrl);
   const rateLists = data?.data ?? [];
   const total = data?.total ?? 0;
   const showSkeleton = loading && !data;
@@ -240,6 +240,11 @@ export default function RateListsPage() {
             <tbody>
               {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
+              ) : error ? (
+                <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
+                  <span style={{ color: "var(--c-red-text)" }}>Couldn&apos;t load rate lists.</span>{" "}
+                  <Button size="sm" variant="secondary" onClick={() => mutate()}>Retry</Button>
+                </td></tr>
               ) : rateLists.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search.trim() ? `No rate lists match "${search}".` : "No rate lists yet. Create your first one."}

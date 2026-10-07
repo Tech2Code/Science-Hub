@@ -77,3 +77,16 @@ export async function deleteAttachmentBlob(url: string | null | undefined) {
     console.error("Failed to delete blob:", error);
   }
 }
+
+// Builds an `inline` Content-Disposition for a served attachment. Header values must be Latin-1, so
+// a filename with non-ASCII characters (Hindi, accented letters, emoji) used verbatim would make the
+// Response constructor throw. The plain `filename=` gets an ASCII-only fallback (anything outside
+// printable ASCII, plus `"`/`\` which would break the quoted value, becomes "_"), and `filename*=`
+// carries the real name RFC 5987-encoded for browsers that support it. CR/LF never survive either form.
+export function attachmentContentDisposition(name: string): string {
+  const trimmed = name.replace(/[\r\n]/g, "").trim().slice(0, 200) || "attachment";
+  const asciiFallback = trimmed.replace(/[^\x20-\x7E]|["\\]/g, "_");
+  // encodeURIComponent leaves ' ( ) * unescaped, but RFC 5987's attr-char set excludes them.
+  const encoded = encodeURIComponent(trimmed).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `inline; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+}

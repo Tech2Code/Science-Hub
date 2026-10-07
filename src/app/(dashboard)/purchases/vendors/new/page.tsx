@@ -79,23 +79,26 @@ export default function NewVendorPage() {
     if (hasErrors(newErrors)) { setErrors(newErrors); return; }
     setErrors({});
     setSaving(true);
-    const res = await fetch("/api/vendors", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, idempotencyKey: idempotency.key() }),
-    });
-    if (res.ok) {
-      const created = await res.json();
-      clearFormDraft(DRAFT_KEY);
-      bustCachePrefix("/api/vendors");
-      toast({ type: "success", title: "Vendor created", message: `"${form.name}" added.` });
-      // Deliberately not resetting `saving` here — it must stay locked until
-      // navigation actually replaces this page.
-      router.push(`/purchases/vendors/${created.id}`);
-      return;
-    } else {
+    try {
+      const res = await fetch("/api/vendors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, idempotencyKey: idempotency.key() }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        clearFormDraft(DRAFT_KEY);
+        bustCachePrefix("/api/vendors");
+        toast({ type: "success", title: "Vendor created", message: `"${form.name}" added.` });
+        // Deliberately not resetting `saving` here — it must stay locked until
+        // navigation actually replaces this page.
+        router.push(`/purchases/vendors/${created.id}`);
+        return;
+      }
       const d = await res.json().catch(() => ({}));
       toast({ type: "error", title: "Failed", message: d.error ?? "Failed to create vendor." });
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Couldn't reach the server. Please try again." });
     }
     setSaving(false);
   }

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { istTodayStartUtc } from "@/lib/validation";
+import type { ProtectedSection } from "@/lib/sections";
 
 // Capped per category — this powers a topbar "glance" dropdown, not a paginated list; each
 // category links through to its real list page (with existing filters) for the full picture.
@@ -559,4 +560,31 @@ export async function getNotificationCategoryItems(userId: string, category: Not
   // binExpiring
   const binExpiringEntities = await fetchBinExpiringEntities(notDismissed);
   return binExpiringEntities.slice(0, CATEGORY_ITEM_LIMIT).map(binEntityToItem);
+}
+
+// Section gating for the money-related categories, mirroring the pages those alerts are about:
+// overdue invoices / over-limit customers are receivables (Payments Received), overdue bills are
+// payables (Payments Made). Admin sees everything; stock/bin categories are not section-gated.
+const CATEGORY_SECTION: Partial<Record<NotificationCategoryKey, ProtectedSection>> = {
+  overdueInvoices: "payments_received",
+  overLimitCustomers: "payments_received",
+  overdueBills: "payments_made",
+};
+
+export function canSeeNotificationCategory(user: { role: string; sections?: string[] | null }, category: NotificationCategoryKey): boolean {
+  if (user.role === "admin") return true;
+  const section = CATEGORY_SECTION[category];
+  if (!section) return true;
+  return Array.isArray(user.sections) && user.sections.includes(section);
+}
+
+// Blanks out any category the caller isn't allowed to see, keeping the response shape the client expects.
+export function filterNotificationSummary(summary: NotificationSummary, user: { role: string; sections?: string[] | null }): NotificationSummary {
+  const empty = { count: 0, items: [] };
+  return {
+    ...summary,
+    overdueInvoices: canSeeNotificationCategory(user, "overdueInvoices") ? summary.overdueInvoices : empty,
+    overLimitCustomers: canSeeNotificationCategory(user, "overLimitCustomers") ? summary.overLimitCustomers : empty,
+    overdueBills: canSeeNotificationCategory(user, "overdueBills") ? summary.overdueBills : empty,
+  };
 }

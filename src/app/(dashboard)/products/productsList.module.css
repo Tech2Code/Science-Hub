@@ -37,8 +37,9 @@
 .filterCountActive {
   /* Active tab background is a solid blue (see .filter-tab-active in globals.css) —
      the amber/red badge's own translucent --badge-bg nearly disappears against it,
-     so give it a solid white chip instead of the mixed-transparent background. */
-  background: #fff;
+     so give it a solid card-colored chip (white in light mode, the dark card surface in dark
+     mode, where --badge-color's lighter amber/red would wash out against white). */
+  background: var(--c-bg-card);
   color: var(--badge-color);
 }
 

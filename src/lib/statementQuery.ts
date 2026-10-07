@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { toIstDateStr } from "@/lib/validation";
 
 // A statement ("account ledger") is a chronological Debit/Credit list with a running balance —
 // shared shape for both the Customer statement (Invoice=debit, Payment/CreditNote=credit, positive
@@ -33,6 +34,11 @@ export interface LedgerResult {
   rows: LedgerRow[];
 }
 
+// Documents (invoice/purchase bill) before settlements (payments/credit notes) within one IST day.
+const LEDGER_TYPE_RANK: Record<LedgerEntryType, number> = {
+  invoice: 0, purchase_bill: 0, payment: 1, credit_note: 1, purchase_payment: 1,
+};
+
 // Walks the (already date-filtered, if the caller pre-filtered at the DB layer) entry list once so
 // the running balance is always correct. `openingBalanceSeed` carries forward the balance of
 // everything before the passed-in entries (computed by the caller, typically via a DB-side
@@ -41,7 +47,18 @@ export interface LedgerResult {
 // correctly; a caller that still passes full unfiltered history (seed 0) gets the exact same
 // result as before, since `from`/`to` here still walk-and-exclude out-of-range entries themselves.
 export function buildLedger(entries: LedgerEntry[], from?: Date, to?: Date, openingBalanceSeed = 0): LedgerResult {
-  const sorted = [...entries].sort((a, b) => a.date.getTime() - b.date.getTime());
+  // Same IST calendar day → the document (invoice/purchase bill) sorts before anything settling it
+  // (payment/credit note/purchase payment), then by time. A payment is stored at exact IST midnight
+  // while its same-day invoice keeps its real creation time, so a pure timestamp sort would put the
+  // payment first and show a transient negative running balance.
+  const sorted = [...entries].sort((a, b) => {
+    const dayA = toIstDateStr(a.date);
+    const dayB = toIstDateStr(b.date);
+    if (dayA !== dayB) return dayA < dayB ? -1 : 1;
+    const rankDiff = LEDGER_TYPE_RANK[a.type] - LEDGER_TYPE_RANK[b.type];
+    if (rankDiff !== 0) return rankDiff;
+    return a.date.getTime() - b.date.getTime();
+  });
 
   let running = openingBalanceSeed;
   let openingBalance = openingBalanceSeed;

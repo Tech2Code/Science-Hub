@@ -274,6 +274,23 @@ export async function getProducts(filters: ProductListFilters, sort: ProductSort
   return { data, total };
 }
 
+// Only the fields the invoice/purchase-bill line-item pickers read (InvoiceProduct/PurchaseBillProduct)
+// — those pages load the whole catalog up front, so skipping the category/brand joins and _count
+// keeps that payload and query small. Same where/orderBy as getProducts() so results never disagree.
+const SLIM_PRODUCT_SELECT = {
+  id: true, name: true, sku: true, hsn: true, unit: true, price: true, purchasePrice: true,
+  listPrice: true, discountPercent: true, gstRate: true, stock: true, minStock: true, isActive: true,
+} as const;
+
+export async function getProductsSlim(filters: ProductListFilters, sort: ProductSort | undefined, skip: number, take: number) {
+  const where = buildProductWhere(filters);
+  const [data, total] = await Promise.all([
+    prisma.product.findMany({ where, orderBy: buildProductOrderBy(sort), skip, take, select: SLIM_PRODUCT_SELECT }),
+    prisma.product.count({ where }),
+  ]);
+  return { data, total };
+}
+
 // Search is excluded — the All/Low/Out tab-count badges are shown simultaneously regardless of the active tab/search text.
 export async function getProductStats() {
   const [totalCount, outOfStockCount, lowStockCount] = await Promise.all([

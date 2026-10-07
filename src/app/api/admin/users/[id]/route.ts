@@ -5,6 +5,7 @@ import { logActivity } from "@/lib/activity";
 import { validateUserInput } from "@/lib/validation";
 import { requireAdmin, requireSession } from "@/lib/apiAuth";
 import { rateLimit } from "@/lib/rateLimit";
+import { revalidateTag } from "next/cache";
 
 const USER_SELECT = {
   id: true,
@@ -124,7 +125,8 @@ export async function PUT(
       const emailErr = validateUserInput({ email: normalizedEmail });
       if (emailErr) return NextResponse.json({ error: emailErr }, { status: 400 });
     }
-    if (normalizedEmail !== undefined && normalizedEmail !== targetUser.email) {
+    const emailChanged = normalizedEmail !== undefined && normalizedEmail !== targetUser.email;
+    if (emailChanged) {
       const conflict = await prisma.user.findUnique({ where: { email: normalizedEmail } });
       if (conflict) {
         return NextResponse.json(
@@ -132,7 +134,36 @@ export async function PUT(
           { status: 409 }
         );
       }
+      // Changing your OWN login email is an account-takeover vector for a session thief —
+      // require the current password, same as a password change. (An admin editing another
+      // user's email doesn't need that user's password.)
+      if (isSelf && hashedPassword === undefined) {
+        const limit = rateLimit(`profile-password:${session.user.id}`, 10, 15 * 60 * 1000);
+        if (!limit.allowed) {
+          return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
+        }
+        if (!currentPassword) {
+          return NextResponse.json({ error: "Current password is required to change your email" }, { status: 400 });
+        }
+        const valid = await bcrypt.compare(currentPassword, targetUser.password);
+        if (!valid) {
+          return NextResponse.json({ error: "Current password is incorrect" }, { status: 401 });
+        }
+      }
     }
+
+    const roleChanged = role !== undefined && role !== targetUser.role;
+    // Demoting the only remaining admin would lock everyone out of Settings/Admin permanently.
+    if (roleChanged && targetUser.role === "admin" && role !== "admin") {
+      const adminCount = await prisma.user.count({ where: { role: "admin" } });
+      if (adminCount <= 1) {
+        return NextResponse.json({ error: "Can't remove the last admin" }, { status: 400 });
+      }
+    }
+
+    // A role/email/password change invalidates the user's existing JWTs (forces re-login),
+    // so e.g. a demoted admin loses admin access immediately rather than at token expiry.
+    const bumpTokenVersion = hashedPassword !== undefined || roleChanged || emailChanged;
 
     const updated = await prisma.user.update({
       where: { id },
@@ -140,10 +171,12 @@ export async function PUT(
         ...(name !== undefined && { name }),
         ...(normalizedEmail !== undefined && { email: normalizedEmail }),
         ...(role !== undefined && { role }),
-        ...(hashedPassword !== undefined && { password: hashedPassword, tokenVersion: { increment: 1 } }),
+        ...(hashedPassword !== undefined && { password: hashedPassword }),
+        ...(bumpTokenVersion && { tokenVersion: { increment: 1 } }),
       },
       select: USER_SELECT,
     });
+    revalidateTag("users", { expire: 0 });
 
     const pwChanged = hashedPassword !== undefined;
     await logActivity(session.user.id, "update_user", `Updated user "${updated.name}" | Email: ${updated.email} | Role: ${updated.role}${pwChanged ? " | Password reset" : ""}`, id, "user");
@@ -216,6 +249,7 @@ export async function DELETE(
     }
 
     await prisma.user.delete({ where: { id } });
+    revalidateTag("users", { expire: 0 });
 
     await logActivity(session.user.id, "delete_user", `Deleted user "${targetUser.name}" | Role: ${targetUser.role} | Email: ${targetUser.email}`, id, "user");
     return NextResponse.json({ message: "User deleted" });

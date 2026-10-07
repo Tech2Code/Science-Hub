@@ -4,7 +4,12 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { getBrandingOrDefault } from "@/lib/db";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+// Branding (title/favicon/name) is admin-editable at runtime — without this the root layout is
+// prerendered at build time and keeps showing whatever branding existed when the app was built.
+// (Valid in Next 16 since cacheComponents is not enabled in this app.)
+export const dynamic = "force-dynamic";
+
+const geistSans =Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export async function generateMetadata(): Promise<Metadata> {

@@ -112,8 +112,8 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
 
   useEffect(() => {
     if (!open) return;
-    fetch("/api/brands?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setBrands(d.data ?? [])).catch(() => {});
-    fetch("/api/categories?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setCategories(d.data ?? [])).catch(() => {});
+    fetch("/api/brands?pageSize=5000&slim=1", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setBrands(d.data ?? [])).catch(() => {});
+    fetch("/api/categories?pageSize=5000&slim=1", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setCategories(d.data ?? [])).catch(() => {});
   }, [open]);
 
   // Checks for a leftover draft on every (re)open (closed tab / refresh mid-review); if rows are already in memory, don't overwrite them with an older snapshot.

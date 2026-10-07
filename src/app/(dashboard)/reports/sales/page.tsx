@@ -92,6 +92,11 @@ export default function SalesReportsPage() {
     setExportingOutstanding(true);
     try {
       const res = await fetch(`/api/reports?type=outstanding${dateQuery}&page=1&pageSize=2000`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast({ type: "error", title: "Export failed", message: d.error ?? "Could not load outstanding invoices." });
+        return;
+      }
       const exportData: OutstandingResponse = await res.json();
       await downloadXlsx(
         "outstanding-invoices.xlsx",
@@ -168,7 +173,7 @@ export default function SalesReportsPage() {
       <div {...animateSection(1, `card ${styles.tabsCard}`)}>
         <div className={styles.tabsRow}>
           {(["outstanding", "summary", "gst"] as Tab[]).map((t) => (
-            <button key={t} className={`${styles.tabBtn} ${tab === t ? styles.active : ""}`} onClick={() => setTab(t)}>
+            <button key={t} type="button" aria-pressed={tab === t} className={`${styles.tabBtn} ${tab === t ? styles.active : ""}`} onClick={() => setTab(t)}>
               {t === "outstanding" ? "Outstanding" : t === "summary" ? "Summary" : "GST"}
             </button>
           ))}

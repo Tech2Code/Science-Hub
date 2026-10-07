@@ -10,6 +10,7 @@ import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { useHasSection } from "@/lib/useHasSection";
 import { formatMonthYear } from "@/lib/formatDate";
 import { PeriodFilter, defaultPeriod, periodToQuery, periodLabel as fmtPeriodLabel, type PeriodValue } from "@/components/dashboard/PeriodFilter";
 import styles from "./salesOverview.module.css";
@@ -100,6 +101,7 @@ export default function SalesDashboardPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const canWrite = useCanWrite();
+  const canViewReports = useHasSection("reports_sales");
   useEffect(() => {
     if (!session) return;
     const role = session.user?.role;
@@ -147,7 +149,7 @@ export default function SalesDashboardPage() {
           {canWrite && <Button variant="secondary" href="/sales/customers/new">+ New Customer</Button>}
           <Button variant="secondary" href="/sales/invoices">All Invoices</Button>
           <Button variant="secondary" href="/sales/customers">All Customers</Button>
-          <Button variant="secondary" href="/reports/sales">Sales Reports</Button>
+          {canViewReports && <Button variant="secondary" href="/reports/sales">Sales Reports</Button>}
         </div>
       </div>
 

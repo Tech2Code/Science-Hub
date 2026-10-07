@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildGstr1CsvFiles } from "@/lib/gstr1CsvExport";
-import type { GstFilingReport } from "@/lib/gstFiling";
+import { isCreditNoteFileable, type GstFilingReport, type CreditNoteRow } from "@/lib/gstFiling";
 
 function baseReport(overrides: Partial<GstFilingReport> = {}): GstFilingReport {
   return {
@@ -18,7 +18,7 @@ function baseReport(overrides: Partial<GstFilingReport> = {}): GstFilingReport {
     summary: {
       outputTaxable: 0, outputCgst: 0, outputSgst: 0, outputIgst: 0, outputTax: 0,
       creditNoteTaxable: 0, creditNoteTax: 0, netOutputTax: 0,
-      inputTaxable: 0, inputTax: 0, rawNetGstPayable: 0, netGstPayableRoundOff: 0, netGstPayable: 0,
+      inputTaxable: 0, inputTax: 0, ineligibleInputTaxable: 0, ineligibleInputTax: 0, rawNetGstPayable: 0, netGstPayableRoundOff: 0, netGstPayable: 0,
     },
     validation: { issues: [], errorCount: 0, warningCount: 0 },
     ...overrides,
@@ -119,5 +119,43 @@ describe("buildGstr1CsvFiles", () => {
     expect(lines[1]).toBe("3401,,NOS-NUMBERS,10,1180,1000,0,90,90,,18");
     expect(lines[2]).toBe("9999,,OTH-OTHERS,5,590,500,0,45,45,,18");
     expect(issues.some((i) => i.severity === "warning" && i.message.includes("Barrel"))).toBe(true);
+  });
+});
+
+function creditNote(overrides: Partial<CreditNoteRow> = {}): CreditNoteRow {
+  return {
+    returnId: "r1", creditNoteNumber: "CN-2026-27-0001", date: new Date("2026-05-10T06:00:00Z"),
+    invoiceNumber: "SH-2026-27-0001", customerName: "Acme Pvt Ltd", customerGstin: "07AAAAA1111A1Z5",
+    productName: "Widget", quantity: 1, taxableValue: 1000, gstRate: 18,
+    cgst: 90, sgst: 90, igst: 0, total: 1180,
+    placeOfSupply: "Delhi", reverseCharge: false, invoiceDate: new Date("2026-04-10T06:00:00Z"), invoiceTotal: 5900,
+    ...overrides,
+  };
+}
+
+describe("buildGstr1CsvFiles — cdnr.csv", () => {
+  it("exports a credit note whose original invoice is dated in an earlier period (not in this period's Sales Register)", () => {
+    // salesRegister is empty: the invoice was dated in April, the credit note in May.
+    const report = baseReport({ creditNotes: [creditNote({ reverseCharge: true })] });
+    const { files, issues } = buildGstr1CsvFiles(report);
+    const lines = files.find((f) => f.name === "cdnr.csv")!.content.trim().split("\r\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toBe("07AAAAA1111A1Z5,Acme Pvt Ltd,CN-2026-27-0001,10-May-2026,C,07-Delhi,Y,Regular B2B,1180,,18,1000,");
+    expect(issues).toHaveLength(0);
+  });
+
+  it("drops a credit note whose own place of supply doesn't resolve, with an error", () => {
+    const report = baseReport({ creditNotes: [creditNote({ placeOfSupply: "Narnia" })] });
+    const { files, issues } = buildGstr1CsvFiles(report);
+    expect(files.find((f) => f.name === "cdnr.csv")!.content.trim().split("\r\n")).toHaveLength(1);
+    expect(issues[0].severity).toBe("error");
+    expect(issues[0].message).toContain("Narnia");
+  });
+
+  it("isCreditNoteFileable mirrors the CSV's own exclusion rules", () => {
+    expect(isCreditNoteFileable(creditNote())).toBe(true);
+    expect(isCreditNoteFileable(creditNote({ placeOfSupply: "Narnia" }))).toBe(false);
+    expect(isCreditNoteFileable(creditNote({ placeOfSupply: "" }))).toBe(false);
+    expect(isCreditNoteFileable(creditNote({ creditNoteNumber: "—" }))).toBe(false);
   });
 });

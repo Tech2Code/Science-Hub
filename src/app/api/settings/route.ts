@@ -7,6 +7,7 @@ import { validateSettingsInput } from "@/lib/validation";
 import { deriveDefaultPrefix, getIndianFinancialYear, formatFinancialYearLabel, NUMBER_FORMATS, numberFormatDbFilter, findMaxSequence, resolveNumberFormat } from "@/lib/documentNumbering";
 import { logActivity } from "@/lib/activity";
 import { isLogoBlobUrl, deleteAttachmentBlob } from "@/lib/blobStorage";
+import { revalidateTag } from "next/cache";
 
 export async function GET() {
   try {
@@ -150,7 +151,7 @@ export async function PUT(request: NextRequest) {
       if ("invoiceNumberFormat" in body) {
         const raw = String(invoiceNumberFormat ?? "").trim();
         if (raw) {
-          if (!(raw in NUMBER_FORMATS)) {
+          if (!Object.hasOwn(NUMBER_FORMATS, raw)) {
             return NextResponse.json({ error: "Unknown invoice number format." }, { status: 400 });
           }
           updateData.invoiceNumberFormat = raw;
@@ -163,7 +164,7 @@ export async function PUT(request: NextRequest) {
       if ("purchaseBillNumberFormat" in body) {
         const raw = String(purchaseBillNumberFormat ?? "").trim();
         if (raw) {
-          if (!(raw in NUMBER_FORMATS)) {
+          if (!Object.hasOwn(NUMBER_FORMATS, raw)) {
             return NextResponse.json({ error: "Unknown purchase bill number format." }, { status: 400 });
           }
           updateData.purchaseBillNumberFormat = raw;
@@ -176,7 +177,7 @@ export async function PUT(request: NextRequest) {
       if ("creditNoteNumberFormat" in body) {
         const raw = String(creditNoteNumberFormat ?? "").trim();
         if (raw) {
-          if (!(raw in NUMBER_FORMATS)) {
+          if (!Object.hasOwn(NUMBER_FORMATS, raw)) {
             return NextResponse.json({ error: "Unknown credit note number format." }, { status: 400 });
           }
           updateData.creditNoteNumberFormat = raw;
@@ -277,6 +278,7 @@ export async function PUT(request: NextRequest) {
     if (logoUrl !== undefined && existing?.logoUrl && existing.logoUrl !== (logoUrl || "")) {
       await deleteAttachmentBlob(existing.logoUrl);
     }
+    revalidateTag("settings", { expire: 0 });
     const decryptedAccountNumber = storedAccountNumber ? safeDecrypt(storedAccountNumber) : { value: "", failed: false };
     return NextResponse.json({
       ...settings,

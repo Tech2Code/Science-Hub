@@ -48,8 +48,8 @@ export default function NewProductPage() {
   const [confirmDiscardDraftOpen, setConfirmDiscardDraftOpen] = useState(false);
 
   useEffect(() => {
-    fetch("/api/brands?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setBrands(d.data ?? [])).catch(() => {});
-    fetch("/api/categories?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setCategories(d.data ?? [])).catch(() => {});
+    fetch("/api/brands?pageSize=5000&slim=1", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setBrands(d.data ?? [])).catch(() => {});
+    fetch("/api/categories?pageSize=5000&slim=1", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => setCategories(d.data ?? [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -105,24 +105,36 @@ export default function NewProductPage() {
     const errors = validateProductForm(form);
     if (hasProductFieldErrors(errors)) { setFieldErrors(errors); return; }
     setFieldErrors({}); setSaving(true);
-    const res = await fetch("/api/products", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...form,
-        price: resolveSellingPrice(form.price, form.purchasePrice),
-        purchasePrice: form.purchasePrice.trim() ? parseFloat(form.purchasePrice) : null,
-        listPrice: form.listPrice.trim() ? parseFloat(form.listPrice) : null,
-        discountPercent: form.discountPercent.trim() ? parseFloat(form.discountPercent) : 0,
-        gstRate: parseFloat(form.gstRate),
-        stock: parseInt(form.stock),
-        minStock: parseInt(form.minStock),
-        brandId: form.brandId || undefined,
-        categoryId: form.categoryId || undefined,
-      }),
-    });
+    let res: Response;
+    try {
+      res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          price: resolveSellingPrice(form.price, form.purchasePrice),
+          purchasePrice: form.purchasePrice.trim() ? parseFloat(form.purchasePrice) : null,
+          listPrice: form.listPrice.trim() ? parseFloat(form.listPrice) : null,
+          discountPercent: form.discountPercent.trim() ? parseFloat(form.discountPercent) : 0,
+          gstRate: parseFloat(form.gstRate),
+          stock: parseInt(form.stock),
+          minStock: parseInt(form.minStock),
+          brandId: form.brandId || undefined,
+          categoryId: form.categoryId || undefined,
+        }),
+      });
+    } catch {
+      toast({ type: "error", title: "Failed", message: "Network error. Please try again." });
+      setSaving(false);
+      return;
+    }
     if (res.ok) {
-      const created = await res.json();
+      const created = await res.json().catch(() => null);
+      if (!created?.id) {
+        toast({ type: "error", title: "Failed", message: "Unexpected server response. Check the products list before retrying." });
+        setSaving(false);
+        return;
+      }
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/products");
       bustCachePrefix("/api/reports");

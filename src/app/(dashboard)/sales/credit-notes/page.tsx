@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
@@ -77,8 +76,6 @@ const COLUMNS: Column[] = [
 const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function CreditNotesPage() {
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "admin";
   const toast = useToast();
 
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
@@ -118,7 +115,7 @@ export default function CreditNotesPage() {
   if (year) statsParams.set("year", year);
   const statsUrl = `/api/credit-notes/stats?${statsParams.toString()}`;
 
-  const { data, loading } = useFetch<CreditNoteListResponse>(apiUrl);
+  const { data, loading, error, mutate } = useFetch<CreditNoteListResponse>(apiUrl);
   const { data: stats } = useFetch<CreditNoteStats>(statsUrl);
   const creditNotes = data?.data ?? [];
   const total = data?.total ?? 0;
@@ -303,7 +300,7 @@ export default function CreditNotesPage() {
               />
             </div>
             <HeaderActionsRow>
-              {data && isAdmin && total > 0 && (
+              {data && total > 0 && (
                 <Button variant="secondary" size="sm" loading={exportingCsv} onClick={exportCsv}>Export Excel</Button>
               )}
               {data && (
@@ -321,6 +318,11 @@ export default function CreditNotesPage() {
               <tbody>
                 {showSkeleton ? (
                   <TableSkeleton columns={COLUMNS} />
+                ) : error ? (
+                  <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
+                    <span style={{ color: "var(--c-red-text)" }}>Couldn&apos;t load credit notes.</span>{" "}
+                    <Button size="sm" variant="secondary" onClick={() => mutate()}>Retry</Button>
+                  </td></tr>
                 ) : creditNotes.length === 0 ? (
                   <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                     {search ? "No credit notes match your search." : (month || year) ? "No credit notes found for this period." : "No credit notes recorded yet."}

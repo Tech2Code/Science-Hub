@@ -69,3 +69,19 @@ describe("monthYearToDateRange", () => {
     expect(range?.lt).toEqual(istDayStartUtc("2026-01-01"));
   });
 });
+
+describe("monthYearToDateRange — invalid input", () => {
+  it("returns undefined (no filter) instead of an Invalid Date for malformed month/year", () => {
+    expect(monthYearToDateRange("", "20x5")).toBeUndefined();
+    expect(monthYearToDateRange("", "25")).toBeUndefined();
+    expect(monthYearToDateRange("12", "2025")).toBeUndefined();
+    expect(monthYearToDateRange("-1", "2025")).toBeUndefined();
+    expect(monthYearToDateRange("1.5", "2025")).toBeUndefined();
+    expect(monthYearToDateRange("abc", "")).toBeUndefined();
+  });
+
+  it("still accepts the boundary months 0 and 11", () => {
+    expect(monthYearToDateRange("0", "2025")?.gte).toEqual(istDayStartUtc("2025-01-01"));
+    expect(monthYearToDateRange("11", "2025")?.lt).toEqual(istDayStartUtc("2026-01-01"));
+  });
+});

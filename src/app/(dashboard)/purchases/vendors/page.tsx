@@ -77,7 +77,7 @@ export default function VendorsPage() {
   listParams.set("pageSize", String(pageSize));
   const apiUrl = `/api/vendors?${listParams.toString()}`;
 
-  const { data, loading, mutate } = useFetch<VendorListResponse>(apiUrl);
+  const { data, loading, error, mutate } = useFetch<VendorListResponse>(apiUrl);
   const vendors = data?.data ?? [];
   const total = data?.total ?? 0;
   const showSkeleton = loading && !data;
@@ -156,6 +156,13 @@ export default function VendorsPage() {
             <tbody>
               {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
+              ) : error && !loading ? (
+                <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
+                  <div role="alert" className={`error-banner ${styles.loadError}`}>
+                    Couldn&apos;t load vendors.
+                    <Button variant="secondary" size="sm" onClick={() => { void mutate(); }}>Retry</Button>
+                  </div>
+                </td></tr>
               ) : vendors.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
                   {search.trim() ? `No vendors match "${search}".` : "No vendors yet. Add your first vendor."}

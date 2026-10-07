@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { rules, validate } from "@/lib/validation";
 import { Input, FormField } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/dialogs/Modal";
 import { OverlayLoader } from "@/components/ui/Spinner";
@@ -72,7 +73,9 @@ export function MyProfileCard({ sectionIndex = 0, onSaved }: Props) {
   const profileDirty = useDirty(profileForm);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [profileFieldErrors, setProfileFieldErrors] = useState<{ name?: string; email?: string }>({});
+  const [profileFieldErrors, setProfileFieldErrors] = useState<{ name?: string; email?: string; currentPassword?: string }>({});
+  // Kept out of profileForm so it doesn't count toward the form's dirty state.
+  const [profileCurrentPw, setProfileCurrentPw] = useState("");
   const [changingPw, setChangingPw] = useState(false);
   const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
   const [pwSaving, setPwSaving] = useState(false);
@@ -95,26 +98,65 @@ export function MyProfileCard({ sectionIndex = 0, onSaved }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Changing the login email requires re-entering the current password (server-enforced too).
+  const emailChanging = !!profile && profileForm.email.trim().toLowerCase() !== profile.email.trim().toLowerCase();
+
+  function resetProfileModal() {
+    setEditingProfile(false);
+    setProfileForm({ name: profile?.name ?? "", email: profile?.email ?? "" });
+    setProfileCurrentPw("");
+    setProfileFieldErrors({});
+    setProfileMsg(null);
+  }
+
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
     const nameErr = validate(profileForm.name, rules.required("Name is required."), rules.minLength(2), rules.maxLength(200));
     const emailErr = validate(profileForm.email, rules.required("Email is required."), rules.maxLength(254), rules.email());
-    if (nameErr || emailErr) { setProfileFieldErrors({ name: nameErr ?? undefined, email: emailErr ?? undefined }); return; }
+    const curPwErr = emailChanging ? validate(profileCurrentPw, rules.required("Enter your current password to change your email.")) : null;
+    if (nameErr || emailErr || curPwErr) {
+      setProfileFieldErrors({ name: nameErr ?? undefined, email: emailErr ?? undefined, currentPassword: curPwErr ?? undefined });
+      return;
+    }
     setProfileFieldErrors({});
     setProfileSaving(true); setProfileMsg(null);
-    const res = await fetch("/api/admin/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(profileForm) });
-    const data = await res.json(); setProfileSaving(false);
-    if (!res.ok) {
+    let data: Partial<Profile> & { error?: string; field?: string };
+    let ok: boolean;
+    try {
+      const res = await fetch("/api/admin/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(emailChanging ? { ...profileForm, currentPassword: profileCurrentPw } : profileForm),
+      });
+      ok = res.ok;
+      data = await res.json().catch(() => ({}));
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Couldn't reach the server. Please try again." });
+      return;
+    } finally {
+      setProfileSaving(false);
+    }
+    if (!ok) {
       const msg: string = data.error ?? "Could not update profile.";
-      if (/email/i.test(msg)) setProfileFieldErrors({ email: msg });
+      if (data.field === "currentPassword" || /current password/i.test(msg)) setProfileFieldErrors({ currentPassword: msg });
+      else if (/email/i.test(msg)) setProfileFieldErrors({ email: msg });
       else if (/name/i.test(msg)) setProfileFieldErrors({ name: msg });
       else setProfileMsg({ type: "err", text: msg });
       return;
     }
-    setProfile(data); setEditingProfile(false); setProfileMsg(null);
-    onSaved?.(data);
-    await updateSession({ name: data.name, email: data.email, role: data.role });
-    toast({ type: "success", title: "Profile updated", message: "Your name and email have been saved." });
+    const saved = data as Profile;
+    const wasEmailChange = emailChanging;
+    setProfile(saved); setEditingProfile(false); setProfileMsg(null); setProfileCurrentPw("");
+    onSaved?.(saved);
+    if (wasEmailChange) {
+      // The server bumps tokenVersion on an email change, invalidating this browser's own session —
+      // sign out deliberately with a clear reason rather than leaving a silently-broken session.
+      toast({ type: "success", title: "Email changed", message: "Please sign in again with your new email." });
+      await signOut({ callbackUrl: "/login" });
+      return;
+    }
+    await updateSession({ name: saved.name, email: saved.email, role: saved.role });
+    toast({ type: "success", title: "Profile updated", message: "Your name has been saved." });
   }
 
   async function savePassword(e: React.FormEvent) {
@@ -125,9 +167,19 @@ export function MyProfileCard({ sectionIndex = 0, onSaved }: Props) {
     if (curErr || nextErr || confErr) { setPwFieldErrors({ current: curErr ?? undefined, next: nextErr ?? undefined, confirm: confErr ?? undefined }); return; }
     setPwFieldErrors({});
     setPwSaving(true); setPwMsg(null);
-    const res = await fetch("/api/admin/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword: pwForm.current, newPassword: pwForm.next }) });
-    const data = await res.json(); setPwSaving(false);
-    if (!res.ok) {
+    let data: { error?: string };
+    let ok: boolean;
+    try {
+      const res = await fetch("/api/admin/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword: pwForm.current, newPassword: pwForm.next }) });
+      ok = res.ok;
+      data = await res.json().catch(() => ({}));
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Couldn't reach the server. Please try again." });
+      return;
+    } finally {
+      setPwSaving(false);
+    }
+    if (!ok) {
       const msg: string = data.error ?? "Could not update password.";
       if (/current password/i.test(msg)) setPwFieldErrors({ current: msg });
       else if (/new password/i.test(msg)) setPwFieldErrors({ next: msg });
@@ -200,7 +252,10 @@ export function MyProfileCard({ sectionIndex = 0, onSaved }: Props) {
                 <div className={styles.profileMetaRow}>
                   <RoleBadge role={profile?.role ?? ""} />
                   <span className={styles.metaText}>Joined {profile?.createdAt ? formatDate(profile.createdAt) : "—"}</span>
-                  <span className={styles.metaText}>· {profile?._count?.invoices ?? 0} invoices created</span>
+                  {/* Manager is read-only and can never create an invoice — the count would always be 0. */}
+                  {profile?.role !== "manager" && (
+                    <span className={styles.metaText}>· {profile?._count?.invoices ?? 0} invoices created</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -225,10 +280,10 @@ export function MyProfileCard({ sectionIndex = 0, onSaved }: Props) {
         open={editingProfile}
         title="Edit Profile"
         variant="fullscreen"
-        onClose={() => { if (profileSaving) return; setEditingProfile(false); setProfileForm({ name: profile?.name ?? "", email: profile?.email ?? "" }); setProfileFieldErrors({}); setProfileMsg(null); }}
+        onClose={() => { if (profileSaving) return; resetProfileModal(); }}
         footer={
           <>
-            <Button type="button" variant="secondary" onClick={() => { setEditingProfile(false); setProfileForm({ name: profile?.name ?? "", email: profile?.email ?? "" }); setProfileFieldErrors({}); setProfileMsg(null); }}>Cancel</Button>
+            <Button type="button" variant="secondary" onClick={resetProfileModal}>Cancel</Button>
             <Button type="submit" form="edit-profile-form" variant="primary" disabled={profileSaving || !profileDirty.isDirty || !profileForm.name.trim() || !profileForm.email.trim()}>Save Changes</Button>
           </>
         }
@@ -241,6 +296,11 @@ export function MyProfileCard({ sectionIndex = 0, onSaved }: Props) {
             <FormField label="Login Email — used to sign in to this app" required error={profileFieldErrors.email}>
               <Input className={`${styles.inp} ${profileFieldErrors.email ? styles.inpError : ""}`} type="email" value={profileForm.email} onChange={(e) => { setProfileForm((p) => ({ ...p, email: e.target.value })); setProfileFieldErrors((prev) => ({ ...prev, email: undefined })); }} maxLength={254} />
             </FormField>
+            {emailChanging && (
+              <FormField label="Current Password" required error={profileFieldErrors.currentPassword} hint="Required to change your login email. You'll be signed out and must log in again with the new email.">
+                <PasswordInput className={`${styles.inp} ${profileFieldErrors.currentPassword ? styles.inpError : ""}`} value={profileCurrentPw} onChange={(e) => { setProfileCurrentPw(e.target.value); setProfileFieldErrors((prev) => ({ ...prev, currentPassword: undefined })); }} placeholder="••••••••" autoComplete="current-password" maxLength={72} />
+              </FormField>
+            )}
           </div>
           {profileMsg && <Msg m={profileMsg} />}
         </form>

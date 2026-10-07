@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/apiAuth";
-import { getNotificationSummary } from "@/lib/notifications";
+import { getNotificationSummary, filterNotificationSummary } from "@/lib/notifications";
 
 export async function GET() {
   try {
@@ -11,7 +11,7 @@ export async function GET() {
     // than surfacing a count they can't click through to.
     const includeBin = auth.session.user.role !== "manager";
     const summary = await getNotificationSummary({ includeBin, userId: auth.session.user.id });
-    return NextResponse.json(summary);
+    return NextResponse.json(filterNotificationSummary(summary, auth.session.user));
   } catch (error) {
     console.error("GET /api/notifications error:", error);
     return NextResponse.json({ error: "Failed to fetch notifications" }, { status: 500 });

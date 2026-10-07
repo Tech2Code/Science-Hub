@@ -48,6 +48,33 @@ interface ReturnRecord {
 interface ReturnFormItem {
   productId: string; name: string; price: number; discountPercent: number; selected: boolean; qty: number; maxQty: number; qtyText: string;
 }
+
+/**
+ * Remaining returnable qty per invoice line (same order as `items`). Mirrors the returns route:
+ * catalog lines match by productId; custom (no productId) lines match returned custom lines by
+ * trimmed lowercase name, with the already-returned qty for a name allocated across same-name
+ * lines in order so the total cap is "invoiced − already returned" for that name.
+ */
+function remainingReturnQty(items: InvoiceItem[], returns: ReturnRecord[]): number[] {
+  const returnedByProduct: Record<string, number> = {};
+  const returnedByName: Record<string, number> = {};
+  for (const ret of returns) {
+    for (const ri of ret.items) {
+      if (ri.productId) returnedByProduct[ri.productId] = (returnedByProduct[ri.productId] ?? 0) + ri.quantity;
+      else {
+        const key = ri.name.trim().toLowerCase();
+        returnedByName[key] = (returnedByName[key] ?? 0) + ri.quantity;
+      }
+    }
+  }
+  return items.map((item) => {
+    if (item.productId) return item.quantity - (returnedByProduct[item.productId] ?? 0);
+    const key = item.name.trim().toLowerCase();
+    const used = Math.min(item.quantity, returnedByName[key] ?? 0);
+    returnedByName[key] = (returnedByName[key] ?? 0) - used;
+    return item.quantity - used;
+  });
+}
 interface Invoice {
   id: string; invoiceNumber: string; date: string; dueDate?: string; createdAt: string;
   status: string; isInterState: boolean; placeOfSupply?: string; reverseCharge?: boolean; ewayBillNumber?: string | null;
@@ -459,20 +486,15 @@ export default function InvoiceDetailPage() {
 
   function openReturnForm() {
     if (!invoice) return;
-    const alreadyReturned: Record<string, number> = {};
-    for (const ret of returns) {
-      for (const ri of ret.items) {
-        if (ri.productId) alreadyReturned[ri.productId] = (alreadyReturned[ri.productId] ?? 0) + ri.quantity;
-      }
-    }
-    setReturnItems(invoice.items.map(item => ({
+    const remaining = remainingReturnQty(invoice.items, returns);
+    setReturnItems(invoice.items.map((item, idx) => ({
       productId: item.productId,
       name: item.name,
       price: item.price,
       discountPercent: item.discountPercent ?? 0,
       selected: false,
       qty: 1,
-      maxQty: item.quantity - (alreadyReturned[item.productId] ?? 0),
+      maxQty: remaining[idx],
       qtyText: "1",
     })).filter(ri => ri.maxQty > 0));
     setReturnNotes("");
@@ -481,13 +503,6 @@ export default function InvoiceDetailPage() {
     setReturnItemsError(undefined);
     setShowReturnForm(true);
   }
-
-  useEffect(() => {
-    if (!showReturnForm || addingReturn) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowReturnForm(false); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [showReturnForm, addingReturn]);
 
   useEffect(() => {
     if (!showReturnForm || !returnDate) return;
@@ -909,6 +924,8 @@ export default function InvoiceDetailPage() {
         // Payments Received filters out payments whose invoice is deleted (buildPaymentWhere),
         // so a deleted invoice's payment rows disappear from that list too.
         bustCachePrefix("/api/payments");
+        // Customer list's invoice counts / outstanding figures change too.
+        bustCachePrefix("/api/customers");
         toast({ type: "success", title: "Deleted", message: "Invoice moved to bin." });
         router.push("/sales/invoices");
         // Deliberately no setDeleting(false)/setDeleteConfirm(false) here — this page is about to
@@ -932,11 +949,7 @@ export default function InvoiceDetailPage() {
   const balance = invoice.total - invoice.paidAmount;
 
   // True once every line item's quantity has already been fully returned.
-  const allItemsReturned = invoice.items.length > 0 && invoice.items.every(item => {
-    const returnedQty = returns.reduce((sum, ret) =>
-      sum + ret.items.filter(ri => ri.productId === item.productId).reduce((s, ri) => s + ri.quantity, 0), 0);
-    return returnedQty >= item.quantity;
-  });
+  const allItemsReturned = invoice.items.length > 0 && remainingReturnQty(invoice.items, returns).every(left => left <= 0);
 
   return (
     <>
@@ -1099,6 +1112,7 @@ export default function InvoiceDetailPage() {
       {deletingReturn && <OverlayLoader text="Deleting credit note…" />}
       {creditNoteToRender && <OverlayLoader text="Preparing credit note PDF…" />}
       {openingEdit && <OverlayLoader text="Opening editor…" />}
+      {reassigning && <OverlayLoader text="Reassigning…" />}
 
       <style>{`
         #invoice-print-area, #credit-note-print-area {
@@ -1231,11 +1245,11 @@ export default function InvoiceDetailPage() {
                         icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" /></svg>,
                         color: "#25d366",
                       },
-                      {
+                      canWrite ? {
                         key: "email", label: "Email",
                         icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>,
                         color: "var(--c-text-2)",
-                      },
+                      } : null,
                     ] as const).filter(Boolean).map((opt) => (
                       <button
                         key={opt!.key}
@@ -1349,110 +1363,92 @@ export default function InvoiceDetailPage() {
         )}
 
         {/* Return form modal */}
-        {showReturnForm && (
-          <div className={styles.returnModalOverlayWrap}>
-            <div className={styles.returnModalBackdrop} onClick={() => { if (!addingReturn) setShowReturnForm(false); }} />
-            <div className={styles.returnModalBox}>
-              <form onSubmit={handleAddReturn} className={styles.returnModalForm} noValidate>
-                {/* Modal header */}
-                <div className={styles.returnModalHeader}>
-                  <div className={styles.returnModalHeaderLeft}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 102.13-9.36L1 10" /></svg>
-                    <h3 className={styles.returnModalTitle}>Record Return</h3>
-                    {nextCreditNoteNumber && (
-                      <Badge variant="blue" className={styles.returnNextNumberBadge}>Next no.: {nextCreditNoteNumber}</Badge>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { if (!addingReturn) setShowReturnForm(false); }}
-                    disabled={addingReturn}
-                    aria-label="Close"
-                    className={styles.returnModalCloseBtn}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                  </button>
-                </div>
-                {/* Meta row (pinned, outside the scrollable body) */}
-                <div className={styles.returnModalMetaRow}>
-                  <div>
-                    <FormField label="Return Date" error={returnDateError}>
-                      <Input type="date" sz="sm" value={returnDate} onChange={e => { setReturnDate(e.target.value); setReturnDateError(undefined); }} min={invoice ? toIstDateStr(new Date(invoice.date)) : undefined} max={toIstDateStr(new Date())} className={styles.returnDateInput} />
-                    </FormField>
-                  </div>
-                  <div className={styles.returnNotesField}>
-                    <FormField label="Notes">
-                      <Input type="text" sz="sm" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Optional reason" className={styles.returnNotesInput} maxLength={2000} />
-                    </FormField>
-                  </div>
-                </div>
-                {/* Modal body (scrollable) */}
-                <div className={styles.returnModalBody}>
-                  <div className={styles.returnItemsSection}>
-                    <FormField label="Select Items to Return" error={returnItemsError}>
-                    <div className={styles.returnItemsList}>
-                      {returnItems.map((ri, idx) => (
-                        <div key={idx} className={`${styles.returnItemRow} ${ri.selected ? styles.returnItemRowSelected : ""}`}>
-                          <input
-                            type="checkbox"
-                            aria-label={ri.name}
-                            checked={ri.selected}
-                            onChange={e => {
-                              const checked = e.target.checked;
-                              setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, selected: checked } : r));
-                              setReturnItemsError(undefined);
-                              if (checked) setTimeout(() => returnQtyRefs.current[idx]?.focus(), 0);
-                            }}
-                            className={styles.returnItemCheckbox}
-                          />
-                          <span className={styles.returnItemName}>{ri.name}</span>
-                          <span className={styles.returnItemMax}>max {ri.maxQty}</span>
-                          <Input
-                            ref={el => { returnQtyRefs.current[idx] = el; }}
-                            type="number"
-                            sz="sm"
-                            value={ri.qtyText}
-                            placeholder={String(ri.qty)}
-                            disabled={!ri.selected}
-                            onFocus={() => {
-                              setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: "" } : r));
-                            }}
-                            onChange={e => {
-                              const raw = e.target.value.replace(/\D/g, "");
-                              setReturnItemsError(undefined);
-                              if (raw === "") { setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: "" } : r)); return; }
-                              const clamped = String(Math.min(ri.maxQty, parseInt(raw, 10)));
-                              if (clamped === ri.qtyText) { e.target.value = clamped; return; }
-                              setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: clamped } : r));
-                            }}
-                            onBlur={() => {
-                              const num = parseInt(ri.qtyText, 10);
-                              const clamped = isNaN(num) || num < 1 ? 1 : Math.min(ri.maxQty, num);
-                              setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qty: clamped, qtyText: String(clamped) } : r));
-                            }}
-                            className={styles.returnItemQtyInput}
-                          />
-                        </div>
-                      ))}
-                      {returnItems.length === 0 && (
-                        <p className={styles.returnItemsEmpty}>All items from this invoice have already been returned.</p>
-                      )}
-                    </div>
-                    </FormField>
-                  </div>
-                </div>
-                {/* Modal footer (pinned, outside the scrollable body) */}
-                <div className={styles.returnModalFooter}>
-                  <Button type="submit" variant="primary" size="sm" disabled={addingReturn || !returnItems.some(ri => ri.selected && ri.qty > 0)} loading={addingReturn}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
-                    Save Return
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => { if (!addingReturn) setShowReturnForm(false); }} disabled={addingReturn}>Cancel</Button>
-                </div>
-              </form>
+        <Modal
+          open={showReturnForm}
+          title="Record Return"
+          onClose={() => { if (!addingReturn) setShowReturnForm(false); }}
+          variant="fullscreen"
+          maxWidth="34rem"
+          footer={
+            <>
+              <Button type="button" variant="secondary" onClick={() => setShowReturnForm(false)} disabled={addingReturn}>Cancel</Button>
+              <Button type="submit" form="record-return-form" variant="primary" disabled={addingReturn || !returnItems.some(ri => ri.selected && ri.qty > 0)} loading={addingReturn}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+                Save Return
+              </Button>
+            </>
+          }
+        >
+          <form id="record-return-form" onSubmit={handleAddReturn} className={styles.returnForm} noValidate>
+            {nextCreditNoteNumber && (
+              <div className={styles.returnNextNumberRow}>
+                <Badge variant="blue" className={styles.returnNextNumberBadge}>Next no.: {nextCreditNoteNumber}</Badge>
+              </div>
+            )}
+            <div className={styles.returnMetaRow}>
+              <div>
+                <FormField label="Return Date" error={returnDateError}>
+                  <Input type="date" sz="sm" value={returnDate} onChange={e => { setReturnDate(e.target.value); setReturnDateError(undefined); }} min={invoice ? toIstDateStr(new Date(invoice.date)) : undefined} max={toIstDateStr(new Date())} className={styles.returnDateInput} />
+                </FormField>
+              </div>
+              <div className={styles.returnNotesField}>
+                <FormField label="Notes">
+                  <Input type="text" sz="sm" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Optional reason" className={styles.returnNotesInput} maxLength={2000} />
+                </FormField>
+              </div>
             </div>
-          </div>
-        )}
+            <FormField label="Select Items to Return" error={returnItemsError}>
+            <div className={styles.returnItemsList}>
+              {returnItems.map((ri, idx) => (
+                <div key={idx} className={`${styles.returnItemRow} ${ri.selected ? styles.returnItemRowSelected : ""}`}>
+                  <input
+                    type="checkbox"
+                    aria-label={ri.name}
+                    checked={ri.selected}
+                    onChange={e => {
+                      const checked = e.target.checked;
+                      setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, selected: checked } : r));
+                      setReturnItemsError(undefined);
+                      if (checked) setTimeout(() => returnQtyRefs.current[idx]?.focus(), 0);
+                    }}
+                    className={styles.returnItemCheckbox}
+                  />
+                  <span className={styles.returnItemName}>{ri.name}</span>
+                  <span className={styles.returnItemMax}>max {ri.maxQty}</span>
+                  <Input
+                    ref={el => { returnQtyRefs.current[idx] = el; }}
+                    type="number"
+                    sz="sm"
+                    value={ri.qtyText}
+                    placeholder={String(ri.qty)}
+                    disabled={!ri.selected}
+                    onFocus={() => {
+                      setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: "" } : r));
+                    }}
+                    onChange={e => {
+                      const raw = e.target.value.replace(/\D/g, "");
+                      setReturnItemsError(undefined);
+                      if (raw === "") { setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: "" } : r)); return; }
+                      const clamped = String(Math.min(ri.maxQty, parseInt(raw, 10)));
+                      if (clamped === ri.qtyText) { e.target.value = clamped; return; }
+                      setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: clamped } : r));
+                    }}
+                    onBlur={() => {
+                      const num = parseInt(ri.qtyText, 10);
+                      const clamped = isNaN(num) || num < 1 ? 1 : Math.min(ri.maxQty, num);
+                      setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qty: clamped, qtyText: String(clamped) } : r));
+                    }}
+                    className={styles.returnItemQtyInput}
+                  />
+                </div>
+              ))}
+              {returnItems.length === 0 && (
+                <p className={styles.returnItemsEmpty}>All items from this invoice have already been returned.</p>
+              )}
+            </div>
+            </FormField>
+          </form>
+        </Modal>
 
         {/* Invoice print area */}
         <div id="invoice-print-area"

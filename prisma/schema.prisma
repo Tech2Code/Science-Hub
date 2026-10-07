@@ -74,6 +74,7 @@ model ActivityLog {
   @@index([userId])
   @@index([createdAt])
   @@index([entityId, action])
+  @@index([entityType, action])
 }
 
 model Customer {
@@ -235,6 +236,8 @@ model Invoice {
   @@index([status])
   @@index([customerId])
   @@index([date])
+  @@index([createdAt])
+  @@index([dueDate])
   @@index([invoiceNumber(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
@@ -257,6 +260,7 @@ model InvoiceItem {
 
   @@index([invoiceId])
   @@index([productId])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model Payment {
@@ -455,6 +459,8 @@ model PurchaseBill {
   @@index([vendorId])
   @@index([status])
   @@index([billDate])
+  @@index([createdAt])
+  @@index([dueDate])
   @@index([billNumber(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
@@ -474,6 +480,8 @@ model PurchaseBillItem {
   gstRate          Float        @default(0)
   gstAmount        Float        @default(0)
   total            Float
+
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 // ── Purchase Payments ─────────────────────────────────────────────────────────

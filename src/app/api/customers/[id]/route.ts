@@ -68,7 +68,12 @@ export async function PUT(
 
     const customer = await prisma.customer.update({
       where: { id },
-      data: { name: name.trim(), phone, email, address, city, state, pincode, gstin, creditLimit: parseCreditLimit(creditLimit) },
+      // Only touch creditLimit when the caller actually sent it — partial editors (e.g. the
+      // invoice-edit "Bill To" modal) omit it and must not wipe an existing limit to null.
+      data: {
+        name: name.trim(), phone, email, address, city, state, pincode, gstin,
+        ...(creditLimit !== undefined ? { creditLimit: parseCreditLimit(creditLimit) } : {}),
+      },
     });
     await logActivity(auth.session.user.id, "update_customer", `Updated customer "${customer.name}" | Phone: ${phone || "—"} | Email: ${email || "—"} | City: ${city || "—"}${state ? ", " + state : ""} | GSTIN: ${gstin || "—"}${customer.creditLimit != null ? ` | Credit Limit: ₹${customer.creditLimit.toFixed(2)}` : ""}`, id, "customer");
     revalidateTag("customers", { expire: 0 });

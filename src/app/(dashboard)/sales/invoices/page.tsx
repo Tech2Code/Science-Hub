@@ -268,7 +268,7 @@ export default function InvoicesPage() {
   if (year) statsParams.set("year", year);
   const statsUrl = `/api/invoices/stats?${statsParams.toString()}`;
 
-  const { data, loading, mutate } = useFetch<InvoiceListResponse>(apiUrl);
+  const { data, loading, error, mutate } = useFetch<InvoiceListResponse>(apiUrl);
   const { data: stats, mutate: mutateStats } = useFetch<InvoiceStats>(statsUrl);
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
   const invoices = data?.data ?? [];
@@ -298,6 +298,8 @@ export default function InvoicesPage() {
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/payments");
+        // Customer list's invoice counts / outstanding figures change too.
+        bustCachePrefix("/api/customers");
         toast({ type: "success", title: "Moved to bin", message: `${target.invoiceNumber} moved to bin. You can restore it within 30 days.` });
       } else {
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete invoice." });
@@ -428,6 +430,11 @@ export default function InvoicesPage() {
             <tbody>
               {showSkeleton ? (
                 <TableSkeleton columns={COLUMNS} />
+              ) : error ? (
+                <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
+                  <span style={{ color: "var(--c-red-text)" }}>Couldn&apos;t load invoices.</span>{" "}
+                  <Button size="sm" variant="secondary" onClick={() => mutate()}>Retry</Button>
+                </td></tr>
               ) : invoices.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
                   {search.trim() ? `No invoices match "${search}".` : (month || year) ? "No invoices found for this period." : "No invoices found."}

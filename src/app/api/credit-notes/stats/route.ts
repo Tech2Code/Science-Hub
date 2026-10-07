@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/apiAuth";
+import { requireSectionAccess } from "@/lib/apiAuth";
 import { monthYearToDateRange } from "@/lib/listQuery";
 import { buildReturnWhere } from "@/lib/creditNoteQuery";
 import { istMonthStartUtc, istNextMonthStartUtc } from "@/lib/validation";
@@ -14,7 +14,8 @@ function currentMonthRange(): { gte: Date; lt: Date } {
 // defaulting to the current calendar month when none is set.
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireSession();
+    // Same gate as the Credit Notes page (ROUTE_SECTION_MAP).
+    const auth = await requireSectionAccess("reports_sales");
     if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(request.url);

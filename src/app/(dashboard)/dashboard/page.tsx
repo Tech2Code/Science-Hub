@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useCanWrite } from "@/lib/useCanWrite";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
@@ -95,7 +96,7 @@ export default function DashboardPage() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const canWrite = role !== "manager";
+  const canWrite = useCanWrite();
 
   const financials = data?.financials ?? null;
   const EMPTY_FIN: FinancialFigures = { totalSales: 0, gstSales: 0, totalPurchases: 0, gstPurchases: 0 };
@@ -322,8 +323,11 @@ export default function DashboardPage() {
       </div>
       )}
 
-      {/* Recent invoices & bills */}
+      {/* Recent invoices & bills — the API redacts data.sales/data.purchases without the overview
+          section, so hide each card instead of showing a misleading "No invoices yet." */}
+      {(canSeeSales || canSeePurchases) && (
       <div {...animateSection(4, styles.recentGrid)}>
+        {canSeeSales && (
         <div className="card">
           <div className={styles.cardHeader}>
             <h2 className={styles.cardHeaderTitle}>Recent Invoices</h2>
@@ -336,7 +340,7 @@ export default function DashboardPage() {
                 {loading ? [...Array(5)].map((_, i) => (
                   <tr key={i}><td colSpan={4}><div className={`${styles.rowSkeleton} ${styles.skeletonPulse}`} /></td></tr>
                 )) : (data?.sales?.recentInvoices ?? []).length === 0 ? (
-                  <tr><td colSpan={4} className="table-empty-cell">No invoices yet. <Link href="/sales/invoices/new" className={styles.emptyLink}>Create one <ArrowIcon /></Link></td></tr>
+                  <tr><td colSpan={4} className="table-empty-cell">No invoices yet.{canWrite && <> <Link href="/sales/invoices/new" className={styles.emptyLink}>Create one <ArrowIcon /></Link></>}</td></tr>
                 ) : (data?.sales?.recentInvoices ?? []).map((inv) => (
                   <tr key={inv.id}>
                     <td data-mobile-full><Link href={`/sales/invoices/${inv.id}`} className={styles.linkCell}>{inv.invoiceNumber}</Link></td>
@@ -349,7 +353,9 @@ export default function DashboardPage() {
             </table>
           </div>
         </div>
+        )}
 
+        {canSeePurchases && (
         <div className="card">
           <div className={styles.cardHeader}>
             <h2 className={styles.cardHeaderTitle}>Recent Purchase Bills</h2>
@@ -362,7 +368,7 @@ export default function DashboardPage() {
                 {loading ? [...Array(5)].map((_, i) => (
                   <tr key={i}><td colSpan={4}><div className={`${styles.rowSkeleton} ${styles.skeletonPulse}`} /></td></tr>
                 )) : (data?.purchases?.recentBills ?? []).length === 0 ? (
-                  <tr><td colSpan={4} className="table-empty-cell">No bills yet. <Link href="/purchases/bills/new" className={styles.emptyLink}>Create one <ArrowIcon /></Link></td></tr>
+                  <tr><td colSpan={4} className="table-empty-cell">No bills yet.{canWrite && <> <Link href="/purchases/bills/new" className={styles.emptyLink}>Create one <ArrowIcon /></Link></>}</td></tr>
                 ) : (data?.purchases?.recentBills ?? []).map((b) => (
                   <tr key={b.id}>
                     <td data-mobile-full><Link href={`/purchases/bills/${b.id}`} className={styles.linkCell}>{b.billNumber}</Link></td>
@@ -375,7 +381,9 @@ export default function DashboardPage() {
             </table>
           </div>
         </div>
+        )}
       </div>
+      )}
 
       {/* Low stock / out of stock alert */}
       {loading ? (

@@ -24,8 +24,12 @@ export function parsePageParams(searchParams: URLSearchParams, maxPageSize = 200
 // Boundaries are computed IST-aware (istMonthBoundsUtc/istDayStartUtc) rather than via local Date
 // constructors — those read the calling environment's local timezone (UTC by default on Vercel),
 // which would mis-bucket anything created IST 00:00-05:29 into the previous UTC day/month/year.
+// Malformed input (year not 4 digits, month not an integer 0-11) returns undefined — "no filter" —
+// rather than producing an Invalid Date that would make the Prisma query throw and the route 500.
 export function monthYearToDateRange(month: string, year: string): { gte: Date; lt: Date } | undefined {
   if (!month && !year) return undefined;
+  if (year && !/^\d{4}$/.test(year)) return undefined;
+  if (month && !/^(\d|1[01])$/.test(month)) return undefined;
   const y = year ? Number(year) : Number(toIstDateStr(new Date()).slice(0, 4));
   if (month) {
     const m = Number(month);

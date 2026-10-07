@@ -341,7 +341,7 @@ export default function EditInvoicePage() {
   useEffect(() => {
     Promise.all([
       fetchCached(`/api/invoices/${id}`),
-      fetchCached("/api/products?pageSize=5000").catch(() => ({ data: [] })),
+      fetchCached("/api/products?pageSize=5000&slim=1").catch(() => ({ data: [] })),
       fetchCached("/api/settings").catch(() => null),
     ]).then(([inv, prods, settings]) => {
       const invoice = inv as InvoiceData;
@@ -469,32 +469,42 @@ export default function EditInvoicePage() {
     setShowStockDialog(false);
     setShowCreditLimitDialog(false);
     setSaving(true);
-    const res = await fetch(`/api/invoices/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        customerId,
-        isInterState,
-        placeOfSupply,
-        reverseCharge,
-        ewayBillNumber: ewayBillNumber.trim() || undefined,
-        items: items.map((i) => ({ productId: i.productId || null, name: i.productName, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent })),
-        notes,
-        date: invoiceDate || undefined,
-        dueDate: dueDate || undefined,
-        transportCharge: effectiveTransportCharge,
-        transportChargeGstRate: effectiveTransportGstRate,
-        expectedUpdatedAt: loadedUpdatedAt,
-        ...(overrideCreditLimit ? { overrideCreditLimit: true } : {}),
-      }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/api/invoices/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId,
+          isInterState,
+          placeOfSupply,
+          reverseCharge,
+          ewayBillNumber: ewayBillNumber.trim() || undefined,
+          items: items.map((i) => ({ productId: i.productId || null, name: i.productName, qty: i.qty, price: i.price, gstRate: i.gstRate, unit: i.unit, hsn: i.hsn, discountPercent: i.discountPercent })),
+          notes,
+          date: invoiceDate || undefined,
+          dueDate: dueDate || undefined,
+          transportCharge: effectiveTransportCharge,
+          transportChargeGstRate: effectiveTransportGstRate,
+          expectedUpdatedAt: loadedUpdatedAt,
+          ...(overrideCreditLimit ? { overrideCreditLimit: true } : {}),
+        }),
+      });
+    } catch {
+      toast({ type: "error", title: "Failed", message: "Network error. Please try again." });
+      setSaving(false);
+      return;
+    }
     if (res.ok) {
-      const d = await res.json();
+      // Body is only read for stockWarnings — a non-JSON 2xx still means the update landed.
+      const d = await res.json().catch(() => ({}));
       clearFormDraft(DRAFT_KEY);
       bustCache(`/api/invoices/${id}`);
       bustCachePrefix("/api/invoices");
       bustCachePrefix("/api/products");
       bustCachePrefix("/api/reports");
+      // The invoice's customer may have changed — both customers' counts/outstanding move.
+      bustCachePrefix("/api/customers");
       bustCache("/api/units");
       invalidateCachedPdf("invoice", id);
       toast({ type: "success", title: "Invoice updated", message: "Changes saved." });

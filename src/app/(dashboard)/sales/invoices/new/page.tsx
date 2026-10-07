@@ -163,7 +163,7 @@ export default function NewInvoicePage() {
     const prefillId = searchParams.get("customerId");
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (prefillId) setCustomerId(prefillId);
-    fetch("/api/products?pageSize=5000", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { data: Product[] }) => setProducts(res.data ?? [])).catch(() => {});
+    fetch("/api/products?pageSize=5000&slim=1", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { data: Product[] }) => setProducts(res.data ?? [])).catch(() => {});
     fetch("/api/invoices/next-number", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((res: { documentNumber?: string }) => setNextInvoiceNumber(res.documentNumber ?? "")).catch(() => {});
     fetch("/api/settings", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((s) => {
       setBusinessState(s?.state ?? "");
@@ -437,17 +437,31 @@ export default function NewInvoicePage() {
       idempotencyKey: idempotency.key(),
       ...(overrideCreditLimit ? { overrideCreditLimit: true } : {}),
     };
-    const res = await fetch("/api/invoices", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetch("/api/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      toast({ type: "error", title: "Failed", message: "Network error. Please try again." });
+      setSaving(false);
+      return;
+    }
     if (res.ok) {
-      const d = await res.json();
+      const d = await res.json().catch(() => null);
+      if (!d?.id) {
+        toast({ type: "error", title: "Failed", message: "Unexpected server response. Check the invoices list before retrying." });
+        setSaving(false);
+        return;
+      }
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/invoices");
       bustCachePrefix("/api/reports");
       bustCachePrefix("/api/products");
+      // Customer list shows per-customer invoice counts/outstanding.
+      bustCachePrefix("/api/customers");
       bustCache("/api/units");
       toast({ type: "success", title: "Invoice created", message: "Invoice saved successfully." });
       if (d.stockWarnings?.length > 0) {
