@@ -8,6 +8,7 @@ import { deleteAttachmentBlob } from "@/lib/blobStorage";
 import { requireWriteAccess, requireAdmin } from "@/lib/apiAuth";
 
 type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill" | "return" | "rate_list";
+const VALID_BIN_TYPES: BinType[] = ["invoice", "customer", "product", "brand", "category", "vendor", "purchase_bill", "return", "rate_list"];
 
 // Thrown from inside a restore transaction for a plain validation failure (400 unless overridden).
 class BinValidationError extends Error {
@@ -87,6 +88,15 @@ export async function POST(
     const { session } = auth;
 
     const binType = type as BinType;
+    if (!VALID_BIN_TYPES.includes(binType)) {
+      return NextResponse.json({ error: "Invalid type" }, { status: 400 });
+    }
+    // The simple (non-transactional) restore paths below use update(): an unknown id would surface
+    // as a raw P2025 500, and an already-active row would be "restored" again with a duplicate
+    // restore_* activity log entry. Short-circuit both up front, mirroring the invoice/bill guards.
+    const binState = await getBinState(binType, id);
+    if (!binState) return NextResponse.json({ error: "Item not found" }, { status: 404 });
+    if (!binState.deletedAt) return NextResponse.json({ message: "Already restored" });
     const name = await getItemName(binType, id);
 
     switch (binType) {
@@ -94,6 +104,18 @@ export async function POST(
         // Guard against double-restore: only re-deduct stock if this call is
         // the one that actually transitions deletedAt from set to null.
         const restored = await prisma.$transaction(async (tx) => {
+          // Refuse if the invoice's customer was explicitly moved to the bin (has a delete_customer
+          // log). A one-off customer is soft-deleted from creation with no such log, so it's fine.
+          const inv = await tx.invoice.findUnique({ where: { id }, select: { customer: { select: { id: true, name: true, deletedAt: true } } } });
+          if (inv?.customer.deletedAt) {
+            const explicitlyBinned = await tx.activityLog.findFirst({
+              where: { entityId: inv.customer.id, entityType: "customer", action: "delete_customer" },
+              select: { id: true },
+            });
+            if (explicitlyBinned) {
+              throw new BinValidationError(`Customer "${inv.customer.name}" is in the Recycle Bin — restore the customer first, then this invoice.`);
+            }
+          }
           const updateResult = await tx.invoice.updateMany({
             where: { id, deletedAt: { not: null } },
             data: { deletedAt: null },
@@ -152,6 +174,18 @@ export async function POST(
         // Double-restore guard, symmetric to invoice. A cancelled bill's stock was already
         // reversed at cancel-time, so restoring must not re-apply it.
         const restored = await prisma.$transaction(async (tx) => {
+          // Same parent check as invoice: block only when the vendor was explicitly binned
+          // (has a delete_vendor log) — one-off vendors are soft-deleted at creation with no log.
+          const pb = await tx.purchaseBill.findUnique({ where: { id }, select: { vendor: { select: { id: true, name: true, deletedAt: true } } } });
+          if (pb?.vendor.deletedAt) {
+            const explicitlyBinned = await tx.activityLog.findFirst({
+              where: { entityId: pb.vendor.id, entityType: "vendor", action: "delete_vendor" },
+              select: { id: true },
+            });
+            if (explicitlyBinned) {
+              throw new BinValidationError(`Vendor "${pb.vendor.name}" is in the Recycle Bin — restore the vendor first, then this purchase bill.`);
+            }
+          }
           const updateResult = await tx.purchaseBill.updateMany({
             where: { id, deletedAt: { not: null } },
             data: { deletedAt: null },
@@ -301,8 +335,7 @@ export async function DELETE(
     const { session } = auth;
 
     const binType = type as BinType;
-    const validTypes: BinType[] = ["invoice", "customer", "product", "brand", "category", "vendor", "purchase_bill", "return", "rate_list"];
-    if (!validTypes.includes(binType)) {
+    if (!VALID_BIN_TYPES.includes(binType)) {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 });
     }
     const binState = await getBinState(binType, id);

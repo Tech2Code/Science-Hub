@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { SearchField } from "@/components/ui/SearchField";
-import { useFetch } from "@/lib/useCache";
+import { useFetch, bustCachePrefix } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -93,6 +93,12 @@ export default function RateListsPage() {
   const showSkeleton = loading && !data;
   const isRefetching = loading && !!data;
 
+  // Deleting the last row on the last page leaves `page` past the end — step back to the real last
+  // page instead of showing a false empty state (adjusted during render).
+  if (data && !loading && page > 1 && rateLists.length === 0 && total > 0) {
+    setPage(Math.max(1, Math.ceil(total / pageSize)));
+  }
+
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
   const [previewTarget, setPreviewTarget] = useState<RateListDetail | null>(null);
   const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null);
@@ -164,6 +170,8 @@ export default function RateListsPage() {
       const res = await fetch(`/api/rate-lists/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
+        // Also drops the cached detail entry so a later visit doesn't show it as still active.
+        bustCachePrefix("/api/rate-lists");
         await mutate();
         toast({ type: "success", title: "Moved to bin", message: `"${target.title}" moved to bin. You can restore it within 30 days.` });
       } else {
@@ -221,7 +229,7 @@ export default function RateListsPage() {
           <div className="toolbar-left">
             <SearchField
               aria-label="Search rate lists"
-              placeholder="Search by title…"
+              placeholder="Search by title or creator…"
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
               className={styles.searchInput}

@@ -21,11 +21,12 @@ export async function POST(req: Request) {
 
   try {
     const form = await req.formData();
-    const pdf = form.get("pdf") as File | null;
-    const to = form.get("to") as string | null;
-    const title = form.get("title") as string | null;
+    const pdf = form.get("pdf");
+    const to = form.get("to");
+    const title = form.get("title");
 
-    if (!pdf || !to || !title) {
+    // A string-valued "pdf" or file-valued "to"/"title" would otherwise crash below (500) instead of a 400.
+    if (!(pdf instanceof Blob) || typeof to !== "string" || typeof title !== "string" || !to || !title) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
     // Supports a comma-separated list so a rate list can go to more than one

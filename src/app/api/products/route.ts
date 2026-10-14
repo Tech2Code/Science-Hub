@@ -8,6 +8,19 @@ import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { validateProductInput, validateNumericField, MAX_MONEY_VALUE } from "@/lib/validation";
 import { parsePageParams } from "@/lib/listQuery";
 
+// brandId/categoryId must point at a real, non-binned row — otherwise a garbage id surfaces as a raw
+// FK 500 and a binned one silently attaches the product to a Recycle Bin entry.
+async function checkTaxonomyRef(kind: "brand" | "category", refId: unknown): Promise<string | null> {
+  if (typeof refId !== "string") return `Invalid ${kind}.`;
+  const label = kind === "brand" ? "Brand" : "Category";
+  const row = kind === "brand"
+    ? await prisma.brand.findUnique({ where: { id: refId }, select: { name: true, deletedAt: true } })
+    : await prisma.category.findUnique({ where: { id: refId }, select: { name: true, deletedAt: true } });
+  if (!row) return `Selected ${kind} no longer exists.`;
+  if (row.deletedAt) return `${label} "${row.name}" is in the Recycle Bin — restore it or choose another ${kind}.`;
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireSession();
@@ -72,6 +85,17 @@ export async function POST(request: NextRequest) {
       validateNumericField("listPrice", parsedListPrice, { min: 0, max: MAX_MONEY_VALUE });
     if (numericErr) return NextResponse.json({ error: numericErr }, { status: 400 });
 
+    const trimmedUnit = typeof unit === "string" ? unit.trim() : "";
+    if (!trimmedUnit) return NextResponse.json({ error: "Unit is required." }, { status: 400 });
+    if (brandId) {
+      const refErr = await checkTaxonomyRef("brand", brandId);
+      if (refErr) return NextResponse.json({ error: refErr }, { status: 400 });
+    }
+    if (categoryId) {
+      const refErr = await checkTaxonomyRef("category", categoryId);
+      if (refErr) return NextResponse.json({ error: refErr }, { status: 400 });
+    }
+
     const trimmedSku = typeof sku === "string" ? sku.trim() || null : null;
     const trimmedHsn = typeof hsn === "string" ? hsn.trim() || null : null;
 
@@ -85,7 +109,7 @@ export async function POST(request: NextRequest) {
 
     const product = await prisma.product.create({
       data: {
-        name: trimmedName, description, sku: trimmedSku, hsn: trimmedHsn, unit,
+        name: trimmedName, description, sku: trimmedSku, hsn: trimmedHsn, unit: trimmedUnit,
         price: parsedPrice,
         purchasePrice: parsedPurchasePrice,
         listPrice: parsedListPrice,
@@ -99,7 +123,7 @@ export async function POST(request: NextRequest) {
       include: { category: true, brand: true },
     });
 
-    await logActivity(auth.session.user.id, "add_product", `Added product "${trimmedName}" | SKU: ${trimmedSku || "—"} | Price: ₹${parsedPrice.toFixed(2)} | GST: ${parsedGstRate}% | Stock: ${parsedStock} ${unit || "Nos"}`, product.id, "product");
+    await logActivity(auth.session.user.id, "add_product", `Added product "${trimmedName}" | SKU: ${trimmedSku || "—"} | Price: ₹${parsedPrice.toFixed(2)} | GST: ${parsedGstRate}% | Stock: ${parsedStock} ${trimmedUnit}`, product.id, "product");
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
     return NextResponse.json(product, { status: 201 });

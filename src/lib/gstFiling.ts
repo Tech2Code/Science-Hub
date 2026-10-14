@@ -22,6 +22,11 @@ export interface SalesRegisterRow {
   invoiceNumber: string; date: Date; customerName: string; customerGstin: string;
   placeOfSupply: string; supplyType: "Inter-State" | "Intra-State"; isB2B: boolean; reverseCharge: boolean;
   taxableValue: number; cgst: number; sgst: number; igst: number; total: number;
+  // Invoice-level transport/freight charge and its GST — display-only on this row, so the workbook's
+  // Sales Register foots (taxable + cgst + sgst + igst + transport + transport GST ≈ total, within
+  // round-off). taxableValue/cgst/sgst/igst stay item-only; the summary below accumulates transport
+  // tax separately and never reads these two fields.
+  transportCharge: number; transportGst: number;
 }
 
 // One row per (invoice, GST rate) — GSTR-1's B2B/B2CS sections require tax-rate-wise
@@ -43,7 +48,8 @@ export interface CreditNoteRow {
   placeOfSupply: string; reverseCharge: boolean; invoiceDate: Date; invoiceTotal: number;
 }
 
-// Shared by the headline summary below and the GSTR-1 cdnr.csv exporter, so the two can never
+// Shared by the headline summary below and the GSTR-1 CSV exporter (registered recipients go to
+// cdnr.csv, unregistered ones are netted into b2cs.csv), so the two can never
 // disagree on which credit notes are actually filed: a credit note needs an assigned number and a
 // place of supply (taken from its own original invoice) that resolves to a recognized GST state/UT.
 export function isCreditNoteFileable(cn: Pick<CreditNoteRow, "creditNoteNumber" | "placeOfSupply">): boolean {
@@ -282,6 +288,7 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
       customerGstin, placeOfSupply: posValue,
       supplyType: inv.isInterState ? "Inter-State" : "Intra-State", isB2B, reverseCharge: inv.reverseCharge,
       taxableValue: inv.subtotal, cgst: inv.cgst, sgst: inv.sgst, igst: inv.igst, total: inv.total,
+      transportCharge: inv.transportCharge, transportGst: inv.transportChargeGstAmount,
     });
   }
 

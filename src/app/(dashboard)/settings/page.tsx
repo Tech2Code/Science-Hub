@@ -248,9 +248,14 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetch("/api/settings", { headers: { "x-no-loader": "1" } })
-      .then((r) => r.json())
-      .then(applyLoaded)
-      .catch(() => {})
+      .then(async (r) => {
+        const d = await r.json().catch(() => null);
+        // A non-2xx `{error}` body used to be applied as if it were settings, showing every
+        // field blank ("not configured") with no hint that loading had actually failed.
+        if (!r.ok || !d || d.error) throw new Error(d?.error ?? "Failed to load settings");
+        applyLoaded(d);
+      })
+      .catch(() => toast({ type: "error", title: "Couldn't load settings", message: "Please refresh the page before making changes." }))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- applyLoaded is a fresh function each render (not memoized); this must run once on mount only
   }, []);

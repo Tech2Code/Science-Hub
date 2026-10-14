@@ -37,7 +37,7 @@ interface RateListApiItem {
   name: string; brand: string | null; unit: string; isNetRate: boolean; discountPercent: number; listRate: number;
 }
 interface RateListApi {
-  id: string; title: string; note: string | null; deletedAt: string | null; items: RateListApiItem[];
+  id: string; title: string; note: string | null; deletedAt: string | null; updatedAt: string; items: RateListApiItem[];
 }
 
 export default function EditRateListPage() {
@@ -60,6 +60,8 @@ export default function EditRateListPage() {
   const [initialTitle, setInitialTitle] = useState("");
   const [initialNote, setInitialNote] = useState("");
   const [initialItems, setInitialItems] = useState<RateListLineItem[]>([]);
+  // Sent back on save as expectedUpdatedAt — the server 409s if someone else saved in between.
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
 
   const DRAFT_KEY = `rate-list:edit:${id}`;
   const [showDraftBanner, setShowDraftBanner] = useState(false);
@@ -109,6 +111,7 @@ export default function EditRateListPage() {
         setInitialTitle(d.title);
         setInitialNote(d.note ?? "");
         setInitialItems(loadedItems);
+        setLoadedUpdatedAt(d.updatedAt);
         setLoading(false);
         if (loadFormDraft(DRAFT_KEY)) setShowDraftBanner(true);
         else setDraftReady(true);
@@ -162,6 +165,7 @@ export default function EditRateListPage() {
         listRate: toNum(i.listRate),
         amount: calcRateListItem(i).amount,
       })),
+      ...(loadedUpdatedAt ? { expectedUpdatedAt: loadedUpdatedAt } : {}),
     };
 
     setSaving(true);
@@ -182,7 +186,11 @@ export default function EditRateListPage() {
         // re-enable Save mid-transition and allow a duplicate update submission.
         return;
       } else {
-        toast({ type: "error", title: "Failed to save", message: data.error ?? "Failed to update rate list." });
+        toast({
+          type: "error",
+          title: res.status === 409 ? "Updated elsewhere" : "Failed to save",
+          message: data.error ?? "Failed to update rate list.",
+        });
       }
     } catch {
       toast({ type: "error", title: "Network error", message: "Please try again." });

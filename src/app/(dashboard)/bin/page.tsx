@@ -74,12 +74,14 @@ function bustNotificationCaches() {
 const TYPE_CACHE_PREFIXES: Record<BinType, string[]> = {
   invoice:       ["/api/invoices", "/api/invoices/stats", "/api/reports", "/api/products", "/api/products/stats"],
   customer:      ["/api/customers", "/api/reports"],
-  product:       ["/api/products", "/api/products/stats", "/api/reports"],
-  brand:         ["/api/brands", "/api/reports"],
-  category:      ["/api/categories", "/api/reports"],
+  // A product moving in/out of the bin changes its brand's/category's product count and list;
+  // permanently deleting a brand/category unassigns it from (binned) products.
+  product:       ["/api/products", "/api/products/stats", "/api/reports", "/api/brands", "/api/categories"],
+  brand:         ["/api/brands", "/api/reports", "/api/products"],
+  category:      ["/api/categories", "/api/reports", "/api/products"],
   vendor:        ["/api/vendors"],
   purchase_bill: ["/api/purchase-bills", "/api/purchase-bills/stats", "/api/reports", "/api/purchase-reports", "/api/products", "/api/products/stats"],
-  return:        ["/api/credit-notes", "/api/credit-notes/stats", "/api/reports", "/api/products", "/api/products/stats"],
+  return:        ["/api/credit-notes", "/api/credit-notes/stats", "/api/invoices", "/api/reports", "/api/products", "/api/products/stats"],
   rate_list:     ["/api/rate-lists"],
 };
 
@@ -90,11 +92,16 @@ function bustPartyCaches() {
   bustCachePrefix("/api/vendors");
 }
 
-function DaysLeftPill({ daysLeft }: { daysLeft: number }) {
+function DaysLeftPill({ daysLeft, protectedReason }: { daysLeft: number; protectedReason?: string }) {
   // -1 = invoices/purchase bills/credit notes, exempt from auto-purge
   // because their numbers are legally significant GST document numbers.
   if (daysLeft < 0) {
     return <span className={`${styles.daysLeftPill} ${styles.daysLeftGreen}`}>Retained (GST)</span>;
+  }
+  // A protected item (e.g. a customer still referenced by invoices) is skipped by the auto-purge,
+  // so a countdown — or "Expiring soon" once it hits 0 — would never actually come true.
+  if (protectedReason) {
+    return <span className={`${styles.daysLeftPill} ${styles.daysLeftYellow}`} title={protectedReason}>On hold</span>;
   }
   const red    = daysLeft <= 7;
   const yellow = !red && daysLeft <= 14;
@@ -190,7 +197,7 @@ function TypeSection({
                     {item.deletedBy ?? <span className={styles.emptyValue}>—</span>}
                   </Cell>
                   <Cell col={BIN_COLUMNS[4]}>
-                    <DaysLeftPill daysLeft={item.daysLeft} />
+                    <DaysLeftPill daysLeft={item.daysLeft} protectedReason={item.protectedReason} />
                   </Cell>
                   <Cell col={BIN_COLUMNS[5]}>
                     <div className="table-actions">
@@ -239,6 +246,15 @@ export default function BinPage() {
   // should stay visible with just the clicked button spinning, not flash back to a skeleton.
   const isInitialLoad = loading && !data;
   const loadingMore = loading && !!data;
+  // useFetch trusts a cached URL until it's explicitly busted, and nothing outside this page busts
+  // "/api/bin" when an item is deleted elsewhere (products, invoices, customers, ...). Without this,
+  // revisiting the Bin in the same session showed the snapshot from the first visit — newly deleted
+  // items missing, and the server-side 30-day auto-purge never re-run. Revalidate once on mount,
+  // keeping the cached list on screen meanwhile.
+  useEffect(() => {
+    if (data) void mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only revalidation
+  }, []);
   function handleLoadMoreRetained() {
     setRetainedLimit((l) => l + RETAINED_LOAD_MORE_STEP);
   }
@@ -277,6 +293,7 @@ export default function BinPage() {
           setConfirmLoading(false);
           setConfirmState(null);
           if (res.ok) {
+            bustCachePrefix("/api/bin"); // other ?limit= variants too, not just the current one
             mutate();
             TYPE_CACHE_PREFIXES[item.type].forEach(bustCachePrefix);
             bustPartyCaches();
@@ -317,6 +334,7 @@ export default function BinPage() {
           setConfirmLoading(false);
           setConfirmState(null);
           if (res.ok) {
+            bustCachePrefix("/api/bin"); // other ?limit= variants too, not just the current one
             mutate();
             TYPE_CACHE_PREFIXES[item.type].forEach(bustCachePrefix);
             bustPartyCaches();
@@ -340,7 +358,8 @@ export default function BinPage() {
   }
 
   async function confirmEmptyBin() {
-    if (emptyBinInput !== EMPTY_BIN_PHRASE) return;
+    // emptyBinLoading guard: Enter in the confirm input bypasses the dialog button's loading state.
+    if (emptyBinInput !== EMPTY_BIN_PHRASE || emptyBinLoading) return;
     setEmptyBinLoading(true);
     try {
       const res = await fetch("/api/bin/empty", { method: "DELETE" });
@@ -348,6 +367,7 @@ export default function BinPage() {
       setEmptyBinLoading(false);
       setEmptyBinOpen(false);
       if (res.ok) {
+        bustCachePrefix("/api/bin");
         mutate();
         Object.values(TYPE_CACHE_PREFIXES).flat().forEach(bustCachePrefix);
         bustNotificationCaches();

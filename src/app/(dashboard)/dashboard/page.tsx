@@ -103,9 +103,12 @@ export default function DashboardPage() {
   // periodLabel() builds the same en-IN/IST short month label ("Sep 2026") the server uses for
   // financials.monthly[].month, so a chosen month matches its row exactly. "Full year" → FY total.
   const finPeriodLabel = periodLabel(finPeriod);
+  // financials.monthly is always the FY's 12 months in Apr→Mar order, so index by position rather
+  // than matching label strings — the server (Node ICU) and browser can format en-IN short months
+  // differently ("Sep" vs "Sept"), which silently zeroed every month tile on a mismatch.
   const finMonth = finPeriod.month0 === "all"
     ? null
-    : financials?.monthly.find((m) => m.month === finPeriodLabel) ?? null;
+    : financials?.monthly[(finPeriod.month0 - 3 + 12) % 12] ?? null;
   const finSelected: FinancialFigures =
     financials == null ? EMPTY_FIN
     : finPeriod.month0 === "all" ? financials.total
@@ -280,7 +283,7 @@ export default function DashboardPage() {
               label="GST Paid (ITC)" tone="neutral" loading={loading}
               value={fmt(finSelected.gstPurchases)}
               help="Within Total Purchases"
-              info="The GST portion already included in Total Purchases — this is reclaimable input tax credit, not a real cost. For the actual net amount payable to the government, see the GST Filing report."
+              info="The GST portion already included in Total Purchases — mostly reclaimable input tax credit, not a real cost (GST on bills from vendors without a GSTIN is included here but can't be claimed). For the actual net amount payable to the government, see the GST Filing report."
             />
           )}
           {canSeeSales && canSeePurchases && (

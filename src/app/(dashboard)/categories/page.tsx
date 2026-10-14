@@ -157,12 +157,14 @@ export default function CategoriesPage() {
       // Product list/detail embed the category's name, so a rename leaves them stale until this bust.
       bustCachePrefix("/api/products");
       toast({ type: "success", title: "Category renamed", message: `Renamed to "${name}".` });
-      // Deliberately not resetting `renaming` here — it must stay locked
-      // until navigation actually replaces this page.
-      router.push(`/categories/${id}`);
-      return;
+      // Stays on the list after an in-place rename, same as Brands (previously jumped to the
+      // category's detail page, losing the user's search/page position).
     } else if (r.status === 409) {
       bustCachePrefix("/api/categories");
+      // Refetch so the list (and its updatedAt) reflects the other user's change — otherwise a retry
+      // re-sends the same stale expectedUpdatedAt and 409s again until a full page reload.
+      await mutate();
+      setEditingId(null);
       toast({ type: "error", title: "Update conflict", message: d.error ?? "This category was changed by someone else. Please reload and try again." });
     } else {
       toast({ type: "error", title: "Rename failed", message: d.error ?? "Could not rename category." });
@@ -189,7 +191,14 @@ export default function CategoriesPage() {
         setDeleting(false);
         setConfirmState(null);
         if (res.ok) {
-          await mutate();
+          // Deleting the only row on a later page would leave an empty page with Pagination
+          // reading e.g. "3 / 2" — step back a page instead of refetching this one.
+          if (categories.length === 1 && page > 1 && !showAll) {
+            bustCachePrefix("/api/categories");
+            setPage((p) => p - 1);
+          } else {
+            await mutate();
+          }
           toast({ type: "success", title: "Category deleted", message: `"${name}" moved to bin.` });
         } else {
           toast({ type: "error", title: "Cannot delete category", message: d.error ?? "Could not delete category." });
@@ -213,7 +222,7 @@ export default function CategoriesPage() {
         variant="danger"
         loading={deleting}
         onConfirm={confirmState?.onConfirm ?? (() => {})}
-        onCancel={() => setConfirmState(null)}
+        onCancel={() => { if (!deleting) setConfirmState(null); }}
       />
 
       <div className="page-header">
@@ -327,7 +336,7 @@ export default function CategoriesPage() {
                 </td></tr>
               ) : categories.map((c, i) => (
                 <tr key={c.id}>
-                  <Cell col={COLUMNS[0]} className={styles.indexCell}>{i + 1}</Cell>
+                  <Cell col={COLUMNS[0]} className={styles.indexCell}>{(showAll ? 0 : (page - 1) * PAGE_SIZE) + i + 1}</Cell>
                   <Cell col={COLUMNS[1]}>
                     <Link href={`/categories/${c.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`} title={c.name}>{c.name}</Link>
                   </Cell>

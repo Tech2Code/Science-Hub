@@ -9,7 +9,8 @@ import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { purchaseBillLineBreakdown, normalizeCategoryInput } from "@/lib/purchaseBillForm";
 import { getBusinessSettings } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
-import { isFutureIstDate, istDayStartUtc, MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
+import { isFutureIstDate, istDayStartUtc, toIstDateStr, MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
+import { formatDate } from "@/lib/formatDate";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
 
 class BillConflictError extends Error {}
@@ -113,6 +114,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
       if (getIndianFinancialYear(parsedBillDate) !== getIndianFinancialYear(new Date(existing.billDate))) {
         return NextResponse.json({ error: "Bill date cannot be moved into a different financial year — it would no longer match the bill number. Delete and re-create the bill instead if it truly belongs to a different year." }, { status: 400 });
+      }
+    }
+
+    // Only validated when the IST calendar day actually changes — the edit form resends the
+    // currently-loaded billDate on every save, and legacy rows shouldn't block unrelated edits.
+    const newBillDay = parsedBillDate ? toIstDateStr(parsedBillDate) : undefined;
+    const billDayChanged = newBillDay !== undefined && newBillDay !== toIstDateStr(new Date(existing.billDate));
+    if (billDayChanged) {
+      // A payment can't predate the bill it pays (the payment routes enforce the same floor at write time).
+      const payments = await prisma.purchasePayment.findMany({ where: { purchaseBillId: id }, select: { date: true } });
+      const earliestPaymentDay = payments.map((p) => toIstDateStr(p.date)).sort()[0];
+      if (earliestPaymentDay && newBillDay > earliestPaymentDay) {
+        return NextResponse.json({ error: `Bill date can't be after a recorded payment date (${formatDate(istDayStartUtc(earliestPaymentDay))}). Edit that payment first.` }, { status: 400 });
+      }
+      // dueDate not sent → the stored one is kept, so it must still be on/after the new bill date.
+      if (dueDate === undefined && existing.dueDate && toIstDateStr(existing.dueDate) < newBillDay) {
+        return NextResponse.json({ error: `The bill's due date (${formatDate(existing.dueDate)}) would be before the new bill date. Update the due date too.` }, { status: 400 });
       }
     }
 

@@ -38,8 +38,16 @@ export default function LoginPage() {
     if (emailErr || passwordErr) return;
     setError("");
     setStage("verifying");
-    const result = await signIn("credentials", { email, password, redirect: false });
-    if (result?.error) {
+    let result: Awaited<ReturnType<typeof signIn>>;
+    try {
+      result = await signIn("credentials", { email, password, redirect: false });
+    } catch {
+      // A network failure used to leave the button stuck on "verifying" forever.
+      setStage("idle");
+      setError("Network error. Please check your connection and try again.");
+      return;
+    }
+    if (!result || result.error) {
       setStage("idle");
       setError("Incorrect email or password. Try again.");
     } else {

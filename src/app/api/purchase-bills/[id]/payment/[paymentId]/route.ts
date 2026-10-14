@@ -25,6 +25,9 @@ export async function PUT(
     if (!/^\d+(\.\d+)?$/.test(amountStr) || parseFloat(amountStr) <= 0) {
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
     }
+    if (method !== undefined && method !== null && (typeof method !== "string" || method.length > 100)) {
+      return NextResponse.json({ error: "Payment method is too long (max 100 characters)." }, { status: 400 });
+    }
     if (typeof reference === "string" && reference.length > 500) {
       return NextResponse.json({ error: "Reference is too long (max 500 characters)." }, { status: 400 });
     }
@@ -120,7 +123,7 @@ export async function PUT(
     await logActivity(
       auth.session.user.id,
       "update_purchase_payment",
-      `Updated payment to ₹${fmt(parseFloat(amountStr))} via ${method} for bill ${billCheck.billNumber}`,
+      `Updated payment to ₹${fmt(parseFloat(amountStr))} via ${method || paymentCheck.method} for bill ${billCheck.billNumber}`,
       id,
       "purchase_bill"
     );

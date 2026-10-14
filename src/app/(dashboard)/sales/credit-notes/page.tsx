@@ -156,6 +156,7 @@ export default function CreditNotesPage() {
   }
 
   function closePdfPreview() {
+    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); // each View/Regenerate creates a fresh blob URL — release it
     setPdfPreviewUrl(null);
     setPdfPreviewNote(null);
   }

@@ -6,6 +6,20 @@ import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { validateProductInput, validateNumericField, MAX_MONEY_VALUE } from "@/lib/validation";
 
+
+// brandId/categoryId must point at a real, non-binned row — otherwise a garbage id surfaces as a raw
+// FK 500 and a binned one silently attaches the product to a Recycle Bin entry.
+async function checkTaxonomyRef(kind: "brand" | "category", refId: unknown): Promise<string | null> {
+  if (typeof refId !== "string") return `Invalid ${kind}.`;
+  const label = kind === "brand" ? "Brand" : "Category";
+  const row = kind === "brand"
+    ? await prisma.brand.findUnique({ where: { id: refId }, select: { name: true, deletedAt: true } })
+    : await prisma.category.findUnique({ where: { id: refId }, select: { name: true, deletedAt: true } });
+  if (!row) return `Selected ${kind} no longer exists.`;
+  if (row.deletedAt) return `${label} "${row.name}" is in the Recycle Bin — restore it or choose another ${kind}.`;
+  return null;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -58,7 +72,7 @@ export async function PUT(
     const body = await request.json();
     const { name, description, sku, hsn, unit, price, purchasePrice, listPrice, discountPercent, gstRate, minStock, categoryId, brandId, expectedUpdatedAt } = body;
 
-    const existing = await prisma.product.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
+    const existing = await prisma.product.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true, brandId: true, categoryId: true } });
     if (!existing) return NextResponse.json({ error: "Product not found" }, { status: 404 });
     if (existing.deletedAt) {
       return NextResponse.json({ error: "This product is in the bin — restore it before editing" }, { status: 400 });
@@ -84,7 +98,11 @@ export async function PUT(
     if (description !== undefined) data.description = description;
     if (sku !== undefined) data.sku = typeof sku === "string" ? sku.trim() || null : null;
     if (hsn !== undefined) data.hsn = typeof hsn === "string" ? hsn.trim() || null : null;
-    if (unit !== undefined) data.unit = unit;
+    if (unit !== undefined) {
+      const trimmedUnit = typeof unit === "string" ? unit.trim() : "";
+      if (!trimmedUnit) return NextResponse.json({ error: "Unit is required." }, { status: 400 });
+      data.unit = trimmedUnit;
+    }
     if (purchasePrice !== undefined) {
       if (purchasePrice === null || purchasePrice === "") {
         return NextResponse.json({ error: "Purchase price is required." }, { status: 400 });
@@ -117,6 +135,16 @@ export async function PUT(
       if (err) return NextResponse.json({ error: err }, { status: 400 });
       data[key] = parsed;
     }
+    // Re-sending the product's current brand/category unchanged is always allowed (it may have been
+    // binned after assignment); a newly-chosen one must exist and not be in the bin.
+    if (categoryId && categoryId !== existing.categoryId) {
+      const refErr = await checkTaxonomyRef("category", categoryId);
+      if (refErr) return NextResponse.json({ error: refErr }, { status: 400 });
+    }
+    if (brandId && brandId !== existing.brandId) {
+      const refErr = await checkTaxonomyRef("brand", brandId);
+      if (refErr) return NextResponse.json({ error: refErr }, { status: 400 });
+    }
     if (categoryId !== undefined) data.categoryId = categoryId || null;
     if (brandId !== undefined) data.brandId = brandId || null;
     const product = await prisma.product.update({
@@ -145,8 +173,11 @@ export async function DELETE(
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
-    const product = await prisma.product.findUnique({ where: { id }, select: { name: true, sku: true, price: true, stock: true, unit: true } });
+    const product = await prisma.product.findUnique({ where: { id }, select: { name: true, sku: true, price: true, stock: true, unit: true, deletedAt: true } });
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    // A repeat DELETE (double-click, stale tab) would otherwise reset deletedAt — restarting the
+    // 30-day bin countdown — and write a second delete_product log entry.
+    if (product.deletedAt) return NextResponse.json({ error: "This product is already in the bin." }, { status: 400 });
     const [invoiceItemCount, purchaseItemCount] = await Promise.all([
       prisma.invoiceItem.count({ where: { productId: id, invoice: { deletedAt: null } } }),
       prisma.purchaseBillItem.count({ where: { productId: id, purchaseBill: { deletedAt: null } } }),

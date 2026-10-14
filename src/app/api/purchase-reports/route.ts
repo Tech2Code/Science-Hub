@@ -54,7 +54,9 @@ async function getPurchaseOutstanding(startDate: string | undefined, endDate: st
   const [bills, total, agg, overdueCount] = await Promise.all([
     prisma.purchaseBill.findMany({
       where,
-      orderBy: { billDate: "asc" as const },
+      // id tiebreak — many bills share a billDate, and without a total order Postgres can return
+      // tied rows in a different order per page query, duplicating/skipping rows across pages.
+      orderBy: [{ billDate: "asc" as const }, { id: "asc" as const }],
       skip,
       take,
       include: { vendor: { select: { id: true, name: true } } },
@@ -68,8 +70,12 @@ async function getPurchaseOutstanding(startDate: string | undefined, endDate: st
 
   const data = bills.map((b) => {
     const balance = b.total - b.paidAmount;
+    // Whole IST calendar days between the due day and today — matches overdueCount's
+    // `dueDate < istTodayStartUtc()` rule exactly, whatever time-of-day dueDate was stored with
+    // (a raw ms diff floored to days let a legacy non-midnight dueDate read "Current" in the
+    // aging column while already being counted in the Overdue Bills banner).
     const daysOverdue = b.dueDate
-      ? Math.floor((now.getTime() - new Date(b.dueDate).getTime()) / 86400000)
+      ? Math.round((istTodayStartUtc(now).getTime() - istDayStartUtc(toIstDateStr(b.dueDate)).getTime()) / 86400000)
       : null;
     let aging = "Current";
     if (daysOverdue !== null && daysOverdue > 0) {

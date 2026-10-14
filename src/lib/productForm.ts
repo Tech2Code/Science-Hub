@@ -53,8 +53,11 @@ export function validateProductForm(form: ProductFormData, opts: { listPriceRequ
   const discountErr      = form.discountPercent.trim() ? validate(form.discountPercent, rules.percentRange(100, "Discount must be between 0 and 100%.")) : null;
   const unitErr          = validate(form.unit, rules.required("Unit is required."));
   const gstRateErr       = validate(form.gstRate, rules.required("GST rate is required."), rules.percentRange(100, "GST rate must be between 0 and 100%."));
-  const stockErr         = validate(form.stock, rules.required("Opening stock is required."), rules.nonNegativeNumber("Stock cannot be negative."));
-  const minStockErr      = validate(form.minStock, rules.required("Minimum stock is required."), rules.nonNegativeNumber("Minimum stock cannot be negative."));
+  // Product.stock/minStock are integer columns and POST/PUT /api/products reject a fraction — catch
+  // it here as a field error instead of letting parseInt() silently truncate "2.5" to 2 on submit.
+  const wholeNumber = (msg: string) => (v: string) => !v.trim() || /^\d+$/.test(v.trim()) ? null : msg;
+  const stockErr         = validate(form.stock, rules.required("Opening stock is required."), rules.nonNegativeNumber("Stock cannot be negative."), wholeNumber("Stock must be a whole number."));
+  const minStockErr      = validate(form.minStock, rules.required("Minimum stock is required."), rules.nonNegativeNumber("Minimum stock cannot be negative."), wholeNumber("Minimum stock must be a whole number."));
   return {
     name: nameErr ?? undefined,
     price: priceErr ?? undefined,

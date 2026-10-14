@@ -27,6 +27,7 @@ import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
+import { istTodayStartUtc } from "@/lib/validation";
 import styles from "./invoicesList.module.css";
 
 interface Invoice {
@@ -62,7 +63,9 @@ type StatusFilter = "All" | "unpaid" | "partial" | "paid" | "overdue";
 const STATUS_TABS: StatusFilter[] = ["All", "overdue", "unpaid", "partial", "paid"];
 
 function isOverdue(inv: { status: string; dueDate: string | null }): boolean {
-  return inv.status !== "paid" && !!inv.dueDate && new Date(inv.dueDate) < new Date();
+  // Same IST "today" boundary the server's Overdue tab/stat uses (buildInvoiceWhere) — a bare
+  // `< new Date()` flagged an invoice due today as Overdue here while the Overdue tab excluded it.
+  return inv.status !== "paid" && !!inv.dueDate && new Date(inv.dueDate) < istTodayStartUtc();
 }
 
 type SortOption = "newest" | "oldest" | "customer_az" | "customer_za" | "amount_high" | "amount_low" | "balance_high";
@@ -282,6 +285,13 @@ export default function InvoicesPage() {
   const overdue       = stats?.overdueCount ?? 0;
   const availableYears = stats?.availableYears ?? [];
 
+  // Deleting the only row on the last page would otherwise leave the user on an empty page past
+  // the end showing "No invoices found" even though earlier pages still have rows.
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  useEffect(() => {
+    if (data && !loading && page > lastPage) setPage(lastPage); // eslint-disable-line react-hooks/set-state-in-effect -- clamps the page once the total shrinks
+  }, [data, loading, page, lastPage]);
+
   async function handleDelete() {
     if (!deleteTarget) return;
     const target = deleteTarget;
@@ -290,6 +300,9 @@ export default function InvoicesPage() {
       const res = await fetch(`/api/invoices/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
+        // Drop every other cached invoice-list variant (other tabs/filters/pages) and the
+        // invoice's own detail entry too, not just the URL this page is currently showing.
+        bustCachePrefix("/api/invoices");
         await Promise.all([mutate(), mutateStats()]);
         invalidateCachedPdf("invoice", target.id);
         // Delete restores stock and the invoice's own payments drop out of Payments Received
@@ -300,7 +313,8 @@ export default function InvoicesPage() {
         bustCachePrefix("/api/payments");
         // Customer list's invoice counts / outstanding figures change too.
         bustCachePrefix("/api/customers");
-        toast({ type: "success", title: "Moved to bin", message: `${target.invoiceNumber} moved to bin. You can restore it within 30 days.` });
+        bustCachePrefix("/api/notifications"); // overdue-invoice alerts drop a deleted invoice
+        toast({ type: "success", title: "Moved to bin", message: `${target.invoiceNumber} moved to bin. You can restore it from the Recycle Bin (GST documents are retained, not auto-purged).` });
       } else {
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete invoice." });
       }
@@ -317,7 +331,7 @@ export default function InvoicesPage() {
     <ConfirmDialog
       open={!!deleteTarget}
       title="Delete Invoice"
-      message={`Move invoice ${deleteTarget?.invoiceNumber} to bin? You can restore it within 30 days.`}
+      message={`Move invoice ${deleteTarget?.invoiceNumber} to bin? You can restore it from the Recycle Bin (GST documents are retained, not auto-purged).`}
       confirmLabel="Move to Bin"
       variant="danger"
       loading={deleting}

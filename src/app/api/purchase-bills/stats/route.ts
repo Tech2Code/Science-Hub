@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
       prisma.purchaseBill.aggregate({ where: aggWhere, _sum: { total: true, paidAmount: true } }),
       // Nested AND (not merged into `where`) so a status tab's own meaning isn't overwritten by the overdue condition's status constraint.
       prisma.purchaseBill.count({ where: { AND: [where, { status: { notIn: ["paid", "cancelled"] }, dueDate: { lt: istTodayStartUtc() } }] } }),
-      prisma.$queryRaw<{ year: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM "billDate")::int AS year FROM "PurchaseBill" WHERE "deletedAt" IS NULL ORDER BY year DESC`,
+      // billDate is stored as IST midnight (= 18:30 UTC the previous day), so the year must be
+      // extracted in IST — a bare EXTRACT on the UTC value put every 1 Jan bill in the previous year.
+      prisma.$queryRaw<{ year: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM ("billDate" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata'))::int AS year FROM "PurchaseBill" WHERE "deletedAt" IS NULL ORDER BY year DESC`,
     ]);
     const totalPurchase = agg._sum.total ?? 0;
     const totalPaid = agg._sum.paidAmount ?? 0;

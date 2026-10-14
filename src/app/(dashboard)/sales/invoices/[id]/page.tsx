@@ -391,6 +391,9 @@ export default function InvoiceDetailPage() {
         bustCachePrefix("/api/invoices");
         bustCachePrefix("/api/payments");
         bustCachePrefix("/api/reports");
+        // Customer detail (invoice status/balance sub-table) and statement are cached separately.
+        bustCachePrefix("/api/customers");
+        bustCachePrefix("/api/notifications"); // overdue/due-invoice alerts depend on paid status
         load(true);
         toast({ type: "success", title: "Payment recorded", message: `₹${parseFloat(paymentForm.amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via ${method}` });
       } else {
@@ -418,7 +421,7 @@ export default function InvoiceDetailPage() {
   async function handleEditPaymentSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!editingPayment || !invoice || !editPaymentDirty.isDirty) return;
-    const editBalance = invoice.total - invoice.paidAmount + editingPayment.amount;
+    const editBalance = Math.round((invoice.total - invoice.paidAmount + editingPayment.amount) * 100) / 100;
     const amt = parseFloat(editPaymentForm.amount);
     const amtErr = validate(editPaymentForm.amount, rules.required("Amount is required."), rules.positiveNumber("Enter a valid amount greater than 0."))
       ?? (amt > editBalance ? `Amount cannot exceed balance due (₹${fmt(editBalance)}).` : undefined);
@@ -448,6 +451,9 @@ export default function InvoiceDetailPage() {
         bustCachePrefix("/api/invoices");
         bustCachePrefix("/api/payments");
         bustCachePrefix("/api/reports");
+        // Customer detail (invoice status/balance sub-table) and statement are cached separately.
+        bustCachePrefix("/api/customers");
+        bustCachePrefix("/api/notifications"); // overdue/due-invoice alerts depend on paid status
         load(true);
         toast({ type: "success", title: "Payment updated" });
       } else {
@@ -472,6 +478,9 @@ export default function InvoiceDetailPage() {
         bustCachePrefix("/api/invoices");
         bustCachePrefix("/api/payments");
         bustCachePrefix("/api/reports");
+        // Customer detail (invoice status/balance sub-table) and statement are cached separately.
+        bustCachePrefix("/api/customers");
+        bustCachePrefix("/api/notifications"); // overdue/due-invoice alerts depend on paid status
         load(true);
         toast({ type: "success", title: "Payment deleted" });
       } else {
@@ -548,6 +557,7 @@ export default function InvoiceDetailPage() {
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/credit-notes");
         bustCachePrefix("/api/reports");
+        bustCachePrefix("/api/customers"); // customer statement lists credit notes
         toast({ type: "success", title: "Return recorded", message: `${selected.length} item(s) returned.` });
       } else {
         const d = await res.json().catch(() => ({}));
@@ -573,6 +583,7 @@ export default function InvoiceDetailPage() {
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/credit-notes");
         bustCachePrefix("/api/reports");
+        bustCachePrefix("/api/customers"); // customer statement lists credit notes
         toast({ type: "success", title: "Deleted", message: "Credit note moved to bin." });
       } else {
         const d = await res.json().catch(() => ({}));
@@ -926,6 +937,7 @@ export default function InvoiceDetailPage() {
         bustCachePrefix("/api/payments");
         // Customer list's invoice counts / outstanding figures change too.
         bustCachePrefix("/api/customers");
+        bustCachePrefix("/api/notifications");
         toast({ type: "success", title: "Deleted", message: "Invoice moved to bin." });
         router.push("/sales/invoices");
         // Deliberately no setDeleting(false)/setDeleteConfirm(false) here — this page is about to
@@ -946,7 +958,10 @@ export default function InvoiceDetailPage() {
   if (loading || settingsLoading) return <InvoiceSkeleton />;
   if (error || !invoice) return <div className={`loading-center ${styles.errorText}`}>{error || "Invoice not found."}</div>;
 
-  const balance = invoice.total - invoice.paidAmount;
+  // Rounded to paise: raw float subtraction (e.g. 1000.3 - 500.1 = 500.19999999999993) made the
+  // "Full ₹X" fill-button's own toFixed(2) value fail the client's `amt > balance` check, and left a
+  // red "Balance Due ₹0.00" + a visible Record Payment button on an effectively fully-paid invoice.
+  const balance = Math.round((invoice.total - invoice.paidAmount) * 100) / 100;
 
   // True once every line item's quantity has already been fully returned.
   const allItemsReturned = invoice.items.length > 0 && remainingReturnQty(invoice.items, returns).every(left => left <= 0);
@@ -956,7 +971,7 @@ export default function InvoiceDetailPage() {
       <ConfirmDialog
         open={deleteConfirm}
         title="Delete Invoice"
-        message={`Move invoice ${invoice?.invoiceNumber} to bin? You can restore it within 30 days.`}
+        message={`Move invoice ${invoice?.invoiceNumber} to bin? You can restore it from the Recycle Bin (GST documents are retained, not auto-purged).`}
         confirmLabel="Move to Bin"
         variant="danger"
         loading={deleting}
@@ -966,7 +981,7 @@ export default function InvoiceDetailPage() {
       <ConfirmDialog
         open={returnDeleteConfirm !== null}
         title="Delete Credit Note"
-        message={`Move credit note ${returnDeleteConfirm?.creditNoteNumber ?? ""} to bin? This reverses the stock it restored. You can restore it within 30 days.`}
+        message={`Move credit note ${returnDeleteConfirm?.creditNoteNumber ?? ""} to bin? This reverses the stock it restored. You can restore it from the Recycle Bin (GST documents are retained, not auto-purged).`}
         confirmLabel="Delete"
         variant="danger"
         loading={deletingReturn}

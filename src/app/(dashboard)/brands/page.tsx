@@ -161,6 +161,10 @@ export default function BrandsPage() {
       toast({ type: "success", title: "Brand renamed", message: `Renamed to "${name}".` });
     } else if (r.status === 409) {
       bustCachePrefix("/api/brands");
+      // Refetch so the list (and its updatedAt) reflects the other user's change — otherwise a retry
+      // re-sends the same stale expectedUpdatedAt and 409s again until a full page reload.
+      await mutate();
+      setEditingId(null);
       toast({ type: "error", title: "Update conflict", message: d.error ?? "This brand was changed by someone else. Please reload and try again." });
     } else {
       toast({ type: "error", title: "Rename failed", message: d.error ?? "Could not rename brand." });
@@ -186,7 +190,14 @@ export default function BrandsPage() {
         setDeleting(false);
         setConfirmState(null);
         if (res.ok) {
-          await mutate();
+          // Deleting the only row on a later page would leave an empty page with Pagination
+          // reading e.g. "3 / 2" — step back a page instead of refetching this one.
+          if (brands.length === 1 && page > 1 && !showAll) {
+            bustCachePrefix("/api/brands");
+            setPage((p) => p - 1);
+          } else {
+            await mutate();
+          }
           toast({ type: "success", title: "Brand deleted", message: `"${name}" moved to bin.` });
         } else {
           toast({ type: "error", title: "Cannot delete brand", message: d.error ?? "Could not delete brand." });
@@ -210,7 +221,7 @@ export default function BrandsPage() {
         variant="danger"
         loading={deleting}
         onConfirm={confirmState?.onConfirm ?? (() => {})}
-        onCancel={() => setConfirmState(null)}
+        onCancel={() => { if (!deleting) setConfirmState(null); }}
       />
 
       <div className="page-header">
@@ -324,7 +335,7 @@ export default function BrandsPage() {
                 </td></tr>
               ) : brands.map((b, i) => (
                 <tr key={b.id}>
-                  <Cell col={COLUMNS[0]} className={styles.indexCell}>{i + 1}</Cell>
+                  <Cell col={COLUMNS[0]} className={styles.indexCell}>{(showAll ? 0 : (page - 1) * PAGE_SIZE) + i + 1}</Cell>
                   <Cell col={COLUMNS[1]}>
                     <Link href={`/brands/${b.id}`} onClick={() => setOpeningView(true)} className={`${styles.nameCell} table-link`} title={b.name}>{b.name}</Link>
                   </Cell>

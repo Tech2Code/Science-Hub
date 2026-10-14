@@ -32,6 +32,7 @@ export default function EditVendorPage() {
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
   const [errors, setErrors] = useState<ReturnType<typeof validateVendorForm>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -78,7 +79,8 @@ export default function EditVendorPage() {
         if (loadFormDraft(DRAFT_KEY)) setShowDraftBanner(true);
         else setDraftReady(true);
       })
-      .catch(() => { setLoading(false); });
+      // Without an error state a failed load rendered a blank, permanently-disabled form.
+      .catch(() => { setLoadError("Vendor not found or failed to load."); setLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- DRAFT_KEY is derived from id, already a dependency
   }, [id]);
 
@@ -108,6 +110,8 @@ export default function EditVendorPage() {
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/vendors");
       bustCachePrefix("/api/purchase-bills");
+      bustCachePrefix("/api/reports"); // dashboard/purchase overview show the vendor name
+      bustCachePrefix("/api/purchase-reports");
       toast({ type: "success", title: "Vendor updated", message: "Changes saved." });
       router.push(`/purchases/vendors/${id}`);
       // No setSaving(false) here — page is navigating away; resetting it first would briefly
@@ -166,7 +170,9 @@ export default function EditVendorPage() {
         />
       )}
 
-      {loading ? (
+      {loadError ? (
+        <div role="alert" className="error-banner">{loadError}</div>
+      ) : loading ? (
         <div className="form-card">
           <div className="form-grid-2">
             <div className={styles.skFieldStack}><Sk w={90} h={11} /><Sk h={38} r={8} /></div>

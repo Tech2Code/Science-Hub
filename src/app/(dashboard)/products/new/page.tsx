@@ -138,6 +138,9 @@ export default function NewProductPage() {
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/products");
       bustCachePrefix("/api/reports");
+      // Brand/Category list rows show a product count and their detail pages list products.
+      bustCachePrefix("/api/brands");
+      bustCachePrefix("/api/categories");
       bustCache("/api/units");
       toast({ type: "success", title: "Product created", message: "New product added to catalog." });
       // Deliberately not resetting `saving` here — it must stay locked until

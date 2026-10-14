@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
 
     const where = {
       ...(userId ? { userId } : {}),
-      ...buildSearchWhere(searchParams.get("search") ?? undefined, ["details", "user.name", "user.email"]),
+      ...buildSearchWhere(searchParams.get("search") ?? undefined, ["details", "action", "user.name", "user.email"]),
     };
 
     const [logs, total] = await Promise.all([

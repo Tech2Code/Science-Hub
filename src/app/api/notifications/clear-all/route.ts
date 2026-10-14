@@ -17,7 +17,18 @@ export async function POST() {
       .flatMap(([category, ids]) => ids.map((entityId) => ({ userId, category, entityId })));
 
     if (data.length > 0) {
-      await prisma.notificationDismissal.createMany({ data, skipDuplicates: true });
+      // An item dismissed > 24h ago (expired, so it's active again) still has its old row until
+      // the 7-day purge — `skipDuplicates` alone would skip it WITHOUT refreshing dismissedAt, so
+      // "Clear all" left exactly those resurfaced items visible. Refresh existing rows first.
+      const byCategory = new Map<string, string[]>();
+      for (const d of data) byCategory.set(d.category, [...(byCategory.get(d.category) ?? []), d.entityId]);
+      await prisma.$transaction([
+        prisma.notificationDismissal.updateMany({
+          where: { userId, OR: [...byCategory].map(([category, ids]) => ({ category, entityId: { in: ids } })) },
+          data: { dismissedAt: new Date() },
+        }),
+        prisma.notificationDismissal.createMany({ data, skipDuplicates: true }),
+      ]);
     }
 
     revalidateTag("notifications", { expire: 0 });

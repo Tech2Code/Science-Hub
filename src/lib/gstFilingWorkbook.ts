@@ -4,6 +4,7 @@ import ExcelJS from "exceljs";
 import type { GstFilingReport } from "@/lib/gstFiling";
 import { formatDate } from "@/lib/formatDate";
 import { neutralizeFormulaCell } from "@/lib/formulaSafety";
+import { splitGstForDisplay } from "@/lib/roundOff";
 
 const money = (n: number) => Math.round(n * 100) / 100;
 
@@ -48,13 +49,30 @@ export function buildGstFilingWorkbook(report: GstFilingReport): ExcelJS.Workboo
     { header: "CGST", key: "cgst", width: 12 },
     { header: "SGST", key: "sgst", width: 12 },
     { header: "IGST", key: "igst", width: 12 },
+    // Transport charge + its GST sit outside the item-only Taxable/CGST/SGST/IGST columns but inside
+    // Total — shown, along with the round-off, so each row foots exactly
+    // (Taxable + CGST + SGST + IGST + Transport Charge + Transport GST + Round Off = Total).
+    { header: "Transport Charge", key: "transportCharge", width: 16 },
+    { header: "Transport GST", key: "transportGst", width: 14 },
+    { header: "Round Off", key: "roundOff", width: 12 },
     { header: "Total", key: "total", width: 14 },
   ];
-  const toSalesRow = (r: GstFilingReport["salesRegister"][number]) => ({
-    invoiceNumber: r.invoiceNumber, date: formatDate(r.date), customerName: r.customerName, customerGstin: r.customerGstin,
-    placeOfSupply: r.placeOfSupply, supplyType: r.supplyType, taxableValue: money(r.taxableValue),
-    cgst: money(r.cgst), sgst: money(r.sgst), igst: money(r.igst), total: money(r.total),
-  });
+  const toSalesRow = (r: GstFilingReport["salesRegister"][number]) => {
+    // CGST/SGST via splitGstForDisplay (same as the printed invoice) so odd-paisa halves don't both
+    // round up. Round Off is derived from the *displayed* 2dp columns rather than read from the
+    // stored Invoice.roundOff: the two are equal whenever the stored components are paisa-clean, but
+    // independently rounding each column can drift by a paisa, and the point of this column is that
+    // the row foots exactly to Total as an accountant sees it.
+    const { cgst, sgst } = splitGstForDisplay(r.cgst + r.sgst);
+    const taxableValue = money(r.taxableValue), igst = money(r.igst);
+    const transportCharge = money(r.transportCharge), transportGst = money(r.transportGst), total = money(r.total);
+    const roundOff = money(total - (taxableValue + cgst + sgst + igst + transportCharge + transportGst));
+    return {
+      invoiceNumber: r.invoiceNumber, date: formatDate(r.date), customerName: r.customerName, customerGstin: r.customerGstin,
+      placeOfSupply: r.placeOfSupply, supplyType: r.supplyType, taxableValue,
+      cgst, sgst, igst, transportCharge, transportGst, roundOff, total,
+    };
+  };
   addTable(wb, "Sales Register", salesCols, report.salesRegister.map(toSalesRow));
   addTable(wb, "B2B Sales", salesCols, report.b2bSales.map(toSalesRow));
   addTable(wb, "B2C Sales", salesCols, report.b2cSales.map(toSalesRow));

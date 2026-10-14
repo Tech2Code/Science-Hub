@@ -91,8 +91,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
     const { id } = await params;
-    const existing = await prisma.vendor.findUnique({ where: { id }, select: { name: true } });
+    const existing = await prisma.vendor.findUnique({ where: { id }, select: { name: true, deletedAt: true } });
     if (!existing) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
+    // A repeated delete (double-click, second tab) would otherwise re-stamp deletedAt — restarting the
+    // bin's 30-day auto-purge clock — and log a second delete_vendor entry.
+    if (existing.deletedAt) return NextResponse.json({ error: "This vendor is already in the bin." }, { status: 400 });
     const activeBillCount = await prisma.purchaseBill.count({ where: { vendorId: id, deletedAt: null } });
     if (activeBillCount > 0) {
       return NextResponse.json(

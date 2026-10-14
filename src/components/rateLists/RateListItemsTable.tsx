@@ -84,8 +84,10 @@ export function RateListItemsTable({ sectionIndex, items, setItems }: RateListIt
       mergeImportedItems(data.items as ParsedRateListRow[], data.skipped ?? 0);
     } catch {
       toast({ type: "error", title: "Import failed", message: "Network error." });
+    } finally {
+      // The !res.ok early `return` above previously skipped this, leaving "Importing…" stuck.
+      setImporting(false);
     }
-    setImporting(false);
   }
 
   function addRow() {
@@ -182,7 +184,7 @@ export function RateListItemsTable({ sectionIndex, items, setItems }: RateListIt
             Paste from Excel
           </button>
           <span className={styles.importSep}>·</span>
-          <button type="button" className={styles.importLinkBtn} onClick={() => fileInputRef.current?.click()}>
+          <button type="button" className={styles.importLinkBtn} disabled={importing} onClick={() => fileInputRef.current?.click()}>
             Upload .xlsx / .csv
           </button>
           <input ref={fileInputRef} type="file" accept=".xlsx,.csv" className={styles.hiddenFileInput} onChange={handleFileChange} />

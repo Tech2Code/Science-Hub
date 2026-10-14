@@ -59,6 +59,7 @@ interface PurchaseBill {
   attachmentUrl: string | null;
   attachmentName: string | null;
   attachmentSize: number | null;
+  deletedAt?: string | null;
 }
 interface BusinessSettings {
   name: string; tagline: string; email: string; phone: string;
@@ -358,6 +359,8 @@ export default function PurchaseBillDetailPage() {
         bustCachePrefix("/api/purchase-bills");
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");
+        bustCachePrefix("/api/vendors"); // vendor detail's bill history / Paid / Balance
+        bustCachePrefix("/api/notifications"); // overdue-bills bell count
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Payment recorded", message: `₹${fmt(amount)} via ${method}.` });
         setShowPayForm(false);
@@ -413,6 +416,8 @@ export default function PurchaseBillDetailPage() {
         bustCachePrefix("/api/purchase-bills");
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");
+        bustCachePrefix("/api/vendors"); // vendor detail's bill history / Paid / Balance
+        bustCachePrefix("/api/notifications"); // overdue-bills bell count
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Payment updated" });
         setEditingPayment(null);
@@ -436,6 +441,8 @@ export default function PurchaseBillDetailPage() {
         bustCachePrefix("/api/purchase-bills");
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");
+        bustCachePrefix("/api/vendors"); // vendor detail's bill history / Paid / Balance
+        bustCachePrefix("/api/notifications"); // overdue-bills bell count
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Payment deleted" });
         setPaymentDeleteConfirm(null);
@@ -462,6 +469,8 @@ export default function PurchaseBillDetailPage() {
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");
+        bustCachePrefix("/api/vendors"); // vendor detail's bill history / Paid / Balance
+        bustCachePrefix("/api/notifications"); // overdue-bills bell count
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Bill cancelled", message: "Status updated to cancelled." });
         load();
@@ -489,6 +498,8 @@ export default function PurchaseBillDetailPage() {
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");
+        bustCachePrefix("/api/vendors"); // vendor detail's bill history / Paid / Balance
+        bustCachePrefix("/api/notifications"); // overdue-bills bell count
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Bill un-cancelled", message: "Status restored." });
         load();
@@ -536,6 +547,7 @@ export default function PurchaseBillDetailPage() {
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");
         bustCachePrefix("/api/vendors");
+        bustCachePrefix("/api/notifications"); // overdue-bills bell count
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Deleted", message: "Purchase bill moved to bin." });
         router.push("/purchases/bills");
@@ -654,7 +666,13 @@ export default function PurchaseBillDetailPage() {
   if (error || !bill) return <div className={`error-banner ${styles.errorBanner}`}>{error || "Bill not found."}</div>;
 
   const balance   = bill.total - bill.paidAmount;
-  const isOverdue = bill.status !== "paid" && bill.status !== "cancelled" && bill.dueDate && new Date(bill.dueDate) < new Date();
+  // IST calendar-day compare, same definition as buildBillWhere()'s "overdue" filter — a bill due
+  // today isn't overdue yet (a bare `new Date(dueDate) < new Date()` flagged it from IST midnight on).
+  const isOverdue = bill.status !== "paid" && bill.status !== "cancelled" && !!bill.dueDate && toIstDateStr(new Date(bill.dueDate)) < toIstDateStr(new Date());
+  // A binned bill's detail page can still be reached (direct URL / back button after Delete) — every
+  // write route rejects it, so don't offer write actions that can only fail.
+  const inBin = !!bill.deletedAt;
+  const canEditBill = canWrite && !inBin;
 
   return (
     <>
@@ -914,7 +932,7 @@ export default function PurchaseBillDetailPage() {
     <ConfirmDialog
       open={confirmDelete}
       title="Delete Purchase Bill"
-      message={`Move bill ${bill.billNumber} to bin? You can restore it within 30 days.`}
+      message={`Move bill ${bill.billNumber} to bin? Purchase bills stay in the Recycle Bin (retained for GST) and can be restored from there.`}
       confirmLabel="Move to Bin"
       variant="danger"
       loading={deleting}
@@ -1061,7 +1079,7 @@ export default function PurchaseBillDetailPage() {
               OVERDUE
             </span>
           )}
-          {canWrite && (
+          {canEditBill && (
           <Button
             variant="editOutline"
             size="sm"
@@ -1073,7 +1091,7 @@ export default function PurchaseBillDetailPage() {
             Edit Bill
           </Button>
           )}
-          {canWrite && bill.status !== "paid" && bill.status !== "cancelled" && (
+          {canEditBill && bill.status !== "paid" && bill.status !== "cancelled" && (
             <Button variant="primary" size="sm" onClick={() => { setShowPayForm(v => !v); resetPaymentForm(); }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
               {showPayForm ? "Hide Payment" : "Record Payment"}
@@ -1146,19 +1164,19 @@ export default function PurchaseBillDetailPage() {
               </>
             )}
           </div>
-          {canWrite && bill.status !== "cancelled" && (
+          {canEditBill && bill.status !== "cancelled" && (
             <Button variant="dangerOutline" size="sm" onClick={() => setConfirmCancel(true)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
               Cancel Bill
             </Button>
           )}
-          {canWrite && bill.status === "cancelled" && (
+          {canEditBill && bill.status === "cancelled" && (
             <Button variant="secondary" size="sm" onClick={() => setConfirmUncancel(true)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
               Un-cancel Bill
             </Button>
           )}
-          {canWrite && (
+          {canEditBill && (
           <Button variant="dangerOutline" size="sm" onClick={() => setConfirmDelete(true)}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
             Delete
@@ -1167,8 +1185,14 @@ export default function PurchaseBillDetailPage() {
         </div>
       </div>
 
+      {inBin && (
+        <div role="status" className="error-banner">
+          This purchase bill is in the Recycle Bin. Restore it from the Bin to edit it or record payments.
+        </div>
+      )}
+
       {/* ── Record Payment form (same compact layout & position as sales/invoices detail) ── */}
-      {showPayForm && bill.status !== "paid" && bill.status !== "cancelled" && (
+      {showPayForm && canEditBill && bill.status !== "paid" && bill.status !== "cancelled" && (
         <div className={`card ${styles.paymentFormCard}`}>
           <h3 className={styles.paymentFormTitle}>Record Payment</h3>
           <form onSubmit={handlePayment} noValidate>
@@ -1241,8 +1265,8 @@ export default function PurchaseBillDetailPage() {
 
       {/* ── KPI stat strip ── */}
       <div {...animateSection(0, styles.statStrip)}>
-        <StatCard label="Subtotal"    value={`₹${fmtShort(bill.subtotal)}`} />
-        <StatCard label="GST"         value={`₹${fmtShort(bill.taxAmount)}`} />
+        <StatCard label="Subtotal"    value={`₹${fmtShort(bill.subtotal + (bill.transportCharge ?? 0))}`} />
+        <StatCard label="GST"         value={`₹${fmtShort(bill.taxAmount + (bill.transportChargeGstAmount ?? 0))}`} />
         {bill.discount > 0 && <StatCard label="Discount" value={`−₹${fmtShort(bill.discount)}`} color="var(--c-red)" />}
         <StatCard label="Total"       value={`₹${fmtShort(bill.total)}`}     color="var(--c-text)" />
         <StatCard label="Paid"        value={`₹${fmtShort(bill.paidAmount)}`} color="var(--c-green-text)" sub={`${bill.payments.length} payment(s)`} />
@@ -1477,7 +1501,7 @@ export default function PurchaseBillDetailPage() {
               ₹{fmt(balance)} outstanding
             </span>
           )}
-          {balance === 0 && (
+          {Math.abs(balance) < 0.005 && bill.status !== "cancelled" && (
             <span className={styles.fullyPaidPill}>
               Fully paid
             </span>
@@ -1486,7 +1510,7 @@ export default function PurchaseBillDetailPage() {
         {bill.payments.length === 0 ? (
           <div className={styles.emptyPayments}>
             No payments recorded yet.
-            {canWrite && bill.status !== "paid" && bill.status !== "cancelled" && (
+            {canEditBill && bill.status !== "paid" && bill.status !== "cancelled" && (
               <div className={styles.emptyPaymentsAction}>
                 <button
                   onClick={() => setShowPayForm(true)}
@@ -1506,7 +1530,7 @@ export default function PurchaseBillDetailPage() {
                   <th>Method</th>
                   <th>Reference</th>
                   <th className={styles.textRight}>Amount</th>
-                  {canWrite && <th className={styles.textRight}>Actions</th>}
+                  {canEditBill && <th className={styles.textRight}>Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -1520,7 +1544,7 @@ export default function PurchaseBillDetailPage() {
                     </td>
                     <td data-label="Reference" className={styles.referenceCell}>{p.reference || "—"}</td>
                     <td data-label="Amount" className={styles.paymentAmountCell}>₹{fmt(p.amount)}</td>
-                    {canWrite && (
+                    {canEditBill && (
                       <td data-label="Actions" className={styles.textRight}>
                         <div className={styles.paymentActionsCell}>
                           <button
@@ -1551,7 +1575,7 @@ export default function PurchaseBillDetailPage() {
                 <tr className={styles.tfootRow}>
                   <td colSpan={3} className={styles.tfootLabelCell}>Total Paid</td>
                   <td className={styles.tfootPaidValueCell}>₹{fmt(bill.paidAmount)}</td>
-                  {canWrite && <td />}
+                  {canEditBill && <td />}
                 </tr>
               </tfoot>
             </table>

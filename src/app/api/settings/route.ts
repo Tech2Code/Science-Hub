@@ -37,6 +37,35 @@ const NUMBERING_KEYS = [
   "creditNoteNumberPrefix", "nextCreditNoteNumberOverride", "creditNoteNumberFormat",
 ] as const;
 
+// Human-readable section/field names for the update_settings ActivityLog entry. Only names are
+// ever logged — never values (bank account number, Gmail address/app password are sensitive).
+const SETTINGS_FIELD_LABELS: Record<string, { section: string; label: string }> = {
+  name: { section: "Business identity", label: "Business name" },
+  tagline: { section: "Business identity", label: "Tagline" },
+  email: { section: "Business identity", label: "Email" },
+  phone: { section: "Business identity", label: "Phone" },
+  gstin: { section: "Business identity", label: "GSTIN" },
+  pan: { section: "Business identity", label: "PAN" },
+  address: { section: "Address", label: "Street address" },
+  city: { section: "Address", label: "City" },
+  state: { section: "Address", label: "State" },
+  pincode: { section: "Address", label: "Pincode" },
+  bankName: { section: "Bank details", label: "Bank name" },
+  bankAccountName: { section: "Bank details", label: "Account holder name" },
+  bankAccountNumber: { section: "Bank details", label: "Account number" },
+  bankIfsc: { section: "Bank details", label: "IFSC" },
+  bankBranch: { section: "Bank details", label: "Branch" },
+  termsAndConditions: { section: "Terms & conditions", label: "Terms & conditions" },
+  gmailUser: { section: "Gmail sending account", label: "Gmail address" },
+  gmailAppPassword: { section: "Gmail sending account", label: "App password" },
+  showLogoOnInvoices: { section: "Logo", label: "Show logo on documents" },
+};
+
+// null/undefined/"" are all "empty" in this table — a null column vs. a "" write is not a change.
+function sameSettingValue(a: unknown, b: unknown): boolean {
+  return String(a ?? "") === String(b ?? "");
+}
+
 export async function PUT(request: NextRequest) {
   try {
     const auth = await requireAdmin();
@@ -63,14 +92,10 @@ export async function PUT(request: NextRequest) {
     );
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
-    const existing = await prisma.businessSettings.findUnique({
-      where: { id: "singleton" },
-      select: {
-        updatedAt: true, name: true, logoUrl: true,
-        invoiceNumberPrefix: true, purchaseBillNumberPrefix: true, creditNoteNumberPrefix: true,
-        invoiceNumberFormat: true, purchaseBillNumberFormat: true, creditNoteNumberFormat: true,
-      },
-    });
+    // Full row: needed both for the concurrency/numbering checks below and to work out which
+    // fields actually changed for the ActivityLog entry.
+    const existing = await prisma.businessSettings.findUnique({ where: { id: "singleton" } });
+    const existingValues = (existing ?? {}) as Record<string, unknown>;
     if (existing && expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== existing.updatedAt.getTime()) {
       return NextResponse.json({ error: "Business settings were updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
     }
@@ -105,6 +130,10 @@ export async function PUT(request: NextRequest) {
     // Each numbering field is independently optional; an empty value clears back to the auto-derived default rather than being rejected.
     const isNumberingSectionUpdate = NUMBERING_KEYS.some((k) => k in body);
     const numberingActivityDetails: string[] = [];
+    // Only record a numbering field in the activity log when its value actually changes.
+    const pushNumberingDetail = (key: string, text: string) => {
+      if (!sameSettingValue(existingValues[key], updateData[key])) numberingActivityDetails.push(text);
+    };
     if (isNumberingSectionUpdate) {
       // Must match the same FY boundary/label the invoice/bill routes use, or this validation checks against the wrong year's highest number.
       const currentYearLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date()));
@@ -119,7 +148,7 @@ export async function PUT(request: NextRequest) {
         } else {
           updateData.invoiceNumberPrefix = null;
         }
-        numberingActivityDetails.push(`invoice prefix -> ${updateData.invoiceNumberPrefix ?? "(auto)"}`);
+        pushNumberingDetail("invoiceNumberPrefix", `invoice prefix -> ${updateData.invoiceNumberPrefix ?? "(auto)"}`);
       }
 
       if ("purchaseBillNumberPrefix" in body) {
@@ -132,7 +161,7 @@ export async function PUT(request: NextRequest) {
         } else {
           updateData.purchaseBillNumberPrefix = null;
         }
-        numberingActivityDetails.push(`purchase bill prefix -> ${updateData.purchaseBillNumberPrefix ?? "(auto)"}`);
+        pushNumberingDetail("purchaseBillNumberPrefix", `purchase bill prefix -> ${updateData.purchaseBillNumberPrefix ?? "(auto)"}`);
       }
 
       if ("creditNoteNumberPrefix" in body) {
@@ -145,7 +174,7 @@ export async function PUT(request: NextRequest) {
         } else {
           updateData.creditNoteNumberPrefix = null;
         }
-        numberingActivityDetails.push(`credit note prefix -> ${updateData.creditNoteNumberPrefix ?? "(auto)"}`);
+        pushNumberingDetail("creditNoteNumberPrefix", `credit note prefix -> ${updateData.creditNoteNumberPrefix ?? "(auto)"}`);
       }
 
       if ("invoiceNumberFormat" in body) {
@@ -158,7 +187,7 @@ export async function PUT(request: NextRequest) {
         } else {
           updateData.invoiceNumberFormat = null;
         }
-        numberingActivityDetails.push(`invoice number format -> ${updateData.invoiceNumberFormat ?? "(default)"}`);
+        pushNumberingDetail("invoiceNumberFormat", `invoice number format -> ${updateData.invoiceNumberFormat ?? "(default)"}`);
       }
 
       if ("purchaseBillNumberFormat" in body) {
@@ -171,7 +200,7 @@ export async function PUT(request: NextRequest) {
         } else {
           updateData.purchaseBillNumberFormat = null;
         }
-        numberingActivityDetails.push(`purchase bill number format -> ${updateData.purchaseBillNumberFormat ?? "(default)"}`);
+        pushNumberingDetail("purchaseBillNumberFormat", `purchase bill number format -> ${updateData.purchaseBillNumberFormat ?? "(default)"}`);
       }
 
       if ("creditNoteNumberFormat" in body) {
@@ -184,7 +213,7 @@ export async function PUT(request: NextRequest) {
         } else {
           updateData.creditNoteNumberFormat = null;
         }
-        numberingActivityDetails.push(`credit note number format -> ${updateData.creditNoteNumberFormat ?? "(default)"}`);
+        pushNumberingDetail("creditNoteNumberFormat", `credit note number format -> ${updateData.creditNoteNumberFormat ?? "(default)"}`);
       }
 
       if ("nextInvoiceNumberOverride" in body) {
@@ -209,7 +238,7 @@ export async function PUT(request: NextRequest) {
           }
           updateData.nextInvoiceNumberOverride = n;
         }
-        numberingActivityDetails.push(`next invoice # -> ${updateData.nextInvoiceNumberOverride ?? "(cleared)"}`);
+        pushNumberingDetail("nextInvoiceNumberOverride", `next invoice # -> ${updateData.nextInvoiceNumberOverride ?? "(cleared)"}`);
       }
 
       if ("nextPurchaseBillNumberOverride" in body) {
@@ -234,7 +263,7 @@ export async function PUT(request: NextRequest) {
           }
           updateData.nextPurchaseBillNumberOverride = n;
         }
-        numberingActivityDetails.push(`next purchase bill # -> ${updateData.nextPurchaseBillNumberOverride ?? "(cleared)"}`);
+        pushNumberingDetail("nextPurchaseBillNumberOverride", `next purchase bill # -> ${updateData.nextPurchaseBillNumberOverride ?? "(cleared)"}`);
       }
 
       if ("nextCreditNoteNumberOverride" in body) {
@@ -262,9 +291,30 @@ export async function PUT(request: NextRequest) {
           }
           updateData.nextCreditNoteNumberOverride = n;
         }
-        numberingActivityDetails.push(`next credit note # -> ${updateData.nextCreditNoteNumberOverride ?? "(cleared)"}`);
+        pushNumberingDetail("nextCreditNoteNumberOverride", `next credit note # -> ${updateData.nextCreditNoteNumberOverride ?? "(cleared)"}`);
       }
     }
+
+    // Which non-numbering fields actually change (compared before the write). Encrypted fields are
+    // compared against their decrypted stored value; neither value is ever logged.
+    const changedFieldKeys: string[] = [];
+    for (const key of Object.keys(SETTINGS_FIELD_LABELS)) {
+      if (!(key in updateData)) continue;
+      let prev: unknown = existingValues[key];
+      let next: unknown = updateData[key];
+      if (key === "bankAccountNumber") {
+        prev = existing?.bankAccountNumber ? safeDecrypt(existing.bankAccountNumber).value : "";
+        next = bankAccountNumber ?? "";
+      } else if (key === "gmailAppPassword") {
+        prev = existing?.gmailAppPassword ? safeDecrypt(existing.gmailAppPassword).value : "";
+        next = gmailAppPassword || "";
+      }
+      if (!sameSettingValue(prev, next)) changedFieldKeys.push(key);
+    }
+    const logoChange: "update_logo" | "remove_logo" | null =
+      logoUrl !== undefined && !sameSettingValue(existing?.logoUrl, logoUrl || "")
+        ? (logoUrl ? "update_logo" : "remove_logo")
+        : null;
 
     const { gmailAppPassword: storedPassword, bankAccountNumber: storedAccountNumber, ...settings } = await prisma.businessSettings.upsert({
       where: { id: "singleton" },
@@ -273,6 +323,27 @@ export async function PUT(request: NextRequest) {
     });
     if (numberingActivityDetails.length > 0) {
       await logActivity(auth.session.user.id, "update_numbering_settings", `Updated document numbering: ${numberingActivityDetails.join(", ")}`);
+    }
+    if (changedFieldKeys.length > 0) {
+      // Group by section, e.g. "Bank details (Account number, IFSC), Gmail sending account (App password)".
+      const bySection = new Map<string, string[]>();
+      for (const key of changedFieldKeys) {
+        const { section, label } = SETTINGS_FIELD_LABELS[key];
+        const labels = bySection.get(section) ?? [];
+        if (label !== section) labels.push(label);
+        bySection.set(section, labels);
+      }
+      const summary = [...bySection.entries()]
+        .map(([section, labels]) => (labels.length ? `${section} (${labels.join(", ")})` : section))
+        .join(", ");
+      await logActivity(auth.session.user.id, "update_settings", `Updated business settings: ${summary}`);
+    }
+    if (logoChange) {
+      await logActivity(
+        auth.session.user.id,
+        logoChange,
+        logoChange === "update_logo" ? "Updated business logo" : "Removed business logo",
+      );
     }
     // Delete the replaced/removed logo's old blob synchronously here rather than relying on a client-fired DELETE that a closed tab could skip.
     if (logoUrl !== undefined && existing?.logoUrl && existing.logoUrl !== (logoUrl || "")) {

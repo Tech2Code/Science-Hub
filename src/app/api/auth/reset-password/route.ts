@@ -2,20 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { rateLimit, getClientIp } from "@/lib/rateLimit";
+import { validateUserInput } from "@/lib/validation";
 
 export async function POST(req: NextRequest) {
   try {
     const { token, password } = await req.json();
 
-    if (!token || !password) {
+    if (!token || !password || typeof token !== "string" || typeof password !== "string") {
       return NextResponse.json({ error: "Token and password are required." }, { status: 400 });
     }
-    if (password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
-    }
-    if (password.length > 72) {
-      return NextResponse.json({ error: "Password must be at most 72 characters." }, { status: 400 });
-    }
+    // Shared validator enforces bcrypt's 72-BYTE cap — the previous char-length check let a
+    // multi-byte password under 72 chars through, which bcrypt then silently truncated.
+    const pwErr = validateUserInput({ password });
+    if (pwErr) return NextResponse.json({ error: `${pwErr}.` }, { status: 400 });
 
     const limit = rateLimit(`reset-password:${getClientIp(req)}`, 10, 15 * 60 * 1000);
     if (!limit.allowed) {
@@ -36,10 +35,17 @@ export async function POST(req: NextRequest) {
 
     const hashed = await bcrypt.hash(password, 12);
 
-    await prisma.$transaction([
-      prisma.user.update({ where: { id: record.userId }, data: { password: hashed, tokenVersion: { increment: 1 } } }),
-      prisma.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
-    ]);
+    // Claim the token atomically (only while usedAt is still null) — two concurrent submits of the
+    // same link could otherwise both pass the usedAt check above and both reset the password.
+    const claimed = await prisma.$transaction(async (tx) => {
+      const { count } = await tx.passwordResetToken.updateMany({ where: { id: record.id, usedAt: null }, data: { usedAt: new Date() } });
+      if (count === 0) return false;
+      await tx.user.update({ where: { id: record.userId }, data: { password: hashed, tokenVersion: { increment: 1 } } });
+      return true;
+    });
+    if (!claimed) {
+      return NextResponse.json({ error: "This reset link has already been used." }, { status: 400 });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {

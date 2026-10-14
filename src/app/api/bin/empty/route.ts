@@ -11,7 +11,7 @@ export async function DELETE() {
     const auth = await requireAdmin();
     if (!auth.ok) return auth.response;
 
-    const [invoices, customers, products, brands, categories, vendors, purchaseBills, returns] = await Promise.all([
+    const [invoices, softDeletedCustomers, products, brands, categories, softDeletedVendors, purchaseBills, returns, rateLists] = await Promise.all([
       prisma.invoice.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
       prisma.customer.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
       prisma.product.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
@@ -20,7 +20,26 @@ export async function DELETE() {
       prisma.vendor.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
       prisma.purchaseBill.findMany({ where: { deletedAt: { not: null } }, select: { id: true, attachmentUrl: true } }),
       prisma.return.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
+      // Rate lists are the 8th bin type (see GET /api/bin) — previously never purged here at all.
+      prisma.rateList.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
     ]);
+
+    // One-off customers/vendors are soft-deleted at creation with no delete_* log entry and are
+    // hidden from the Bin page (see GET /api/bin) — "Empty Bin" must only act on what the user
+    // actually sees there. Including them inflated the "N skipped" toast (they nearly always have
+    // an invoice/bill on record) with rows the user never deleted and can't find.
+    const [customerDeleteLogs, vendorDeleteLogs] = await Promise.all([
+      softDeletedCustomers.length > 0
+        ? prisma.activityLog.findMany({ where: { entityType: "customer", action: "delete_customer", entityId: { in: softDeletedCustomers.map((c) => c.id) } }, select: { entityId: true } })
+        : Promise.resolve([] as { entityId: string | null }[]),
+      softDeletedVendors.length > 0
+        ? prisma.activityLog.findMany({ where: { entityType: "vendor", action: "delete_vendor", entityId: { in: softDeletedVendors.map((v) => v.id) } }, select: { entityId: true } })
+        : Promise.resolve([] as { entityId: string | null }[]),
+    ]);
+    const explicitCustomerIds = new Set(customerDeleteLogs.map((l) => l.entityId));
+    const explicitVendorIds = new Set(vendorDeleteLogs.map((l) => l.entityId));
+    const customers = softDeletedCustomers.filter((c) => explicitCustomerIds.has(c.id));
+    const vendors = softDeletedVendors.filter((v) => explicitVendorIds.has(v.id));
 
     let deleted = 0;
     let skipped = 0;
@@ -106,6 +125,12 @@ export async function DELETE() {
       deleted += r.count;
     }
 
+    // Rate lists — nothing references a RateList; cascade handles its items.
+    if (rateLists.length > 0) {
+      const r = await prisma.rateList.deleteMany({ where: { id: { in: rateLists.map((x) => x.id) } } });
+      deleted += r.count;
+    }
+
     await logActivity(
       auth.session.user.id,
       "empty_bin",
@@ -117,6 +142,7 @@ export async function DELETE() {
     revalidateTag("products", { expire: 0 });
     revalidateTag("vendors", { expire: 0 });
     revalidateTag("purchase-bills", { expire: 0 });
+    revalidateTag("rate-lists", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
 
     return NextResponse.json({ deleted, skipped });

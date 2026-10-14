@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { logActivity } from "@/lib/activity";
-import { rules, validate } from "@/lib/validation";
+import { rules, validate, validateUserInput } from "@/lib/validation";
 import { rateLimit } from "@/lib/rateLimit";
 import { revalidateTag } from "next/cache";
 
@@ -75,12 +75,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    if (name !== undefined && (name.trim().length === 0 || name.length > 200)) {
-      return NextResponse.json(
-        { error: "Name must be between 1 and 200 characters" },
-        { status: 400 }
-      );
-    }
+    // Same shared rule as the Admin → Users routes and the client form (name >= 2 chars).
+    const nameErr = validateUserInput({ name });
+    if (nameErr) return NextResponse.json({ error: nameErr }, { status: 400 });
 
     // Email uniqueness check (against other users) — normalized the same
     // way login does, so case-variant duplicates can't be created here.
@@ -129,12 +126,10 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
       }
 
-      if (newPassword.length < 8) {
-        return NextResponse.json(
-          { error: "New password must be at least 8 characters" },
-          { status: 400 }
-        );
-      }
+      // Shared validator also enforces bcrypt's 72-BYTE cap — without it a longer password would be
+      // silently truncated by bcrypt (any string sharing the first 72 bytes would then log in).
+      const pwErr = validateUserInput({ password: newPassword }, { passwordLabel: "New password" });
+      if (pwErr) return NextResponse.json({ error: pwErr }, { status: 400 });
 
       if (!currentPassword) {
         return NextResponse.json(

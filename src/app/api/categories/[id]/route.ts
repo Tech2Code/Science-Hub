@@ -93,23 +93,15 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
     const { id } = await params;
 
-    const category = await prisma.category.findUnique({ where: { id }, select: { name: true, _count: { select: { products: { where: { deletedAt: null } } } } } });
+    const category = await prisma.category.findUnique({ where: { id }, select: { name: true, deletedAt: true, _count: { select: { products: { where: { deletedAt: null } } } } } });
     if (!category) return NextResponse.json({ error: "Category not found" }, { status: 404 });
+    // A repeat DELETE would otherwise reset deletedAt (restarting the 30-day bin countdown) and log twice.
+    if (category.deletedAt) return NextResponse.json({ error: "This category is already in the bin." }, { status: 400 });
 
-    const invoiceItemCount = await prisma.invoiceItem.count({ where: { product: { categoryId: id } } });
-    if (invoiceItemCount > 0) {
-      return NextResponse.json(
-        { error: `"${category.name}" has products used in ${invoiceItemCount} invoice line item${invoiceItemCount > 1 ? "s" : ""} and cannot be deleted.` },
-        { status: 400 }
-      );
-    }
-    const purchaseItemCount = await prisma.purchaseBillItem.count({ where: { product: { categoryId: id } } });
-    if (purchaseItemCount > 0) {
-      return NextResponse.json(
-        { error: `"${category.name}" has products used in ${purchaseItemCount} purchase bill line item${purchaseItemCount > 1 ? "s" : ""} and cannot be deleted.` },
-        { status: 400 }
-      );
-    }
+    // Only ACTIVE assigned products block a soft delete. Invoice/purchase-bill lines store their own
+    // name snapshot, so binning a category doesn't touch them; any line on an active product is
+    // already covered by this check, and lines on binned products shouldn't block. Permanent-delete
+    // FK safety lives in DELETE /api/bin/[type]/[id].
     if (category._count.products > 0) {
       return NextResponse.json(
         { error: `"${category.name}" has ${category._count.products} product(s) assigned and cannot be deleted. Reassign or delete those products first.` },

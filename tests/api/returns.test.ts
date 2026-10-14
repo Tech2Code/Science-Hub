@@ -246,3 +246,40 @@ describe.skipIf(!hasTestDatabase)("DELETE /api/invoices/[id]/returns/[returnId]"
     expect(afterSecondDelete?.stock).toBe(50);
   });
 });
+
+describe.skipIf(!hasTestDatabase)("POST /api/invoices/[id]/returns — quantity type validation", () => {
+  beforeEach(async () => {
+    await resetDb();
+    const user = await seedUser();
+    mockSession({ id: user.id, role: "staff" });
+  });
+
+  it.each(["abc", "", "1e2x", null, true, { n: 1 }])("rejects a non-numeric quantity (%j) with 400", async (quantity) => {
+    const product = await makeProduct();
+    const invoice = await makeInvoice({ productId: product.id, quantity: 10, price: 100, gstRate: 0, paidAmount: 1000 });
+    const { POST } = await import("@/app/api/invoices/[id]/returns/route");
+    const res = await POST(
+      jsonRequest(`http://localhost/api/invoices/${invoice.id}/returns`, "POST", {
+        items: [{ productId: product.id, name: "Beaker", quantity, price: 100 }],
+      }),
+      paramsOf(invoice.id)
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/quantity/i);
+  });
+
+  it("accepts a numeric-string quantity and parses it", async () => {
+    const product = await makeProduct();
+    const invoice = await makeInvoice({ productId: product.id, quantity: 10, price: 100, gstRate: 0, paidAmount: 1000 });
+    const { POST } = await import("@/app/api/invoices/[id]/returns/route");
+    const res = await POST(
+      jsonRequest(`http://localhost/api/invoices/${invoice.id}/returns`, "POST", {
+        items: [{ productId: product.id, name: "Beaker", quantity: "2", price: 100 }],
+      }),
+      paramsOf(invoice.id)
+    );
+    expect(res.status).toBe(201);
+    const ret = await testPrisma.return.findFirstOrThrow({ where: { invoiceId: invoice.id }, include: { items: true } });
+    expect(ret.items[0].quantity).toBe(2);
+  });
+});

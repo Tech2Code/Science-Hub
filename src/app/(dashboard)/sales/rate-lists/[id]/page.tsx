@@ -32,6 +32,7 @@ interface RateListItem {
 }
 interface RateList {
   id: string; title: string; note: string | null; createdAt: string; updatedAt: string;
+  deletedAt: string | null;
   createdBy: { id: string; name: string };
   items: RateListItem[];
 }
@@ -64,6 +65,9 @@ export default function RateListDetailPage() {
 
   const [rateList, setRateList] = useState<RateList | null>(null);
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
+  // PDF actions stay disabled until settings load — a PDF rendered before then has no business
+  // header/logo and would otherwise be cached under a placeholder key and served from then on.
+  const [settingsFailed, setSettingsFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -105,19 +109,30 @@ export default function RateListDetailPage() {
   useEffect(() => { load(); }, [id]);
 
   useEffect(() => {
-    fetch("/api/settings").then((r) => r.json()).then(setSettings).catch(() => {});
+    fetch("/api/settings")
+      .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then((d: BusinessSettings) => setSettings(d))
+      .catch(() => setSettingsFailed(true));
   }, []);
 
   async function generateRateListPdfBlob(force = false): Promise<Blob | null> {
-    if (!rateList) return null;
-    const showLogo = settings?.showLogoOnInvoices !== false;
-    const variantKey = buildPdfVariantKey(undefined, { logo: showLogo, settings: settings?.updatedAt ?? "loading", updatedAt: rateList.updatedAt });
-    return withCachedPdf("rate-list", rateList.id, variantKey, async () => {
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      await document.fonts.ready;
-      const el = document.getElementById("rate-list-print-area");
-      return el ? await generateInvoicePdfBlob(el, { logoUrl: showLogo ? settings?.logoUrl || undefined : undefined }) : null;
-    }, force);
+    // Never render (or cache) before settings have loaded — see settingsFailed above.
+    if (!rateList || !settings) return null;
+    const showLogo = settings.showLogoOnInvoices !== false;
+    const variantKey = buildPdfVariantKey(undefined, { logo: showLogo, settings: settings.updatedAt ?? "none", updatedAt: rateList.updatedAt });
+    // A thrown render error must resolve to null (→ "Could not generate PDF." toast) rather than
+    // propagate — every caller sets an OverlayLoader flag before awaiting this and would stay stuck.
+    try {
+      return await withCachedPdf("rate-list", rateList.id, variantKey, async () => {
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        await document.fonts.ready;
+        const el = document.getElementById("rate-list-print-area");
+        return el ? await generateInvoicePdfBlob(el, { logoUrl: showLogo ? settings.logoUrl || undefined : undefined }) : null;
+      }, force);
+    } catch (err) {
+      console.error("Rate list PDF generation failed:", err);
+      return null;
+    }
   }
 
   async function handleRegeneratePdf() {
@@ -375,6 +390,15 @@ export default function RateListDetailPage() {
   }
 
   const total = rateList.items.reduce((sum, i) => sum + i.amount, 0);
+  // A binned rate list's page is still reachable (direct URL / back button after Delete, or an
+  // admin coming here to Reassign) — PUT rejects it, so don't offer write actions that can only
+  // fail. Reassign stays available on purpose (works regardless of bin state, see Features #65).
+  const inBin = !!rateList.deletedAt;
+  const canEditRateList = canWrite && !inBin;
+  const pdfReady = !!settings;
+  const pdfNotReadyTitle = settingsFailed
+    ? "Business settings failed to load — refresh the page to generate the PDF"
+    : "Loading business settings…";
 
   return (
     <>
@@ -457,20 +481,20 @@ export default function RateListDetailPage() {
           )}
         </div>
         <div className={styles.toolbarActions}>
-          {canWrite && (
+          {canEditRateList && (
             <Button variant="editOutline" size="sm" href={`/sales/rate-lists/${rateList.id}/edit`}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               Edit
             </Button>
           )}
-          <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" aria-label="Regenerate PDF" onClick={handleRegeneratePdf}>
+          <Button variant="secondary" size="sm" title={pdfReady ? "Discard the cached PDF and view a freshly generated copy" : pdfNotReadyTitle} aria-label="Regenerate PDF" disabled={!pdfReady} onClick={handleRegeneratePdf}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
           </Button>
-          <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing}>
+          <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing} disabled={!pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             Preview
           </Button>
-          <Button variant="secondary" size="sm" onClick={handleDownloadPdf} loading={pdfDownloading}>
+          <Button variant="secondary" size="sm" onClick={handleDownloadPdf} loading={pdfDownloading} disabled={!pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Download PDF
           </Button>
@@ -479,7 +503,7 @@ export default function RateListDetailPage() {
             Export Excel
           </Button>
           <div className={styles.shareWrap} ref={shareContainerRef}>
-            <Button variant="secondary" size="sm" disabled={shareLoading} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
+            <Button variant="secondary" size="sm" disabled={shareLoading || !pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
               setShareOpen((o) => {
                 const next = !o;
                 if (next && shareContainerRef.current) {
@@ -513,7 +537,7 @@ export default function RateListDetailPage() {
                       icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>,
                       color: "#25d366",
                     },
-                    canWrite ? {
+                    canEditRateList ? {
                       key: "email", label: "Email",
                       icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
                       color: "var(--c-text-2)",
@@ -533,7 +557,7 @@ export default function RateListDetailPage() {
               </>
             )}
           </div>
-          {canWrite && (
+          {canEditRateList && (
             <Button variant="dangerOutline" size="sm" onClick={() => setConfirmDelete(true)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
               Delete
@@ -541,6 +565,12 @@ export default function RateListDetailPage() {
           )}
         </div>
       </div>
+
+      {inBin && (
+        <div role="status" className="error-banner">
+          This rate list is in the Recycle Bin. Restore it from the Bin to edit it.
+        </div>
+      )}
 
       {rateList.note && <p className={styles.noteBanner}>{rateList.note}</p>}
 

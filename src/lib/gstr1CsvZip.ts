@@ -20,6 +20,7 @@ These files match the GST Returns Offline Tool's own CSV import format
      - b2b,sez,de.csv        -> B2B, SEZ, DE section
      - b2cs.csv               -> B2CS section
      - cdnr.csv                -> Credit/Debit Notes (Registered) section
+                                  (credit notes to customers WITH a GSTIN only)
      - hsn(b2b).csv            -> HSN Summary (B2B) section
      - hsn(b2c).csv            -> HSN Summary (B2C) section
 
@@ -28,6 +29,17 @@ These files match the GST Returns Offline Tool's own CSV import format
 
 5. Once every section looks right, use "Generate JSON File to Upload" in the
    tool, then upload that JSON on the GST portal under Returns > GSTR-1.
+
+CREDIT NOTES TO UNREGISTERED (NO-GSTIN) CUSTOMERS are not listed in
+cdnr.csv (that section only accepts registered recipients). Because every
+B2C sale is reported as B2CS here, those credit notes are instead netted
+against the b2cs.csv row for the same place of supply + tax rate.
+Validation-Report.csv lists which credit notes were netted this way. If B2C
+returns exceed B2C sales at a place of supply + rate this period (e.g. the
+original sale was in an earlier period), no negative row is written — that
+row is left out and Validation-Report.csv shows an ERROR with the exact
+unabsorbed amount, to be reduced from the next period's B2CS (or checked
+with your CA).
 
 BEFORE YOU IMPORT — check Validation-Report.csv in this zip. Any ERROR row
 means that item was skipped from the export entirely (e.g. an unrecognized

@@ -67,10 +67,12 @@ export function validateAndBuildRateListItems(items: unknown): { error: string }
     return { error: "At least one item is required" };
   }
   const built: BuiltRateListItem[] = [];
-  for (const [idx, raw] of (items as RateListItemInput[]).entries()) {
-    const name = (raw.name ?? "").trim();
-    const brand = (raw.brand ?? "").trim();
-    const unit = (raw.unit ?? "").trim();
+  for (const [idx, raw] of (items as (RateListItemInput | null)[]).entries()) {
+    // A null/non-object item or a non-string name/brand/unit would otherwise throw on .trim() → 500.
+    if (!raw || typeof raw !== "object") return { error: "Every item must have a name" };
+    const name = typeof raw.name === "string" ? raw.name.trim() : "";
+    const brand = typeof raw.brand === "string" ? raw.brand.trim() : "";
+    const unit = typeof raw.unit === "string" ? raw.unit.trim() : "";
     const listRate = parseFloat(String(raw.listRate));
     if (!name) return { error: "Every item must have a name" };
     if (name.length < 2) return { error: "Item name must be at least 2 characters" };

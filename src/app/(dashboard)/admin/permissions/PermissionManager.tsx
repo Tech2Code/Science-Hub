@@ -103,13 +103,21 @@ export function PermissionManager() {
     const target = !isGstEnabled(user);
     const salesEnabled = isEnabled(user, "reports_sales");
     const purchasesEnabled = isEnabled(user, "reports_purchases");
-    if (salesEnabled !== target) handleToggle(user.id, "reports_sales", salesEnabled);
-    if (purchasesEnabled !== target) handleToggle(user.id, "reports_purchases", purchasesEnabled);
+    // Toggled silently and toasted once — previously flipping GST from fully-off fired two
+    // identical "Permission updated" toasts (one per underlying section).
+    const pending: Promise<boolean>[] = [];
+    if (salesEnabled !== target) pending.push(handleToggle(user.id, "reports_sales", salesEnabled, true));
+    if (purchasesEnabled !== target) pending.push(handleToggle(user.id, "reports_purchases", purchasesEnabled, true));
+    Promise.all(pending).then((results) => {
+      if (results.length > 0 && results.every(Boolean)) {
+        toast({ type: "success", title: "Permission updated", message: `GST Reports ${target ? "enabled" : "disabled"} for ${user.name}` });
+      }
+    });
   };
 
-  const handleToggle = async (userId: string, section: ProtectedSection, currentEnabled: boolean) => {
+  const handleToggle = async (userId: string, section: ProtectedSection, currentEnabled: boolean, silent = false): Promise<boolean> => {
     const toggleKey = `${userId}:${section}`;
-    if (togglingIds.has(toggleKey)) return;
+    if (togglingIds.has(toggleKey)) return false;
 
     const newEnabled = !currentEnabled;
     setTogglingIds((prev) => new Set(prev).add(toggleKey));
@@ -131,8 +139,9 @@ export function PermissionManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, section, enabled: newEnabled }),
       });
-      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to update"); }
-      toast({ type: "success", title: "Permission updated", message: "Permission updated successfully" });
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || "Failed to update"); }
+      if (!silent) toast({ type: "success", title: "Permission updated", message: "Permission updated successfully" });
+      return true;
     } catch (err) {
       setUsers((prev) =>
         prev.map((u) => {
@@ -141,6 +150,7 @@ export function PermissionManager() {
         })
       );
       toast({ type: "error", title: "Update failed", message: err instanceof Error ? err.message : "Failed to update permission" });
+      return false;
     } finally {
       setTogglingIds((prev) => { const next = new Set(prev); next.delete(toggleKey); return next; });
     }

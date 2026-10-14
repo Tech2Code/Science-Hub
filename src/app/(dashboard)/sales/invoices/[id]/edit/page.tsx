@@ -280,6 +280,7 @@ export default function EditInvoicePage() {
         setCustomerSearch(data.name);
         bustCachePrefix("/api/customers");
         bustCachePrefix("/api/invoices");
+        bustCachePrefix("/api/reports");
         setCustomerModalOpen(false);
         setCustomerEditId(null);
         setCustomerForm(BLANK_CUSTOMER_FORM);
@@ -505,6 +506,7 @@ export default function EditInvoicePage() {
       bustCachePrefix("/api/reports");
       // The invoice's customer may have changed — both customers' counts/outstanding move.
       bustCachePrefix("/api/customers");
+      bustCachePrefix("/api/notifications"); // due date / total / status may have changed
       bustCache("/api/units");
       invalidateCachedPdf("invoice", id);
       toast({ type: "success", title: "Invoice updated", message: "Changes saved." });

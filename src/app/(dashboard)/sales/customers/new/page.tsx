@@ -114,7 +114,7 @@ export default function NewCustomerPage() {
     <>
     {saving && <OverlayLoader text="Saving…" />}
     <div className={`page-stack ${styles.pageStack}`}>
-      <Breadcrumb items={[{ label: "Customers", href: "/customers" }, { label: "New Customer" }]} />
+      <Breadcrumb items={[{ label: "Customers", href: "/sales/customers" }, { label: "New Customer" }]} />
 
       <div>
         <h1 className="page-title">New Customer</h1>

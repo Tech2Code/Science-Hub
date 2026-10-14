@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { requireAdmin } from "@/lib/apiAuth";
 import { prisma } from "@/lib/prisma";
-import { PROTECTED_SECTIONS, ProtectedSection } from "@/lib/sections";
+import { PROTECTED_SECTIONS, ProtectedSection, SECTION_LABELS } from "@/lib/sections";
+import { logActivity } from "@/lib/activity";
 
 // GET — list all grantable users with their section permissions
 export async function GET() {
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
     // Validate target user exists
     const targetUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, role: true },
+      select: { id: true, role: true, name: true },
     });
 
     if (!targetUser) {
@@ -112,6 +113,14 @@ export async function POST(request: NextRequest) {
     });
 
     revalidateTag("permissions", { expire: 0 });
+    // Access grants are security-relevant — audit them like every other admin mutation.
+    await logActivity(
+      auth.session.user.id,
+      "update_permission",
+      `${enabled ? "Granted" : "Revoked"} "${SECTION_LABELS[section as ProtectedSection]}" for "${targetUser.name}"`,
+      userId,
+      "user"
+    );
     return NextResponse.json({ ok: true, permission });
   } catch (error) {
     console.error("POST /api/admin/permissions error:", error);

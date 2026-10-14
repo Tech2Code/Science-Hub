@@ -165,6 +165,9 @@ export default function PurchaseReportsPage() {
         return;
       }
       const exportData: OutstandingResponse = await res.json();
+      if (exportData.total > exportData.data.length) {
+        toast({ type: "warning", title: "Export truncated", message: `Exported the first ${exportData.data.length} of ${exportData.total} bills.` });
+      }
       await downloadXlsx(
         "outstanding-bills.xlsx",
         "Outstanding Bills",
@@ -211,6 +214,9 @@ export default function PurchaseReportsPage() {
         return;
       }
       const exportData: { data: LedgerRow[]; total: number } = await res.json();
+      if (exportData.total > exportData.data.length) {
+        toast({ type: "warning", title: "Export truncated", message: `Exported the first ${exportData.data.length} of ${exportData.total} movements.` });
+      }
       await downloadXlsx(
         "stock-movement-ledger.xlsx",
         "Stock Ledger",

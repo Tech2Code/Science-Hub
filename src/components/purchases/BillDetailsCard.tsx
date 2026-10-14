@@ -214,7 +214,7 @@ export function BillDetailsCard({
         setVendorSearch("");
         closeVendorCreate();
         if (ivEditId || !ivDontSave) bustCachePrefix("/api/vendors");
-        if (ivEditId) bustCachePrefix("/api/purchase-bills");
+        if (ivEditId) { bustCachePrefix("/api/purchase-bills"); bustCachePrefix("/api/reports"); bustCachePrefix("/api/purchase-reports"); }
         toast(ivEditId
           ? { type: "success", title: "Vendor updated", message: `${data.name} saved.` }
           : { type: "success", title: "Vendor created", message: ivDontSave ? `${data.name} added and selected for this bill only.` : `${data.name} added and selected.` }
@@ -228,6 +228,11 @@ export function BillDetailsCard({
     setIvSaving(false);
   }
 
+  // Only show the remembered vendor while it still matches the parent's vendorId — the parent can
+  // change/clear vendorId on its own (e.g. "Resume draft" restoring a draft with a different or no
+  // vendor), and showing a stale selection there would hide a "Please select a vendor" error.
+  const shownVendor = selectedVendor && selectedVendor.id === vendorId ? selectedVendor : null;
+
   const section = animateSection(sectionIndex, "form-card");
 
   return (
@@ -237,20 +242,20 @@ export function BillDetailsCard({
       <h2 className="form-section-title">Bill Details</h2>
 
       <FormField label="Vendor" required error={vendorError} id={vendorFieldId}>
-        {selectedVendor ? (
+        {shownVendor ? (
           <div className={styles.selectedVendor}>
             <div className={styles.selectedVendorInfo}>
-              <div className={styles.selectedVendorName}>{selectedVendor.name}{selectedVendor.company ? ` — ${selectedVendor.company}` : ""}</div>
+              <div className={styles.selectedVendorName}>{shownVendor.name}{shownVendor.company ? ` — ${shownVendor.company}` : ""}</div>
               <div className={styles.selectedVendorSub}>
-                {[selectedVendor.city, selectedVendor.state].filter(Boolean).join(", ")}
-                {selectedVendor.gstin && ` · GSTIN: ${selectedVendor.gstin}`}
+                {[shownVendor.city, shownVendor.state].filter(Boolean).join(", ")}
+                {shownVendor.gstin && ` · GSTIN: ${shownVendor.gstin}`}
               </div>
-              {selectedVendor.isActive === false && (
+              {shownVendor.isActive === false && (
                 <p className={styles.selectHint}>⚠ This vendor is marked Inactive</p>
               )}
             </div>
             <div className={styles.selectedVendorActions}>
-              <button type="button" onClick={() => openVendorEdit(selectedVendor)} className={styles.dropdownEmptyLink}>Edit</button>
+              <button type="button" onClick={() => openVendorEdit(shownVendor)} className={styles.dropdownEmptyLink}>Edit</button>
               <button type="button" onClick={removeVendor} className={styles.removeVendorLink}>Remove</button>
             </div>
           </div>

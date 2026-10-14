@@ -9,7 +9,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { SearchField } from "@/components/ui/SearchField";
-import { useFetch } from "@/lib/useCache";
+import { useFetch, bustCachePrefix } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -82,6 +82,12 @@ export default function CustomersPage() {
   const showSkeleton = loading && !data;
   const isRefetching = loading && !!data;
 
+  // Deleting the last row on the last page leaves `page` past the end — the table would show a false
+  // "No customers yet" and Pagination "41–40 of 40". Step back to the real last page (adjust during render).
+  if (data && !loading && page > 1 && customers.length === 0 && total > 0) {
+    setPage(Math.max(1, Math.ceil(total / pageSize)));
+  }
+
   function handleDelete(id: string, name: string) {
     setConfirmState({
       title: "Move to Bin",
@@ -101,6 +107,8 @@ export default function CustomersPage() {
         setDeleting(false);
         setConfirmState(null);
         if (res.ok) {
+          // Also drops this customer's cached detail/statement entries, not just this list page.
+          bustCachePrefix("/api/customers");
           await mutate();
           toast({ type: "success", title: "Moved to bin", message: `"${name}" moved to bin. You can restore it within 30 days.` });
         } else {

@@ -17,13 +17,15 @@ export interface ParsedRateListResult {
 
 type ColumnKey = "serial" | "name" | "brand" | "unit" | "discount" | "listRate" | "amount";
 
-// Order matters — first match wins, so "List Rate" is tried before the looser "amount"/"rate" catch-alls.
+// Order matters — first match wins, so "List Rate" is tried before the looser "amount"/"rate" catch-alls,
+// a "Unit Price"/"Unit Rate" or "Rate (₹)" header maps to the rate (not to unit / nothing), and "brand"
+// is tried before the loose "name" pattern so a "Brand Name" header isn't taken as the item name.
 const COLUMN_PATTERNS: { key: ColumnKey; pattern: RegExp }[] = [
   { key: "serial", pattern: /^(s\.?\s*no\.?|sr\.?\s*no\.?|#)$/i },
-  { key: "listRate", pattern: /list\s*rate|^rate$|^price$/i },
+  { key: "listRate", pattern: /list\s*rate|unit\s*(price|rate)|^rate\b|^price\b|^mrp\b/i },
   { key: "amount", pattern: /amount/i },
-  { key: "name", pattern: /name|item|chemical|product|description/i },
   { key: "brand", pattern: /brand/i },
+  { key: "name", pattern: /name|item|chemical|product|description/i },
   { key: "unit", pattern: /unit/i },
   { key: "discount", pattern: /discount/i },
 ];

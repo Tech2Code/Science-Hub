@@ -391,3 +391,56 @@ describe.skipIf(!hasTestDatabase)("DELETE /api/purchase-bills/[id]", () => {
     expect(afterSecondDelete?.stock).toBe(10);
   });
 });
+
+describe.skipIf(!hasTestDatabase)("PUT /api/purchase-bills/[id] — bill date vs payments/due date", () => {
+  beforeEach(async () => {
+    await resetDb();
+    const user = await seedUser();
+    mockSession({ id: user.id, role: "staff" });
+  });
+
+  // Two IST days in the same financial year, both in the past/today, so only the new rule can fail.
+  async function sameFyDays() {
+    const { toIstDateStr, istDayStartUtc } = await import("@/lib/validation");
+    const { getIndianFinancialYear } = await import("@/lib/documentNumbering");
+    const today = toIstDateStr(new Date());
+    const earlier = toIstDateStr(new Date(Date.now() - 86400000));
+    const ok = getIndianFinancialYear(istDayStartUtc(today)) === getIndianFinancialYear(istDayStartUtc(earlier));
+    return { today, earlier, ok, istDayStartUtc };
+  }
+
+  it("rejects moving the bill date after an existing payment's date", async () => {
+    const { today, earlier, ok, istDayStartUtc } = await sameFyDays();
+    if (!ok) return; // 1 April in IST — the FY guard would fire first; nothing meaningful to assert.
+    const vendor = await makeVendor();
+    const user = await testPrisma.user.findFirstOrThrow();
+    const bill = await testPrisma.purchaseBill.create({
+      data: {
+        billNumber: "PB-2026-0101", vendorId: vendor.id, billDate: istDayStartUtc(earlier), subtotal: 100, taxAmount: 0,
+        total: 100, paidAmount: 50, status: "partial", createdByUserId: user.id,
+        payments: { create: [{ amount: 50, date: istDayStartUtc(earlier) }] },
+      },
+    });
+    const { PUT } = await import("@/app/api/purchase-bills/[id]/route");
+    const res = await PUT(jsonRequest(`http://localhost/api/purchase-bills/${bill.id}`, "PUT", { billDate: today }), paramsOf(bill.id));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/payment date/i);
+  });
+
+  it("rejects a bill date change that leaves the stored due date before it when dueDate isn't sent", async () => {
+    const { today, earlier, ok, istDayStartUtc } = await sameFyDays();
+    if (!ok) return;
+    const vendor = await makeVendor();
+    const user = await testPrisma.user.findFirstOrThrow();
+    const bill = await testPrisma.purchaseBill.create({
+      data: {
+        billNumber: "PB-2026-0102", vendorId: vendor.id, billDate: istDayStartUtc(earlier), dueDate: istDayStartUtc(earlier),
+        subtotal: 100, taxAmount: 0, total: 100, paidAmount: 0, status: "unpaid", createdByUserId: user.id,
+      },
+    });
+    const { PUT } = await import("@/app/api/purchase-bills/[id]/route");
+    const res = await PUT(jsonRequest(`http://localhost/api/purchase-bills/${bill.id}`, "PUT", { billDate: today }), paramsOf(bill.id));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/due date/i);
+  });
+});

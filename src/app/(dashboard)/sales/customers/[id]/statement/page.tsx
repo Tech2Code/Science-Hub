@@ -89,7 +89,19 @@ export default function CustomerStatementPage() {
   if (endDate) qs.set("to", endDate);
   const { data: statement, loading, error } = useFetch<Statement>(id ? `/api/customers/${id}/statement?${qs.toString()}` : null);
 
-  useEffect(() => { fetch("/api/settings").then((r) => r.json()).then(setSettings).catch(() => {}); }, []);
+  // PDF actions stay disabled until settings load — a PDF rendered before then has no business
+  // header/logo and would otherwise be cached under a placeholder key and served from then on.
+  const [settingsFailed, setSettingsFailed] = useState(false);
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then((d) => setSettings(d))
+      .catch(() => setSettingsFailed(true));
+  }, []);
+  const pdfReady = !!settings;
+  const pdfNotReadyTitle = settingsFailed
+    ? "Business settings failed to load — refresh the page to generate the PDF"
+    : "Loading business settings…";
 
   // Reset back to page 1 whenever the date filter changes — adjusted during render (React's documented
   // pattern for this) rather than in an effect, so it takes effect in the same render pass.
@@ -110,18 +122,26 @@ export default function CustomerStatementPage() {
     : "All Time";
 
   async function generateStatementPdfBlob(force = false): Promise<Blob | null> {
-    if (!statement) return null;
+    // Never render (or cache) before settings have loaded — see settingsFailed above.
+    if (!statement || !settings) return null;
     const variantKey = buildPdfVariantKey(undefined, {
       period: qs.toString() || "all",
       fp: fingerprintStatement(statement),
-      settings: settings?.updatedAt ?? "loading",
+      settings: settings.updatedAt ?? "none",
     });
-    return withCachedPdf("statement", id, variantKey, async () => {
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      await document.fonts.ready;
-      const el = document.getElementById("statement-print-area");
-      return el ? await generateInvoicePdfBlob(el, { logoUrl: settings?.showLogoOnInvoices !== false ? settings?.logoUrl || undefined : undefined }) : null;
-    }, force);
+    // A thrown render error must resolve to null (→ "Could not generate PDF." toast) rather than
+    // propagate — every caller sets an OverlayLoader flag before awaiting this and would stay stuck.
+    try {
+      return await withCachedPdf("statement", id, variantKey, async () => {
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        await document.fonts.ready;
+        const el = document.getElementById("statement-print-area");
+        return el ? await generateInvoicePdfBlob(el, { logoUrl: settings.showLogoOnInvoices !== false ? settings.logoUrl || undefined : undefined }) : null;
+      }, force);
+    } catch (err) {
+      console.error("Statement PDF generation failed:", err);
+      return null;
+    }
   }
 
   async function handleRegeneratePdf() {
@@ -160,9 +180,15 @@ export default function CustomerStatementPage() {
     if (!statement) return;
     setExportingExcel(true);
     try {
-      const rows = statement.rows.map((r) => [
-        formatDate(r.date), r.label, r.debit || "", r.credit || "", bal(r.balance),
-      ]);
+      // Opening/Closing rows mirror StatementPrintArea's, so a date-ranged export's running
+      // balance is explained (it starts from the opening balance, not zero).
+      const rows = [
+        ["", "Opening Balance", "", "", bal(statement.openingBalance)],
+        ...statement.rows.map((r) => [
+          formatDate(r.date), r.label, r.debit || "", r.credit || "", bal(r.balance),
+        ]),
+        ["", "Closing Balance (Receivable)", "", "", bal(statement.closingBalance)],
+      ];
       await downloadXlsx(`Statement-${statement.customer.name}`, "Statement", ["Date", "Particulars", "Debit", "Credit", "Balance"], rows);
     } catch {
       toast({ type: "error", title: "Failed", message: "Could not export Excel." });
@@ -334,14 +360,14 @@ export default function CustomerStatementPage() {
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>Account Statement{statement ? ` — ${statement.customer.name}` : ""}</h2>
           <div className={styles.toolbarActions}>
-            <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" aria-label="Regenerate PDF" onClick={handleRegeneratePdf} disabled={loading}>
+            <Button variant="secondary" size="sm" title={pdfReady ? "Discard the cached PDF and view a freshly generated copy" : pdfNotReadyTitle} aria-label="Regenerate PDF" onClick={handleRegeneratePdf} disabled={loading || !pdfReady}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>
             </Button>
-            <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={viewingPdf} disabled={loading}>
+            <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={viewingPdf} disabled={loading || !pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
               View PDF
             </Button>
-            <Button variant="secondary" size="sm" onClick={handleDownloadPdf} loading={downloadingPdf} disabled={loading}>
+            <Button variant="secondary" size="sm" onClick={handleDownloadPdf} loading={downloadingPdf} disabled={loading || !pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
               Download PDF
             </Button>
@@ -350,7 +376,7 @@ export default function CustomerStatementPage() {
               Export Excel
             </Button>
             <div className={styles.shareWrap} ref={shareContainerRef}>
-              <Button variant="secondary" size="sm" disabled={loading || shareLoading} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
+              <Button variant="secondary" size="sm" disabled={loading || shareLoading || !pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
                 setShareOpen(o => {
                   const next = !o;
                   if (next && shareContainerRef.current) {

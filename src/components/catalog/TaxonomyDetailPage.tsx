@@ -11,7 +11,8 @@ import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useToast } from "@/components/ui/Toast";
 import { animateSection } from "@/lib/animateSection";
-import { isLowStock } from "@/lib/stockStatus";
+import { needsRestock } from "@/lib/stockStatus";
+import { OverlayLoader } from "@/components/ui/Spinner";
 import { formatDateTime } from "@/lib/formatDate";
 import { useCanWrite } from "@/lib/useCanWrite";
 import type { Column } from "@/components/ui/Table";
@@ -71,7 +72,8 @@ export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }
 
   async function saveRename() {
     const name = renameValue.trim();
-    if (!name || !entity) return;
+    // Enter bypasses the Save button's disabled state — guard the same conditions here.
+    if (!name || !entity || savingRename || name === entity.name) return;
     setSavingRename(true);
     try {
       const res = await fetch(`${apiBase}/${id}`, {
@@ -82,7 +84,9 @@ export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }
       const data = await res.json().catch(() => ({}));
       setSavingRename(false);
       if (res.ok) {
-        setEntity((prev) => (prev ? { ...prev, name } : prev));
+        // Carry the server's new updatedAt too — keeping the old one made a second rename on this
+        // page send a stale expectedUpdatedAt and fail with a bogus "changed by someone else" 409.
+        setEntity((prev) => (prev ? { ...prev, name, updatedAt: data.updatedAt ?? prev.updatedAt } : prev));
         bustCachePrefix(apiBase);
         // Product list/detail embed the brand/category's name, so a rename here leaves them
         // stale until this bust — same fix already applied to the Brands/Categories list pages'
@@ -130,11 +134,14 @@ export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }
   // Rendered unconditionally (loading or loaded) so adding/removing a header
   // button, stat, or column only ever needs one edit — see SkeletonSwap.
   const products = entity?.products ?? [];
-  const lowStockCount = products.filter((p) => isLowStock(p.stock, p.minStock)).length;
+  // needsRestock (out-of-stock OR low), not isLowStock alone — a product at 0 stock is the most
+  // urgent case and previously wasn't counted or highlighted here at all.
+  const lowStockCount = products.filter((p) => needsRestock(p.stock, p.minStock)).length;
   const catalogValue = products.reduce((s, p) => s + p.price * p.stock, 0);
 
   return (
     <div className={`page-stack ${styles.pageStack}`}>
+      {savingRename && <OverlayLoader text="Renaming…" />}
       <ConfirmDialog
         open={confirmOpen}
         title={`Delete ${entityLabel}`}
@@ -243,7 +250,7 @@ export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }
                   </td>
                   <td data-label="SKU" className={styles.mutedCell}>{p.sku || "—"}</td>
                   <td data-label="Selling Price" className="table-td-right">₹{p.price.toLocaleString("en-IN")}</td>
-                  <td data-label="Stock" className={`table-td-right ${isLowStock(p.stock, p.minStock) ? styles.stockLow : ""}`}>{p.stock}</td>
+                  <td data-label="Stock" className={`table-td-right ${needsRestock(p.stock, p.minStock) ? styles.stockLow : ""}`}>{p.stock}</td>
                 </tr>
               ))}
             </tbody>

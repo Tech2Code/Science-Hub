@@ -1,14 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSectionAccess } from "@/lib/apiAuth";
+import { monthYearToDateRange } from "@/lib/listQuery";
 import { buildPurchasePaymentWhere } from "@/lib/purchasePaymentQuery";
 
-export async function GET() {
+// Accepts the same search/month/year filters as the list route (same where-builder) — the Payments
+// Made header shows "<count> payments · Total paid ₹X" next to the list's filtered count, so an
+// unfiltered total here made the two numbers disagree as soon as the user searched.
+export async function GET(request: NextRequest) {
   try {
     const auth = await requireSectionAccess("payments_made");
     if (!auth.ok) return auth.response;
 
-    const where = buildPurchasePaymentWhere({});
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search") ?? undefined;
+    const dateRange = monthYearToDateRange(searchParams.get("month") ?? "", searchParams.get("year") ?? "");
+    const where = buildPurchasePaymentWhere({ search, dateRange });
     const [agg, total] = await Promise.all([
       prisma.purchasePayment.aggregate({ where, _sum: { amount: true } }),
       prisma.purchasePayment.count({ where }),

@@ -25,6 +25,7 @@ import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
 import { animateSection } from "@/lib/animateSection";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { formatDate } from "@/lib/formatDate";
+import { toIstDateStr } from "@/lib/validation";
 import { purchaseBillAttachmentByIdHref } from "@/lib/attachmentHref";
 import { useRouter, useSearchParams } from "next/navigation";
 import styles from "./billsList.module.css";
@@ -217,7 +218,11 @@ export default function PurchasesPage() {
           const baseName = sanitizeZipEntryName(b.billNumber);
 
           if (opts.includePdfs) {
-            const blob = await generatePdfViaIframe(b);
+            // A thrown render error must count as a failed PDF (and not abort this bill's attachment
+            // below) — bulkZipDownload's own catch would otherwise drop the whole item silently while
+            // the success toast still counted its PDF.
+            let blob: Blob | null = null;
+            try { blob = await generatePdfViaIframe(b); } catch { blob = null; }
             if (blob) {
               entries.push({ name: nestInFolders ? `Bills/${baseName}.pdf` : `${baseName}.pdf`, blob });
             } else {
@@ -319,13 +324,18 @@ export default function PurchasesPage() {
       const res = await fetch(`/api/purchase-bills/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
+        // Sibling caches (Payments Made list, other filter/page variants) also include this bill.
+        bustCachePrefix("/api/purchase-bills");
+        // Deleting the last row of the last page would otherwise leave an empty "No bills" page.
+        if (bills.length === 1 && page > 1) setPage(page - 1);
         await Promise.all([mutate(), mutateStats()]);
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");
         bustCachePrefix("/api/vendors");
+        bustCachePrefix("/api/notifications"); // overdue-bills bell count
         invalidateCachedPdf("purchase-bill", target.id);
-        toast({ type: "success", title: "Moved to bin", message: `${target.billNumber} moved to bin. You can restore it within 30 days.` });
+        toast({ type: "success", title: "Moved to bin", message: `${target.billNumber} moved to bin. You can restore it from the Recycle Bin.` });
       } else {
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete bill." });
       }
@@ -342,12 +352,12 @@ export default function PurchasesPage() {
     <ConfirmDialog
       open={!!deleteTarget}
       title="Delete Purchase Bill"
-      message={`Move bill ${deleteTarget?.billNumber} to bin? You can restore it within 30 days.`}
+      message={`Move bill ${deleteTarget?.billNumber} to bin? Purchase bills stay in the Recycle Bin (retained for GST) and can be restored from there.`}
       confirmLabel="Move to Bin"
       variant="danger"
       loading={deleting}
       onConfirm={handleDelete}
-      onCancel={() => setDeleteTarget(null)}
+      onCancel={() => { if (!deleting) setDeleteTarget(null); }}
     />
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
     {openingEdit && <OverlayLoader text="Opening editor…" />}
@@ -492,7 +502,8 @@ export default function PurchasesPage() {
                   </Cell>
                   <Cell col={COLUMNS[1]} className={styles.dateCell}>
                     <div>{formatDate(b.billDate)}</div>
-                    {b.dueDate && new Date(b.dueDate) < new Date() && b.status !== "paid" && (
+                    {/* IST calendar-day compare + excludes cancelled — same definition as the "Overdue" tab (buildBillWhere). */}
+                    {b.dueDate && toIstDateStr(new Date(b.dueDate)) < toIstDateStr(new Date()) && b.status !== "paid" && b.status !== "cancelled" && (
                       <div className={styles.overdueSub}>Overdue</div>
                     )}
                   </Cell>

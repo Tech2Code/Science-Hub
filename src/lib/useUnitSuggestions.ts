@@ -15,7 +15,14 @@ export function useUnitSuggestions(staticUnits: string[]): string[] {
 
   return useMemo(() => {
     const seen = new Set(staticUnits.map((u) => u.toLowerCase()));
-    const extra = (data?.units ?? []).filter((u) => !seen.has(u.toLowerCase()));
+    // Also dedupes the DB units among themselves case-insensitively ("kg"/"KG" typed on different
+    // items would otherwise both appear as separate suggestions).
+    const extra = (data?.units ?? []).filter((u) => {
+      const key = u.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     return extra.length ? [...staticUnits, ...extra] : staticUnits;
   }, [staticUnits, data]);
 }

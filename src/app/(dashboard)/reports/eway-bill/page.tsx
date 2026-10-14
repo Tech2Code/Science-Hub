@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { formatDate } from "@/lib/formatDate";
+import { toIstDateStr } from "@/lib/validation";
 import { Badge } from "@/components/ui/Badge";
 import type { Column } from "@/components/ui/Table";
 import styles from "./ewayBill.module.css";
@@ -64,12 +65,9 @@ function sortRows<T>(rows: T[], sort: SortOption, dateOf: (r: T) => string, valu
   return sorted;
 }
 
-function ymd(year: number, month1to12: number, day: number): string {
-  return `${year.toString().padStart(4, "0")}-${String(month1to12).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
+// IST calendar day, not the device's local clock — same helper the other report pages use.
 function todayStr() {
-  const now = new Date();
-  return ymd(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  return toIstDateStr(new Date());
 }
 export default function EwayBillReportPage() {
   const { data: session } = useSession();

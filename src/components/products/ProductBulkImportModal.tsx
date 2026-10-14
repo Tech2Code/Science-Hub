@@ -251,11 +251,17 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
         toast({ type: "error", title: "Import failed", message: data.error ?? "Could not read the file." });
         return;
       }
+      if (data.truncated) {
+        toast({ type: "warning", title: "File truncated", message: "Only the first 2,000 rows of the file were read." });
+      }
       loadRows(data.items as ParsedProductRow[], data.skipped ?? 0);
     } catch {
       toast({ type: "error", title: "Import failed", message: "Network error." });
+    } finally {
+      // In `finally` so the early return above (server rejected the file) doesn't leave the
+      // "Reading file…" overlay stuck on screen forever.
+      setParsing(false);
     }
-    setParsing(false);
   }
 
   function updateRow<K extends keyof ReviewRow>(idx: number, field: K, value: ReviewRow[K]) {

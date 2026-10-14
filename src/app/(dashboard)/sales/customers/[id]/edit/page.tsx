@@ -31,6 +31,7 @@ export default function EditCustomerPage() {
   const [initialForm, setInitialForm] = useState<CustomerFormData | null>(null);
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [errors, setErrors] = useState<FormErrors<CustomerFormData>>({});
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -60,7 +61,12 @@ export default function EditCustomerPage() {
 
   useEffect(() => {
     fetch(`/api/customers/${id}`, { headers: { "x-no-loader": "1" } })
-      .then((r) => r.json())
+      .then(async (r) => {
+        const body = await r.json().catch(() => ({}));
+        // A 404/500 error body is not a customer — don't let it flow into the form as blank fields.
+        if (!r.ok) throw new Error(body?.error ?? "Customer not found.");
+        return body;
+      })
       .then((d) => {
         const loaded: CustomerFormData = { name: d.name ?? "", phone: d.phone ?? "", email: d.email ?? "",
           address: d.address ?? "", city: d.city ?? "", state: d.state ?? "",
@@ -72,7 +78,7 @@ export default function EditCustomerPage() {
         if (loadFormDraft(DRAFT_KEY)) setShowDraftBanner(true);
         else setDraftReady(true);
       })
-      .catch(() => { setLoading(false); });
+      .catch((err: unknown) => { setLoadError(err instanceof Error ? err.message : "Failed to load customer."); setLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- DRAFT_KEY is derived from id, already a dependency
   }, [id]);
 
@@ -101,6 +107,7 @@ export default function EditCustomerPage() {
       bustCachePrefix("/api/customers");
       bustCache(`/api/customers/${id}`);
       bustCachePrefix("/api/invoices");
+      bustCachePrefix("/api/reports"); // dashboard/top customers/outstanding show the customer name
       toast({ type: "success", title: "Customer updated", message: "Changes saved." });
       router.push(`/sales/customers/${id}`);
       // No setSaving(false) here — page is navigating away; resetting it first would briefly
@@ -127,6 +134,15 @@ export default function EditCustomerPage() {
   const disabled = loading || saving;
 
   useFormDraft(DRAFT_KEY, form, !draftReady || saving || noChanges);
+
+  if (loadError) {
+    return (
+      <div className="page-stack">
+        <p>{loadError}</p>
+        <Button variant="secondary" href="/sales/customers">Back to Customers</Button>
+      </div>
+    );
+  }
 
   return (
     <>

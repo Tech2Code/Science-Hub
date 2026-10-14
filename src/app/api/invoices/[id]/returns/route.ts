@@ -71,9 +71,18 @@ export async function POST(
       return NextResponse.json({ error: "Notes is too long (max 2000 characters)." }, { status: 400 });
     }
     for (const item of items) {
-      if (!item.quantity || item.quantity <= 0) {
+      // Accept a real number or a strictly numeric string (explicitly parsed); anything else
+      // ("abc", objects, booleans) is rejected before it can reach any quantity math below.
+      const rawQty: unknown = item.quantity;
+      const qty = typeof rawQty === "number"
+        ? rawQty
+        : typeof rawQty === "string" && /^\s*\d+(\.\d+)?\s*$/.test(rawQty)
+          ? Number(rawQty)
+          : NaN;
+      if (!Number.isFinite(qty) || qty <= 0) {
         return NextResponse.json({ error: `Invalid quantity for ${item.name}` }, { status: 400 });
       }
+      item.quantity = qty;
       if (typeof item.price !== "number" || !Number.isFinite(item.price) || item.price < 0 || item.price > MAX_MONEY_VALUE) {
         return NextResponse.json({ error: `Invalid price for ${item.name}` }, { status: 400 });
       }

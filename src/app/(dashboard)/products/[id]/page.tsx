@@ -164,6 +164,9 @@ export default function ProductViewPage() {
       setConfirmOpen(false);
       if (res.ok) {
         bustCachePrefix("/api/products");
+        // Brand/Category list rows show a product count and their detail pages list products.
+        bustCachePrefix("/api/brands");
+        bustCachePrefix("/api/categories");
         // Reports' stock/value aggregates read live Product rows — a deleted product's stock
         // no longer counts toward them (server already busts this tag, see /api/products/[id]).
         bustCachePrefix("/api/reports");
@@ -206,9 +209,9 @@ export default function ProductViewPage() {
       {adjustSaving && <OverlayLoader text="Adjusting stock…" />}
       <ConfirmDialog
         open={confirmOpen}
-        title="Delete Product"
-        message={`Move "${product?.name ?? ""}" to bin?`}
-        confirmLabel="Delete"
+        title="Move to Bin"
+        message={`Move "${product?.name ?? ""}" to bin? You can restore it within 30 days.`}
+        confirmLabel="Move to Bin"
         variant="danger"
         loading={deleting}
         onConfirm={handleDelete}

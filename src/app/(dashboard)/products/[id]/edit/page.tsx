@@ -41,6 +41,7 @@ export default function EditProductPage() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<ProductFieldErrors>({});
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -70,7 +71,13 @@ export default function EditProductPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/products/${id}`, { headers: { "x-no-loader": "1" } }).then((r) => r.json()),
+      // A 404 (deleted/binned product) still parses as JSON — throw instead of loading `{ error }`
+      // into the form as if it were a product with every field blank.
+      fetch(`/api/products/${id}`, { headers: { "x-no-loader": "1" } }).then(async (r) => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body?.error ?? "Product not found.");
+        return body;
+      }),
       fetch("/api/brands?pageSize=5000&slim=1", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => d.data ?? []).catch(() => []),
       fetch("/api/categories?pageSize=5000&slim=1", { headers: { "x-no-loader": "1" } }).then((r) => r.json()).then((d) => d.data ?? []).catch(() => []),
     ])
@@ -102,7 +109,7 @@ export default function EditProductPage() {
         if (loadFormDraft(DRAFT_KEY)) setShowDraftBanner(true);
         else setDraftReady(true);
       })
-      .catch(() => { setLoading(false); });
+      .catch((err: unknown) => { setLoadError(err instanceof Error ? err.message : "Couldn't load this product."); setLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- DRAFT_KEY is derived from id, already a dependency
   }, [id]);
 
@@ -139,6 +146,9 @@ export default function EditProductPage() {
       clearFormDraft(DRAFT_KEY);
       bustCachePrefix("/api/products");
       bustCachePrefix("/api/reports");
+      // A brand/category change moves the product between Brand/Category product counts/lists.
+      bustCachePrefix("/api/brands");
+      bustCachePrefix("/api/categories");
       bustCache("/api/units");
       toast({ type: "success", title: "Product updated", message: "Changes saved." });
       router.push(`/products/${id}`);
@@ -157,7 +167,10 @@ export default function EditProductPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const errors = validateProductForm(form);
+    // Stock is read-only here (changed only via Adjust Stock) and isn't sent — and an oversold
+    // product legitimately has negative stock — so don't let its "cannot be negative" rule block
+    // saving an unrelated field with an error the user has no way to fix on this form.
+    const errors = validateProductForm({ ...form, stock: "0" });
     if (hasProductFieldErrors(errors)) { setFieldErrors(errors); return; }
     setFieldErrors({}); setConfirmOpen(true);
   }
@@ -166,6 +179,9 @@ export default function EditProductPage() {
   const disabled = loading || saving;
 
   useFormDraft(DRAFT_KEY, form, !draftReady || saving || noChanges);
+
+  if (!loading && loadError)
+    return <div className="loading-center">{loadError}</div>;
 
   return (
     <>

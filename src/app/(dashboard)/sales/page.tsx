@@ -36,7 +36,7 @@ const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigi
 const shortFmt = (n: number) => {
   if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
   if (n >= 1000)   return `₹${(n / 1000).toFixed(1)}K`;
-  return `₹${n}`;
+  return `₹${Math.round(n)}`;
 };
 
 function BarChart({ data }: { data: MonthlyBar[] }) {
@@ -128,7 +128,7 @@ export default function SalesDashboardPage() {
   const loading = baseLoading;                 // chart/lists skeletons follow the base fetch
   const kpiLoading = scopedLoading;            // KPI skeletons follow the period-scoped fetch
   const data = base;                           // chart + lists read the current-FY payload
-  const periodLabel = scoped?.periodLabel ?? fmtPeriodLabel(period);
+  const periodLabel = fmtPeriodLabel(period); // never the previous period's label while the new one loads
 
   return (
     <div className="page-stack">

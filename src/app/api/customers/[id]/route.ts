@@ -24,8 +24,23 @@ export async function GET(
       orderBy: { createdAt: "asc" },
     });
 
+    // A soft-deleted customer is either explicitly in the Recycle Bin (has a delete_customer log)
+    // or a one-off customer (soft-deleted from creation, no such log — still editable). Only the
+    // former should hide write actions on the detail page; PUT applies the same distinction.
+    const inBin = customer.deletedAt
+      ? !!(await prisma.activityLog.findFirst({
+          where: { entityId: id, entityType: "customer", action: "delete_customer" },
+          select: { id: true },
+        }))
+      : false;
+
     return NextResponse.json({
+      inBin,
       ...customer,
+      // getCustomer() also includes binned (soft-deleted) invoices — the detail page's Invoice
+      // History and Total Billed/Outstanding must only reflect active ones (matches the statement
+      // and the DELETE guard, which both ignore binned invoices).
+      invoices: customer.invoices.filter((inv) => !inv.deletedAt),
       createdBy: log?.user.name ?? null,
       createdAt: customer.createdAt ?? log?.createdAt ?? null,
     });

@@ -77,10 +77,37 @@ const ACTION_META: Record<string, { label: string; color: string; bg: string; bo
   reassign_purchase_bill: { label: "Bill Reassigned",        color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
   reassign_rate_list:     { label: "Rate List Reassigned",   color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
   reassign_user_documents:{ label: "Documents Reassigned",   color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
+  update_brand:           { label: "Brand Updated",          color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)" },
+  update_category:        { label: "Category Updated",       color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)" },
+  delete_category:        { label: "Category Deleted",       color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
+  create_rate_list:       { label: "Rate List Created",      color: "var(--c-blue)",        bg: "var(--c-blue-bg)",   border: "var(--c-blue-border)" },
+  update_rate_list:       { label: "Rate List Updated",      color: "var(--c-blue)",        bg: "var(--c-blue-bg)",   border: "var(--c-blue-border)" },
+  delete_rate_list:       { label: "Rate List Deleted",      color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
+  delete_payment:         { label: "Payment Deleted",        color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
+  update_purchase_payment:{ label: "Purchase Payment Updated", color: "var(--c-green-text)", bg: "var(--c-green-bg)", border: "var(--c-green-border)" },
+  delete_purchase_payment:{ label: "Purchase Payment Deleted", color: "var(--c-red)",       bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
+  delete_return:          { label: "Credit Note Deleted",    color: "var(--c-red)",         bg: "var(--c-red-bg)",    border: "var(--c-red-border)" },
+  update_numbering_settings:{ label: "Numbering Updated",    color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)" },
+  update_settings:        { label: "Settings Updated",       color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)" },
+  update_logo:            { label: "Logo Updated",           color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)" },
+  remove_logo:            { label: "Logo Removed",           color: "var(--c-text-2)",      bg: "var(--c-bg-sub)",    border: "var(--c-border)" },
+  update_permission:      { label: "Permission Changed",     color: "var(--c-amber)",       bg: "var(--c-amber-bg)",  border: "var(--c-amber-border)" },
 };
 
+const NEUTRAL_META = { color: "var(--c-text-3)", bg: "var(--c-bg-sub)", border: "var(--c-border)" };
+
+// Bin actions are logged as `restore_<type>` / `permanent_delete_<type>` (dynamic), so they can't be
+// listed individually above — previously these showed as raw snake_case strings.
+function actionMeta(action: string) {
+  if (ACTION_META[action]) return ACTION_META[action];
+  const humanize = (s: string) => s.replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase());
+  if (action.startsWith("restore_")) return { label: `${humanize(action.slice(8))} Restored`, color: "var(--c-green-text)", bg: "var(--c-green-bg)", border: "var(--c-green-border)" };
+  if (action.startsWith("permanent_delete_")) return { label: `${humanize(action.slice(17))} Purged`, color: "var(--c-red)", bg: "var(--c-red-bg)", border: "var(--c-red-border)" };
+  return { label: humanize(action), ...NEUTRAL_META };
+}
+
 function ActionBadge({ action }: { action: string }) {
-  const m = ACTION_META[action] ?? { label: action, color: "var(--c-text-3)", bg: "var(--c-bg-sub)", border: "var(--c-border)" };
+  const m = actionMeta(action);
   return (
     <span className={styles.actionBadge} style={{ color: m.color, background: m.bg, borderColor: m.border }}>{m.label}</span>
   );
@@ -224,8 +251,26 @@ export default function AdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Non-2xx used to be fed straight into setUsers (an `{error}` object), crashing `users.map`.
+  // `showSkeleton` is false for background re-fetches (e.g. after a bulk reassign changed counts).
+  const loadUsers = useCallback(async (showSkeleton: boolean) => {
+    if (showSkeleton) setUsersLoading(true);
+    try {
+      const res = await fetch("/api/admin/users", { headers: { "x-no-loader": "1" } });
+      const data = await res.json().catch(() => null);
+      if (res.ok && Array.isArray(data)) setUsers(data);
+      else toast({ type: "error", title: "Couldn't load users", message: data?.error ?? "Please refresh the page." });
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Couldn't load users. Please refresh the page." });
+    } finally {
+      if (showSkeleton) setUsersLoading(false);
+    }
+    // toast is stable (context-provided).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => { if (!isAdmin) return; setUsersLoading(true); fetch("/api/admin/users", { headers: { "x-no-loader": "1" } }).then(r => r.json()).then(setUsers).finally(() => setUsersLoading(false)); }, [isAdmin]);
+  useEffect(() => { if (isAdmin) loadUsers(true); }, [isAdmin, loadUsers]);
   // logsSearch intentionally excluded — its own debounced effect below handles search changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (isAdmin) loadLogs(1, logsFilter, logsSearch.trim()); }, [isAdmin, logsFilter, loadLogs]);
@@ -278,6 +323,12 @@ export default function AdminPage() {
     }
   }
 
+  // Every user mutation writes an ActivityLog row server-side — reload the log so it shows up
+  // immediately instead of only after a manual Refresh.
+  function refreshLogs() {
+    loadLogs(1, logsFilter, logsSearch.trim());
+  }
+
   async function addUser(e: React.FormEvent) {
     e.preventDefault();
     const nameErr  = validate(addForm.name,            rules.required("Name is required."), rules.minLength(2), rules.maxLength(200));
@@ -309,6 +360,7 @@ export default function AdminPage() {
     }
     setUsers(prev => [...prev, data as User]); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddOpen(false); setAddMsg(null); setAddFieldErrors({});
     toast({ type: "success", title: "User created", message: `"${data.name}" added to the system.` });
+    refreshLogs();
   }
 
   async function saveEdit(e: React.FormEvent) {
@@ -343,6 +395,7 @@ export default function AdminPage() {
     }
     setUsers(prev => prev.map(u => u.id === data.id ? data as User : u)); setEditUser(null); setEditMsg(null); setEditFieldErrors({});
     toast({ type: "success", title: "User updated", message: `${data.name}'s details saved.` });
+    refreshLogs();
   }
 
   async function deleteUser() {
@@ -370,6 +423,7 @@ export default function AdminPage() {
       setDeleteConfirm(null);
       setUsers(prev => prev.filter(u => u.id !== target.id));
       toast({ type: "success", title: "User deleted", message: `"${target.name}" removed.` });
+      refreshLogs();
     } catch {
       setDeleteLoading(false);
       setDeleteConfirm(null);
@@ -393,16 +447,23 @@ export default function AdminPage() {
         toast({ type: "error", title: "Reassign failed", message: reassignData.error ?? "Could not reassign documents." });
         return;
       }
-      const delRes = await fetch(`/api/admin/users/${target.id}`, { method: "DELETE" });
-      const delData = await delRes.json().catch(() => ({}));
-      setReassigningAndDeleting(false);
-      if (!delRes.ok) {
-        toast({ type: "error", title: "Delete failed", message: delData.error ?? "Documents were reassigned, but the user could not be deleted." });
-        return;
-      }
+      // The reassign already committed — bust caches and refresh the logs/user counts now, so
+      // a failed DELETE below doesn't leave stale "Created by" lists, log, or invoice counts.
       if (reassignData.invoiceCount > 0) bustCachePrefix("/api/invoices");
       if (reassignData.purchaseBillCount > 0) bustCachePrefix("/api/purchase-bills");
       if (reassignData.rateListCount > 0) bustCachePrefix("/api/rate-lists");
+      const delRes = await fetch(`/api/admin/users/${target.id}`, { method: "DELETE" });
+      const delData = await delRes.json().catch(() => ({}));
+      setReassigningAndDeleting(false);
+      refreshLogs();
+      // Target user's invoice count changed — re-fetch rather than patching locally.
+      loadUsers(false);
+      if (!delRes.ok) {
+        setReassignDeleteTarget(null);
+        setDeleteBlockers(null);
+        toast({ type: "error", title: "Delete failed", message: delData.error ?? "Documents were reassigned, but the user could not be deleted." });
+        return;
+      }
       setUsers(prev => prev.filter(u => u.id !== target.id));
       setReassignDeleteTarget(null);
       setDeleteBlockers(null);
@@ -430,8 +491,12 @@ export default function AdminPage() {
         toast({ type: "error", title: "Delete failed", message: data.error ?? "Could not delete log entry." });
         return;
       }
-      setLogs(prev => prev.filter(l => l.id !== target.id));
-      setLogsTotal(t => Math.max(0, t - 1));
+      // Re-fetch the current page (not just filter locally) so the next entry slides up into the
+      // freed slot, and step back a page if this was the last row on the last page — otherwise
+      // the table showed "No activity" while Pagination still reported entries.
+      const newTotal = Math.max(0, logsTotal - 1);
+      const lastPage = Math.max(1, Math.ceil(newTotal / LOGS_LIMIT));
+      loadLogs(Math.min(logsPage, lastPage), logsFilter, logsSearch.trim());
       toast({ type: "success", title: "Log entry deleted", message: "Removed from activity log." });
     } catch {
       setLogDeleteLoading(false);
@@ -452,9 +517,10 @@ export default function AdminPage() {
         toast({ type: "error", title: "Failed", message: data.error ?? "Could not clear activity log." });
         return;
       }
-      setLogs([]);
-      setLogsTotal(0);
-      setLogsPage(1);
+      setClearLogsInput("");
+      // The server writes a "clear_activity_log" entry right after clearing — reload so it shows
+      // (and the "Delete All" button / total stay accurate) instead of a hard-coded empty list.
+      refreshLogs();
       toast({ type: "success", title: "Activity log cleared", message: `${data.deleted ?? 0} log entries removed.` });
     } catch {
       setClearLogsLoading(false);
@@ -476,7 +542,7 @@ export default function AdminPage() {
     },
     {
       role: "manager", color: "var(--c-blue)", dotBg: "#6366f1",
-      perms: ["Access granted sections (set by Admin)", "Invoices, customers, products", "No access to Admin Panel"],
+      perms: ["Access granted sections (set by Admin)", "Read-only — cannot create, edit or delete", "No access to Admin Panel"],
     },
     {
       role: "staff", color: "var(--c-text-3)", dotBg: "#94a3b8",
@@ -593,7 +659,7 @@ export default function AdminPage() {
         <div className={styles.mainCol}>
 
       {/* ── My Profile ─────────────────────────────────────────── */}
-      <MyProfileCard sectionIndex={0} onSaved={(u) => setUsers(prev => prev.map(x => x.id === u.id ? { ...x, name: u.name, email: u.email } : x))} />
+      <MyProfileCard sectionIndex={0} onSaved={(u) => { setUsers(prev => prev.map(x => x.id === u.id ? { ...x, name: u.name, email: u.email } : x)); refreshLogs(); }} />
 
       {/* ── User Management ────────────────────────────────────── */}
       <div id="users" {...animateSection(1, "card")}>
@@ -904,7 +970,7 @@ export default function AdminPage() {
               <div className={styles.roleCardHead}>
                 {(() => { const c = AVATAR_COLORS[r.role as keyof typeof AVATAR_COLORS]; return (
                   <div className={styles.roleAvatar} style={{ background: c.bg, color: c.text, borderColor: `${c.bg}99` }}>
-                    {r.role === "admin" ? "A" : "S"}
+                    {r.role === "admin" ? "A" : r.role === "manager" ? "M" : "S"}
                     <span className={styles.roleAvatarBadge} style={{ background: c.badge }}>{c.badgeIcon}</span>
                   </div>
                 ); })()}

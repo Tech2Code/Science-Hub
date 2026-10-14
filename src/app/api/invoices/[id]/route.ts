@@ -9,6 +9,7 @@ import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { assertInvoiceQuantitiesNotBelowReturned, InvoiceQuantityValidationError } from "@/lib/invoiceReturns";
 import { isFutureIstDate, istDayStartUtc, toIstDateStr, MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
+import { formatDate } from "@/lib/formatDate";
 
 class InvoiceConflictError extends Error {}
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
@@ -205,6 +206,11 @@ export async function PUT(
       }
     }
 
+    const newInvoiceDay = parsedInvoiceDate ? toIstDateStr(parsedInvoiceDate) : undefined;
+
+    // Note: unlike PUT /api/purchase-bills/[id], an omitted `dueDate` here clears the stored due date
+    // (`dueDate: parsedDueDate ?? null` below — the edit form sends `dueDate || undefined` to clear it),
+    // so there is no surviving stored due date to re-validate against a changed invoice date.
     let parsedDueDate: Date | undefined;
     if (dueDate) {
       parsedDueDate = istDayStartUtc(dueDate);
@@ -370,6 +376,24 @@ export async function PUT(
       const paidAmount = fresh.paidAmount;
       if (total < paidAmount - 0.01) {
         throw new InvoiceEditValidationError(`Total can't be less than the amount already received (₹${paidAmount.toFixed(2)}). Edit or delete payments first.`);
+      }
+      // A payment or credit note can't predate the invoice it belongs to (their own create routes
+      // enforce the same floor). Read inside this transaction so a concurrent payment/return is seen.
+      // Only checked when the IST calendar day actually changes — the edit form resends the
+      // currently-loaded date on every save, and legacy rows shouldn't block unrelated edits.
+      if (newInvoiceDay !== undefined && newInvoiceDay !== toIstDateStr(new Date(existing.date))) {
+        const [payments, returns] = await Promise.all([
+          tx.payment.findMany({ where: { invoiceId: id }, select: { date: true } }),
+          tx.return.findMany({ where: { invoiceId: id, deletedAt: null }, select: { date: true } }),
+        ]);
+        const earliestPaymentDay = payments.map((p) => toIstDateStr(p.date)).sort()[0];
+        if (earliestPaymentDay && newInvoiceDay > earliestPaymentDay) {
+          throw new InvoiceEditValidationError(`Invoice date can't be after a recorded payment date (${formatDate(istDayStartUtc(earliestPaymentDay))}). Edit that payment first.`);
+        }
+        const earliestReturnDay = returns.map((r) => toIstDateStr(r.date)).sort()[0];
+        if (earliestReturnDay && newInvoiceDay > earliestReturnDay) {
+          throw new InvoiceEditValidationError(`Invoice date can't be after a credit note's date (${formatDate(istDayStartUtc(earliestReturnDay))}). Edit or delete that credit note first.`);
+        }
       }
       // Recalculate status based on paidAmount — the +0.01 tolerance matches every other
       // status-derivation site in the app (invoice/purchase-bill payment POST/PUT/DELETE, and the

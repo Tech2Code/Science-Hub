@@ -41,6 +41,7 @@ interface PurchaseBill {
   subtotal: number; taxAmount: number; discount: number; total: number; paidAmount: number;
   transportCharge?: number; transportChargeGstRate?: number;
   attachmentUrl: string | null; attachmentName: string | null; attachmentSize: number | null;
+  deletedAt?: string | null;
   vendor: { id: string; name: string; company: string | null; gstin: string | null; city?: string | null; state?: string | null; pincode?: string | null; isActive?: boolean };
   items: BillItem[];
 }
@@ -120,9 +121,11 @@ export default function EditPurchaseBillPage() {
   const [savedAttachmentUrl, setSavedAttachmentUrl] = useState<string | null>(null);
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
 
+  // transportChargeEnabled must be tracked too — switching the toggle off leaves the amount/rate
+  // strings untouched, so without it removing a transport charge never counted as a change.
   const { isDirty, markClean } = useDirty({
     vendorId, billDate, dueDate, category, notes, discount, items, attachmentUrl, attachmentName,
-    transportCharge, transportChargeGstRate,
+    transportChargeEnabled, transportCharge, transportChargeGstRate,
   });
 
   const DRAFT_KEY = `bill:edit:${id}`;
@@ -132,7 +135,7 @@ export default function EditPurchaseBillPage() {
 
   type BillEditDraft = {
     vendorId: string; billDate: string; dueDate: string; category: string; notes: string; discount: string;
-    items: PurchaseBillLineItem[]; attachmentUrl: string | null; attachmentName: string | null;
+    items: PurchaseBillLineItem[]; attachmentUrl: string | null; attachmentName: string | null; attachmentSize?: number | null;
     transportChargeEnabled: boolean; transportCharge: string; transportChargeGstRate: string;
   };
 
@@ -149,6 +152,8 @@ export default function EditPurchaseBillPage() {
       setItems(v.items ?? []);
       setAttachmentUrl(v.attachmentUrl ?? null);
       setAttachmentName(v.attachmentName ?? null);
+      // Size must follow the restored attachment, or the bill's own original size gets saved against a different file.
+      setAttachmentSize(v.attachmentUrl && v.attachmentUrl === originalAttachmentUrl.current ? (bill?.attachmentSize ?? null) : (v.attachmentSize ?? null));
       setTransportChargeEnabled(v.transportChargeEnabled);
       setTransportCharge(v.transportCharge ?? "");
       setTransportChargeGstRate(v.transportChargeGstRate ?? "18");
@@ -175,7 +180,7 @@ export default function EditPurchaseBillPage() {
   }
 
   useFormDraft(DRAFT_KEY, {
-    vendorId, billDate, dueDate, category, notes, discount, items, attachmentUrl, attachmentName,
+    vendorId, billDate, dueDate, category, notes, discount, items, attachmentUrl, attachmentName, attachmentSize,
     transportChargeEnabled, transportCharge, transportChargeGstRate,
   }, !draftReady || saving || !isDirty);
 
@@ -219,6 +224,7 @@ export default function EditPurchaseBillPage() {
         items: lineItems,
         attachmentUrl: b.attachmentUrl ?? null,
         attachmentName: b.attachmentName ?? null,
+        transportChargeEnabled: b.transportCharge != null && b.transportCharge > 0,
         transportCharge: transportChargeVal,
         transportChargeGstRate: transportChargeGstRateVal,
       });
@@ -300,6 +306,9 @@ export default function EditPurchaseBillPage() {
   // forever unless discarded here — a plain href link (no onClick) previously skipped this entirely.
   function handleCancel() {
     discardIfUnsaved(attachmentUrl);
+    // Cancel is an explicit abandon (same as Invoice's Cancel) — a leftover draft would otherwise
+    // still reference the replacement attachment just deleted above, and resuming it would save a dead link.
+    clearFormDraft(DRAFT_KEY);
     router.push(`/purchases/bills/${id}`);
   }
 
@@ -406,6 +415,7 @@ export default function EditPurchaseBillPage() {
         bustCachePrefix("/api/purchase-reports");
         // The vendor may have changed — both the old and new vendor's bill counts are now stale.
         bustCachePrefix("/api/vendors");
+        bustCachePrefix("/api/notifications"); // overdue-bills bell count
         bustCache("/api/units");
         invalidateCachedPdf("purchase-bill", id);
         toast({ type: "success", title: "Bill updated", message: "Changes saved successfully." });
@@ -459,7 +469,7 @@ export default function EditPurchaseBillPage() {
   if (loadErr)  return <div className={`error-banner ${styles.loadErr}`}>{loadErr}</div>;
 
   // Guard here too — reachable directly by URL even though the detail page's Edit button is disabled for these.
-  if (bill && (bill.status === "paid" || bill.status === "cancelled")) {
+  if (bill && (bill.status === "paid" || bill.status === "cancelled" || bill.deletedAt)) {
     return (
       <div className="page-stack">
         <Breadcrumb items={[
@@ -468,7 +478,7 @@ export default function EditPurchaseBillPage() {
           { label: "Edit" },
         ]} />
         <div className={`error-banner ${styles.loadErr}`}>
-          This bill is {bill.status} and cannot be edited.
+          {bill.deletedAt ? "This bill is in the Recycle Bin — restore it before editing." : `This bill is ${bill.status} and cannot be edited.`}
         </div>
         <div className="form-actions">
           <Button variant="secondary" href={`/purchases/bills/${id}`}>← Back to Bill</Button>

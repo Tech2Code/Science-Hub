@@ -22,6 +22,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
     }
     const amount = parseFloat(amountStr);
+    if (method !== undefined && method !== null && (typeof method !== "string" || method.length > 100)) {
+      return NextResponse.json({ error: "Payment method is too long (max 100 characters)." }, { status: 400 });
+    }
     if (typeof reference === "string" && reference.length > 500) {
       return NextResponse.json({ error: "Reference is too long (max 500 characters)." }, { status: 400 });
     }

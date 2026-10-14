@@ -98,6 +98,9 @@ export default function SalesReportsPage() {
         return;
       }
       const exportData: OutstandingResponse = await res.json();
+      if (exportData.total > exportData.data.length) {
+        toast({ type: "warning", title: "Export truncated", message: `Exported the first ${exportData.data.length} of ${exportData.total} invoices.` });
+      }
       await downloadXlsx(
         "outstanding-invoices.xlsx",
         "Outstanding Invoices",
@@ -165,7 +168,7 @@ export default function SalesReportsPage() {
         <div className="stat-banner stat-banner-purple">
           <div className="stat-banner-label">Total GST Collected</div>
           <div className="stat-banner-value"><SkeletonSwap loading={loadingGst} w={90} h={20}>{fmt(totalGst)}</SkeletonSwap></div>
-          <div className="stat-banner-sub">CGST + SGST + IGST across all invoices</div>
+          <div className="stat-banner-sub">{dateQuery ? "CGST + SGST + IGST in selected date range" : "CGST + SGST + IGST across all invoices"}</div>
         </div>
       </div>
 
@@ -214,7 +217,9 @@ export default function SalesReportsPage() {
                   {showOutSkeleton ? <TableSkeleton columns={OUT_COLUMNS} /> : outstanding.length === 0 ? (
                     <tr><td colSpan={OUT_COLUMNS.length} className="table-empty-cell">No outstanding invoices. All settled.</td></tr>
                   ) : outstanding.map((inv) => {
-                    const isOverdue = inv.dueDate && new Date(inv.dueDate) < new Date() && inv.status !== "paid";
+                    // IST calendar-day compare — same "due before today (IST)" rule as the server's
+                    // overdue filters (istTodayStartUtc), so an invoice due today isn't flagged here.
+                    const isOverdue = !!inv.dueDate && toIstDateStr(new Date(inv.dueDate)) < todayStr && inv.status !== "paid";
                     return (
                       <tr key={inv.id} className={isOverdue ? styles.overdueRow : undefined}>
                         <Cell col={OUT_COLUMNS[0]}>

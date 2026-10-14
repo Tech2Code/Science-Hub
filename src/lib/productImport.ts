@@ -94,7 +94,13 @@ export function parseProductRows(rows: string[][]): { items: ParsedProductRow[];
     dataRows = rows.slice(1);
   } else {
     const width = rows[0].length;
-    if (width >= 10) cols = { name: 0, sku: 1, hsn: 2, unit: 3, listPrice: 4, discountPercent: 5, price: 6, gstRate: 7, stock: 8, minStock: 9 };
+    // 10-12 columns = the modal's own documented paste order, where Brand/Category are columns 11/12
+    // — without mapping them a header-less paste silently dropped both.
+    if (width >= 10) cols = {
+      name: 0, sku: 1, hsn: 2, unit: 3, listPrice: 4, discountPercent: 5, price: 6, gstRate: 7, stock: 8, minStock: 9,
+      ...(width >= 11 ? { brand: 10 } : {}),
+      ...(width >= 12 ? { category: 11 } : {}),
+    };
     else if (width >= 7) cols = { name: 0, unit: 1, listPrice: 2, discountPercent: 3, price: 4, gstRate: 5, stock: 6 };
     else if (width >= 5) cols = { name: 0, unit: 1, listPrice: 2, price: 3, stock: 4 };
     else if (width >= 2) cols = { name: 0, listPrice: 1 };

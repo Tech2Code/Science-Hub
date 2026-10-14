@@ -91,6 +91,8 @@ export default function VendorsPage() {
       const res = await fetch(`/api/vendors/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
+        // Deleting the last row of the last page would otherwise leave an empty page.
+        if (data && data.data.length === 1 && page > 1) setPage(page - 1);
         await mutate();
         toast({ type: "success", title: "Moved to bin", message: `"${target.name}" moved to bin. You can restore it within 30 days.` });
       } else {
@@ -115,7 +117,7 @@ export default function VendorsPage() {
       variant="danger"
       loading={deleting}
       onConfirm={handleDelete}
-      onCancel={() => setDeleteTarget(null)}
+      onCancel={() => { if (!deleting) setDeleteTarget(null); }}
     />
 
     <div className="page-stack">

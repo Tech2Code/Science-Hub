@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useFetch, patchCacheIfPresent, bustCache } from "@/lib/useCache";
+import { usePathname } from "next/navigation";
+import { useFetch, patchCacheIfPresent, bustCache, isCached } from "@/lib/useCache";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useMenuA11y } from "@/lib/useMenuA11y";
@@ -78,7 +79,20 @@ export function NotificationBell() {
   // hooks target the exact same URL, so they share one underlying cache entry — a mutate/patch
   // through either instance updates both (the badge keeps working even while the dropdown is closed).
   const { data: summary, loading, mutate, patchData } = useFetch<NotificationSummary>(open ? "/api/notifications" : null);
-  const { data: badgeSummary } = useFetch<NotificationSummary>("/api/notifications");
+  const { data: badgeSummary, mutate: refreshBadge } = useFetch<NotificationSummary>("/api/notifications");
+  // The shell (and this bell) stays mounted across navigation, and useFetch trusts its cache until
+  // busted, so without this the badge count only updated on a full reload or on opening the
+  // dropdown. Refresh on navigation instead — immediately if a mutation busted the cache (e.g. an
+  // invoice payment), otherwise throttled so page-hopping doesn't spam the route.
+  const pathname = usePathname();
+  const lastBadgeRefreshRef = useRef(0);
+  useEffect(() => {
+    if (lastBadgeRefreshRef.current === 0) { lastBadgeRefreshRef.current = Date.now(); return; }
+    const busted = !isCached("/api/notifications");
+    if (!busted && Date.now() - lastBadgeRefreshRef.current < 30_000) return;
+    lastBadgeRefreshRef.current = Date.now();
+    refreshBadge();
+  }, [pathname, refreshBadge]);
   // Only fetched once the "Dismissed" panel is actually opened — the same lazy-loading rationale
   // as the main summary above.
   const { data: dismissedSummary, loading: dismissedLoading, patchData: patchDismissed } =
@@ -157,7 +171,14 @@ export function NotificationBell() {
       fetch(url, {
         method,
         ...(method === "POST" ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category, entityId }) } : {}),
-      }).catch(() => {})
+      }).then((res) => { if (!res.ok) throw new Error(); }).catch(() => {
+        // The optimistic patch didn't actually persist — say so and resync from the server,
+        // rather than letting the item silently reappear (or stay hidden) on the next open.
+        toast({ type: "error", title: "Couldn't update notification", message: "Please try again." });
+        bustCache(DISMISSED_URL);
+        bustCache(categoryUrl(category));
+        mutate();
+      })
     );
     pendingRef.current.set(entityId, next);
     // Release the entry once this chain settles — the Map only exists to serialize a dismiss/undo
@@ -183,7 +204,7 @@ export function NotificationBell() {
     toast({
       type: "info",
       title: "Notification dismissed",
-      message: `"${item.label}" won't show again today — it'll reappear tomorrow if still unresolved.`,
+      message: `"${item.label}" won't show again for 24 hours — it'll reappear after that if still unresolved.`,
       actionLabel: "Undo",
       onAction: () => withBusyGuard(`undo:${category}:${item.id}`, () => handleUndo(category, item)),
     });
@@ -225,11 +246,21 @@ export function NotificationBell() {
   async function handleClearAll() {
     setClearing(true);
     try {
-      await fetch("/api/notifications/clear-all", { method: "POST" });
+      // Previously no feedback at all — a failed clear silently closed the dialog as if it worked.
+      const res = await fetch("/api/notifications/clear-all", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) toast({ type: "success", title: "Notifications cleared", message: "Anything still unresolved will reappear in 24 hours." });
+      else toast({ type: "error", title: "Couldn't clear notifications", message: data.error ?? "Please try again." });
+    } catch {
+      toast({ type: "error", title: "Network error", message: "Couldn't clear notifications. Please try again." });
     } finally {
       setClearing(false);
       setConfirmClearOpen(false);
       mutate();
+      // Any expanded "Show all" lists were fetched before the clear — collapse them so they
+      // don't keep showing the just-cleared items.
+      setExpanded(new Set());
+      (Object.keys(CATEGORY_TITLES) as NotificationCategoryKey[]).forEach((k) => bustCache(categoryUrl(k)));
       // Every currently-active item just got dismissed server-side — rather than hand-build the
       // resulting dismissed list optimistically, just drop the cached one so the next time the
       // "Dismissed" panel is opened it does a real fetch instead of showing a stale/partial list.
@@ -304,7 +335,7 @@ export function NotificationBell() {
       <ConfirmDialog
         open={confirmClearOpen}
         title="Clear all notifications?"
-        message="This clears every alert currently shown here for you. Anything still unresolved (e.g. an invoice still overdue) will reappear tomorrow."
+        message="This clears every alert currently shown here for you. Anything still unresolved (e.g. an invoice still overdue) will reappear in 24 hours."
         confirmLabel="Clear All"
         variant="danger"
         loading={clearing}

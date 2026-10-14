@@ -9,7 +9,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { SearchField } from "@/components/ui/SearchField";
-import { useFetch, bustCachePrefix } from "@/lib/useCache";
+import { useFetch, bustCache, bustCachePrefix } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -121,8 +121,8 @@ export default function ProductsPage() {
 
   function handleDelete(id: string, name: string) {
     setConfirmState({
-      title: "Delete Product",
-      message: `Delete "${name}"? This will permanently remove it from your catalog.`,
+      title: "Move to Bin",
+      message: `Move "${name}" to bin? You can restore it within 30 days.`,
       onConfirm: async () => {
         setDeleting(true);
         let res: Response;
@@ -138,11 +138,22 @@ export default function ProductsPage() {
         setDeleting(false);
         setConfirmState(null);
         if (res.ok) {
-          await Promise.all([mutate(), mutateStats()]);
+          // Deleting the only row on a later page would otherwise leave an empty page ("No products
+          // yet…") with Pagination reading e.g. "3 / 2" — step back a page instead of refetching this one.
+          if (products.length === 1 && page > 1 && !showAll) {
+            bustCachePrefix("/api/products");
+            setPage((p) => p - 1);
+            await mutateStats();
+          } else {
+            await Promise.all([mutate(), mutateStats()]);
+          }
           // Reports' stock/value aggregates read live Product rows — a deleted product's stock
           // no longer counts toward them (server already busts this tag, see /api/products/[id]).
           bustCachePrefix("/api/reports");
-          toast({ type: "success", title: "Product deleted", message: `"${name}" removed from catalog.` });
+          // Brand/Category list rows show a product count and their detail pages list products.
+          bustCachePrefix("/api/brands");
+          bustCachePrefix("/api/categories");
+          toast({ type: "success", title: "Moved to bin", message: `"${name}" moved to bin. You can restore it within 30 days.` });
         } else {
           toast({ type: "error", title: "Delete failed", message: resBody.error ?? "Could not delete product." });
         }
@@ -167,17 +178,22 @@ export default function ProductsPage() {
           // rows and would otherwise show stale figures for up to the 2-min cache TTL right after
           // importing dozens of products at once.
           bustCachePrefix("/api/reports");
+          // Imported rows can be assigned a brand/category (their product counts change) and can
+          // introduce new unit strings (unit suggestions everywhere else).
+          bustCachePrefix("/api/brands");
+          bustCachePrefix("/api/categories");
+          bustCache("/api/units");
         }}
       />
       <ConfirmDialog
         open={!!confirmState}
         title={confirmState?.title ?? ""}
         message={confirmState?.message ?? ""}
-        confirmLabel="Delete"
+        confirmLabel="Move to Bin"
         variant="danger"
         loading={deleting}
         onConfirm={confirmState?.onConfirm ?? (() => {})}
-        onCancel={() => setConfirmState(null)}
+        onCancel={() => { if (!deleting) setConfirmState(null); }}
       />
 
       <div className="page-header">

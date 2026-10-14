@@ -49,15 +49,16 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "customer_za", label: "Customer (Z–A)" },
 ];
 
+// Keys are lowercase; look up via (method ?? "").trim().toLowerCase() — stored methods vary in case (API default is "cash").
 const METHOD_CLASS: Record<string, string> = {
-  Cash: "methodCash",
-  UPI: "methodUpi",
-  IMPS: "methodNeft",
-  NEFT: "methodNeft",
-  RTGS: "methodRtgs",
-  Cheque: "methodCheque",
-  Card: "methodCard",
-  Other: "methodOther",
+  cash: "methodCash",
+  upi: "methodUpi",
+  imps: "methodNeft",
+  neft: "methodNeft",
+  rtgs: "methodRtgs",
+  cheque: "methodCheque",
+  card: "methodCard",
+  other: "methodOther",
 };
 
 const COLUMNS: Column[] = [
@@ -97,7 +98,10 @@ export default function PaymentsPage() {
   const apiUrl = `/api/payments?${listParams.toString()}`;
 
   const { data, loading, error, mutate } = useFetch<PaymentListResponse>(apiUrl);
-  const { data: stats } = useFetch<PaymentStats>("/api/payments/stats");
+  // Same search filter as the list, so "N payments · Total collected ₹X" describe the same rows.
+  const statsParams = new URLSearchParams();
+  if (debouncedSearch.trim()) statsParams.set("search", debouncedSearch.trim());
+  const { data: stats } = useFetch<PaymentStats>(`/api/payments/stats?${statsParams.toString()}`);
   const payments = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalCollected = stats?.totalCollected ?? 0;
@@ -153,7 +157,7 @@ export default function PaymentsPage() {
                   {search ? "No payments match your search." : "No payments recorded yet."}
                 </td></tr>
               ) : payments.map((p) => {
-                const methodClass = styles[METHOD_CLASS[p.method] ?? METHOD_CLASS.Other];
+                const methodClass = styles[METHOD_CLASS[(p.method ?? "").trim().toLowerCase()] ?? METHOD_CLASS.other];
                 return (
                   <tr key={p.id}>
                     <Cell col={COLUMNS[0]} className={styles.dateCell}>

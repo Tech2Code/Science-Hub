@@ -59,9 +59,13 @@ export function buildGstr1CsvFiles(report: GstFilingReport): Gstr1CsvResult {
   const issues: ValidationIssue[] = [];
   const invoiceTotalByNumber = new Map(report.salesRegister.map((r) => [r.invoiceNumber, r]));
 
+  // Called once per rate-row / credit-note line, so a mixed-rate invoice or multi-line credit note
+  // with a bad place of supply would otherwise log the identical error several times.
+  const reportedPos = new Set<string>();
   function resolvePos(stateName: string, reference: string): string | null {
     const label = getGstPosLabel(stateName);
-    if (!label) {
+    if (!label && !reportedPos.has(`${reference}|${stateName}`)) {
+      reportedPos.add(`${reference}|${stateName}`);
       issues.push(issue(
         "error", "GST Filing Export",
         `Place of supply "${stateName}" on ${reference} doesn't match a recognized GST state/UT — this row was skipped from the export.`,
@@ -101,18 +105,69 @@ export function buildGstr1CsvFiles(report: GstFilingReport): Gstr1CsvResult {
     if (existing) existing.taxableValue += r.taxableValue;
     else b2csMap.set(key, { pos, rate: r.gstRate, taxableValue: r.taxableValue });
   }
+  // Credit notes against an unregistered (no-GSTIN) customer can't go in cdnr.csv — that section
+  // is for registered recipients only, and the Offline Tool rejects a blank-GSTIN row. Since this
+  // app reports every B2C sale as B2CS (it doesn't track B2C Large / cdnur separately), GSTR-1
+  // practice is to net such a credit note against the B2CS row for the same place of supply +
+  // rate. A credit note with no matching B2CS row this period (e.g. its invoice was in an earlier
+  // period) yields a negative-value row. Same fileability rules as cdnr below (assigned number +
+  // resolvable place of supply, i.e. isCreditNoteFileable()), so the on-screen Net GST Payable —
+  // which already nets every fileable credit note — matches b2cs + cdnr taken together.
+  const nettedB2cCreditNotes = new Set<string>();
+  const creditNotesByB2csKey = new Map<string, Set<string>>();
+  for (const cn of report.creditNotes) {
+    if (cn.customerGstin) continue; // registered recipient — goes to cdnr.csv below
+    if (cn.creditNoteNumber === "—") continue; // no number assigned yet — nothing valid to export
+    const pos = resolvePos(cn.placeOfSupply, `credit note ${cn.creditNoteNumber}`);
+    if (!pos) continue;
+    const key = `${pos}|${cn.gstRate}`;
+    const existing = b2csMap.get(key);
+    if (existing) existing.taxableValue -= cn.taxableValue;
+    else b2csMap.set(key, { pos, rate: cn.gstRate, taxableValue: -cn.taxableValue });
+    nettedB2cCreditNotes.add(cn.creditNoteNumber);
+    if (!creditNotesByB2csKey.has(key)) creditNotesByB2csKey.set(key, new Set());
+    creditNotesByB2csKey.get(key)!.add(cn.creditNoteNumber);
+  }
+  if (nettedB2cCreditNotes.size > 0) {
+    const n = nettedB2cCreditNotes.size;
+    issues.push(issue(
+      "warning", "GST Filing Export",
+      `${n} credit note${n === 1 ? "" : "s"} issued to unregistered (no-GSTIN) customers ${n === 1 ? "was" : "were"} netted against the matching place-of-supply + rate rows in b2cs.csv instead of being listed in cdnr.csv (which is for registered recipients only): ${Array.from(nettedB2cCreditNotes).join(", ")}.`,
+    ));
+  }
+  // Whether the GST portal accepts a net-negative Table 7 (B2CS) value isn't settled, so never emit
+  // one: when this period's B2C credit notes exceed B2C sales at a place of supply + rate, the row
+  // is left out and the unabsorbed amount is raised as an error for the user/CA to carry into the
+  // next period's B2CS. Carrying it forward automatically was rejected on purpose — it would make
+  // one month's export depend on earlier months, silently changing figures that may already be filed.
+  const b2csRows: { pos: string; rate: number; taxableValue: number }[] = [];
+  for (const [key, row] of b2csMap) {
+    const net = round2(row.taxableValue);
+    if (net < 0) {
+      const notes = Array.from(creditNotesByB2csKey.get(key) ?? []).join(", ");
+      issues.push(issue(
+        "error", "GST Filing Export",
+        `B2C credit notes at ${row.pos}, ${row.rate}% exceed this period's B2C sales there by ₹${Math.abs(net).toFixed(2)} (taxable value). That excess is NOT included in b2cs.csv, since a negative B2CS value may be rejected — reduce it from the next period's B2CS at the same place of supply + rate, or check with your CA. Credit note(s): ${notes}.`,
+      ));
+      continue;
+    }
+    if (net === 0) continue; // fully offset — nothing to report for this place of supply + rate
+    b2csRows.push(row);
+  }
   const b2csCsv = toCsv(
     ["Type", "Place Of Supply", "Rate", "Applicable % of Tax Rate", "Taxable Value", "Cess Amount", "E-Commerce GSTIN"],
-    Array.from(b2csMap.values()).map((row) => ["OE", row.pos, row.rate, "", round2(row.taxableValue), "", ""]),
+    b2csRows.map((row) => ["OE", row.pos, row.rate, "", round2(row.taxableValue), "", ""]),
   );
 
   // ── cdnr.csv ────────────────────────────────────────────────────────────
+  // Registered (GSTIN-bearing) recipients only — unregistered ones were netted into b2cs above.
+  const registeredCreditNotes = report.creditNotes.filter((cn) => cn.customerGstin);
   const creditNoteTotals = new Map<string, number>();
-  for (const cn of report.creditNotes) {
+  for (const cn of registeredCreditNotes) {
     creditNoteTotals.set(cn.creditNoteNumber, (creditNoteTotals.get(cn.creditNoteNumber) ?? 0) + cn.total);
   }
   const cdnrMap = new Map<string, { row: CreditNoteRow; rate: number; taxableValue: number; pos: string }>();
-  for (const cn of report.creditNotes) {
+  for (const cn of registeredCreditNotes) {
     if (cn.creditNoteNumber === "—") continue; // no number assigned yet — nothing valid to export
     // Place of supply comes from the credit note's own original invoice (carried on the row by
     // buildGstFilingReport), NOT from this period's Sales Register — the invoice may be dated in an

@@ -180,7 +180,7 @@ export default function NewPurchaseBillPage() {
       setAttachmentUrl(v.attachmentUrl ?? null);
       setAttachmentName(v.attachmentName ?? null);
       setAttachmentSize(v.attachmentSize ?? null);
-      setTransportChargeEnabled(v.transportChargeEnabled ?? true);
+      setTransportChargeEnabled(v.transportChargeEnabled ?? false); // matches this page's own default (off)
       setTransportCharge(v.transportCharge ?? "");
       setTransportChargeGstRate(v.transportChargeGstRate ?? "18");
       setAddPayment(v.addPayment ?? false);
@@ -285,6 +285,9 @@ export default function NewPurchaseBillPage() {
   // discarded here — a plain href link (no onClick) previously skipped this entirely.
   function handleCancel() {
     if (attachmentUrl) discardUnsavedAttachment(attachmentUrl);
+    // Cancel is an explicit abandon (same as Invoice's Cancel) — a leftover draft would otherwise
+    // still reference the attachment just deleted above, and resuming it would save a dead link.
+    clearFormDraft(DRAFT_KEY);
     router.push("/purchases/bills");
   }
 
@@ -308,6 +311,9 @@ export default function NewPurchaseBillPage() {
     setDueDateError(undefined);
     if (addPayment && toNum(payAmount) > 0 && payDate < billDate) { setPaymentDateError("Payment date cannot be before the bill date."); return; }
     if (addPayment && toNum(payAmount) > 0 && isFutureIstDate(payDate)) { setPaymentDateError("Payment date cannot be in the future."); return; }
+    // The payment was validated against the total at the time it was added — items/discount edited
+    // since can drop the total below it (the server would reject the whole bill).
+    if (addPayment && toNum(payAmount) > grandTotal + 0.01) { setPaymentDateError(`Payment (₹${fmtCurrency(toNum(payAmount))}) exceeds the bill total (₹${fmtCurrency(grandTotal)}) — edit or remove it.`); return; }
     setPaymentDateError(undefined);
     if (missingTransportAmount) {
       setTransportChargeError("Enter the transport charge amount.");
@@ -379,6 +385,7 @@ export default function NewPurchaseBillPage() {
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");
         bustCachePrefix("/api/vendors");
+        bustCachePrefix("/api/notifications"); // overdue-bills bell count
         bustCache("/api/units");
         toast({ type: "success", title: "Bill created", message: `${data.billNumber} saved.` });
         router.push(`/purchases/bills/${data.id}`);
@@ -490,7 +497,9 @@ export default function NewPurchaseBillPage() {
             <>
               {/* Optional Payment — only meaningful once the bill actually has a
                   total; recording a payment against a ₹0 bill has nothing to pay. */}
-              {grandTotal > 0 && (
+              {/* Also kept visible while a payment is already attached, so it can still be edited/removed
+                  if the total later drops to ₹0. */}
+              {(grandTotal > 0 || addPayment) && (
                 <div className={styles.paymentSection}>
                   {addPayment ? (
                     <div className={styles.paymentSummary}>
@@ -505,7 +514,7 @@ export default function NewPurchaseBillPage() {
                     </div>
                   ) : null}
                   {paymentDateError && <p className={styles.paymentDateErrorMsg} role="alert">{paymentDateError}</p>}
-                  {!addPayment && (
+                  {!addPayment && grandTotal > 0 && (
                     <button type="button" className={styles.recordPaymentLink} onClick={() => { setPayMethod("IMPS"); setShowPaymentDialog(true); }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                       Record payment now

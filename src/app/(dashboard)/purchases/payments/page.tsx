@@ -49,15 +49,16 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "vendor_za",   label: "Vendor (Z–A)" },
 ];
 
+// Keys are lowercase; look up via (method ?? "").trim().toLowerCase() — stored methods vary in case (API default is "cash").
 const METHOD_CLASS: Record<string, string> = {
-  Cash: "methodCash",
-  UPI: "methodUpi",
-  IMPS: "methodNeft",
-  NEFT: "methodNeft",
-  RTGS: "methodRtgs",
-  Cheque: "methodCheque",
-  Card: "methodCard",
-  Other: "methodOther",
+  cash: "methodCash",
+  upi: "methodUpi",
+  imps: "methodNeft",
+  neft: "methodNeft",
+  rtgs: "methodRtgs",
+  cheque: "methodCheque",
+  card: "methodCard",
+  other: "methodOther",
 };
 
 const COLUMNS: Column[] = [
@@ -97,7 +98,11 @@ export default function PurchasePaymentsPage() {
   const apiUrl = `/api/purchase-bills/payments?${listParams.toString()}`;
 
   const { data, loading, error, mutate } = useFetch<PurchasePaymentListResponse>(apiUrl);
-  const { data: stats } = useFetch<PurchasePaymentStats>("/api/purchase-bills/payments/stats");
+  // Same search filter as the list, so the header's count and "Total paid" describe the same rows.
+  const statsParams = new URLSearchParams();
+  if (debouncedSearch.trim()) statsParams.set("search", debouncedSearch.trim());
+  const statsQuery = statsParams.toString();
+  const { data: stats } = useFetch<PurchasePaymentStats>(`/api/purchase-bills/payments/stats${statsQuery ? `?${statsQuery}` : ""}`);
   const payments = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPaid = stats?.totalPaid ?? 0;
@@ -153,7 +158,7 @@ export default function PurchasePaymentsPage() {
                   {search ? "No payments match your search." : "No purchase payments recorded yet."}
                 </td></tr>
               ) : payments.map((p) => {
-                const methodClass = styles[METHOD_CLASS[p.method] ?? METHOD_CLASS.Other];
+                const methodClass = styles[METHOD_CLASS[(p.method ?? "").trim().toLowerCase()] ?? METHOD_CLASS.other];
                 return (
                   <tr key={p.id}>
                     <Cell col={COLUMNS[0]} className={styles.dateCell}>

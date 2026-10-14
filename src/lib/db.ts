@@ -128,7 +128,7 @@ export async function getInvoiceStats(filters: Omit<InvoiceListFilters, "search"
   const [agg, overdueCount, years] = await Promise.all([
     prisma.invoice.aggregate({ where, _sum: { total: true, paidAmount: true } }),
     prisma.invoice.count({ where: { AND: [where, { status: { not: "paid" }, dueDate: { lt: istTodayStartUtc() } }] } }),
-    prisma.$queryRaw<{ year: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM "date")::int AS year FROM "Invoice" WHERE "deletedAt" IS NULL ORDER BY year DESC`,
+    prisma.$queryRaw<{ year: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM ("date" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata'))::int AS year FROM "Invoice" WHERE "deletedAt" IS NULL ORDER BY year DESC`,
   ]);
   const totalInvoiced = agg._sum.total ?? 0;
   const totalPaid = agg._sum.paidAmount ?? 0;
@@ -190,7 +190,8 @@ export async function getCustomers(search: string | undefined, sort: CustomerSor
       orderBy: buildCustomerOrderBy(sort),
       skip,
       take,
-      include: { _count: { select: { invoices: true } } },
+      // Binned invoices still reference the customer but shouldn't inflate its visible count.
+      include: { _count: { select: { invoices: { where: { deletedAt: null } } } } },
     }),
     prisma.customer.count({ where }),
   ]);
@@ -202,6 +203,7 @@ export async function getCustomer(id: string) {
     where: { id },
     include: {
       invoices: {
+        where: { deletedAt: null },
         include: { items: true, payments: true },
         // See the matching comment on buildInvoiceOrderBy() above — createdAt order always matches
         // invoiceNumber sequence order, immune to a later backdate of the invoice's own `date`.
@@ -375,7 +377,8 @@ export async function getReportOutstanding(startDate: string | undefined, endDat
   const [invoices, total, agg] = await Promise.all([
     prisma.invoice.findMany({
       where,
-      orderBy: { date: "asc" as const },
+      // id tiebreak so tied dates paginate deterministically (no duplicated/skipped rows across pages).
+      orderBy: [{ date: "asc" as const }, { id: "asc" as const }],
       skip,
       take,
       include: { customer: { select: { id: true, name: true } } },
