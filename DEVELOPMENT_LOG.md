@@ -481,7 +481,28 @@ See `CLAUDE.md` Features Completed #67 and #68 for the full write-ups. This is a
 - A tour of 37 pages, including detail and edit pages, showed no 5xx responses and no page errors.
 - The live run caught one more real issue, the purchase-bill "future date" check running before the "invalid date" check. It was fixed.
 
-**Not yet applied anywhere:** the new migration `20261006120000_add_perf_indexes`, covering Invoice/PurchaseBill `createdAt`/`dueDate`, ActivityLog `(entityType, action)`, and trigram GIN on line-item names.
+**Migration:** the new migration `20261006120000_add_perf_indexes`, covering Invoice/PurchaseBill `createdAt`/`dueDate`, ActivityLog `(entityType, action)`, and trigram GIN on line-item names, was applied to the dev DB by the Vercel preview build. It reaches production on the `main` deploy. Committed as `dd4c969`/`f4a6d2c` and merged to `main` on 2026-10-07.
+
+---
+
+## Era 23 — Area-based end-to-end bug pass (2026-10-07)
+
+See `CLAUDE.md` Features Completed #69. Right after #68 shipped, the user found a bug that the specialist audit had missed: editing a user on `/admin` didn't refresh the Activity Log on that same page.
+
+**Lesson:** an audit split by *specialty* (security, API, React…) is weak at finding "action A leaves panel B stale" bugs. Each specialist looks at one layer, and this class of bug lives *between* a handler and every other piece of UI that shows the same data. The follow-up pass split the app by *area* instead. Six agents each owned all files for one area, and each traced every user action end to end, from click through API and DB to everything that should refresh afterwards. That pass found about 90 bugs, mostly stale UI, plus wrong numbers, pagination dead-ends, stuck loaders and edge-case 500s.
+
+**Cache gotcha surfaced again:** `bustCachePrefix()` only *deletes* cache entries. A `useFetch` that is already mounted (like the always-mounted Notification Bell in the shell) does **not** refetch until it remounts or calls its own `mutate()`. The bell now refreshes on navigation, using the new `isCached()` helper to skip the throttle when a mutation just busted it. Any other always-mounted component that shows mutable data needs the same treatment.
+
+**Follow-up decisions (2026-10-08, `CLAUDE.md` #70).** The user delegated the nine open product decisions from this pass. Each was settled by best practice plus this app's existing precedent, not by inventing a new pattern:
+- B2C credit notes are netted into B2CS, per GSTR-1 practice for unregistered supplies.
+- Binned parents block restore, extending the existing credit-note-parent rule.
+- Rate lists get optimistic concurrency, matching the customer/vendor routes.
+- Binned detail pages get an In-Bin banner, matching the purchase-bill page.
+- Settings changes are audited by field name only, never by value.
+- Document dates can't move past their own payments.
+- Statement Excel exports gain opening/closing rows, matching the PDF.
+- The GST workbook sales sheets now foot exactly, with Transport and Round Off columns.
+- Brand/category delete is blocked only by active products.
 
 ---
 

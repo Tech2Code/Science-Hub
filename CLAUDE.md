@@ -640,12 +640,92 @@ See **Testing** below before adding new tests — in particular, `tests/api/**` 
     - **Other**: root layout is `dynamic = "force-dynamic"` so tab title/favicon follow branding changes; missing `revalidateTag` added on settings/admin routes.
     - **Verified**: `tsc --noEmit`, `eslint src tests`, `check-date-safety --all`, `vitest run tests/unit` (218 passing, 16 new) all clean. **Live-verified 2026-10-07** against the local dev server + dev DB via a scripted Playwright run logged in as `dev@admin.com`. The script covered H2/H3/H4/H5/H7/H8/H10/H11, M1/M2/M3/M4/M6/M9/M11/M14, the rate lock, the binned-customer check, inline overpayment, the invalid bill date, adjust-stock null, the slim endpoints, `/api/units`, GST `ineligibleInputTax`, manager 403/notifications/route guard, and a no-5xx tour of 27 pages. Each check asserted the server's specific error message and the stock level after each step. All checks passed. That run caught one more issue, now fixed: `POST /api/purchase-bills` checked "future date" before "invalid date", so a garbage `billDate` got the wrong message. All ZZZ test rows were then soft-deleted and permanently deleted from the Bin. Not covered: M5 (skipped because there are 2 admins), the 5-minute JWT role refresh, and `npm run build` (it would apply the new migration).
     - **Dev-server gotcha found during this pass**: after a cold `npm run dev` on top of an old `.next`, every API route nested under a dynamic segment (`/api/invoices/[id]/payment`, `/returns`, `/api/bin/[type]/[id]`, `/api/customers/[id]/statement`, `/api/products/[id]/adjust-stock`) returned Next's HTML 404 page, while `[id]/route.ts` itself worked. Deleting `.next` and restarting fixed it; no code change was needed. Also, the first API calls right after login can return 401 until the session cookie settles, so poll `/api/admin/profile` for a 200 before scripting.
+69. **Area-based end-to-end bug pass** (2026-10-07). This pass was triggered by a user-found bug the #68 specialist audit missed: editing a user on `/admin` didn't refresh the Activity Log on the same page. Six agents, each owning one area of the app, traced every user action from click through API and DB to what refreshes afterwards, and fixed about 90 bugs. Main classes:
+    - **Stale UI after an action** — the biggest class. Examples:
+      - Activity Log refreshes after user add/edit/delete/reassign, profile save, log delete and Delete All.
+      - The customer or vendor detail balance goes stale after an invoice/bill payment or return.
+      - The Bin page never revalidated; it now revalidates on mount and busts on restore/purge.
+      - Brand/category counts didn't update after product changes.
+      - The reports and dashboard showed old names after a customer/vendor rename.
+      - The Notification Bell badge only refreshed on reload or when opened. It now refreshes on navigation: immediately when a mutation busted `/api/notifications`, otherwise throttled to every 30s. It uses the new `isCached()` in `useCache.ts`.
+      - Invoice and bill mutations now bust `/api/notifications` and `/api/customers` or `/api/vendors`.
+    - **Wrong numbers:**
+      - Customer detail and the customer list's invoice count included binned invoices (`getCustomer()`/`getCustomers()` in `db.ts` now filter `deletedAt`).
+      - Invoice balance used raw float subtraction, so "Full ₹X" got rejected.
+      - Payments Received / Payments Made totals ignored the search; both `/stats` routes now share the list's where-builder.
+      - The "Overdue" label on list and detail pages used `new Date()` instead of the IST day.
+      - `EXTRACT(YEAR …)` read UTC, so a 1-Jan document fell in the wrong year (invoices, bills, credit notes).
+      - Bill detail's Subtotal/GST cards left out the transport charge.
+      - Dashboard Cash Flow month picker: a label mismatch between browser and Node showed ₹0.
+      - Purchase-report aging didn't match the overdue count.
+      - Outstanding lists' paging was unstable (`id` tiebreak added).
+    - **Pagination** — every list now steps back to the real last page after deleting the last row on it.
+    - **Stuck loaders and bad loads:**
+      - Rate list and product import overlays could stay up.
+      - PDF generate failures on the statement/rate-list pages.
+      - Login hung on a network error.
+      - Customer, vendor and product edit pages turned a 404 into a blank form.
+      - Settings load failure showed every field as blank.
+    - **Data/security:**
+      - A reset link could be used twice concurrently; the token is now claimed atomically.
+      - The profile/reset password checks are now the 72-byte rule.
+      - "Clear all" notifications missed resurfaced items.
+      - Permission grants/revokes are now audited (`update_permission`).
+      - Empty Bin now purges rate lists and skips hidden one-off customers/vendors.
+      - Repeat soft-delete of a product/brand/category/vendor is a 400 instead of resetting the 30-day purge clock.
+      - Restoring an unknown or already-active Bin id gives 404 or "Already restored" instead of a 500 or a duplicate log.
+      - Purchase-bill payment `method` is validated.
+    - **Binned-document pages:**
+      - The bill detail page shows an In-Bin banner and hides write actions.
+      - The bill edit page refuses binned bills.
+      - Delete dialogs for invoices/bills/credit notes no longer claim "restore within 30 days", since these are retained indefinitely.
+    - **Verified:**
+      - `tsc`, `eslint src tests`, `check-date-safety`, 218 unit tests and `next build` are all clean.
+      - The #68 live regression script still passes (87/87).
+      - A new live script passed 30/30 against the dev server and dev DB. It drove the real `/admin` UI and confirmed the Activity Log updates without a reload. It also covered binned-invoice exclusion, repeat delete, edit-page error states, the stats search filters, Bin restore edge cases, and a crash-free tour of the touched pages.
+    - **Open product decisions** that the agents listed are all resolved in #70.
+70. **Product decisions from #69, decided and implemented** (2026-10-08). The user delegated these decisions with "best practice + this app's conventions":
+    1. **GSTR-1 B2C credit notes** (`gstr1CsvExport.ts`). Credit notes for customers without a GSTIN are no longer written to `cdnr.csv`, which is for registered recipients only.
+       - They are netted against `b2cs.csv`, reducing the row with the same place of supply + rate.
+       - **A negative b2cs row is never emitted** (2026-10-14, "Option A"). The official GST portal help doesn't settle whether a net-negative Table 7 value is accepted, and practitioner sources disagree. So when this period's B2C credit notes exceed B2C sales at a place of supply + rate, that row is left out of `b2cs.csv`. The Validation Report then shows an **error** with the unabsorbed taxable amount and the credit note numbers, telling the user/CA to reduce it from the next period's B2CS. A row that nets to exactly 0 is also dropped, with no error.
+       - Automatic carry-forward into the next month was deliberately rejected. It would make one month's export depend on earlier months and silently change figures that may already be filed.
+       - Credit notes for customers with a GSTIN stay in `cdnr`. Net GST Payable is unchanged.
+    2. **GST workbook sales sheets** (`gstFilingWorkbook.ts`) gained Transport Charge, Transport GST and Round Off columns, so every row foots exactly to Total.
+       - CGST/SGST there now use `splitGstForDisplay()`, the same split as the printed invoice.
+       - `SalesRegisterRow` gained `transportCharge` and `transportGst`.
+    3. **Binned customer and rate-list detail pages** show an "In Recycle Bin" banner and hide write actions, mirroring the purchase-bill detail page.
+       - `GET /api/customers/[id]` returns `inBin`, which is false for one-off customers.
+       - Reassign stays available on a binned rate list, per #65.
+    4. **Bin restore of an invoice or purchase bill** returns 400 when its customer/vendor was explicitly binned, i.e. it has a `delete_customer`/`delete_vendor` log entry. The message is "restore the customer first". One-off parties are unaffected.
+    5. **Settings changes are audited** in `PUT /api/settings`.
+       - Actions: `update_settings`, `update_logo`, `remove_logo`.
+       - Only the changed sections/fields are named; secret values are never logged.
+       - `update_numbering_settings` now lists only the fields that actually changed.
+    6. **Rate-list edit uses optimistic concurrency.** It sends `expectedUpdatedAt`, the server rechecks inside the transaction, and a conflict returns 409.
+    7. **A document's date can't move after its own payments.** This applies to an invoice's `date` (also after its credit notes) and a bill's `billDate`.
+       - The check only runs when the IST day actually changes.
+       - Bills also re-check the stored `dueDate` when `dueDate` isn't sent.
+       - Invoices skip that re-check, because omitting `dueDate` clears it on that route.
+    8. **Statement Excel exports** (customer and vendor) have Opening Balance and Closing Balance rows, matching the PDF.
+    9. **Brand/category soft delete** is blocked only by *active* assigned products. The invoice/purchase line-item check was removed, because lines store their own name snapshot.
+    - **Extras:**
+      - Statement and rate-list PDFs can't be generated or cached before `/api/settings` loads. Previously a PDF could be cached without the business header.
+      - Return `quantity` must be numeric.
+      - Product `unit` is trimmed and can't be blank.
+      - Product `brandId`/`categoryId` must exist and not be binned (checked only when changed on edit).
+      - Payment-method colours are case-insensitive.
+      - Protected Bin items show "On hold" instead of a permanent "Expiring soon".
+    - **Verified:**
+      - `tsc`, `eslint src tests`, `check-date-safety`, 223 unit tests (5 new) and `next build` are all clean.
+      - New live script 31/31 against the dev server and dev DB, covering every decision above except the GSTR-1/workbook output, which is unit-tested.
+      - The #68 regression script still passes (87/87), and so does the #69 script (30/30).
+      - Test rows were cleaned up.
 
 ---
 
 ## Current Work In Progress
 
-As of 2026-10-07, Features Completed #67 (manager read-only sweep) and #68 (8-specialist bug-fix pass) are implemented and verified but **not yet committed** — they share one working tree and ideally go in as separate commits. #68's migration `20261006120000_add_perf_indexes` is written but not applied anywhere yet; it will be applied to production by Vercel's `build` (`migrate deploy`) on the first deploy after it's committed. Check `git log` against this note before trusting it.
+As of 2026-10-08, #67/#68 are committed and merged to `main` (`dd4c969`, `f4a6d2c`). #69 and #70 are implemented and verified but **not yet committed**. Check `git log` against this note before trusting it.
 
 ---
 
