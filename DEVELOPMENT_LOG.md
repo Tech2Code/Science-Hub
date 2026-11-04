@@ -455,7 +455,7 @@ Both passes were live-verified against the real dev database via a scripted Play
 
 ---
 
-## Era 22 — Manager read-only sweep and an 8-specialist bug hunt + fix pass (2026-10-06 → 2026-10-07, uncommitted as of writing)
+## Era 22 — Manager read-only sweep and an 8-specialist bug hunt + fix pass (2026-10-06 → 2026-10-07, committed as `dd4c969`/`f4a6d2c`)
 
 See `CLAUDE.md` Features Completed #67 and #68 for the full write-ups. This is a summary for the log's own continuity.
 
@@ -506,6 +506,17 @@ See `CLAUDE.md` Features Completed #69. Right after #68 shipped, the user found 
 
 ---
 
+## Era 24 — Architecture-review hardening and the invoice detail page split (2026-11-04)
+
+Started from a review that named five structural issues, then worked through them in order, verifying each with the real app rather than only the type-checker. Full detail in `CLAUDE.md` Features Completed #71–#73.
+
+- **Shared rate limiter** (`rateLimitShared()`, Upstash REST with in-memory fallback) on login/reset/forgot/find-email; **`build` now runs `next build` before `prisma migrate deploy`**; **`retryOnWriteConflict()`** replaced 11 copy-pasted Serializable retry loops. One bug of my own was caught while re-verifying: a Redis key left without a TTL would have locked a caller out forever — fixed by repairing the TTL on the next hit.
+- **Phase 1 — `invalidateAfter()`**: the invoice and bill detail pages' 73 hand-written cache-bust calls became 7 named events in `src/lib/cacheInvalidation.ts`. Live-verified with a never-reloading Playwright session (30/30), re-run after every later phase.
+- **Phases 2–3 — the invoice detail page went from 2,525 to ~1,300 lines**: print area, shared types, skeleton, credit-note print area and the two history cards were moved out with no visible change. Verified byte-for-byte (print-area HTML, light/dark screenshots, every PDF variant including a multi-page one and a credit note).
+- **Phase 4 (list-page PDFs without the hidden iframe) was deliberately not started** — it changes behavior, not just structure, and needs a purchase-bill print area first. Left as a decision for the owner.
+
+**What this taught about verification** (kept in `CLAUDE.md` → Testing): capture the baseline twice and prove it deterministic before trusting any before/after comparison; run the "after" capture on a warm dev server (the Next "Rendering…" indicator shows up in early screenshots); don't compare timing-dependent screenshots (skeletons) — diff source text; and never log in from a script on every run, because the login limiter works.
+
 ## Conventions (read this before touching a save/create/delete flow)
 
 - **`OverlayLoader` (`src/components/ui/Spinner.tsx`, `position: fixed; inset: 0; z-index: 9999`) is how this app locks a page or modal during an async action** — not a pile of per-field `disabled` props. Its z-index sits above everything, including an open `Modal`, so it blocks pointer interaction with whatever's underneath regardless of that content's own disabled state. Reach for it on any new save/create flow, gated on that flow's own `saving` boolean.
@@ -539,3 +550,5 @@ See `CLAUDE.md` Features Completed #69. Right after #68 shipped, the user found 
 - **Building locally without touching the DB:** `npm run build` runs `migrate deploy` against `.env`'s database. To check that the app compiles, stop the dev server, delete `.next`, and run `npx next build` instead.
 - **Windows + `npm run build`'s `prebuild` step can `ENOTEMPTY` on `.next/dev`** if the dev server is running concurrently — same root cause as the Prisma one. `npx tsc --noEmit` + targeted `eslint <file>` is an acceptable stand-in when a full build can't run for this reason, *provided* no schema/migration change is part of what's being verified.
 - A pre-commit hook blocks `schema.prisma` changes without a matching migration file — don't try to bypass it; write the migration.
+- **Scripted logins lock the account out** (since the login limiter is real): a test script that signs in on every run is blocked after ~8 attempts per 15 minutes with "Incorrect email or password". Log in once and reuse Playwright's `storageState`.
+- **First requests after a code change are slow on the dev server** (route compile): give save/delete toasts 30–45 s in scripted checks, and capture screenshots only once the server is warm — the Next "Rendering…" indicator otherwise leaks into them.
