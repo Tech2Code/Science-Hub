@@ -2,6 +2,8 @@
  * Shared invoice PDF generator — pass the #invoice-print-area element, returns a Blob or null on failure.
  * `copyLabels` concatenates multiple labeled copies into one PDF, each with its own page count.
  */
+import { yieldToMain } from "./yieldToMain";
+
 // Border color — matches the @media print override in the invoice detail page CSS
 const BD = "#64748b";
 
@@ -144,6 +146,7 @@ export async function generateInvoicePdfBlob(
     };
 
     for (const copyLabel of copyLabels) {
+      await yieldToMain();
       const canvas = await html2canvas(el, {
         scale: SCALE, useCORS: true, backgroundColor: "#fff",
         width: A4_PX, windowWidth: A4_PX,
@@ -254,6 +257,7 @@ export async function generateInvoicePdfBlob(
           });
         },
       });
+      await yieldToMain(); // html2canvas's clone + paint is one long task; let input run before the page slicing starts
 
       const mmPerPx = contentW / canvas.width;
       const pageHeightPx = Math.floor(contentH / mmPerPx);
@@ -439,7 +443,7 @@ export async function generateInvoicePdfBlob(
 
       // Render — footer is pinned to the bottom of every page that shows it. pageNum/totalPages are scoped to this copy only (see header comment).
       let start = 0;
-      pageSplits.forEach((splitAt, i) => {
+      for (const [i, splitAt] of pageSplits.entries()) {
         // Page 1 never gets a repeated banner/column-header (everything's already shown in-flow
         // there). A continuation page always repeats the banner; it additionally repeats the item
         // column-header only if this page actually contains an item row — a page that's purely the
@@ -448,20 +452,32 @@ export async function generateInvoicePdfBlob(
         const bannerH = i === 0 ? 0 : theadH;
         const pageColHeaderH = i === 0 ? 0 : (pageHasItemRows(start, splitAt) ? colHeaderH : 0);
         addPageBreakIfNeeded();
+        await yieldToMain();
         const { dataUrl, totalH } = tfootH > 0
           ? slicePagePinned(start, splitAt, bannerH, pageColHeaderH, i + 1, pageSplits.length)
           : slicePage(start, splitAt, bannerH, pageColHeaderH, false, i + 1, pageSplits.length);
-        // jsPDF's `compression` param (undocumented default: "NONE") controls the FlateDecode level it
-        // applies when re-embedding a PNG's raw pixel data into the PDF — unlike a JPEG's own DCT bytes,
-        // which pass through as-is, jsPDF does NOT reuse the source PNG's own compressed bytes at all,
-        // so omitting this silently embeds the image fully uncompressed (confirmed: without it, a single
-        // invoice page inflates to ~10MB). "SLOW" = strongest compression; the CPU cost is a one-time,
-        // non-blocking-UI cost per PDF generation, not a hot path.
-        pdf.addImage(dataUrl, "PNG", M, M, contentW, totalH * mmPerPx, undefined, "SLOW");
+        await yieldToMain(); // slicing + PNG-encoding above is one long task; the compression below is another
+        // jsPDF's `compression` param (undocumented default: "NONE") controls the FlateDecode level it applies when
+        // re-embedding a PNG's raw pixel data into the PDF. Unlike a JPEG's own DCT bytes, which pass through as-is, jsPDF
+        // does NOT reuse the source PNG's own compressed bytes at all, so omitting this silently embeds the image fully
+        // uncompressed (confirmed: a single invoice page inflates to ~10MB).
+        //
+        // "FAST" (deflate level 1), not "SLOW" (level 9): this single synchronous call is the most expensive step of a PDF
+        // — about half of its main-thread time — and the UI cannot be serviced while it runs, so it is what made a bulk
+        // download freeze typing and clicks. Measured: a fresh render of a 12- and a 45-item invoice went 2.0s -> 1.0s and
+        // 3.5s -> 1.7s, and the longest freeze 1.5s -> 0.4s; across five sample invoices the finished PDFs were between
+        // 1.2% smaller and 2.8% larger. PNG predictors are reversible, so the image is lossless at every level — but the
+        // level also changes the PNG filter (Paeth -> Sub), so the byte-level stream fingerprint used by our PDF
+        // comparisons DIFFERS from the old output. Equality of the decoded pixels was machine-verified on
+        // jsPDF itself with a synthetic page image (predictor undone, byte-identical), not on a real invoice. Reverting to "SLOW" is a one-word change if a PDF ever looks wrong.
+        // yieldToMain() around it lets input run between pages.
+        pdf.addImage(dataUrl, "PNG", M, M, contentW, totalH * mmPerPx, undefined, "FAST");
+        await yieldToMain();
         start = splitAt;
-      });
+      }
     }
 
+    await yieldToMain();
     return pdf.output("blob");
   } catch {
     return null;

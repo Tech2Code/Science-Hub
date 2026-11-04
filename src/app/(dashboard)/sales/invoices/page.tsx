@@ -1,6 +1,8 @@
 ﻿"use client";
 
+import { pdfFileName } from "@/lib/fileName";
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -14,7 +16,8 @@ import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useInvoicePdfRenderer } from "@/lib/useInvoicePdfRenderer";
 import type { BusinessSettings } from "@/components/invoices/invoiceDetailTypes";
 import { withCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
-import { bulkDownloadPdfsAsZip, sanitizeZipEntryName } from "@/lib/bulkPdfDownload";
+import { sanitizeZipEntryName } from "@/lib/bulkPdfDownload";
+import type { JobPriority } from "@/lib/pdfJobQueue";
 import { MONTH_NAMES } from "@/lib/dateFilter";
 import { bustCachePrefix } from "@/lib/useCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
@@ -113,7 +116,6 @@ export default function InvoicesPage() {
   const [pdfDialogLoading, setPdfDialogLoading] = useState(false);
   const [openingEditId, setOpeningEditId] = useState<string | null>(null);
   const [bulkDownloading, setBulkDownloading] = useState(false);
-  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
   const bulkBusyRef = useRef(false);
   const toast = useToast();
   const router = useRouter();
@@ -137,7 +139,7 @@ export default function InvoicesPage() {
 
   // Builds the PDF by mounting the invoice's print area off-screen in THIS page (no hidden iframe / full detail-page load —
   // see useInvoicePdfRenderer). It always renders the default state (payment/return toggles off), so the variant key can assume those are false.
-  async function generateInvoicePdf(inv: Invoice, copyLabels?: string[], force = false): Promise<Blob | null> {
+  async function generateInvoicePdf(inv: Invoice, copyLabels?: string[], force = false, priority: JobPriority = "high"): Promise<Blob | null> {
     const showLogoOnInvoices = settings?.showLogoOnInvoices !== false;
     const variantKey = buildPdfVariantKey(copyLabels, {
       p: false,
@@ -148,7 +150,7 @@ export default function InvoicesPage() {
     });
     return withCachedPdf(
       "invoice", inv.id, variantKey,
-      () => renderInvoicePdf(inv.id, copyLabels),
+      () => renderInvoicePdf(inv.id, copyLabels, { priority, settings: settings ?? null }),
       force,
     );
   }
@@ -188,7 +190,7 @@ export default function InvoicesPage() {
     }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `${pdfDialogInvoice.invoiceNumber}.pdf`;
+    a.href = url; a.download = pdfFileName(pdfDialogInvoice.invoiceNumber);
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -206,7 +208,6 @@ export default function InvoicesPage() {
     }
     bulkBusyRef.current = true;
     setBulkDownloading(true);
-    setBulkProgress({ done: 0, total: 0 });
     try {
       const params = new URLSearchParams();
       if (filter !== "All") params.set("status", filter);
@@ -222,24 +223,17 @@ export default function InvoicesPage() {
         toast({ type: "error", title: "Nothing to download", message: "No invoices found for the selected period." });
         return;
       }
-      setBulkProgress({ done: 0, total: list.length });
       const truncated = (json?.total ?? list.length) > list.length;
       const monthLabel = MONTH_NAMES[Number(month)];
-      const { succeeded, failed } = await bulkDownloadPdfsAsZip(
-        list.map((inv) => ({ ...inv, fileName: `${sanitizeZipEntryName(inv.invoiceNumber)}.pdf` })),
-        (item) => generateInvoicePdf(item, ["ORIGINAL COPY"]),
-        `Invoices_${monthLabel}_${year}.zip`,
-        (done, total) => setBulkProgress({ done, total }),
-      );
-      if (succeeded === 0) {
-        toast({ type: "error", title: "Download failed", message: "Could not generate any invoice PDFs." });
-      } else if (truncated) {
-        toast({ type: "error", title: "Partial download", message: `Only the first ${list.length} of ${json?.total} matching invoices were zipped (limit ${list.length}/request) — refine the filter (e.g. by status) and download the rest separately.` });
-      } else if (failed.length > 0) {
-        toast({ type: "error", title: "Partial download", message: `${succeeded} downloaded, ${failed.length} failed — try again for those.` });
-      } else {
-        toast({ type: "success", title: "Downloaded", message: `${succeeded} invoice${succeeded === 1 ? "" : "s"} zipped and downloaded.` });
-      }
+      // Hand the run to the app-wide provider: it keeps going (with a progress card + Cancel) if the user leaves this page,
+      // runs each item at low priority so a View/PDF click jumps the queue, and reports the outcome with a toast.
+      startBulkZip({
+        label: "invoice",
+        items: list.map((inv) => ({ ...inv, fileName: `${sanitizeZipEntryName(inv.invoiceNumber)}.pdf` })),
+        produce: (item) => generateInvoicePdf(item, ["ORIGINAL COPY"], false, "low"),
+        zipFileName: `Invoices_${monthLabel}_${year}.zip`,
+        partialNote: truncated ? `Only the first ${list.length} of ${json?.total} matching invoices were zipped (limit ${list.length}/request) — refine the filter (e.g. by status) and download the rest separately.` : undefined,
+      });
     } catch {
       toast({ type: "error", title: "Download failed", message: "Network error." });
     } finally {
@@ -270,7 +264,7 @@ export default function InvoicesPage() {
   const { data, loading, error, mutate } = useFetch<InvoiceListResponse>(apiUrl);
   const { data: stats, mutate: mutateStats } = useFetch<InvoiceStats>(statsUrl);
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
-  const { renderInvoicePdf, host: pdfRenderHost } = useInvoicePdfRenderer(settings ?? null);
+  const { renderInvoicePdf, startBulkZip, bulk } = useInvoicePdfRenderer();
   const invoices = data?.data ?? [];
   const total = data?.total ?? 0;
   const showSkeleton = loading && !data;
@@ -335,12 +329,10 @@ export default function InvoicesPage() {
       onConfirm={handleDelete}
       onCancel={() => setDeleteTarget(null)}
     />
-    {pdfRenderHost}
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
     {openingEditId && <OverlayLoader text="Opening editor…" />}
-    {bulkDownloading && (
-      <OverlayLoader text={bulkProgress.total > 0 ? `Preparing ZIP… ${bulkProgress.done}/${bulkProgress.total}` : "Fetching invoices…"} />
-    )}
+    {/* Only the short list-fetch is blocking; the ZIP itself runs in the background (progress card, see PdfRenderProvider). */}
+    {bulkDownloading && <OverlayLoader text="Fetching invoices…" />}
 
     <PdfCopyDialog
       open={!!pdfDialogInvoice}
@@ -419,9 +411,9 @@ export default function InvoicesPage() {
             <Button
               variant="secondary"
               size="sm"
-              disabled={bulkDownloading}
+              disabled={bulkDownloading || bulk.running}
               ariaDisabled={!month || !year}
-              title={!month || !year ? "Select a month and year to bulk download" : "Download all invoices for this period as a ZIP of PDFs"}
+              title={bulk.running ? "A bulk download is already running — see the progress card" : !month || !year ? "Select a month and year to bulk download" : "Download all invoices for this period as a ZIP of PDFs"}
               onClick={handleBulkDownload}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -454,9 +446,9 @@ export default function InvoicesPage() {
               ) : invoices.map((inv) => (
                 <tr key={inv.id}>
                   <Cell col={COLUMNS[0]}>
-                    <a href={`/sales/invoices/${inv.id}`} className={styles.invoiceLink}>
+                    <Link href={`/sales/invoices/${inv.id}`} className={styles.invoiceLink}>
                       {inv.invoiceNumber}
-                    </a>
+                    </Link>
                   </Cell>
                   <Cell col={COLUMNS[1]} className={styles.dateCell}>
                     <div>{formatDate(inv.date)}</div>

@@ -1,0 +1,73 @@
+.card {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 9000; /* above page content and the mobile sidebar, below toasts (9999) and modals */
+  width: 22rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.875rem 1rem;
+  background: var(--c-bg-card);
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius);
+  box-shadow: var(--c-shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  color: var(--c-blue);
+}
+
+.title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--c-text, inherit);
+}
+
+.track {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--c-bg-sub);
+  border: 1px solid var(--c-border);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: var(--c-blue);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.hint {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--c-text-3, var(--c-border-dark));
+}
+
+@media (max-width: 640px) {
+  .card {
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    width: auto;
+    max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+}

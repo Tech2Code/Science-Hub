@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { get } from "@vercel/blob";
 import { requireSession } from "@/lib/apiAuth";
+import { prisma } from "@/lib/prisma";
 import { getPrivateBlobToken, attachmentContentDisposition } from "@/lib/blobStorage";
 
 // Serves a just-uploaded, not-yet-saved purchase-bill attachment (Edit form previewing a
@@ -29,6 +30,18 @@ export async function GET(
       return NextResponse.json({ error: "Invalid attachment path" }, { status: 400 });
     }
 
+    // This route addresses the blob directly, so it must not become a back door around the rule the by-id route
+    // enforces: a binned bill's attachment is only reachable by an admin (who manages the Bin). A just-uploaded,
+    // not-yet-saved file belongs to no bill yet and is served as before.
+    const storagePathname = `purchase-bills/${folder}/${filename}`;
+    const owner = await prisma.purchaseBill.findFirst({
+      where: { attachmentUrl: { endsWith: `/${storagePathname}` } },
+      select: { deletedAt: true },
+    });
+    if (owner?.deletedAt && auth.session.user.role !== "admin") {
+      return NextResponse.json({ error: "Attachment not found" }, { status: 404 });
+    }
+
     const privateToken = getPrivateBlobToken();
     if (!privateToken) {
       // See the sibling [id]/attachment/[filename] route for why this must fail fast instead of
@@ -36,7 +49,7 @@ export async function GET(
       return NextResponse.json({ error: "Attachment storage is not configured." }, { status: 503 });
     }
 
-    const result = await get(`purchase-bills/${folder}/${filename}`, {
+    const result = await get(storagePathname, {
       access: "private",
       token: privateToken,
     });

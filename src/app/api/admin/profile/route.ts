@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { BCRYPT_COST } from "@/lib/passwordHash";
 import { logActivity } from "@/lib/activity";
 import { rules, validate, validateUserInput } from "@/lib/validation";
 import { rateLimit } from "@/lib/rateLimit";
@@ -146,7 +147,7 @@ export async function PUT(request: NextRequest) {
         );
       }
 
-      hashedPassword = await bcrypt.hash(newPassword, 12);
+      hashedPassword = await bcrypt.hash(newPassword, BCRYPT_COST);
     }
 
     const updated = await prisma.user.update({

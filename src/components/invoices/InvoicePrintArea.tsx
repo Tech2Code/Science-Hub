@@ -13,6 +13,12 @@ interface InvoicePrintAreaProps {
   balance: number;
   showPaymentInPdf: boolean;
   showReturnInPdf: boolean;
+  /**
+   * DOM id of the outer element. The detail page keeps the default; the app-wide off-screen PDF host
+   * (PdfRenderProvider) passes "invoice-print-area-bg" so it can never collide with a detail page's own
+   * "invoice-print-area" — two elements with one id would make getElementById pick the wrong invoice.
+   */
+  id?: string;
 }
 
 /**
@@ -20,14 +26,14 @@ interface InvoicePrintAreaProps {
  * PDF (see generateInvoicePdf.ts). Pure presentation — all data comes in through props.
  *
  * Contracts with generateInvoicePdf.ts / pdfIframeGenerator.ts that must not be renamed or restructured
- * without updating them: id="invoice-print-area", id="invoice-copy-badge"/data-role="copy-badge",
+ * without updating them: id="invoice-print-area" (or the `id` prop), id="invoice-copy-badge"/data-role="copy-badge",
  * the single <thead> (banner), the row marked data-header-item-cols="true", every item row marked
  * data-invoice-item-row, and the <tfoot>. The --inv-* CSS variables it uses are defined once in
  * PrintAreaStyles.tsx — any page that mounts this component must also render <PrintAreaStyles />.
  */
-export function InvoicePrintArea({ invoice, settings, returns, balance, showPaymentInPdf, showReturnInPdf }: InvoicePrintAreaProps) {
+export function InvoicePrintArea({ invoice, settings, returns, balance, showPaymentInPdf, showReturnInPdf, id = "invoice-print-area" }: InvoicePrintAreaProps) {
   return (
-      <div id="invoice-print-area"
+      <div id={id}
         style={{ background: "var(--inv-bg)", color: "var(--inv-tx)", borderRadius: "0.75rem", boxShadow: "var(--c-shadow-sm)" }}>
         <div style={{ overflowX: "auto" }}>
           {/* minWidth keeps the printable layout's proportions intact on

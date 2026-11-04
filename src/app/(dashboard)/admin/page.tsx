@@ -197,7 +197,7 @@ export default function AdminPage() {
   // lists — offers a "reassign everything to another user, then delete" flow instead of just an
   // error, so clearing this block never requires opening each document individually.
   const [reassignDeleteTarget, setReassignDeleteTarget] = useState<User | null>(null);
-  const [deleteBlockers, setDeleteBlockers] = useState<{ invoiceCount: number; purchaseBillCount: number; rateListCount: number } | null>(null);
+  const [deleteBlockers, setDeleteBlockers] = useState<{ invoiceCount: number; purchaseBillCount: number; rateListCount: number; recordCount: number } | null>(null);
   const [reassignTargetId, setReassignTargetId] = useState("");
   const [reassigningAndDeleting, setReassigningAndDeleting] = useState(false);
 
@@ -409,10 +409,10 @@ export default function AdminPage() {
       if (!res.ok) {
         // Blocked by attached documents — hand off to the reassign-and-delete flow instead of
         // just showing an error, so this never requires opening each document individually.
-        if (data.invoiceCount > 0 || data.purchaseBillCount > 0 || data.rateListCount > 0) {
+        if (data.invoiceCount > 0 || data.purchaseBillCount > 0 || data.rateListCount > 0 || data.recordCount > 0) {
           setDeleteConfirm(null);
           setReassignDeleteTarget(target);
-          setDeleteBlockers({ invoiceCount: data.invoiceCount ?? 0, purchaseBillCount: data.purchaseBillCount ?? 0, rateListCount: data.rateListCount ?? 0 });
+          setDeleteBlockers({ invoiceCount: data.invoiceCount ?? 0, purchaseBillCount: data.purchaseBillCount ?? 0, rateListCount: data.rateListCount ?? 0, recordCount: data.recordCount ?? 0 });
           setReassignTargetId("");
           return;
         }
@@ -470,7 +470,7 @@ export default function AdminPage() {
       toast({
         type: "success",
         title: "User deleted",
-        message: `Reassigned ${reassignData.invoiceCount ?? 0} invoice(s), ${reassignData.purchaseBillCount ?? 0} purchase bill(s), ${reassignData.rateListCount ?? 0} rate list(s) and removed "${target.name}".`,
+        message: `Reassigned ${reassignData.invoiceCount ?? 0} invoice(s), ${reassignData.purchaseBillCount ?? 0} purchase bill(s), ${reassignData.rateListCount ?? 0} rate list(s), ${reassignData.recordCount ?? 0} tracked record(s) and removed "${target.name}".`,
       });
     } catch {
       setReassigningAndDeleting(false);
@@ -521,7 +521,7 @@ export default function AdminPage() {
       // The server writes a "clear_activity_log" entry right after clearing — reload so it shows
       // (and the "Delete All" button / total stay accurate) instead of a hard-coded empty list.
       refreshLogs();
-      toast({ type: "success", title: "Activity log cleared", message: `${data.deleted ?? 0} log entries removed.` });
+      toast({ type: "success", title: "Activity log cleared", message: `${data.deleted ?? 0} log entries removed.${data.kept > 0 ? ` ${data.kept} protected entries were kept (they track Recycle Bin items and who created records).` : ""}` });
     } catch {
       setClearLogsLoading(false);
       setClearLogsConfirm(false);
@@ -591,6 +591,7 @@ export default function AdminPage() {
             deleteBlockers?.invoiceCount ? `${deleteBlockers.invoiceCount} invoice(s)` : null,
             deleteBlockers?.purchaseBillCount ? `${deleteBlockers.purchaseBillCount} purchase bill(s)` : null,
             deleteBlockers?.rateListCount ? `${deleteBlockers.rateListCount} rate list(s)` : null,
+            deleteBlockers?.recordCount ? `${deleteBlockers.recordCount} tracked record(s) (products, brands, categories, customers or vendors they created or moved to the Bin)` : null,
           ].filter(Boolean).join(", ")}. Choose another user to reassign all of them to — this user will then be deleted.
         </p>
         <FormField label="Reassign to">
@@ -616,7 +617,7 @@ export default function AdminPage() {
       <ConfirmDialog
         open={clearLogsConfirm}
         title="Delete Entire Activity Log"
-        message={`Permanently delete all ${logsTotal} activity log entries? This cannot be undone.`}
+        message={`Permanently delete the activity log (${logsTotal} entries)? This cannot be undone. Entries the app depends on — which customers/vendors are in the Recycle Bin, and who created products, brands, categories, customers and vendors — are always kept.`}
         confirmLabel="Delete All" variant="danger" loading={clearLogsLoading}
         confirmDisabled={clearLogsInput !== CLEAR_LOGS_PHRASE}
         detail={

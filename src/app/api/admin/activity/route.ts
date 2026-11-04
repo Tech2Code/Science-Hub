@@ -3,14 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireAdmin } from "@/lib/apiAuth";
 import { parsePaginationParams, buildSearchWhere } from "@/lib/apiPagination";
-
-// Entries tied to GST-numbered documents (invoices/purchase bills/credit
-// notes) are exempt — those documents are themselves retained indefinitely
-// (see the Bin's own GST exemption), so their audit trail (who created/
-// edited/deleted/paid them) shouldn't silently disappear out from under
-// them while the document itself is still around, possibly for years.
-const PURGE_EXEMPT_ENTITY_TYPES = ["invoice", "purchase_bill", "return"];
-const ACTIVITY_LOG_RETENTION_DAYS = 30;
+import { ACTIVITY_LOG_RETENTION_DAYS, STATE_BEARING_ACTIONS, buildActivityPurgeWhere, buildActivityClearWhere } from "@/lib/activityProtection";
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,19 +26,9 @@ export async function GET(request: NextRequest) {
     // out from under an in-progress pagination session, shifting the skip window.
     if (offset === 0) {
       const cutoff = new Date(Date.now() - ACTIVITY_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
-      await prisma.activityLog.deleteMany({
-        where: {
-          createdAt: { lt: cutoff },
-          // Explicit OR (rather than NOT: { entityType: { in: [...] } }) so rows with
-          // a null entityType (logins, settings changes, etc.) are still purged —
-          // SQL's NULL IN (...) is neither true nor false, which would otherwise
-          // silently exclude every non-entity-scoped log row from ever being purged.
-          OR: [
-            { entityType: null },
-            { entityType: { notIn: PURGE_EXEMPT_ENTITY_TYPES } },
-          ],
-        },
-      });
+      // buildActivityPurgeWhere() keeps GST-document rows (retained as long as the documents are) and the
+      // state-bearing rows the app reads back (Recycle-Bin markers, "Created by") — see activityProtection.ts.
+      await prisma.activityLog.deleteMany({ where: buildActivityPurgeWhere(cutoff) });
     }
 
     const where = {
@@ -77,11 +60,14 @@ export async function DELETE() {
     const auth = await requireAdmin();
     if (!auth.ok) return auth.response;
 
-    const { count } = await prisma.activityLog.deleteMany({});
+    // State-bearing rows (Recycle-Bin markers, "Created by") are kept — deleting them would make binned
+    // customers/vendors disappear from the Bin and blank every "Created by" column.
+    const { count } = await prisma.activityLog.deleteMany({ where: buildActivityClearWhere() });
+    const kept = await prisma.activityLog.count({ where: { action: { in: [...STATE_BEARING_ACTIONS] } } });
     // Logged after the clear (not before) — a pre-clear log entry would just
     // get wiped out by the same deleteMany, leaving no record it happened.
-    await logActivity(auth.session.user.id, "clear_activity_log", `Cleared entire activity log (${count} entr${count === 1 ? "y" : "ies"} removed)`);
-    return NextResponse.json({ deleted: count });
+    await logActivity(auth.session.user.id, "clear_activity_log", `Cleared activity log (${count} entr${count === 1 ? "y" : "ies"} removed${kept > 0 ? `, ${kept} protected entr${kept === 1 ? "y" : "ies"} kept` : ""})`);
+    return NextResponse.json({ deleted: count, kept });
   } catch (error) {
     console.error("DELETE /api/admin/activity error:", error);
     return NextResponse.json({ error: "Failed to clear activity log" }, { status: 500 });

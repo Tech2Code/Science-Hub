@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import { pdfFileName } from "@/lib/fileName";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
@@ -433,7 +434,7 @@ export default function InvoiceDetailPage() {
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate credit note PDF." }); return; }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `${ret.creditNoteNumber ?? "Credit-Note"}.pdf`;
+    a.href = url; a.download = pdfFileName(ret.creditNoteNumber ?? "Credit-Note");
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
@@ -500,7 +501,7 @@ export default function InvoiceDetailPage() {
     setPdfCopyDialogOpen(false);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `${invoice.invoiceNumber}.pdf`;
+    a.href = url; a.download = pdfFileName(invoice.invoiceNumber);
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
@@ -540,7 +541,7 @@ export default function InvoiceDetailPage() {
     // directly among the share targets for a PDF file, and Android exposes
     // its system print service the same way.
     if (isMobile) {
-      const file = new File([blob], `${invoice.invoiceNumber}.pdf`, { type: "application/pdf" });
+      const file = new File([blob], pdfFileName(invoice.invoiceNumber), { type: "application/pdf" });
       let shared = false;
       if (navigator.canShare?.({ files: [file] })) {
         try {
@@ -566,7 +567,7 @@ export default function InvoiceDetailPage() {
       // in the device's own PDF app, which always has one. Same mechanism
       // as the working "Download PDF" button.
       const a = document.createElement("a");
-      a.href = url; a.download = `${invoice.invoiceNumber}.pdf`;
+      a.href = url; a.download = pdfFileName(invoice.invoiceNumber);
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       toast({ type: "info", title: "PDF downloaded", message: "Open it from your Downloads/notifications and tap Print from there." });
       setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -617,12 +618,12 @@ export default function InvoiceDetailPage() {
     setShareLoading(false);
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
 
-    const file = new File([blob], `${num}.pdf`, { type: "application/pdf" });
+    const file = new File([blob], pdfFileName(num), { type: "application/pdf" });
 
     const downloadPdf = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = `${num}.pdf`;
+      a.href = url; a.download = pdfFileName(num);
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     };
@@ -683,7 +684,7 @@ export default function InvoiceDetailPage() {
         return;
       }
       const formData = new FormData();
-      formData.append("pdf", blob, `${invoice.invoiceNumber}.pdf`);
+      formData.append("pdf", blob, pdfFileName(invoice.invoiceNumber));
       formData.append("to", emails.join(","));
       formData.append("invoiceNumber", invoice.invoiceNumber);
       formData.append("customerName", invoice.customer.name);

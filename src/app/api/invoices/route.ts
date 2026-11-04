@@ -55,7 +55,8 @@ export async function POST(request: NextRequest) {
     const { items, notes, dueDate, isInterState: clientIsInterState, placeOfSupply, reverseCharge, ewayBillNumber, transportCharge, transportChargeGstRate, idempotencyKey, overrideCreditLimit } = body;
     const { customerId } = body;
 
-    if (!items || items.length === 0) {
+    // Array.isArray, not just a truthiness/length check: a string or object here would otherwise throw at .map() below and surface as a 500.
+    if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "At least one item is required" }, { status: 400 });
     }
     if (idempotencyKey !== undefined && (typeof idempotencyKey !== "string" || idempotencyKey.length > 200)) {
@@ -186,7 +187,7 @@ export async function POST(request: NextRequest) {
     const currentYearLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date()));
 
     // Fetch product details for each item (custom/unlinked items have no productId)
-    const productIds = items.map((item: { productId?: string }) => item.productId).filter(Boolean);
+    const productIds = items.map((item: { productId?: string }) => item.productId).filter(Boolean) as string[];
     const products = await prisma.product.findMany({
       where: { id: { in: productIds }, deletedAt: null },
     });

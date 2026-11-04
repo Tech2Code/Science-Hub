@@ -517,6 +517,24 @@ Started from a review that named five structural issues, then worked through the
 
 **What this taught about verification** (kept in `CLAUDE.md` → Testing): capture the baseline twice and prove it deterministic before trusting any before/after comparison; run the "after" capture on a warm dev server (the Next "Rendering…" indicator shows up in early screenshots); don't compare timing-dependent screenshots (skeletons) — diff source text; and never log in from a script on every run, because the login limiter works.
 
+## Era 25 — Deep audit by six specialist agents, then fix batch 1 (2026-11-04)
+
+Asked for a deep audit, so six read-only agents (security, database, API, regression, performance, React/UI) each took one angle and returned ~70 findings. The rule for the follow-up was: **verify every finding in the code before acting on it, fix one point at a time, and only move on once that point has been proven working** — see `CLAUDE.md` Features Completed #75 for the per-fix evidence. Fixed: the activity log being used as state while being purgeable/cascade-deletable (a binned customer with retained invoices would have vanished from the Bin on day 31); invoice PUT accepting `items: []`; the login and forgot-password enumeration channels plus plaintext reset tokens; the binned-bill attachment back door; full-reload list links; and four defects in the previous session's PDF renderer (no timeout, hidden-tab stall, unmount mid-bulk, a late job tearing down its successor).
+
+- Everything the agents reported that was not independently re-read is marked ⚠️ in `CLAUDE.md` Pending Tasks rather than presented as fact.
+- **A test I wrote was wrong, not the app**: the bills-list check passed `text=Payment` as its "detail page loaded" locator, which already matches the list page, so it didn't wait for navigation. Fixed by waiting for the URL first. Related lesson: a probe that can pass on the page you started from proves nothing.
+- **Verifying a no-behavior-change refactor against itself**: when a detail-page-vs-list-page PDF comparison showed one difference (a 45-item invoice rendered in a 1500 px vs 850 px viewport), the real question was "did *my change* alter output", answered by temporarily swapping the previous version of the file back in on the same sample invoices and comparing — identical.
+
+## Era 26 — Share file names and background downloads (2026-11-04)
+
+Two reports from using the app: sharing an invoice showed only the financial year as its name, and a bulk ZIP stopped when the user left the page. Details and evidence in `CLAUDE.md` Features Completed #76.
+
+- **The name bug was one pattern in 17 call sites**, not one bug: `` `${documentNumber}.pdf` `` where the number can contain `/`. Fixed once in `src/lib/fileName.ts` and guarded by a source-scan unit test plus a test that pushes every numbering layout through the helper. The reproduction was only possible because the dev database already used the slash layout for invoices — worth remembering when a bug depends on an admin setting.
+- **The bulk-ZIP regression was mine** (the previous change moved the PDF host and loop into the list page). Rather than patch the symptom, ownership moved to an app-level provider so nothing that must outlive navigation lives in a page. A hazard found while designing it: two print areas with the same DOM id would have made a detail page capture the *wrong invoice* while a background job ran — so the host uses its own id.
+- **Test-script lessons**: a download listener registered before a second download fires catches the wrong file (filter by name); a toast that disappears in seconds must be watched from the moment the action starts, not checked afterwards; a cache-backed second run finishes instantly and can't exercise Cancel — use fresh data. And a hash of a whole PDF always differs (creation date); fingerprint the decoded streams instead.
+
+**A measurement mistake worth keeping** (Era 26 follow-up, see `CLAUDE.md` #77): comparing PDF output across jsPDF compression levels in one browser context, the downloads came back byte-for-byte equal at every level — because the app's own IndexedDB PDF cache served the first level's blob to the rest. Only the forced-regenerate timings were real. Before trusting an "identical" result, ask what could have made it identical for the wrong reason (here: a cache); clear the cache or use a fresh context per variant.
+
 ## Conventions (read this before touching a save/create/delete flow)
 
 - **`OverlayLoader` (`src/components/ui/Spinner.tsx`, `position: fixed; inset: 0; z-index: 9999`) is how this app locks a page or modal during an async action** — not a pile of per-field `disabled` props. Its z-index sits above everything, including an open `Modal`, so it blocks pointer interaction with whatever's underneath regardless of that content's own disabled state. Reach for it on any new save/create flow, gated on that flow's own `saving` boolean.

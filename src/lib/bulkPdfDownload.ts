@@ -4,6 +4,8 @@
 // Purchase Bills additionally uses this to bundle each bill's uploaded attachment alongside/instead
 // of its generated PDF (see BulkDownloadOptionsDialog).
 
+import { safeFileBaseName } from "./fileName";
+
 export interface ZipEntry {
   /** Path inside the zip, e.g. "SH-2026-27-0001.pdf" or "Attachments/PB-2026-27-0001 - scan.pdf". */
   name: string;
@@ -12,7 +14,7 @@ export interface ZipEntry {
 
 /** Replaces characters JSZip/most filesystems can't use in a single path segment (a document number like "02/2026-27" contains "/", which JSZip would otherwise read as a folder separator). */
 export function sanitizeZipEntryName(name: string): string {
-  return name.replace(/[/\\?%*:|"<>]/g, "-");
+  return safeFileBaseName(name, "file");
 }
 
 /** Generic form: each item may contribute zero, one, or several named entries (e.g. a bill's PDF AND its attachment). A failed item should just return an empty array — it's silently skipped, not fatal to the batch. */
@@ -21,12 +23,15 @@ export async function bulkZipDownload<T>(
   produceEntries: (item: T) => Promise<ZipEntry[]>,
   zipFileName: string,
   onProgress?: (done: number, total: number) => void,
-): Promise<{ entriesZipped: number }> {
+  /** Checked before each item; when it returns true the run stops, nothing is downloaded, and `cancelled` is true (e.g. the page was left mid-download). */
+  isCancelled?: () => boolean,
+): Promise<{ entriesZipped: number; cancelled?: boolean }> {
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
   let entriesZipped = 0;
 
   for (const [idx, item] of items.entries()) {
+    if (isCancelled?.()) return { entriesZipped: 0, cancelled: true };
     let entries: ZipEntry[] = [];
     try {
       entries = await produceEntries(item);
@@ -63,6 +68,7 @@ export interface BulkZipItem {
 export interface BulkDownloadResult {
   succeeded: number;
   failed: string[]; // fileNames that failed to render
+  cancelled?: boolean; // the run was stopped by isCancelled(); nothing was downloaded
 }
 
 /** Simple one-PDF-per-item case (Invoices, and Purchase Bills' PDFs-only path) — built on bulkZipDownload. */
@@ -71,9 +77,10 @@ export async function bulkDownloadPdfsAsZip<T extends BulkZipItem>(
   generatePdf: (item: T) => Promise<Blob | null>,
   zipFileName: string,
   onProgress?: (done: number, total: number) => void,
+  isCancelled?: () => boolean,
 ): Promise<BulkDownloadResult> {
   const failed: string[] = [];
-  const { entriesZipped } = await bulkZipDownload(
+  const { entriesZipped, cancelled } = await bulkZipDownload(
     items,
     async (item) => {
       const blob = await generatePdf(item);
@@ -85,6 +92,7 @@ export async function bulkDownloadPdfsAsZip<T extends BulkZipItem>(
     },
     zipFileName,
     onProgress,
+    isCancelled,
   );
-  return { succeeded: entriesZipped, failed };
+  return { succeeded: entriesZipped, failed, ...(cancelled ? { cancelled: true } : {}) };
 }

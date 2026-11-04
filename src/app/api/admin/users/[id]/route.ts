@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { BCRYPT_COST } from "@/lib/passwordHash";
 import { logActivity } from "@/lib/activity";
 import { validateUserInput } from "@/lib/validation";
 import { requireAdmin, requireSession } from "@/lib/apiAuth";
 import { rateLimit } from "@/lib/rateLimit";
+import { STATE_BEARING_ACTIONS } from "@/lib/activityProtection";
 import { revalidateTag } from "next/cache";
 
 const USER_SELECT = {
@@ -115,7 +117,7 @@ export async function PUT(
         }
       }
 
-      hashedPassword = await bcrypt.hash(newPassword, 12);
+      hashedPassword = await bcrypt.hash(newPassword, BCRYPT_COST);
     }
 
     // Email uniqueness check (against other users) — normalized the same
@@ -227,22 +229,29 @@ export async function DELETE(
     // row while any exist would otherwise surface as a raw, unhandled Prisma FK error instead of
     // this clear message. Counts are returned structured (not just baked into the message) so the
     // client can offer a "reassign, then delete" flow instead of just showing an error.
-    const [invoiceCount, purchaseBillCount, rateListCount] = await Promise.all([
+    // ActivityLog.userId cascades on delete, and some of a user's log rows are state the app reads back
+    // (who created a product/brand/category/customer/vendor, which customers/vendors were put in the Bin —
+    // see src/lib/activityProtection.ts). Deleting the user would silently wipe them, so they count as
+    // blockers too and the reassign step re-homes them onto the chosen user.
+    const [invoiceCount, purchaseBillCount, rateListCount, recordCount] = await Promise.all([
       prisma.invoice.count({ where: { userId: id } }),
       prisma.purchaseBill.count({ where: { createdByUserId: id } }),
       prisma.rateList.count({ where: { createdByUserId: id } }),
+      prisma.activityLog.count({ where: { userId: id, action: { in: [...STATE_BEARING_ACTIONS] } } }),
     ]);
-    if (invoiceCount > 0 || purchaseBillCount > 0 || rateListCount > 0) {
+    if (invoiceCount > 0 || purchaseBillCount > 0 || rateListCount > 0 || recordCount > 0) {
       const parts: string[] = [];
       if (invoiceCount > 0) parts.push(`${invoiceCount} invoice(s)`);
       if (purchaseBillCount > 0) parts.push(`${purchaseBillCount} purchase bill(s)`);
       if (rateListCount > 0) parts.push(`${rateListCount} rate list(s)`);
+      if (recordCount > 0) parts.push(`${recordCount} tracked record(s) (products, brands, categories, customers or vendors they created or moved to the Bin)`);
       return NextResponse.json(
         {
           error: `Cannot delete "${targetUser.name}" — they have created ${parts.join(", ")}. Reassign them to another user first.`,
           invoiceCount,
           purchaseBillCount,
           rateListCount,
+          recordCount,
         },
         { status: 400 }
       );

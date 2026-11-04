@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { requireAdmin } from "@/lib/apiAuth";
+import { STATE_BEARING_ACTIONS } from "@/lib/activityProtection";
 
 // Admin-only bulk reassign: moves every Invoice/PurchaseBill/RateList a user has created (across
 // every status, including bin/soft-deleted rows — DELETE /api/admin/users/[id]'s own block counts
@@ -39,20 +40,25 @@ export async function POST(
       return NextResponse.json({ error: "Cannot reassign documents to a manager" }, { status: 400 });
     }
 
-    const [invoiceResult, purchaseBillResult, rateListResult] = await prisma.$transaction([
+    const [invoiceResult, purchaseBillResult, rateListResult, recordResult] = await prisma.$transaction([
       prisma.invoice.updateMany({ where: { userId: id }, data: { userId: targetUserId } }),
       prisma.purchaseBill.updateMany({ where: { createdByUserId: id }, data: { createdByUserId: targetUserId } }),
       prisma.rateList.updateMany({ where: { createdByUserId: id }, data: { createdByUserId: targetUserId } }),
+      // The user's state-bearing activity-log rows (who created a product/brand/category/customer/vendor,
+      // and the Recycle-Bin markers for customers/vendors they binned) move with the documents — the log
+      // rows would otherwise cascade-delete with the user. See src/lib/activityProtection.ts.
+      prisma.activityLog.updateMany({ where: { userId: id, action: { in: [...STATE_BEARING_ACTIONS] } }, data: { userId: targetUserId } }),
     ]);
 
     const invoiceCount = invoiceResult.count;
     const purchaseBillCount = purchaseBillResult.count;
     const rateListCount = rateListResult.count;
+    const recordCount = recordResult.count;
 
     await logActivity(
       auth.session.user.id,
       "reassign_user_documents",
-      `Reassigned ${invoiceCount} invoice(s), ${purchaseBillCount} purchase bill(s), ${rateListCount} rate list(s) from "${sourceUser.name}" to "${targetUser.name}"`,
+      `Reassigned ${invoiceCount} invoice(s), ${purchaseBillCount} purchase bill(s), ${rateListCount} rate list(s), ${recordCount} tracked record(s) from "${sourceUser.name}" to "${targetUser.name}"`,
       id,
       "user"
     );
@@ -60,7 +66,7 @@ export async function POST(
     if (purchaseBillCount > 0) revalidateTag("purchase-bills", { expire: 0 });
     if (rateListCount > 0) revalidateTag("rate-lists", { expire: 0 });
 
-    return NextResponse.json({ invoiceCount, purchaseBillCount, rateListCount, targetUser });
+    return NextResponse.json({ invoiceCount, purchaseBillCount, rateListCount, recordCount, targetUser });
   } catch (error) {
     console.error("POST /api/admin/users/[id]/reassign error:", error);
     return NextResponse.json({ error: "Failed to reassign documents" }, { status: 500 });

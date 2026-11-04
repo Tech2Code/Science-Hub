@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { BCRYPT_COST } from "@/lib/passwordHash";
 import crypto from "crypto";
 
 // One-time seed endpoint; disabled in production and refuses to run once any user exists.
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Name is too long (max 200 characters)." }, { status: 400 });
     }
 
-    const hashedPassword = await bcrypt.hash(adminPassword, 12);
+    const hashedPassword = await bcrypt.hash(adminPassword, BCRYPT_COST);
     const admin = await prisma.user.create({
       data: { email: adminEmail, password: hashedPassword, name: adminName, role: "admin" },
     });

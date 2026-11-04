@@ -156,6 +156,13 @@ export async function PUT(
       return NextResponse.json(invoice);
     }
 
+    // `items` was supplied (the notes-only branch above handles "absent"), so it must be a non-empty array — an empty
+    // array used to fall through as "no lines": the invoice was saved with total 0, derived status "paid", and all its
+    // stock reversed. POST /api/invoices has always rejected this; PUT now does too.
+    if (!Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: "At least one item is required" }, { status: 400 });
+    }
+
     if (!placeOfSupply || !String(placeOfSupply).trim()) {
       return NextResponse.json({ error: "Place of supply is required" }, { status: 400 });
     }
@@ -286,7 +293,7 @@ export async function PUT(
     }
 
     // Fetch product info for names/units (custom/unlinked items have no productId)
-    const productIds = items.map((i: { productId?: string }) => i.productId).filter(Boolean);
+    const productIds = items.map((i: { productId?: string }) => i.productId).filter(Boolean) as string[];
     const products = await prisma.product.findMany({ where: { id: { in: productIds }, deletedAt: null } });
     const productMap = new Map(products.map((p) => [p.id, p]));
     const missingProductId = (productIds as string[]).find((pid) => !productMap.has(pid));

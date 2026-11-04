@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { BCRYPT_COST } from "@/lib/passwordHash";
 import { rateLimitShared, getClientIp } from "@/lib/rateLimit";
 import { validateUserInput } from "@/lib/validation";
+import { hashResetToken } from "@/lib/resetToken";
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,7 +23,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429 });
     }
 
-    const record = await prisma.passwordResetToken.findUnique({ where: { token } });
+    // Tokens are stored hashed (see src/lib/resetToken.ts); the emailed value is only ever the raw token.
+    const record = await prisma.passwordResetToken.findUnique({ where: { token: hashResetToken(token) } });
 
     if (!record) {
       return NextResponse.json({ error: "Invalid or expired reset link." }, { status: 400 });
@@ -33,7 +36,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "This reset link has expired. Request a new one." }, { status: 400 });
     }
 
-    const hashed = await bcrypt.hash(password, 12);
+    const hashed = await bcrypt.hash(password, BCRYPT_COST);
 
     // Claim the token atomically (only while usedAt is still null) — two concurrent submits of the
     // same link could otherwise both pass the usedAt check above and both reset the password.

@@ -1,3 +1,4 @@
+import { pdfFileName } from "@/lib/fileName";
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { getBusinessSettings } from "@/lib/db";
@@ -91,7 +92,7 @@ export async function POST(req: Request) {
         </div>
       `,
       attachments: [
-        { filename: `${billNumber.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`, content: buffer, contentType: "application/pdf" },
+        { filename: pdfFileName(billNumber), content: buffer, contentType: "application/pdf" },
       ],
     });
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { pdfFileName } from "@/lib/fileName";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import styles from "./PdfPreviewModal.module.css";
@@ -74,7 +75,7 @@ export function PdfPreviewModal({ url, fileName, title, subtitle, onClose }: Pdf
   function handleDownload() {
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${fileName}.pdf`;
+    a.download = pdfFileName(fileName, "document");
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

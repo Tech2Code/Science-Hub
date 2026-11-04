@@ -1,5 +1,6 @@
 "use client";
 
+import { pdfFileName } from "@/lib/fileName";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -208,7 +209,7 @@ export default function PurchaseBillDetailPage() {
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `${bill.billNumber}.pdf`;
+    a.href = url; a.download = pdfFileName(bill.billNumber);
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
     if (force) toast({ type: "success", title: "Regenerated", message: "Latest PDF generated and cached." });
@@ -242,12 +243,12 @@ export default function PurchaseBillDetailPage() {
     setShareLoading(false);
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate PDF." }); return; }
 
-    const file = new File([blob], `${num}.pdf`, { type: "application/pdf" });
+    const file = new File([blob], pdfFileName(num), { type: "application/pdf" });
 
     const downloadPdf = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = `${num}.pdf`;
+      a.href = url; a.download = pdfFileName(num);
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     };
@@ -307,7 +308,7 @@ export default function PurchaseBillDetailPage() {
         return;
       }
       const formData = new FormData();
-      formData.append("pdf", blob, `${bill.billNumber}.pdf`);
+      formData.append("pdf", blob, pdfFileName(bill.billNumber));
       formData.append("to", emails.join(","));
       formData.append("billNumber", bill.billNumber);
       formData.append("vendorName", bill.vendor.name);

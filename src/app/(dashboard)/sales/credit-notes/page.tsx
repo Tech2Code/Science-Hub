@@ -1,5 +1,6 @@
 "use client";
 
+import { pdfFileName } from "@/lib/fileName";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -233,7 +234,7 @@ export default function CreditNotesPage() {
       }
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = `${c.creditNoteNumber ?? "Credit-Note"}.pdf`;
+      a.href = url; a.download = pdfFileName(c.creditNoteNumber ?? "Credit-Note");
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } finally {

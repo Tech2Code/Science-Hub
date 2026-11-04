@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { pdfFileName } from "@/lib/fileName";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { OverlayLoader } from "@/components/ui/Spinner";
@@ -272,7 +273,7 @@ export default function RateListDetailPage() {
         return;
       }
       const formData = new FormData();
-      formData.append("pdf", blob, `${rateList.title}.pdf`);
+      formData.append("pdf", blob, pdfFileName(rateList.title, "rate-list"));
       formData.append("to", emails.join(","));
       formData.append("title", rateList.title);
       const res = await fetch("/api/send-rate-list", { method: "POST", body: formData });

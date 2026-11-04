@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -486,7 +487,7 @@ export default function PurchasesPage() {
               ) : bills.map(b => (
                 <tr key={b.id}>
                   <Cell col={COLUMNS[0]} className={styles.billNoCell}>
-                    <a href={`/purchases/bills/${b.id}`} className={styles.billLink}>{b.billNumber}</a>
+                    <Link href={`/purchases/bills/${b.id}`} className={styles.billLink}>{b.billNumber}</Link>
                     {b.attachmentUrl && (
                       <a
                         href={purchaseBillAttachmentByIdHref(b.id, b.attachmentName || "attachment.pdf")}

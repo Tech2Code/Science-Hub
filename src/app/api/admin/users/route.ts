@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { BCRYPT_COST } from "@/lib/passwordHash";
 import { logActivity } from "@/lib/activity";
 import { validateUserInput } from "@/lib/validation";
 import { requireAdmin } from "@/lib/apiAuth";
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password as string, 12);
+    const hashedPassword = await bcrypt.hash(password as string, BCRYPT_COST);
 
     const user = await prisma.user.create({
       data: { name: validName, email: normalizedEmail, password: hashedPassword, role: validRole },

@@ -3,14 +3,12 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
 import bcrypt from "bcryptjs";
 import { rateLimitShared } from "./rateLimit";
+import { DUMMY_PASSWORD_HASH } from "./passwordHash";
+import { hashForKey } from "./resetToken";
 
 if (!process.env.NEXTAUTH_SECRET) {
   throw new Error("NEXTAUTH_SECRET environment variable is required");
 }
-
-// Fixed dummy hash used to keep authorize()'s timing constant whether or not
-// the email exists, so response time can't be used to enumerate accounts.
-const DUMMY_HASH = "$2a$10$CwTycUXWue0Thq9StjUM0uJ8/Wq5rE/H2LTKq/i9v9r0Kv6WGqA0e";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -31,10 +29,14 @@ export const authOptions: NextAuthOptions = {
           || headers["x-real-ip"]?.trim()
           || headers["x-forwarded-for"]?.split(",")[0]?.trim()
           || "unknown";
-        const ipLimit = await rateLimitShared(`login:ip:${ip}`, 30, 15 * 60 * 1000);
         // Keyed by email+IP so an attacker can't lock a real user out of their own account
-        // (login DoS) just by spamming wrong passwords for that email from elsewhere.
-        const accountLimit = await rateLimitShared(`login:${email}:${ip}`, 8, 15 * 60 * 1000);
+        // (login DoS) just by spamming wrong passwords for that email from elsewhere. The email is hashed
+        // in the key because the key can live in a third-party store (Upstash). Both checks run together so
+        // a slow shared store costs one round-trip, not two.
+        const [ipLimit, accountLimit] = await Promise.all([
+          rateLimitShared(`login:ip:${ip}`, 30, 15 * 60 * 1000),
+          rateLimitShared(`login:${hashForKey(email)}:${ip}`, 8, 15 * 60 * 1000),
+        ]);
         if (!ipLimit.allowed || !accountLimit.allowed) return null;
 
         // A DB error must not surface as a message distinct from "wrong password" (would leak which
@@ -46,7 +48,7 @@ export const authOptions: NextAuthOptions = {
           console.error("[auth] DB lookup failed during login attempt", { email, err });
           return null;
         }
-        const valid = await bcrypt.compare(credentials.password, user?.password ?? DUMMY_HASH);
+        const valid = await bcrypt.compare(credentials.password, user?.password ?? DUMMY_PASSWORD_HASH);
         if (!user || !valid) return null;
         return { id: user.id, name: user.name, email: user.email, role: user.role, tokenVersion: user.tokenVersion };
       },
