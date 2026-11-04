@@ -1,11 +1,11 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Badge, StatusBadge } from "@/components/ui/Badge";
-import { fetchCached, bustCache, bustCachePrefix, useFetch } from "@/lib/useCache";
+import { fetchCached, useFetch } from "@/lib/useCache";
+import { invalidateAfter } from "@/lib/cacheInvalidation";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Input, Select, FormField } from "@/components/ui/Input";
 import { FillMaxButton } from "@/components/ui/FillMaxButton";
@@ -17,34 +17,23 @@ import { Modal } from "@/components/dialogs/Modal";
 import { PdfCopyDialog } from "@/components/dialogs/PdfCopyDialog";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
-import { withCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
-import { amountInWordsINR } from "@/lib/numberToWords";
-import { splitGstForDisplay } from "@/lib/roundOff";
-import { animateSection } from "@/lib/animateSection";
+import { withCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { useCanWrite } from "@/lib/useCanWrite";
 import { useIsAdmin } from "@/lib/useIsAdmin";
 import { ReassignOwnerModal } from "@/components/dialogs/ReassignOwnerModal";
-import { formatDate, formatDateTime } from "@/lib/formatDate";
+import { formatDateTime } from "@/lib/formatDate";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { useDirty } from "@/lib/useDirty";
 import { useMenuA11y } from "@/lib/useMenuA11y";
 import { PAYMENT_METHODS, resolvePaymentMethod, methodSelectValue, methodCustomText } from "@/lib/paymentMethods";
+import { InvoicePrintArea } from "@/components/invoices/InvoicePrintArea";
+import { InvoiceDetailSkeleton } from "./_components/InvoiceDetailSkeleton";
+import { CreditNotePrintArea } from "./_components/CreditNotePrintArea";
+import { PaymentHistoryCard } from "./_components/PaymentHistoryCard";
+import { ReturnHistoryCard } from "./_components/ReturnHistoryCard";
+import { fmt, type BusinessSettings, type Invoice, type InvoiceItem, type Payment, type ReturnRecord } from "@/components/invoices/invoiceDetailTypes";
 import styles from "./invoiceDetail.module.css";
 
-interface InvoiceItem {
-  id: string; productId: string; name: string; unit: string; hsn?: string;
-  quantity: number; price: number; discountPercent?: number; discountAmount?: number;
-  gstRate: number; gstAmount: number; total: number;
-}
-interface Payment {
-  id: string; date: string; amount: number; method: string; reference: string;
-}
-interface ReturnRecord {
-  id: string; date: string; notes: string | null; createdAt: string;
-  creditNoteNumber: string | null;
-  subtotal: number; cgst: number; sgst: number; igst: number; roundOff: number; total: number;
-  items: { id: string; name: string; quantity: number; price: number; discountPercent?: number; gstRate: number; gstAmount: number; total: number; productId: string | null }[];
-}
 interface ReturnFormItem {
   productId: string; name: string; price: number; discountPercent: number; selected: boolean; qty: number; maxQty: number; qtyText: string;
 }
@@ -74,159 +63,6 @@ function remainingReturnQty(items: InvoiceItem[], returns: ReturnRecord[]): numb
     returnedByName[key] = (returnedByName[key] ?? 0) - used;
     return item.quantity - used;
   });
-}
-interface Invoice {
-  id: string; invoiceNumber: string; date: string; dueDate?: string; createdAt: string;
-  status: string; isInterState: boolean; placeOfSupply?: string; reverseCharge?: boolean; ewayBillNumber?: string | null;
-  createdBy?: { id: string; name: string } | null;
-  customer: { name: string; phone: string; email: string; address: string; city: string; state: string; pincode: string; gstin: string; updatedAt?: string; };
-  items: InvoiceItem[];
-  payments: Payment[];
-  subtotal: number; cgst: number; sgst: number; igst: number;
-  transportCharge?: number; transportChargeGstRate?: number; transportChargeGstAmount?: number;
-  total: number; roundOff: number; paidAmount: number; notes: string;
-}
-
-interface BusinessSettings {
-  name: string; tagline: string; email: string; phone: string;
-  address: string; city: string; state: string; pincode: string; gstin: string; pan?: string;
-  termsAndConditions?: string;
-  bankName?: string; bankAccountName?: string; bankAccountNumber?: string; bankIfsc?: string; bankBranch?: string;
-  logoUrl?: string;
-  showLogoOnInvoices?: boolean;
-  updatedAt?: string;
-}
-
-const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-// A returned line's own `price` is the original invoice line's List Price (gross, pre-discount) —
-// this derives the actual net rate charged/refunded, same as the main item table's Rate (₹) column.
-const returnItemRate = (ri: { price: number; discountPercent?: number }) => ri.price * (1 - (ri.discountPercent ?? 0) / 100);
-// Use createdAt (always a full server timestamp) for display rather than date
-// (which is a user-picked date-only value stored as UTC midnight).
-function parseDate(d: string) {
-  return new Date(d);
-}
-function Sk({ w = "100%", h = 16, r = 6 }: { w?: string | number; h?: number; r?: number }) {
-  return (
-    <div style={{
-      width: w, height: h, borderRadius: r,
-      background: "var(--c-border)",
-      animation: "skPulse 1.4s ease-in-out infinite",
-    }} />
-  );
-}
-
-function InvoiceSkeleton() {
-  return (
-    <>
-      <style>{`@keyframes skPulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
-      <div className="page-stack">
-
-        {/* Toolbar — breadcrumb + 7 action buttons */}
-        <div className={styles.skToolbarRow}>
-          <div className={styles.skFlexGap5}>
-            <Sk w={70} h={13} r={4} />
-            <Sk w={8} h={13} r={2} />
-            <Sk w={110} h={13} r={4} />
-          </div>
-          <div className={styles.skActionsRow}>
-            <Sk w={64} h={20} r={10} />
-            <Sk w={28} h={28} r={6} />
-            <Sk w={100} h={28} r={6} />
-            <Sk w={118} h={28} r={6} />
-            <Sk w={105} h={28} r={6} />
-            <Sk w={95} h={28} r={6} />
-            <Sk w={62} h={28} r={6} />
-            <Sk w={85} h={28} r={6} />
-            <Sk w={90} h={28} r={6} />
-          </div>
-        </div>
-
-        {/* Invoice print area */}
-        <div className={`card ${styles.skCard}`}>
-          {/* TAX INVOICE header bar */}
-          <Sk w="100%" h={40} r={0} />
-
-          <div className={styles.skTwoCol}>
-            {/* Left: company info */}
-            <div className={styles.skCompanyCol}>
-              <div className={styles.skFlexGap5}>
-                <Sk w={36} h={36} r={4} />
-                <Sk w={130} h={16} r={4} />
-              </div>
-              <Sk w="80%" h={11} r={3} />
-              <Sk w="65%" h={11} r={3} />
-              <Sk w="50%" h={11} r={3} />
-            </div>
-            {/* Right: invoice meta rows */}
-            <div className={styles.skMetaCol}>
-              {["Invoice No.", "Date", "Supply Type"].map(label => (
-                <div key={label} className={styles.skMetaRow}>
-                  <Sk w="70%" h={11} r={3} />
-                  <Sk w="85%" h={11} r={3} />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Bill To section */}
-          <div className={styles.skBillTo}>
-            <Sk w={60} h={10} r={3} />
-            <Sk w={180} h={14} r={3} />
-            <Sk w={220} h={11} r={3} />
-            <div className={styles.skBillToRow}>
-              <Sk w={100} h={11} r={3} />
-              <Sk w={160} h={11} r={3} />
-            </div>
-          </div>
-
-          {/* Items table header */}
-          <div className={styles.skTableHeader}>
-            {Array.from({ length: 14 }).map((_, i) => <Sk key={i} w="75%" h={10} r={3} />)}
-          </div>
-
-          {/* Item rows */}
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className={styles.skTableRow}>
-              <Sk w="60%" h={12} r={3} />
-              <Sk w="85%" h={12} r={3} />
-              <Sk w="70%" h={12} r={3} />
-              <Sk w="70%" h={12} r={3} />
-              <Sk w="80%" h={12} r={3} />
-              <Sk w="80%" h={12} r={3} />
-              <Sk w="60%" h={12} r={3} />
-              <Sk w="75%" h={12} r={3} />
-              <Sk w="75%" h={12} r={3} />
-              <Sk w="85%" h={12} r={3} />
-              <Sk w="60%" h={12} r={3} />
-              <Sk w="80%" h={12} r={3} />
-              <Sk w="60%" h={12} r={3} />
-              <Sk w="85%" h={12} r={3} />
-            </div>
-          ))}
-
-          {/* Totals rows */}
-          <div className={styles.skTotalsRow}>
-            <div className={styles.skTotalsLeft}>
-              <Sk w="60%" h={11} r={3} />
-            </div>
-            <div className={styles.skTotalsRight}>
-              {["Subtotal", "CGST", "SGST", "Round Off", "Grand Total", "Amount in Words", "Paid", "Balance Due"].map(label => (
-                <div key={label} className={styles.skTotalsLine}>
-                  <Sk w="60%" h={11} r={3} />
-                  <Sk w="70%" h={11} r={3} />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Footer bar */}
-          <Sk w="100%" h={34} r={0} />
-        </div>
-
-      </div>
-    </>
-  );
 }
 
 export default function InvoiceDetailPage() {
@@ -386,14 +222,7 @@ export default function InvoiceDetailPage() {
         setPaymentAmountError(undefined);
         setPaymentDateError(undefined);
         setPaymentOtherMethodError(undefined);
-        invalidateCachedPdf("invoice", id);
-        bustCache(`/api/invoices/${id}`);
-        bustCachePrefix("/api/invoices");
-        bustCachePrefix("/api/payments");
-        bustCachePrefix("/api/reports");
-        // Customer detail (invoice status/balance sub-table) and statement are cached separately.
-        bustCachePrefix("/api/customers");
-        bustCachePrefix("/api/notifications"); // overdue/due-invoice alerts depend on paid status
+        invalidateAfter({ type: "invoice-payment-changed", invoiceId: id });
         load(true);
         toast({ type: "success", title: "Payment recorded", message: `₹${parseFloat(paymentForm.amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via ${method}` });
       } else {
@@ -446,14 +275,7 @@ export default function InvoiceDetailPage() {
       });
       if (res.ok) {
         setEditingPayment(null);
-        invalidateCachedPdf("invoice", id);
-        bustCache(`/api/invoices/${id}`);
-        bustCachePrefix("/api/invoices");
-        bustCachePrefix("/api/payments");
-        bustCachePrefix("/api/reports");
-        // Customer detail (invoice status/balance sub-table) and statement are cached separately.
-        bustCachePrefix("/api/customers");
-        bustCachePrefix("/api/notifications"); // overdue/due-invoice alerts depend on paid status
+        invalidateAfter({ type: "invoice-payment-changed", invoiceId: id });
         load(true);
         toast({ type: "success", title: "Payment updated" });
       } else {
@@ -473,14 +295,7 @@ export default function InvoiceDetailPage() {
       const res = await fetch(`/api/invoices/${id}/payment/${paymentDeleteConfirm.id}`, { method: "DELETE" });
       if (res.ok) {
         setPaymentDeleteConfirm(null);
-        invalidateCachedPdf("invoice", id);
-        bustCache(`/api/invoices/${id}`);
-        bustCachePrefix("/api/invoices");
-        bustCachePrefix("/api/payments");
-        bustCachePrefix("/api/reports");
-        // Customer detail (invoice status/balance sub-table) and statement are cached separately.
-        bustCachePrefix("/api/customers");
-        bustCachePrefix("/api/notifications"); // overdue/due-invoice alerts depend on paid status
+        invalidateAfter({ type: "invoice-payment-changed", invoiceId: id });
         load(true);
         toast({ type: "success", title: "Payment deleted" });
       } else {
@@ -551,13 +366,7 @@ export default function InvoiceDetailPage() {
         const created = await res.json();
         setReturns(prev => [created, ...prev]);
         setShowReturnForm(false);
-        invalidateCachedPdf("invoice", id);
-        bustCache(`/api/invoices/${id}`);
-        bustCachePrefix("/api/invoices");
-        bustCachePrefix("/api/products");
-        bustCachePrefix("/api/credit-notes");
-        bustCachePrefix("/api/reports");
-        bustCachePrefix("/api/customers"); // customer statement lists credit notes
+        invalidateAfter({ type: "invoice-return-changed", invoiceId: id });
         toast({ type: "success", title: "Return recorded", message: `${selected.length} item(s) returned.` });
       } else {
         const d = await res.json().catch(() => ({}));
@@ -576,14 +385,7 @@ export default function InvoiceDetailPage() {
       const res = await fetch(`/api/invoices/${id}/returns/${returnDeleteConfirm.id}`, { method: "DELETE" });
       if (res.ok) {
         setReturns(prev => prev.filter(r => r.id !== returnDeleteConfirm.id));
-        invalidateCachedPdf("return", returnDeleteConfirm.id);
-        invalidateCachedPdf("invoice", id);
-        bustCache(`/api/invoices/${id}`);
-        bustCachePrefix("/api/invoices");
-        bustCachePrefix("/api/products");
-        bustCachePrefix("/api/credit-notes");
-        bustCachePrefix("/api/reports");
-        bustCachePrefix("/api/customers"); // customer statement lists credit notes
+        invalidateAfter({ type: "invoice-return-changed", invoiceId: id, returnId: returnDeleteConfirm.id });
         toast({ type: "success", title: "Deleted", message: "Credit note moved to bin." });
       } else {
         const d = await res.json().catch(() => ({}));
@@ -909,8 +711,7 @@ export default function InvoiceDetailPage() {
       });
       if (res.ok) {
         setReassignOpen(false);
-        bustCache(`/api/invoices/${id}`);
-        bustCachePrefix("/api/invoices");
+        invalidateAfter({ type: "invoice-reassigned" });
         load(true);
         toast({ type: "success", title: "Reassigned", message: "Invoice creator updated." });
       } else {
@@ -928,16 +729,7 @@ export default function InvoiceDetailPage() {
     try {
       const res = await fetch(`/api/invoices/${id}`, { method: "DELETE" });
       if (res.ok) {
-        invalidateCachedPdf("invoice", id);
-        bustCachePrefix("/api/invoices");
-        bustCachePrefix("/api/products");
-        bustCachePrefix("/api/reports");
-        // Payments Received filters out payments whose invoice is deleted (buildPaymentWhere),
-        // so a deleted invoice's payment rows disappear from that list too.
-        bustCachePrefix("/api/payments");
-        // Customer list's invoice counts / outstanding figures change too.
-        bustCachePrefix("/api/customers");
-        bustCachePrefix("/api/notifications");
+        invalidateAfter({ type: "invoice-deleted", invoiceId: id });
         toast({ type: "success", title: "Deleted", message: "Invoice moved to bin." });
         router.push("/sales/invoices");
         // Deliberately no setDeleting(false)/setDeleteConfirm(false) here — this page is about to
@@ -955,7 +747,7 @@ export default function InvoiceDetailPage() {
     setDeleteConfirm(false);
   }
 
-  if (loading || settingsLoading) return <InvoiceSkeleton />;
+  if (loading || settingsLoading) return <InvoiceDetailSkeleton />;
   if (error || !invoice) return <div className={`loading-center ${styles.errorText}`}>{error || "Invoice not found."}</div>;
 
   // Rounded to paise: raw float subtraction (e.g. 1000.3 - 500.1 = 500.19999999999993) made the
@@ -1466,1059 +1258,43 @@ export default function InvoiceDetailPage() {
         </Modal>
 
         {/* Invoice print area */}
-        <div id="invoice-print-area"
-          style={{ background: "var(--inv-bg)", color: "var(--inv-tx)", borderRadius: "0.75rem", boxShadow: "var(--c-shadow-sm)" }}>
-          <div style={{ overflowX: "auto" }}>
-            {/* minWidth keeps the printable layout's proportions intact on
-                narrow screens — without it the table shrinks to the
-                viewport width instead of triggering the scroll wrapper
-                above, and the nowrap header/cell text gets visually
-                clipped by neighboring cells instead of staying legible. */}
-            {/* overflowWrap inherits down to every cell (address, GSTIN,
-                phone/email, place of supply, etc.) so a long unbreakable
-                token wraps instead of spilling past the cell/table edge —
-                which html2canvas would otherwise capture as content
-                bleeding outside the page during PDF generation. The
-                customer-name divs override this locally with nowrap +
-                ellipsis, which still wins for that single line. */}
-            <table style={{ width: "100%", minWidth: 700, borderCollapse: "collapse", fontSize: 9, overflowWrap: "break-word", wordBreak: "break-word" }}>
-              {/* ── Letterhead header ── */}
-              <thead>
-                <tr>
-                  <th colSpan={invoice.isInterState ? 12 : 14}
-                    style={{ padding: 0, background: "var(--inv-bg)", fontWeight: "normal" }}>
-                    {/* Thin top bar: copy label only (no border — only the
-                        block below is boxed) */}
-                    <div style={{
-                      display: "flex", alignItems: "center", justifyContent: "flex-end",
-                      padding: "4px 14px",
-                      fontSize: 9, color: "var(--inv-tx3)"
-                    }}>
-                      {/* "Original Copy" by default on screen; overwritten to
-                          "ORIGINAL COPY"/"DUPLICATE COPY" per pass during PDF
-                          generation / printing — data-role survives node cloning
-                          (ids get stripped there). */}
-                      <span id="invoice-copy-badge" data-role="copy-badge" style={{
-                        textAlign: "right",
-                        fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--inv-tx2)"
-                      }}>
-                        Original Copy
-                      </span>
-                    </div>
-                    {/* Logo + company block */}
-                    <div style={{
-                      display: "flex", alignItems: "center", gap: 14, padding: "10px 20px",
-                      borderTop: "1px solid var(--inv-bd)", borderLeft: "1px solid var(--inv-bd)",
-                      borderRight: "1px solid var(--inv-bd)", borderBottom: "1px solid var(--inv-bd)"
-                    }}>
-                      {settings?.showLogoOnInvoices !== false && (
-                        <div style={{ flexShrink: 0, width: 60, height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element -- html2canvas needs a plain <img>, swapped to a data URL during PDF/print generation */}
-                          <img src={settings?.logoUrl || "/logo.png"} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
-                        </div>
-                      )}
-                      <div style={{ flex: 1, textAlign: "center" }}>
-                        <div style={{
-                          fontSize: 10, fontWeight: 700,
-                          letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--inv-tx2)", marginBottom: 3
-                        }}>
-                          Tax Invoice
-                        </div>
-                        <div style={{
-                          fontSize: 17, fontWeight: 800, letterSpacing: "0.02em",
-                          color: "var(--inv-tx)", marginBottom: 3, lineHeight: 1.2
-                        }}>
-                          {settings?.name}
-                        </div>
-                        {settings?.tagline && (
-                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", marginBottom: 2 }}>{settings.tagline}</div>
-                        )}
-                        {(settings?.address || settings?.city || settings?.state || settings?.pincode) && (
-                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", marginBottom: 2 }}>
-                            {[settings?.address, settings?.city, settings?.state, settings?.pincode].filter(Boolean).join(", ")}
-                          </div>
-                        )}
-                        {(settings?.phone || settings?.email) && (
-                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", marginBottom: 2 }}>
-                            {[settings?.phone && `Mobile: ${settings.phone}`, settings?.email && `Email: ${settings.email}`]
-                              .filter(Boolean).join("  |  ")}
-                          </div>
-                        )}
-                        {(settings?.gstin || settings?.pan) && (
-                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", fontFamily: "monospace" }}>
-                            {[settings?.gstin && `GSTIN - ${settings.gstin}`, settings?.pan && `PAN - ${settings.pan}`]
-                              .filter(Boolean).join("  |  ")}
-                          </div>
-                        )}
-                      </div>
-                      {settings?.showLogoOnInvoices !== false && <div style={{ flexShrink: 0, width: 60 }} aria-hidden="true" />}
-                    </div>
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {/* ── Invoice meta ── */}
-                <tr>
-                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Invoice No.</td>
-                  <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", fontWeight: 700, color: "var(--inv-tx)" }}>{invoice.invoiceNumber}</td>
-                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Invoice Date</td>
-                  <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)" }}>
-                    {formatDate(invoice.date)}
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Due Date</td>
-                  <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)" }}>
-                    {invoice.dueDate ? formatDate(invoice.dueDate) : "—"}
-                  </td>
-                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>Place of Supply</td>
-                  <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)" }}>
-                    {invoice.placeOfSupply || invoice.customer.state || "—"}
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, background: "var(--inv-bg2)" }}>Supply Type</td>
-                  <td colSpan={invoice.isInterState ? 4 : 5} style={{
-                    border: "1px solid var(--inv-bd)", padding: "8px 14px",
-                    color: invoice.isInterState ? "var(--inv-blue)" : "var(--inv-green)", fontWeight: 600
-                  }}>
-                    {invoice.isInterState ? "Inter-state (IGST)" : "Intra-state (CGST+SGST)"}
-                  </td>
-                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, background: "var(--inv-bg2)" }}>Reverse Charge</td>
-                  <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)", fontWeight: 600 }}>
-                    {invoice.reverseCharge ? "Yes" : "No"}
-                  </td>
-                </tr>
-                {invoice.ewayBillNumber && (
-                  <tr>
-                    <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx3)", fontWeight: 600, whiteSpace: "nowrap", background: "var(--inv-bg2)" }}>E-way Bill No.</td>
-                    <td colSpan={invoice.isInterState ? 4 : 5} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px", color: "var(--inv-tx2)", fontWeight: 600, fontFamily: "monospace" }}>
-                      {invoice.ewayBillNumber}
-                    </td>
-                    {/* Filler — completes the row to the table's real total width (allCols: 12/14,
-                        same constant the header/totals rows use), so the right edge stays bordered
-                        instead of blank. */}
-                    <td colSpan={invoice.isInterState ? 6 : 7} style={{ border: "1px solid var(--inv-bd)", padding: "8px 14px" }} />
-                  </tr>
-                )}
-
-                {/* ── Buyer: Bill To / Ship To ── */}
-                <tr>
-                  <td colSpan={invoice.isInterState ? 6 : 7}
-                    style={{ border: "1px solid var(--inv-bd)", padding: 0, verticalAlign: "top" }}>
-                    <div style={{
-                      background: "var(--inv-bg3)", padding: "5px 14px", fontSize: 10, fontWeight: 700,
-                      color: "var(--inv-tx2)", borderBottom: "1px solid var(--inv-bd)"
-                    }}>
-                      Buyer (Bill to)
-                    </div>
-                    <div style={{ padding: "10px 14px", lineHeight: 1.75, fontSize: 10.5 }}>
-                      {/* nowrap+ellipsis doesn't clip inside an auto-layout
-                          table — the cell just grows to fit the unwrapped
-                          text instead, pushing the whole table (and PDF
-                          page) wider. Let it wrap/break like the address
-                          below it, which the table's own overflowWrap
-                          already handles correctly. */}
-                      <div style={{ fontWeight: 700, fontSize: 12, color: "var(--inv-tx)", marginBottom: 2 }} title={invoice.customer.name}>
-                        {invoice.customer.name}
-                      </div>
-                      {invoice.customer.address && (
-                        <div style={{ color: "var(--inv-tx2)", width: 340 }}>{invoice.customer.address}</div>
-                      )}
-                      {(invoice.customer.city || invoice.customer.state) && (
-                        <div style={{ color: "var(--inv-tx2)" }}>
-                          {[invoice.customer.city, invoice.customer.state].filter(Boolean).join(", ")}
-                        </div>
-                      )}
-                      {invoice.customer.pincode && (
-                        <div style={{ color: "var(--inv-tx2)" }}>{invoice.customer.pincode}</div>
-                      )}
-                      {(invoice.customer.phone || invoice.customer.email) && (
-                        <div style={{ color: "var(--inv-tx3)", marginTop: 2 }}>
-                          {[invoice.customer.phone && `Ph: ${invoice.customer.phone}`,
-                          invoice.customer.email && `Email: ${invoice.customer.email}`]
-                            .filter(Boolean).join("  |  ")}
-                        </div>
-                      )}
-                      <div style={{ marginTop: 6, borderTop: "1px solid var(--inv-bd)", paddingTop: 5 }}>
-                        {(invoice.placeOfSupply || invoice.customer.state) && (
-                          <div style={{ fontWeight: 600, color: "var(--inv-tx)", fontSize: 10 }}>
-                            Place of Supply : {invoice.placeOfSupply || invoice.customer.state}
-                          </div>
-                        )}
-                        {invoice.customer.gstin && (
-                          <div style={{ fontWeight: 600, color: "var(--inv-tx)", fontSize: 10 }}>
-                            GST Number : {invoice.customer.gstin}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td colSpan={invoice.isInterState ? 6 : 7}
-                    style={{ border: "1px solid var(--inv-bd)", padding: 0, verticalAlign: "top" }}>
-                    <div style={{
-                      background: "var(--inv-bg3)", padding: "5px 14px", fontSize: 10, fontWeight: 700,
-                      color: "var(--inv-tx2)", borderBottom: "1px solid var(--inv-bd)"
-                    }}>
-                      Buyer (Ship to)
-                    </div>
-                    <div style={{ padding: "10px 14px", lineHeight: 1.75, fontSize: 10.5 }}>
-                      {/* nowrap+ellipsis doesn't clip inside an auto-layout
-                          table — the cell just grows to fit the unwrapped
-                          text instead, pushing the whole table (and PDF
-                          page) wider. Let it wrap/break like the address
-                          below it, which the table's own overflowWrap
-                          already handles correctly. */}
-                      <div style={{ fontWeight: 700, fontSize: 12, color: "var(--inv-tx)", marginBottom: 2 }} title={invoice.customer.name}>
-                        {invoice.customer.name}
-                      </div>
-                      {invoice.customer.address && (
-                        <div style={{ color: "var(--inv-tx2)", width: 340 }}>{invoice.customer.address}</div>
-                      )}
-                      {(invoice.customer.city || invoice.customer.state) && (
-                        <div style={{ color: "var(--inv-tx2)" }}>
-                          {[invoice.customer.city, invoice.customer.state].filter(Boolean).join(", ")}
-                        </div>
-                      )}
-                      {invoice.customer.pincode && (
-                        <div style={{ color: "var(--inv-tx2)" }}>{invoice.customer.pincode}</div>
-                      )}
-                      {(invoice.customer.phone || invoice.customer.email) && (
-                        <div style={{ color: "var(--inv-tx3)", marginTop: 2 }}>
-                          {[invoice.customer.phone && `Ph: ${invoice.customer.phone}`,
-                          invoice.customer.email && `Email: ${invoice.customer.email}`]
-                            .filter(Boolean).join("  |  ")}
-                        </div>
-                      )}
-                      <div style={{ marginTop: 6, borderTop: "1px solid var(--inv-bd)", paddingTop: 5 }}>
-                        {(invoice.placeOfSupply || invoice.customer.state) && (
-                          <div style={{ fontWeight: 600, color: "var(--inv-tx)", fontSize: 10 }}>
-                            Place of Supply : {invoice.placeOfSupply || invoice.customer.state}
-                          </div>
-                        )}
-                        {invoice.customer.gstin && (
-                          <div style={{ fontWeight: 600, color: "var(--inv-tx)", fontSize: 10 }}>
-                            GST Number : {invoice.customer.gstin}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-
-                {/* Items header — a single real row (no rowSpan anywhere): html2canvas doesn't
-                    compute rowSpan cell heights correctly, which cut off/hid borders in the
-                    generated PDF even though it rendered fine on screen. The CGST/SGST/IGST group
-                    cells still colSpan the same 2 underlying data columns below them (colSpan
-                    renders fine), but their Rate/Amount sub-labels are nested inline via flex
-                    instead of living in a second table row.
-                    `data-header-item-cols="true"` marks this row for generateInvoicePdf.ts's
-                    page-split logic: on a continuation page that still has item rows on it, this
-                    row is redrawn stacked right under the repeating banner (so the columns are
-                    still labeled past page 1) — but on a continuation page that's purely the
-                    trailing Notes/Bank/Terms/Totals block with no item rows, only the banner
-                    repeats and this row is skipped (column headers with nothing under them would
-                    look broken there). Deliberately kept in <tbody>, immediately above the actual
-                    item rows — NOT in <thead> — so it stays visually right above where the items
-                    start on page 1 (after Invoice No./Bill To/Place of Supply etc.), instead of
-                    jumping to the very top of the table under the banner the way anything inside
-                    <thead> unavoidably would. */}
-                {(() => {
-                  const taxGroup = (label: string, width: string) => (
-                    <td key={label} colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", width, whiteSpace: "nowrap" }}>
-                      <div style={{ textAlign: "center" }}>{label}</div>
-                      <div style={{ display: "flex", fontSize: 7, gap: 6, margin: "5px -4px 0", borderTop: "1px solid var(--inv-bd)", padding: "5px 5px 0 5px" }}>
-                        <div style={{ flex: "1.3", textAlign: "left" }}>Rate</div>
-                        <div style={{ flex: 1, textAlign: "left" }}>Amount</div>
-                      </div>
-                    </td>
-                  );
-                  return (
-                    <tr id="invoice-col-header" data-header-item-cols="true" style={{ background: "var(--inv-bg3)", fontWeight: 700, fontSize: 8, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--inv-tx2)" }}>
-                      {[
-                        ["#", "center", "3%"], ["Description", "left", "7%"], ["HSN/SAC", "center", "8%"],
-                        ["Qty", "center", "5%"], ["Unit", "center", "10%"],
-                      ].map(([label, align, width]) => (
-                        <td key={label} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align as "left" | "right" | "center", width, whiteSpace: "nowrap", verticalAlign: "middle" }}>{label}</td>
-                      ))}
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "11%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
-                        <div>List</div><div>Price(₹)</div>
-                      </td>
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "9%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
-                        <div>Total</div><div>Value (₹)</div>
-                      </td>
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", width: "2%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
-                        <div>Discount</div><div>%</div>
-                      </td>
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "7%", whiteSpace: "nowrap", verticalAlign: "middle" }}>
-                        <div>Taxable (₹)</div>
-                      </td>
-                      {invoice.isInterState
-                        ? taxGroup("IGST", "9%")
-                        : <>{taxGroup("CGST", "8%")}{taxGroup("SGST", "8%")}</>
-                      }
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", width: "8%", whiteSpace: "nowrap", verticalAlign: "middle" }}>Amount (₹)</td>
-                    </tr>
-                  );
-                })()}
-
-                {/* Item rows */}
-                {invoice.items.map((item, idx) => {
-                  const discountAmount = item.discountAmount ?? 0;
-                  const grossValue = item.quantity * item.price;
-                  const taxable = grossValue - discountAmount;
-                  // Same helper the invoice/credit-note footers already use to split a combined GST
-                  // amount for display — a naive item.gstAmount/2 independently rounds each half and
-                  // can print a row whose own CGST+SGST don't foot to that row's own Amount column
-                  // (e.g. gstAmount=10.01 -> both halves round to 5.01, printing 10.02).
-                  const { cgst: itemCgst, sgst: itemSgst } = splitGstForDisplay(item.gstAmount);
-                  const halfRate = item.gstRate / 2;
-                  const rowBg = idx % 2 === 1 ? "var(--inv-bg2)" : "var(--inv-bg)";
-                  const c = (content: React.ReactNode, align: "left" | "right" | "center" = "center", bold = false, width?: string, nowrap = false) => (
-                    <td style={{
-                      border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align, width,
-                      fontWeight: bold ? 700 : undefined, background: rowBg, color: bold ? "var(--inv-tx)" : "var(--inv-tx2)",
-                      ...(nowrap ? { whiteSpace: "nowrap" as const } : {})
-                    }}>
-                      {content}
-                    </td>
-                  );
-                  return (
-                    <tr key={item.id} data-invoice-item-row="true">
-                      {c(idx + 1, "center", false, "3%", true)}
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 6px", width: "13%", background: rowBg, fontWeight: 600, color: "var(--inv-tx)" }}>
-                        {/* TEST: 2-line clamp instead of the previous
-                            fixed-1-line-height ellipsis, to see how the
-                            page-split math in generateInvoicePdf.ts
-                            (ROW_SAFETY_MARGIN_PX) copes with rows whose
-                            height now legitimately varies (1 line vs 2). The
-                            div still needs its own definite px width (see
-                            prior comment) so overflow/line-clamp measure
-                            against a fixed column width, not the text's own
-                            length. */}
-                        <div style={{
-                          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-                          overflow: "hidden", textOverflow: "ellipsis",
-                          width: 145, maxWidth: "100%",
-                        }} title={item.name}>{item.name}</div>
-                      </td>
-                      <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "center", background: rowBg, color: "var(--inv-tx2)" }}>
-                        {/* Real HSN/SAC codes are numeric-only, max 8 digits
-                            (2/4/6/8-digit HSN hierarchy, or 6-digit SAC) —
-                            they never legitimately need to wrap. The server
-                            still allows up to 50 chars as a generic safety
-                            bound (route.ts), so a fixed single-line ellipsis
-                            (rather than the item-name's 2-line clamp) guards
-                            against a stray long/garbage value wrapping
-                            unpredictably and reintroducing the same row-
-                            height page-split risk. 55px comfortably fits 8
-                            digits at this font size with room to spare. */}
-                        <div style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", width: 55, maxWidth: "100%", margin: "0 auto" }} title={item.hsn || "—"}>
-                          {item.hsn || "—"}
-                        </div>
-                      </td>
-                      {c(item.quantity, "center", false, undefined, true)}{c(item.unit, "center", false, undefined, true)}
-                      {c(fmt(item.price), "right", false, undefined, true)}
-                      {c(fmt(grossValue), "right", false, undefined, true)}
-                      {c(`${(item.discountPercent ?? 0).toFixed(2)}%`, "center", false, undefined, true)}
-                      {c(fmt(taxable), "right", false, undefined, true)}
-                      {invoice.isInterState
-                        ? <>{c(`${item.gstRate}%`, "center", false, "4.5%", true)}{c(fmt(item.gstAmount), "right", false, undefined, true)}</>
-                        : <>{c(`${halfRate}%`, "center", false, "4.5%", true)}{c(fmt(itemCgst), "right", false, undefined, true)}{c(`${halfRate}%`, "center", false, "4.5%", true)}{c(fmt(itemSgst), "right", false, undefined, true)}</>}
-                      {c(fmt(item.total), "right", true, undefined, true)}
-                    </tr>
-                  );
-                })}
-
-                {/* Transportation Charges — its own row right after the item
-                    rows end, broken into Taxable/CGST+SGST(or IGST)/Amount
-                    columns exactly like an item row, rather than a single
-                    merged amount+GST figure, so its tax is as visible as any
-                    product line's. Kept out of the Notes+Totals merged block
-                    below so it reads as "one more line item". */}
-                {!!invoice.transportCharge && invoice.transportCharge > 0 && (() => {
-                  const tcTaxable = invoice.transportCharge ?? 0;
-                  const tcGst = invoice.transportChargeGstAmount ?? 0;
-                  const tcRate = invoice.transportChargeGstRate ?? 0;
-                  const tcHalfRate = tcRate / 2;
-                  const tcHalfGst = tcGst / 2;
-                  const tcTd = (content: React.ReactNode, bold = false, align: "right" | "center" = "right") => (
-                    <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align, background: "var(--inv-bg)", fontWeight: bold ? 700 : undefined, color: bold ? "var(--inv-tx)" : "var(--inv-tx2)", whiteSpace: "nowrap" }}>
-                      {content}
-                    </td>
-                  );
-                  return (
-                    <tr>
-                      <td colSpan={8} style={{ border: "1px solid var(--inv-bd)", padding: "5px 6px", background: "var(--inv-bg)", fontWeight: 600, color: "var(--inv-tx)" }}>
-                        Transportation Charges
-                      </td>
-                      {tcTd(fmt(tcTaxable))}
-                      {invoice.isInterState
-                        ? <>{tcTd(`${tcRate}%`, false, "center")}{tcTd(fmt(tcGst))}</>
-                        : <>{tcTd(`${tcHalfRate}%`, false, "center")}{tcTd(fmt(tcHalfGst))}{tcTd(`${tcHalfRate}%`, false, "center")}{tcTd(fmt(tcHalfGst))}</>}
-                      {tcTd(fmt(tcTaxable + tcGst), true)}
-                    </tr>
-                  );
-                })()}
-
-                {/* Notes + Totals — rowSpan must equal the exact number of
-                    rows this merged Notes cell needs to cover: Subtotal +
-                    Grand Total + Amount in Words + Paid + Balance Due (5,
-                    always present) + tax rows (1 for IGST, 2 for CGST+SGST)
-                    + Round Off (only when non-zero). A stale/hardcoded count
-                    here desyncs the table the moment Round Off is nonzero —
-                    the rows past the rowSpan's end silently lose their left
-                    offset and collapse against the table's left edge. */}
-                <tr data-invoice-summary-start="true">
-                  <td colSpan={8} rowSpan={5 + (invoice.isInterState ? 1 : 2) + (invoice.roundOff !== 0 ? 1 : 0)}
-                    style={{ border: "1px solid var(--inv-bd)", padding: "14px 16px", verticalAlign: "top", color: "var(--inv-tx3)" }}>
-                    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 120 }}>
-                      <div style={{ marginTop: "auto" }}>
-                        <div style={{ display: "flex", gap: 16, marginBottom: 10 }}>
-                          {settings?.termsAndConditions?.trim() && (
-                            <div style={{ flex: 1.37, minWidth: 0 }}>
-                              <div style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10, marginBottom: 4, color: "var(--inv-tx2)" }}>Terms &amp; Conditions</div>
-                              <ol style={{ margin: 0, paddingLeft: 14, fontSize: 9.5, lineHeight: 1.5 }}>
-                                {settings.termsAndConditions.split("\n").map((line, i) => line.trim() && <li key={i}>{line.trim()}</li>)}
-                              </ol>
-                            </div>
-                          )}
-                          {(settings?.bankName || settings?.bankAccountNumber) && (() => {
-                            const bankRow = (label: string, value?: string) => value && (
-                              <div>
-                                <span style={{ fontWeight: 600, color: "var(--inv-tx2)" }}>{label} : </span>
-                                <span style={{ fontWeight: 700 }}>{value}</span>
-                              </div>
-                            );
-                            const hasTerms = Boolean(settings?.termsAndConditions?.trim());
-                            return (
-                              <div style={{ flex: 1, minWidth: 0, ...(hasTerms ? { borderLeft: "1px solid var(--inv-bd2)", paddingLeft: 14 } : {}) }}>
-                                <div style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10.5, marginBottom: 5, color: "var(--inv-tx2)" }}>Bank Details</div>
-                                <div style={{ fontSize: 10.5, lineHeight: 1.75, color: "var(--inv-tx)" }}>
-                                  {bankRow("Bank", settings.bankName)}
-                                  {bankRow("A/C Name", settings.bankAccountName)}
-                                  {bankRow("A/C No", settings.bankAccountNumber)}
-                                  {bankRow("IFSC", settings.bankIfsc)}
-                                  {bankRow("Branch", settings.bankBranch)}
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                        {invoice.notes && (
-                          <><div style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10, marginBottom: 4, color: "var(--inv-tx2)" }}>Notes</div><p>{invoice.notes}</p></>
-                        )}
-                        <p style={{ marginTop: 10, fontSize: 9.5, opacity: 0.55 }}>**Disclaimer:** This is a computer-generated invoice; please verify all details and calculations, as errors or discrepancies may occur.</p>
-                        <div style={{ marginTop: 16, borderTop: "1px solid var(--inv-bd2)", paddingTop: 8, display: "flex", justifyContent: "space-between", gap: 16 }}>
-                          <div>
-                            <div style={{ fontSize: 10, fontWeight: 600, color: "var(--inv-tx2)", marginBottom: 20 }}>For {settings?.name}</div>
-                            <div style={{ fontSize: 9, color: "var(--inv-tx3)" }}>Authorised Signatory</div>
-                          </div>
-                          {/* Shown only on the Duplicate Copy pass — toggled in
-                              generateInvoicePdf.ts's onclone via visibility (not
-                              display), same mechanism as #invoice-copy-badge, so
-                              this row's layout space is always reserved and every
-                              copy's canvas height matches the pre-loop measurement.
-                              Original/no-label copies keep it invisible. */}
-                          <div id="invoice-receiver-signature" data-role="receiver-signature" style={{ visibility: "hidden", textAlign: "right" }}>
-                            <div style={{ fontSize: 10, fontWeight: 600, color: "var(--inv-tx2)", marginBottom: 20 }}>&nbsp;</div>
-                            <div style={{ fontSize: 9, color: "var(--inv-tx3)" }}>Receiver Signature</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Subtotal</td>
-                  <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.subtotal)}</td>
-                </tr>
-                {/* Transportation Charges' own IGST/CGST/SGST (shown split
-                    out on its own row above) must be folded into these
-                    footer totals too, or "Total CGST"/"Total SGST" would
-                    silently under-report the tax actually charged on the
-                    invoice whenever a transport charge is present. */}
-                {invoice.isInterState ? (
-                  <tr>
-                    <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total IGST</td>
-                    <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.igst + (invoice.transportChargeGstAmount ?? 0))}</td>
-                  </tr>
-                ) : (() => {
-                  // Split the combined CGST+SGST once (not each half independently) so the two
-                  // printed rows always foot back to the printed Grand Total — see
-                  // splitGstForDisplay's own comment for why independently rounding invoice.cgst
-                  // and invoice.sgst (both exact halves in raw float math) can silently print
-                  // ₹0.01 more than the actual total GST on an odd-paisa invoice.
-                  const { cgst: cgstDisplay, sgst: sgstDisplay } = splitGstForDisplay(invoice.cgst + invoice.sgst + (invoice.transportChargeGstAmount ?? 0));
-                  return (
-                    <>
-                      <tr>
-                        <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total CGST</td>
-                        <td colSpan={4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(cgstDisplay)}</td>
-                      </tr>
-                      <tr>
-                        <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Total SGST</td>
-                        <td colSpan={4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(sgstDisplay)}</td>
-                      </tr>
-                    </>
-                  );
-                })()}
-                {invoice.roundOff !== 0 && (
-                  <tr>
-                    <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Round Off</td>
-                    <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>{invoice.roundOff > 0 ? "+" : "−"}₹{fmt(Math.abs(invoice.roundOff))}</td>
-                  </tr>
-                )}
-                <tr>
-                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", fontWeight: 700, color: "var(--inv-tx)", background: "var(--inv-bg4)", fontSize: 12 }}>Grand Total</td>
-                  <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", fontWeight: 700, color: "var(--inv-tx)", background: "var(--inv-bg4)", fontSize: 12 }}>₹{fmt(invoice.total)}</td>
-                </tr>
-                <tr>
-                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx3)", background: "var(--inv-bg2)", fontSize: 9.5, fontStyle: "italic" }}>Amount in Words</td>
-                  <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)", fontSize: 9.5, fontStyle: "italic" }}>{amountInWordsINR(invoice.total)}</td>
-                </tr>
-                <tr>
-                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-green)", background: "var(--inv-bg2)" }}>Paid</td>
-                  <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-green)", fontWeight: 600, background: "var(--inv-bg2)" }}>₹{fmt(invoice.paidAmount)}</td>
-                </tr>
-                <tr>
-                  <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", fontWeight: 700, color: "var(--inv-tx)", background: "var(--inv-bg3)" }}>Balance Due</td>
-                  <td colSpan={invoice.isInterState ? 2 : 4} style={{
-                    border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", fontWeight: 700, fontSize: 12.5, background: "var(--inv-bg3)",
-                    color: balance > 0 ? "var(--inv-red)" : "var(--inv-green)"
-                  }}>₹{fmt(balance)}</td>
-                </tr>
-
-              </tbody>
-
-              {/* PDF payment history — direct rows in main table to avoid double borders */}
-              {showPaymentInPdf && invoice.payments.length > 0 && (() => {
-                const sorted = [...invoice.payments].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-                const allCols = invoice.isInterState ? 12 : 14;
-                // Reference/UTR and Amount columns are sized so the divider between
-                // them lands on the same underlying column boundary as the Grand
-                // Total / Balance Due label|value divider above — the notes cell
-                // (colSpan 8, fixed for both supply types) plus the label (colSpan 2)
-                // always puts that divider after 10 real columns, so Date+Method+Ref
-                // must also total 10 in both states; Amount absorbs the difference
-                // between inter-state (12 total) and intra-state (14, since CGST/SGST
-                // each carry their own Rate+Amount sub-columns).
-                const refCols = 6;
-                const amountCols = invoice.isInterState ? 2 : 4;
-                const bd: React.CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 10px", fontSize: 10 };
-                return (
-                  <tbody>
-                    <tr>
-                      <td colSpan={allCols} style={{ ...bd, padding: "7px 14px", background: "var(--inv-bg3)", color: "var(--inv-tx)", fontWeight: 700, fontSize: 10.5 }}>
-                        Payment History
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date</td>
-                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Method</td>
-                      <td colSpan={refCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Reference / UTR</td>
-                      <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
-                    </tr>
-                    {sorted.map((p) => (
-                      <tr key={p.id}>
-                        <td colSpan={2} style={{ ...bd, color: "var(--inv-tx2)" }}>
-                          {formatDate(p.date)}
-                        </td>
-                        <td colSpan={2} style={{ ...bd, color: "var(--inv-tx2)" }}>{p.method}</td>
-                        <td colSpan={refCols} style={{ ...bd, color: "var(--inv-tx2)" }}>{p.reference || "—"}</td>
-                        <td colSpan={amountCols} style={{ ...bd, textAlign: "right", color: "var(--inv-green)", fontWeight: 600 }}>{fmt(p.amount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                );
-              })()}
-
-              {showReturnInPdf && returns.length > 0 && (() => {
-                const allCols = invoice.isInterState ? 12 : 14;
-                // Column widths are tuned so two dividers line up with the tables
-                // above: Item|Qty×Rate lands on the same column boundary as the
-                // Grand Total/Balance Due label|value split (the notes cell is now
-                // always colSpan 8), and Qty×Rate|Amount lands on the same boundary
-                // as Payment History's Reference|Amount divider (also now fixed,
-                // since both boundaries above are fixed for both supply types).
-                const itemCols = 4;
-                const qtyRateCols = 2;
-                const gstCols = 2;
-                const amountCols = invoice.isInterState ? 2 : 4;
-                const bd: React.CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 10px", fontSize: 10 };
-                const totalSubtotal = returns.reduce((s, r) => s + r.subtotal, 0);
-                const totalCgst = returns.reduce((s, r) => s + r.cgst, 0);
-                const totalSgst = returns.reduce((s, r) => s + r.sgst, 0);
-                const totalIgst = returns.reduce((s, r) => s + r.igst, 0);
-                const totalRoundOff = returns.reduce((s, r) => s + r.roundOff, 0);
-                const totalReturnedAmt = returns.reduce((s, r) => s + r.total, 0);
-                return (
-                  <tbody>
-                    <tr>
-                      <td colSpan={allCols} style={{ ...bd, padding: "7px 14px", background: "var(--inv-bg3)", color: "var(--inv-tx)", fontWeight: 700, fontSize: 10.5 }}>
-                        Return History
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan={2} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Date</td>
-                      <td colSpan={itemCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Item</td>
-                      <td colSpan={qtyRateCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600 }}>Qty × Rate</td>
-                      <td colSpan={gstCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>GST</td>
-                      <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Amount (₹)</td>
-                    </tr>
-                    {returns.map((ret) =>
-                      ret.items.map((ri, riIdx) => (
-                        <tr key={`${ret.id}-${ri.id}`}>
-                          {riIdx === 0 && (
-                            <td colSpan={2} rowSpan={ret.items.length} style={{ ...bd, color: "var(--inv-tx2)", verticalAlign: "top" }}>
-                              {ret.creditNoteNumber && <div style={{ fontWeight: 600, color: "var(--inv-tx)" }}>{ret.creditNoteNumber}</div>}
-                              {formatDate(ret.date)}
-                              {ret.notes ? <div style={{ fontSize: 10, color: "var(--inv-tx3)", marginTop: 2 }}>{ret.notes}</div> : null}
-                            </td>
-                          )}
-                          <td colSpan={itemCols} style={{ ...bd, color: "var(--inv-tx2)" }}>{ri.name}</td>
-                          <td colSpan={qtyRateCols} style={{ ...bd, color: "var(--inv-tx3)" }}>{ri.quantity} × ₹{fmt(returnItemRate(ri))}</td>
-                          <td colSpan={gstCols} style={{ ...bd, textAlign: "right", color: "var(--inv-tx3)" }}>{ri.gstRate}% ({fmt(ri.gstAmount)})</td>
-                          <td colSpan={amountCols} style={{ ...bd, textAlign: "right", color: "var(--inv-red)", fontWeight: 600 }}>−{fmt(ri.total)}</td>
-                        </tr>
-                      ))
-                    )}
-                    <tr>
-                      <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>Taxable Value</td>
-                      <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(totalSubtotal)}</td>
-                    </tr>
-                    {totalIgst > 0 ? (
-                      <tr>
-                        <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>IGST</td>
-                        <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(totalIgst)}</td>
-                      </tr>
-                    ) : (
-                      <>
-                        <tr>
-                          <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>CGST</td>
-                          <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(totalCgst)}</td>
-                        </tr>
-                        <tr>
-                          <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>SGST</td>
-                          <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(totalSgst)}</td>
-                        </tr>
-                      </>
-                    )}
-                    {totalRoundOff !== 0 && (
-                      <tr>
-                        <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>Round Off</td>
-                        <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>{totalRoundOff > 0 ? "−" : "+"}{fmt(Math.abs(totalRoundOff))}</td>
-                      </tr>
-                    )}
-                    <tr>
-                      <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", fontWeight: 600, textAlign: "right" }}>Total Returned</td>
-                      <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-red)", fontWeight: 700, textAlign: "right" }}>
-                        −{fmt(totalReturnedAmt)}
-                      </td>
-                    </tr>
-                  </tbody>
-                );
-              })()}
-
-              <tfoot>
-                <tr>
-                  <td colSpan={invoice.isInterState ? 12 : 14}
-                    style={{ border: "1px solid var(--inv-bd)", padding: "8px 16px", textAlign: "center", fontSize: 9.5, color: "var(--inv-tx3)", background: "var(--inv-bg2)" }}>
-                    Thank you for your business · {settings?.name}{settings?.email ? ` · ${settings.email}` : ""}{settings?.phone ? ` · ${settings.phone}` : ""}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-            {/* No page-marker element here on purpose — "Page No. X of Y" is
-                drawn directly onto the generated PDF's canvas in a reserved
-                band below the tfoot (see generateInvoicePdf.ts), computed
-                from the table's own measured edges rather than a live DOM
-                node, so the on-screen detail page never shows any such text
-                and there's nothing here that could go stale/desync. */}
-          </div>
-
-        </div>
+        <InvoicePrintArea
+          invoice={invoice}
+          settings={settings}
+          returns={returns}
+          balance={balance}
+          showPaymentInPdf={showPaymentInPdf}
+          showReturnInPdf={showReturnInPdf}
+        />
 
         {/* Credit note print area — mounted off-screen only while a credit
             note PDF is being generated, fed to the same generateInvoicePdfBlob()
             pipeline as the main invoice via #credit-note-print-area. */}
         {creditNoteToRender && (
-          <div id="credit-note-print-area" style={{
-            position: "absolute", left: -9999, top: 0,
-            width: 700, background: "var(--inv-bg)", color: "var(--inv-tx)",
-          }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10.5 }}>
-              {/* Letterhead + credit-note-meta + column-header rows live in a real <thead> (this
-                  print area previously had none at all) so generateInvoicePdf.ts's page-split
-                  logic repeats them on every continuation page of a long credit note, the same
-                  way the main invoice print area's own header repeats. */}
-              <thead>
-                <tr>
-                  <td colSpan={6} style={{ padding: 0 }}>
-                    <div style={{
-                      display: "flex", alignItems: "center", gap: 14, padding: "10px 20px",
-                      border: "1px solid var(--inv-bd)",
-                    }}>
-                      {settings?.showLogoOnInvoices !== false && (
-                        <div style={{ flexShrink: 0, width: 60, height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element -- html2canvas needs a plain <img>, swapped to a data URL during PDF generation */}
-                          <img src={settings?.logoUrl || "/logo.png"} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
-                        </div>
-                      )}
-                      <div style={{ flex: 1, textAlign: "center" }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--inv-tx2)", marginBottom: 3 }}>
-                          Credit Note
-                        </div>
-                        <div style={{ fontSize: 17, fontWeight: 800, color: "var(--inv-tx)", marginBottom: 3 }}>{settings?.name}</div>
-                        {(settings?.address || settings?.city || settings?.state || settings?.pincode) && (
-                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", marginBottom: 2 }}>
-                            {[settings?.address, settings?.city, settings?.state, settings?.pincode].filter(Boolean).join(", ")}
-                          </div>
-                        )}
-                        {(settings?.gstin || settings?.pan) && (
-                          <div style={{ fontSize: 10, color: "var(--inv-tx2)", fontFamily: "monospace" }}>
-                            {[settings?.gstin && `GSTIN - ${settings.gstin}`, settings?.pan && `PAN - ${settings.pan}`].filter(Boolean).join("   ")}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={6} style={{ padding: "10px 20px", border: "1px solid var(--inv-bd)", borderTop: "none" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
-                      <div>
-                        <div><strong>Credit Note No.:</strong> {creditNoteToRender.creditNoteNumber ?? "—"}</div>
-                        <div><strong>Date:</strong> {formatDate(parseDate(creditNoteToRender.date))}</div>
-                        <div><strong>Against Invoice:</strong> {invoice.invoiceNumber} ({formatDate(parseDate(invoice.date))})</div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div><strong>Customer:</strong> {invoice.customer.name}</div>
-                        {invoice.customer.gstin && <div style={{ fontFamily: "monospace" }}>GSTIN: {invoice.customer.gstin}</div>}
-                        {invoice.customer.address && <div>{[invoice.customer.address, invoice.customer.city, invoice.customer.state].filter(Boolean).join(", ")}</div>}
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-                <tr style={{ background: "var(--inv-bg2)" }}>
-                  {["Item", "Qty", "Rate", "GST %", "GST Amt", "Total"].map((h, i) => (
-                    <td key={h} style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", fontWeight: 700, fontSize: 9.5, textAlign: i === 0 ? "left" : "right" }}>{h}</td>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {creditNoteToRender.items.map((ri) => (
-                  <tr key={ri.id}>
-                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)" }}>{ri.name}</td>
-                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{ri.quantity}</td>
-                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{fmt(returnItemRate(ri))}</td>
-                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{ri.gstRate}%</td>
-                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{fmt(ri.gstAmount)}</td>
-                    <td style={{ padding: "6px 10px", border: "1px solid var(--inv-bd2)", textAlign: "right" }}>{fmt(ri.total)}</td>
-                  </tr>
-                ))}
-                {(() => {
-                  const cnTotalsRows = 1 + (creditNoteToRender.igst > 0 ? 1 : 2) + (creditNoteToRender.roundOff !== 0 ? 1 : 0) + 1;
-                  const cnLabelCell: CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 8px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" };
-                  const cnValueCell: CSSProperties = { ...cnLabelCell, textAlign: "right" };
-                  // Same reconciliation fix as the main invoice footer — round the combined
-                  // CGST+SGST once instead of each half independently, so the two printed rows
-                  // always foot back to the printed credit-note Total.
-                  const { cgst: cnCgstDisplay, sgst: cnSgstDisplay } = splitGstForDisplay(creditNoteToRender.cgst + creditNoteToRender.sgst);
-                  return (
-                    <>
-                      <tr>
-                        <td colSpan={4} rowSpan={cnTotalsRows} style={{ border: "1px solid var(--inv-bd)", padding: "10px 12px", verticalAlign: "top", fontSize: 9.5, color: "var(--inv-tx3)" }}>
-                          <div style={{ fontStyle: "italic" }}><strong>Amount in Words:</strong> {amountInWordsINR(creditNoteToRender.total)}</div>
-                          {creditNoteToRender.notes && <div style={{ marginTop: 6 }}><strong>Notes:</strong> {creditNoteToRender.notes}</div>}
-                        </td>
-                        <td style={cnLabelCell}>Taxable Value</td>
-                        <td style={cnValueCell}>₹{fmt(creditNoteToRender.subtotal)}</td>
-                      </tr>
-                      {creditNoteToRender.igst > 0 ? (
-                        <tr>
-                          <td style={cnLabelCell}>IGST</td>
-                          <td style={cnValueCell}>₹{fmt(creditNoteToRender.igst)}</td>
-                        </tr>
-                      ) : (
-                        <>
-                          <tr>
-                            <td style={cnLabelCell}>CGST</td>
-                            <td style={cnValueCell}>₹{fmt(cnCgstDisplay)}</td>
-                          </tr>
-                          <tr>
-                            <td style={cnLabelCell}>SGST</td>
-                            <td style={cnValueCell}>₹{fmt(cnSgstDisplay)}</td>
-                          </tr>
-                        </>
-                      )}
-                      {creditNoteToRender.roundOff !== 0 && (
-                        <tr>
-                          <td style={cnLabelCell}>Round Off</td>
-                          <td style={cnValueCell}>{creditNoteToRender.roundOff > 0 ? "+" : "−"}₹{fmt(Math.abs(creditNoteToRender.roundOff))}</td>
-                        </tr>
-                      )}
-                      <tr>
-                        <td style={{ ...cnLabelCell, fontWeight: 700, color: "var(--inv-tx)", background: "var(--inv-bg4)", fontSize: 12 }}>Total</td>
-                        <td style={{ ...cnValueCell, fontWeight: 700, color: "var(--inv-tx)", background: "var(--inv-bg4)", fontSize: 12 }}>₹{fmt(creditNoteToRender.total)}</td>
-                      </tr>
-                    </>
-                  );
-                })()}
-              </tbody>
-            </table>
-          </div>
+          <CreditNotePrintArea ret={creditNoteToRender} invoice={invoice} settings={settings} />
         )}
-
         {/* Payment history */}
-        {invoice.payments.length > 0 && (() => {
-          const METHOD_STYLE: Record<string, { bg: string; color: string; border: string }> = {
-            Cash: { bg: "var(--c-green-bg)", color: "var(--c-green-text)", border: "var(--c-green-border)" },
-            UPI: { bg: "#f3e8ff", color: "#7c3aed", border: "#ddd6fe" },
-            IMPS: { bg: "var(--c-blue-bg)", color: "var(--c-blue)", border: "var(--c-blue-border)" },
-            NEFT: { bg: "var(--c-blue-bg)", color: "var(--c-blue)", border: "var(--c-blue-border)" },
-            RTGS: { bg: "var(--c-blue-bg)", color: "var(--c-blue)", border: "var(--c-blue-border)" },
-            Cheque: { bg: "var(--c-amber-bg)", color: "var(--c-amber)", border: "var(--c-amber-border)" },
-            Card: { bg: "#ede9fe", color: "#5b21b6", border: "#c4b5fd" },
-            Other: { bg: "var(--c-bg-sub)", color: "var(--c-text-3)", border: "var(--c-border)" },
-          };
-          const paidTotal = invoice.payments.reduce((s, p) => s + p.amount, 0);
-          const totalReturned = returns.reduce((s, r) => s + r.total, 0);
-          // Grand Total already bakes in roundOff (subtotal + tax + roundOff),
-          // so netting it out of "net paid" too shows the reconciled figure
-          // net of both what was returned and the sub-rupee rounding cushion.
-          const roundOffAdj = invoice.roundOff;
-          const netPaid = paidTotal - totalReturned - roundOffAdj;
-          const paidPct = Math.min(100, (paidTotal / invoice.total) * 100);
-
-          return (
-            <div {...animateSection(0, "card")}>
-              {/* Header */}
-              <div className={styles.historyHeader}>
-                {/* Left: title + count */}
-                <div className={styles.historyHeaderLeft}>
-                  <h2 className={styles.historyTitle}>Payment History</h2>
-                  <span className={styles.historyCountBadge}>
-                    {invoice.payments.length}
-                  </span>
-                </div>
-                {/* Right: toggle + stats */}
-                <div className={styles.historyHeaderRight}>
-                  {/* Show in PDF toggle */}
-                  <button
-                    onClick={() => setShowPaymentInPdf(v => !v)}
-                    title={showPaymentInPdf ? "Remove from PDF/Print" : "Include in PDF/Print"}
-                    className={`${styles.pdfToggleBtn} ${showPaymentInPdf ? styles.pdfToggleBtnActive : ""}`}
-                  >
-                    {showPaymentInPdf ? (
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    ) : (
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                      </svg>
-                    )}
-                    {showPaymentInPdf ? "Remove Payment History from PDF" : "Add Payment History to PDF"}
-                  </button>
-                  {/* Stats group — separated visually */}
-                  <div className={styles.historyStatsGroup}>
-                    <div>
-                      <div className={styles.historyStatLabel}>Total Paid</div>
-                      <div className={`${styles.historyStatValue} ${styles.historyStatValueGreen}`}>₹{fmt(paidTotal)}</div>
-                      {(totalReturned > 0 || roundOffAdj !== 0) && (
-                        <div className={styles.historyNetLine}>
-                          {totalReturned > 0 && (
-                            <span className={styles.historyNetLineOrange}>− ₹{fmt(totalReturned)} returned</span>
-                          )}
-                          {roundOffAdj !== 0 && (
-                            <span className={styles.historyNetLineOrange}>
-                              {totalReturned > 0 ? ", " : ""}{roundOffAdj > 0 ? "− " : "+ "}₹{fmt(Math.abs(roundOffAdj))} round off
-                            </span>
-                          )}
-                          <span className={styles.historyNetLineNet}> = ₹{fmt(netPaid)}</span>
-                          <span> net</span>
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <div className={styles.historyStatLabel}>Balance</div>
-                      <div className={styles.historyStatValue} style={{ color: balance > 0 ? "var(--c-red)" : "var(--c-green)" }}>₹{fmt(balance)}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Progress bar */}
-              <div className={styles.progressRowWrap}>
-                <div className={styles.progressRow}>
-                  <div className={styles.progressTrack}>
-                    <div className={styles.progressFill} style={{ width: `${paidPct}%`, background: paidPct >= 100 ? "var(--c-green)" : "var(--c-blue)" }} />
-                  </div>
-                  <span className={styles.progressLabel} style={{ color: paidPct >= 100 ? "var(--c-green-text)" : "var(--c-text-3)" }}>
-                    {paidPct.toFixed(0)}% paid
-                  </span>
-                </div>
-              </div>
-
-              {/* Table */}
-              <div className="table-wrap">
-                <table className="table-base">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Date</th>
-                      <th>Method</th>
-                      <th>Reference / UTR</th>
-                      <th className="table-th-right">Amount</th>
-                      {canWrite && <th className="table-th-right">Actions</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...invoice.payments]
-                      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                      .map((p, idx) => {
-                        const ms = METHOD_STYLE[p.method] ?? METHOD_STYLE.Other;
-                        return (
-                          <tr key={p.id}>
-                            <td className={styles.payIdxCell}>{idx + 1}</td>
-                            <td data-label="Date" className={styles.payDateCell}>
-                              {formatDate(p.date)}
-                            </td>
-                            <td data-label="Method">
-                              <span className={styles.methodBadge} style={{ background: ms.bg, color: ms.color, border: `1px solid ${ms.border}` }}>{p.method}</span>
-                            </td>
-                            <td data-label="Reference" className={styles.payReferenceCell}>
-                              {p.reference || "—"}
-                            </td>
-                            <td data-label="Amount" className={`table-td-right ${styles.payAmountCell}`}>
-                              ₹{fmt(p.amount)}
-                            </td>
-                            {canWrite && (
-                              <td data-label="Actions" className="table-td-right">
-                                <div className={styles.paymentActionsCell}>
-                                  <button
-                                    type="button"
-                                    className={styles.paymentEditBtn}
-                                    title="Edit payment"
-                                    aria-label="Edit payment"
-                                    onClick={() => openEditPayment(p)}
-                                  >
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={styles.paymentDeleteBtn}
-                                    title="Delete payment"
-                                    aria-label="Delete payment"
-                                    onClick={() => setPaymentDeleteConfirm(p)}
-                                  >
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
-                                  </button>
-                                </div>
-                              </td>
-                            )}
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          );
-        })()}
+        <PaymentHistoryCard
+          invoice={invoice}
+          returns={returns}
+          balance={balance}
+          canWrite={canWrite}
+          showPaymentInPdf={showPaymentInPdf}
+          onTogglePdf={() => setShowPaymentInPdf(v => !v)}
+          onEdit={openEditPayment}
+          onDelete={setPaymentDeleteConfirm}
+        />
 
         {/* Returns history */}
-        {returns.length > 0 && (() => {
-          const totalReturned = returns.reduce((s, r) => s + r.total, 0);
-          return (
-            <div {...animateSection(1, `card ${styles.returnsHistoryCard}`)}>
-              <div className={styles.returnsHistoryHeader}>
-                <div className={styles.returnsHistoryHeaderLeft}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--c-orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 102.13-9.36L1 10" /></svg>
-                  <span className={styles.returnsHistoryTitle}>Return History</span>
-                  <span className={styles.returnsCountBadge}>{returns.length}</span>
-                </div>
-                <div className={styles.historyHeaderRight}>
-                  <button
-                    onClick={() => setShowReturnInPdf(v => !v)}
-                    title={showReturnInPdf ? "Remove from PDF/Print" : "Include in PDF/Print"}
-                    className={`${styles.pdfToggleBtn} ${showReturnInPdf ? styles.pdfToggleBtnActive : styles.pdfToggleBtnOrange}`}
-                  >
-                    {showReturnInPdf ? (
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    ) : (
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                      </svg>
-                    )}
-                    {showReturnInPdf ? "Remove Return History from PDF" : "Add Return History to PDF"}
-                  </button>
-                  <div className={styles.returnsHistoryTotal}>₹{fmt(totalReturned)} returned</div>
-                </div>
-              </div>
-              <div className={styles.returnsList}>
-                {returns.map((ret, ridx) => (
-                  <div key={ret.id} className={ridx < returns.length - 1 ? styles.returnEntry : styles.returnEntryLast}>
-                    <div className={styles.returnEntryHead}>
-                      <div className={styles.returnEntryHeadLeft}>
-                        {ret.creditNoteNumber && <span className={styles.creditNoteNumberBadge}>{ret.creditNoteNumber}</span>}
-                        <span className={styles.returnEntryDate}>
-                          {formatDate(ret.date)}
-                        </span>
-                        {ret.notes && <span className={styles.returnEntryNotes}>— {ret.notes}</span>}
-                      </div>
-                      <div className={styles.returnEntryHeadRight}>
-                        <span className={styles.returnEntryTotal}>₹{fmt(ret.total)}</span>
-                        <button
-                          type="button"
-                          className={styles.returnDeleteBtn}
-                          title="Download credit note PDF"
-                          aria-label="Download credit note PDF"
-                          disabled={creditNoteDownloadingId === ret.id}
-                          onClick={() => handleDownloadCreditNotePdf(ret)}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                        </button>
-                        {canWrite && (
-                          <button
-                            type="button"
-                            className={styles.returnDeleteBtn}
-                            title="Delete credit note"
-                            aria-label="Delete credit note"
-                            onClick={() => setReturnDeleteConfirm(ret)}
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    <div className={styles.returnItemsGroup}>
-                      {ret.items.map(ri => (
-                        <div key={ri.id} className={styles.returnLineItem}>
-                          <span className={styles.returnLineItemName}>
-                            {ri.name}
-                            <span className={styles.returnLineItemQty}> ×{ri.quantity}</span>
-                            <span className={styles.returnLineItemPrice}> @ ₹{fmt(returnItemRate(ri))}</span>
-                            {ri.gstRate > 0 && <span className={styles.returnLineItemPrice}> + {ri.gstRate}% GST</span>}
-                          </span>
-                          <span className={styles.returnLineItemTotal}>₹{fmt(ri.total)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className={styles.returnTaxSummary}>
-                      Taxable ₹{fmt(ret.subtotal)}
-                      {ret.igst > 0 ? ` · IGST ₹${fmt(ret.igst)}` : ` · CGST ₹${fmt(ret.cgst)} · SGST ₹${fmt(ret.sgst)}`}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
+        <ReturnHistoryCard
+          returns={returns}
+          canWrite={canWrite}
+          showReturnInPdf={showReturnInPdf}
+          onTogglePdf={() => setShowReturnInPdf(v => !v)}
+          creditNoteDownloadingId={creditNoteDownloadingId}
+          onDownload={handleDownloadCreditNotePdf}
+          onDelete={setReturnDeleteConfirm}
+        />
       </div>
     </>
   );

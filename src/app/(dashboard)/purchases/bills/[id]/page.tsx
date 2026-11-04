@@ -16,10 +16,10 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
 import { rules, validate, toIstDateStr, isFutureIstDate } from "@/lib/validation";
 import { splitGstForDisplay } from "@/lib/roundOff";
-import { bustCachePrefix } from "@/lib/useCache";
+import { invalidateAfter } from "@/lib/cacheInvalidation";
 import { useToast } from "@/components/ui/Toast";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
-import { withCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
+import { withCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { PdfPreviewModal } from "@/components/ui/PdfPreviewModal";
 import { amountInWordsINR } from "@/lib/numberToWords";
 import { animateSection } from "@/lib/animateSection";
@@ -356,12 +356,7 @@ export default function PurchaseBillDetailPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         paymentIdempotency.renew(); // this dialog can be reopened for another payment — a fresh key must back the next submit
-        bustCachePrefix("/api/purchase-bills");
-        bustCachePrefix("/api/reports");
-        bustCachePrefix("/api/purchase-reports");
-        bustCachePrefix("/api/vendors"); // vendor detail's bill history / Paid / Balance
-        bustCachePrefix("/api/notifications"); // overdue-bills bell count
-        invalidateCachedPdf("purchase-bill", id);
+        invalidateAfter({ type: "bill-payment-changed", billId: id });
         toast({ type: "success", title: "Payment recorded", message: `₹${fmt(amount)} via ${method}.` });
         setShowPayForm(false);
         resetPaymentForm();
@@ -413,12 +408,7 @@ export default function PurchaseBillDetailPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        bustCachePrefix("/api/purchase-bills");
-        bustCachePrefix("/api/reports");
-        bustCachePrefix("/api/purchase-reports");
-        bustCachePrefix("/api/vendors"); // vendor detail's bill history / Paid / Balance
-        bustCachePrefix("/api/notifications"); // overdue-bills bell count
-        invalidateCachedPdf("purchase-bill", id);
+        invalidateAfter({ type: "bill-payment-changed", billId: id });
         toast({ type: "success", title: "Payment updated" });
         setEditingPayment(null);
         load();
@@ -438,12 +428,7 @@ export default function PurchaseBillDetailPage() {
       const res = await fetch(`/api/purchase-bills/${id}/payment/${paymentDeleteConfirm.id}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        bustCachePrefix("/api/purchase-bills");
-        bustCachePrefix("/api/reports");
-        bustCachePrefix("/api/purchase-reports");
-        bustCachePrefix("/api/vendors"); // vendor detail's bill history / Paid / Balance
-        bustCachePrefix("/api/notifications"); // overdue-bills bell count
-        invalidateCachedPdf("purchase-bill", id);
+        invalidateAfter({ type: "bill-payment-changed", billId: id });
         toast({ type: "success", title: "Payment deleted" });
         setPaymentDeleteConfirm(null);
         load();
@@ -465,13 +450,7 @@ export default function PurchaseBillDetailPage() {
         body: JSON.stringify({ status: "cancelled" }),
       });
       if (res.ok) {
-        bustCachePrefix("/api/purchase-bills");
-        bustCachePrefix("/api/products");
-        bustCachePrefix("/api/reports");
-        bustCachePrefix("/api/purchase-reports");
-        bustCachePrefix("/api/vendors"); // vendor detail's bill history / Paid / Balance
-        bustCachePrefix("/api/notifications"); // overdue-bills bell count
-        invalidateCachedPdf("purchase-bill", id);
+        invalidateAfter({ type: "bill-stock-changed", billId: id });
         toast({ type: "success", title: "Bill cancelled", message: "Status updated to cancelled." });
         load();
       } else {
@@ -494,13 +473,7 @@ export default function PurchaseBillDetailPage() {
         body: JSON.stringify({ status: "unpaid" }), // any non-"cancelled" value — the server recomputes the real status from paidAmount vs total
       });
       if (res.ok) {
-        bustCachePrefix("/api/purchase-bills");
-        bustCachePrefix("/api/products");
-        bustCachePrefix("/api/reports");
-        bustCachePrefix("/api/purchase-reports");
-        bustCachePrefix("/api/vendors"); // vendor detail's bill history / Paid / Balance
-        bustCachePrefix("/api/notifications"); // overdue-bills bell count
-        invalidateCachedPdf("purchase-bill", id);
+        invalidateAfter({ type: "bill-stock-changed", billId: id });
         toast({ type: "success", title: "Bill un-cancelled", message: "Status restored." });
         load();
       } else {
@@ -524,7 +497,7 @@ export default function PurchaseBillDetailPage() {
       });
       if (res.ok) {
         setReassignOpen(false);
-        bustCachePrefix("/api/purchase-bills");
+        invalidateAfter({ type: "bill-reassigned" });
         load();
         toast({ type: "success", title: "Reassigned", message: "Bill creator updated." });
       } else {
@@ -542,13 +515,7 @@ export default function PurchaseBillDetailPage() {
     try {
       const res = await fetch(`/api/purchase-bills/${id}`, { method: "DELETE" });
       if (res.ok) {
-        bustCachePrefix("/api/purchase-bills");
-        bustCachePrefix("/api/products");
-        bustCachePrefix("/api/reports");
-        bustCachePrefix("/api/purchase-reports");
-        bustCachePrefix("/api/vendors");
-        bustCachePrefix("/api/notifications"); // overdue-bills bell count
-        invalidateCachedPdf("purchase-bill", id);
+        invalidateAfter({ type: "bill-stock-changed", billId: id });
         toast({ type: "success", title: "Deleted", message: "Purchase bill moved to bin." });
         router.push("/purchases/bills");
         // No setDeleting(false)/setConfirmDelete(false) here — page is navigating away; resetting
