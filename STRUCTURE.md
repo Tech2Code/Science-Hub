@@ -7,6 +7,10 @@
 > (struck through where useful rather than silently deleted) after a full source-code audit. See
 > `CLAUDE.md` for the currently-authoritative, more actively-maintained project overview — when the
 > two disagree, trust `CLAUDE.md` and re-verify against the actual source, not this file.
+>
+> **Re-checked 2026-11-04**: rate limiting, the sidebar/`navigation.ts` location, the edit-route shape, the
+> `unstable_cache` claims and the env-var table were brought up to date. The directory tree below is still a
+> partial, older snapshot — CLAUDE.md's 'Project Structure' and 'Key Files' are the complete picture.
 
 ---
 
@@ -23,7 +27,7 @@
 | ~~AI~~ | ~~Google Gemini 2.0 Flash bill extraction~~ | **Not present in the current codebase** — no `GOOGLE_API_KEY`, no extraction route, no AI-scan UI exist. This row was aspirational/stale; there is no AI feature in this app today. |
 | Styling | CSS Modules + CSS variables | Light/dark theme via localStorage; a pre-hydration inline script in `src/app/layout.tsx` prevents theme flicker (an earlier note calling this "unfixed" was also stale) |
 | Hosting | Vercel (frontend) + Neon (database) | ~~Railway~~ is not used anywhere in this project |
-| Rate limiting | In-memory fixed-window counter | `src/lib/rateLimit.ts` — defense-in-depth only, not distributed across instances |
+| Rate limiting | Fixed-window counters | `src/lib/rateLimit.ts` — `rateLimit()` in-memory/per-instance for authenticated routes; `rateLimitShared()` Upstash-REST-backed (in-memory fallback) for login/reset/forgot/find-email. See CLAUDE.md |
 | Middleware | `middleware.ts` | Default-deny baseline for `/api/**` — see CLAUDE.md |
 
 ---
@@ -51,12 +55,12 @@ d:\nextApps\science-hub\
 │   │   │   │   │   ├── page.tsx          ← /sales/customers List
 │   │   │   │   │   ├── new/page.tsx      ← /sales/customers/new
 │   │   │   │   │   ├── [id]/page.tsx     ← /sales/customers/[id] Detail + invoice history
-│   │   │   │   │   └── edit/[id]/page.tsx
+│   │   │   │   │   └── [id]/edit/page.tsx
 │   │   │   │   ├── invoices/
 │   │   │   │   │   ├── page.tsx          ← /sales/invoices List + status filter
 │   │   │   │   │   ├── new/page.tsx      ← /sales/invoices/new Create
-│   │   │   │   │   ├── [id]/page.tsx     ← /sales/invoices/[id] Detail + payment + PDF
-│   │   │   │   │   └── edit/[id]/page.tsx
+│   │   │   │   │   ├── [id]/page.tsx     ← /sales/invoices/[id] Detail + payment + PDF (orchestrator; pieces in [id]/_components/ and components/invoices/InvoicePrintArea.tsx)
+│   │   │   │   │   └── [id]/edit/page.tsx
 │   │   │   │   └── payments/page.tsx     ← /sales/payments Payments received history
 │   │   │   │
 │   │   │   ├── purchases/
@@ -76,7 +80,7 @@ d:\nextApps\science-hub\
 │   │   │   ├── products/
 │   │   │   │   ├── page.tsx              ← /products List + low-stock alerts
 │   │   │   │   ├── new/page.tsx
-│   │   │   │   └── edit/[id]/page.tsx
+│   │   │   │   └── [id]/edit/page.tsx
 │   │   │   │
 │   │   │   ├── brands/page.tsx           ← /brands CRUD (inline add/delete)
 │   │   │   ├── reports/
@@ -135,12 +139,17 @@ d:\nextApps\science-hub\
 │   │
 │   ├── lib/
 │   │   ├── auth.ts         ← NextAuth config; CredentialsProvider + JWT callbacks
-│   │   ├── db.ts           ← ALL server-side DB queries (unstable_cache wrappers)
+│   │   ├── db.ts           ← Prisma helpers for the original invoices/customers/products/reports routes (no unstable_cache — newer routes query Prisma directly)
 │   │   ├── prisma.ts       ← Prisma client singleton
 │   │   ├── theme.tsx       ← ThemeContext — useTheme() hook; toggle light/dark
 │   │   ├── useCache.ts     ← useFetch(url) → { data, loading, mutate }; bustCache(url)
 │   │   ├── activity.ts     ← logActivity(session, action, details, entityId?, entityType?)
 │   │   ├── loading.tsx     ← Full-screen loading component
+│   │   ├── rateLimit.ts    ← rateLimit() in-memory + rateLimitShared() (Upstash REST, in-memory fallback)
+│   │   ├── retryOnWriteConflict.ts ← Serializable-transaction retry (P2034) + idempotency-key conflict check
+│   │   ├── cacheInvalidation.ts    ← invalidateAfter(event): which cached screens/PDFs a mutation makes stale
+│   │   ├── useInvoicePdfRenderer.tsx ← build an invoice PDF from a list page (off-screen print area, no iframe)
+│   │   ├── …                ← partial list: ~60 more files, see CLAUDE.md 'Project Structure' and 'Key Files'
 │   │   └── validation.ts   ← Form validation: rules, validateForm, hasErrors, FormErrors<T>
 │   │
 │   └── types/
@@ -265,7 +274,7 @@ BusinessSettings  id="singleton", name, tagline, email (printed on invoices),
 
 ## Sidebar Navigation
 
-**Corrected**: defined in `src/components/layout/DashboardShell.tsx` as `NAV_GROUPS` — **not** `src/app/(dashboard)/layout.tsx`, which is just a 5-line pass-through rendering `<DashboardShell>{children}</DashboardShell>`. (`CLAUDE.md` already had this right.)
+**Corrected**: defined as `NAV_GROUPS`/`BIN_NAV` in `src/lib/navigation.ts` (rendered by `src/components/layout/DashboardShell.tsx`, which also owns `NavIcons` and `EXACT_MATCH_HREFS`) — **not** `src/app/(dashboard)/layout.tsx`, which is just a 5-line pass-through rendering `<DashboardShell>{children}</DashboardShell>`. (`CLAUDE.md` already had this right.)
 
 ```
 Groups:      null → SALES → PURCHASES → CATALOG → REPORTS → SYSTEM
@@ -277,7 +286,7 @@ Exact-match: /, /sales, /purchases (these don't highlight for sub-pages)
 
 **To add a new nav item:**
 1. Add an SVG to `NavIcons` in `DashboardShell.tsx`
-2. Add entry to the relevant group in `NAV_GROUPS`
+2. Add entry to the relevant group in `NAV_GROUPS` (`src/lib/navigation.ts`)
 3. If it's an overview/landing page that has sub-pages, add its href to `EXACT_MATCH_HREFS`
 4. If it should be gated by role or section, set `adminOnly` and/or `sectionRequired`/`sectionsRequired` on the entry
 
@@ -289,7 +298,7 @@ Exact-match: /, /sales, /purchases (these don't highlight for sub-pages)
 Browser
   └── useFetch("/api/...") ──────────────────────────────────────► API Route Handler
                                                                          │
-                                                                    unstable_cache
+                                                                    (no server data cache in use today — see CLAUDE.md)
                                                                          │
                                                                     Prisma → Neon DB
 
@@ -309,6 +318,8 @@ After mutation (POST/PUT/DELETE):
 | `"vendors"` | Vendor create/edit/delete |
 
 > Always use two-arg form: `revalidateTag("invoices", { expire: 0 })` — single-arg is deprecated in Next.js 16.
+
+> Client-side cache freshness: the in-memory `useFetch` cache has **no expiry** — an entry is served until something busts it. On the invoice and purchase-bill detail pages use `invalidateAfter({ type: ... })` from `src/lib/cacheInvalidation.ts` rather than hand-writing `bustCachePrefix()` lists (see CLAUDE.md → Cache Tags).
 
 ---
 
@@ -421,7 +432,7 @@ if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden"
 2. Use `useFetch("/api/<resource>")` for reads, `mutate()` after mutations
 3. Show `{saving && <OverlayLoader />}` while submitting
 4. Use `toast()` for all validation and mutation feedback
-5. Add nav item to `NAV_GROUPS` in `DashboardShell.tsx` if needed (not `layout.tsx` — see correction above)
+5. Add nav item to `NAV_GROUPS` in `src/lib/navigation.ts` if needed (not `layout.tsx` — see correction above)
 
 ### New API Route
 **Corrected**: writing Prisma queries directly in the route handler is the established, dominant pattern in this codebase today (most routes do this) — `src/lib/db.ts` only holds helpers for the original invoices/customers/products/reports list routes. Match whichever pattern the file you're editing already uses; don't assume every route must go through `db.ts`.
@@ -440,7 +451,7 @@ if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden"
 
 ### New Sidebar Section
 1. Add nav icon SVG to `NavIcons` in `DashboardShell.tsx` (not `layout.tsx`)
-2. Add a new `NavGroup` to `NAV_GROUPS` (or add items to existing group)
+2. Add a new `NavGroup` to `NAV_GROUPS` in `src/lib/navigation.ts` (or add items to existing group)
 3. If the landing page has sub-routes, add to `EXACT_MATCH_HREFS`
 4. Set `adminOnly`/`sectionRequired`/`sectionsRequired` on the item if it should be role- or section-gated
 
@@ -456,6 +467,7 @@ if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden"
 | `GMAIL_USER` | Optional | Fallback Gmail sender (if not set in BusinessSettings) |
 | `GMAIL_APP_PASSWORD` | Optional | Fallback Gmail App Password |
 | `ENCRYPTION_KEY` | Optional | Dedicated key for encrypting secrets-at-rest, independent of `NEXTAUTH_SECRET`. Without it, encryption still works exactly as before (keyed off `NEXTAUTH_SECRET`). |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Optional (recommended in production) | Upstash Redis REST endpoint + token for `rateLimitShared()`. Without them login/reset rate limiting stays per-instance. Set both or neither. |
 
 ---
 
@@ -463,7 +475,7 @@ if (session.user.role !== "admin") return NextResponse.json({ error: "Forbidden"
 
 | Pattern | Why | Alternative |
 |---------|-----|-------------|
-| `"use cache"` directive | Causes "Blocking Route Server" errors | Use `unstable_cache` in `db.ts` |
+| `"use cache"` directive | Causes "Blocking Route Server" errors | No server data cache is in use; freshness = client cache + `revalidateTag` |
 | `cacheComponents: true` in next.config | Breaks this app | Leave next.config minimal |
 | Single-arg `revalidateTag(tag)` | Deprecated in Next.js 16 | `revalidateTag(tag, { expire: 0 })` |
 | ~~Prisma in route handlers~~ | **Corrected**: this is actually the dominant, accepted pattern in this codebase — the original "forbidden" claim was wrong | Match the existing pattern in the file you're editing; `db.ts` is only for the original invoices/customers/products/reports helpers |
