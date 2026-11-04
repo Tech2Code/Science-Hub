@@ -1,7 +1,7 @@
 "use client";
 
 import { amountInWordsINR } from "@/lib/numberToWords";
-import { splitGstForDisplay } from "@/lib/roundOff";
+import { splitGstForDisplay, round2 } from "@/lib/roundOff";
 import { formatDate } from "@/lib/formatDate";
 import { fmt, returnItemRate, type BusinessSettings, type Invoice, type ReturnRecord } from "./invoiceDetailTypes";
 
@@ -333,8 +333,9 @@ export function InvoicePrintArea({ invoice, settings, returns, balance, showPaym
               {/* Item rows */}
               {invoice.items.map((item, idx) => {
                 const discountAmount = item.discountAmount ?? 0;
-                const grossValue = item.quantity * item.price;
-                const taxable = grossValue - discountAmount;
+                // Rounded to paise exactly like lineBreakdown() — new invoices store 2-dp lines, so what is printed here equals what is stored.
+                const grossValue = round2(item.quantity * item.price);
+                const taxable = round2(grossValue - discountAmount);
                 // Same helper the invoice/credit-note footers already use to split a combined GST
                 // amount for display — a naive item.gstAmount/2 independently rounds each half and
                 // can print a row whose own CGST+SGST don't foot to that row's own Amount column
@@ -409,7 +410,9 @@ export function InvoicePrintArea({ invoice, settings, returns, balance, showPaym
                 const tcGst = invoice.transportChargeGstAmount ?? 0;
                 const tcRate = invoice.transportChargeGstRate ?? 0;
                 const tcHalfRate = tcRate / 2;
-                const tcHalfGst = tcGst / 2;
+                // Same helper the item rows use: tcGst/2 printed twice can show two halves that do not add up to the row's own GST
+                // (e.g. 60.01 -> 30.005 -> both "30.01").
+                const { cgst: tcCgst, sgst: tcSgst } = splitGstForDisplay(tcGst);
                 const tcTd = (content: React.ReactNode, bold = false, align: "right" | "center" = "right") => (
                   <td style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: align, background: "var(--inv-bg)", fontWeight: bold ? 700 : undefined, color: bold ? "var(--inv-tx)" : "var(--inv-tx2)", whiteSpace: "nowrap" }}>
                     {content}
@@ -423,8 +426,8 @@ export function InvoicePrintArea({ invoice, settings, returns, balance, showPaym
                     {tcTd(fmt(tcTaxable))}
                     {invoice.isInterState
                       ? <>{tcTd(`${tcRate}%`, false, "center")}{tcTd(fmt(tcGst))}</>
-                      : <>{tcTd(`${tcHalfRate}%`, false, "center")}{tcTd(fmt(tcHalfGst))}{tcTd(`${tcHalfRate}%`, false, "center")}{tcTd(fmt(tcHalfGst))}</>}
-                    {tcTd(fmt(tcTaxable + tcGst), true)}
+                      : <>{tcTd(`${tcHalfRate}%`, false, "center")}{tcTd(fmt(tcCgst))}{tcTd(`${tcHalfRate}%`, false, "center")}{tcTd(fmt(tcSgst))}</>}
+                    {tcTd(fmt(round2(tcTaxable + tcGst)), true)}
                   </tr>
                 );
               })()}

@@ -8,7 +8,7 @@ import { retryOnWriteConflict, isIdempotencyKeyConflict } from "@/lib/retryOnWri
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { isFutureIstDate, toIstDateStr, istDayStartUtc, MAX_MONEY_VALUE } from "@/lib/validation";
 import { lineBreakdown } from "@/lib/invoiceCalc";
-import { computeRoundOff } from "@/lib/roundOff";
+import { computeRoundOff, round2 } from "@/lib/roundOff";
 import { getBusinessSettings } from "@/lib/db";
 import { computeNextNumber, numberFormatDbFilter, getIndianFinancialYear, formatFinancialYearLabel } from "@/lib/documentNumbering";
 
@@ -177,7 +177,7 @@ export async function POST(
           select: {
             paidAmount: true,
             deletedAt: true,
-            items: { select: { productId: true, name: true, quantity: true, price: true, gstRate: true, discountPercent: true } },
+            items: { select: { productId: true, name: true, quantity: true, price: true, gstRate: true, discountPercent: true, discountAmount: true, gstAmount: true, total: true } },
           },
         });
         // Re-checked under the transaction too — the invoice could have been binned after the outer check.
@@ -218,7 +218,13 @@ export async function POST(
         const discountByProduct = new Map(currentInvoice.items.map((it) => [it.productId, it.discountPercent]));
         const priceByProduct = new Map(currentInvoice.items.map((it) => [it.productId, it.price]));
 
-        const computedItems = items.map((item) => {
+        // Everything already credited on this invoice — read up-front so each line below can be capped (see "apportion").
+        const existingReturns = await tx.return.findMany({
+          where: { invoiceId: id, deletedAt: null },
+          include: { items: true },
+        });
+
+        const computedItemsRaw = items.map((item) => {
           if (!item.productId) {
             const line = customLines.get(customLineKey(item.name))!;
             const { discountAmount, taxable, gstAmt, total } = lineBreakdown({ qty: item.quantity, price: line.price, gstRate: line.gstRate, discountPercent: line.discountPercent });
@@ -235,23 +241,56 @@ export async function POST(
           return { ...item, price, gstRate, discountPercent, discountAmount, taxable, gstAmt, total };
         });
 
-        const subtotal = computedItems.reduce((s, i) => s + i.taxable, 0);
-        const totalGst = computedItems.reduce((s, i) => s + i.gstAmt, 0);
+        // Apportion: a return line is priced per unit and rounded to paise, so credit notes issued in parts could add up to
+        // ₹0.01 MORE GST than the invoice line charged (3 x 9.99 less 15% + 18% GST: one invoice line = 4.58, three
+        // single-unit credit notes = 3 x 1.53 = 4.59). Cap every line at what is left of the invoice line's own stored
+        // value, and let the return that completes the line take exactly that remainder — so the credit notes of a line
+        // always add up to precisely what the invoice charged, never more.
+        const lineKey = (productId: string | null | undefined, name: string) => (productId ? `p:${productId}` : `c:${customLineKey(name)}`);
+        const origByLine = new Map<string, { quantity: number; total: number; gstAmount: number; discountAmount: number }>();
+        for (const it of currentInvoice.items) {
+          const k = lineKey(it.productId, it.name);
+          const o = origByLine.get(k) ?? { quantity: 0, total: 0, gstAmount: 0, discountAmount: 0 };
+          o.quantity += it.quantity; o.total += it.total; o.gstAmount += it.gstAmount; o.discountAmount += it.discountAmount;
+          origByLine.set(k, o);
+        }
+        const priorByLine = new Map<string, { quantity: number; total: number; gstAmount: number; discountAmount: number }>();
+        for (const r of existingReturns) {
+          for (const ri of r.items) {
+            const k = lineKey(ri.productId, ri.name);
+            const p = priorByLine.get(k) ?? { quantity: 0, total: 0, gstAmount: 0, discountAmount: 0 };
+            p.quantity += ri.quantity; p.total += ri.total; p.gstAmount += ri.gstAmount; p.discountAmount += ri.discountAmount;
+            priorByLine.set(k, p);
+          }
+        }
+        const computedItems = computedItemsRaw.map((item) => {
+          const k = lineKey(item.productId, item.name);
+          const orig = origByLine.get(k);
+          if (!orig) return item;
+          const prior = priorByLine.get(k) ?? { quantity: 0, total: 0, gstAmount: 0, discountAmount: 0 };
+          const remTotal = Math.max(0, round2(orig.total - prior.total));
+          const remGst = Math.max(0, round2(orig.gstAmount - prior.gstAmount));
+          const remDiscount = Math.max(0, round2(orig.discountAmount - prior.discountAmount));
+          const completesLine = Math.abs(prior.quantity + item.quantity - orig.quantity) < 1e-9;
+          const total = completesLine ? remTotal : Math.min(item.total, remTotal);
+          const gstAmt = completesLine ? remGst : Math.min(item.gstAmt, remGst);
+          const discountAmount = completesLine ? remDiscount : Math.min(item.discountAmount, remDiscount);
+          return { ...item, total, gstAmt, discountAmount, taxable: round2(total - gstAmt) };
+        });
+
+        const subtotal = round2(computedItems.reduce((s, i) => s + i.taxable, 0));
+        const totalGst = round2(computedItems.reduce((s, i) => s + i.gstAmt, 0));
         const cgst = inv.isInterState ? 0 : totalGst / 2;
         const sgst = inv.isInterState ? 0 : totalGst / 2;
         const igst = inv.isInterState ? totalGst : 0;
         const { roundOff, roundedTotal: creditNoteTotal } = computeRoundOff(subtotal + totalGst);
 
-        const existingReturns = await tx.return.findMany({
-          where: { invoiceId: id, deletedAt: null },
-          include: { items: true },
-        });
         // GST-inclusive value — capping against paidAmount on the ex-GST value alone would let more be refunded than the customer ever paid.
         const existingReturnTotal = existingReturns.reduce((s, r) => s + r.total, 0);
         const newReturnTotal = creditNoteTotal;
         const availableForReturn = currentInvoice.paidAmount - existingReturnTotal;
 
-        if (newReturnTotal > availableForReturn + 0.01) {
+        if (round2(newReturnTotal) > round2(availableForReturn)) {
           throw new ReturnValidationError(
             `Return value (₹${newReturnTotal.toFixed(2)}) exceeds available paid amount (₹${availableForReturn.toFixed(2)} remaining after previous returns).`
           );

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { round2 } from "@/lib/roundOff";
 import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
@@ -22,7 +23,7 @@ export async function PUT(
     const { amount, method, reference, date } = body;
 
     const amountStr = (typeof amount === "string" || typeof amount === "number") ? String(amount).trim() : "";
-    if (!/^\d+(\.\d+)?$/.test(amountStr) || parseFloat(amountStr) <= 0) {
+    if (!/^\d+(\.\d+)?$/.test(amountStr) || round2(parseFloat(amountStr)) <= 0) {
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
     }
     if (method !== undefined && method !== null && (typeof method !== "string" || method.length > 100)) {
@@ -69,16 +70,16 @@ export async function PUT(
         });
         const otherPaymentsTotal = otherPayments._sum.amount ?? 0;
         const remaining = bill.total - otherPaymentsTotal;
-        if (parseFloat(amountStr) > remaining + 0.01) {
+        if (round2(parseFloat(amountStr)) > round2(remaining)) {
           throw new PaymentExceedsBalanceError(
-            `Payment (₹${parseFloat(amountStr).toFixed(2)}) exceeds the remaining balance (₹${remaining.toFixed(2)})`
+            `Payment (₹${round2(parseFloat(amountStr)).toFixed(2)}) exceeds the remaining balance (₹${remaining.toFixed(2)})`
           );
         }
 
         await tx.purchasePayment.update({
           where: { id: paymentId },
           data: {
-            amount: parseFloat(amountStr),
+            amount: round2(parseFloat(amountStr)),
             method: method || payment.method,
             reference: reference || null,
             ...(paymentDate ? { date: paymentDate } : {}),
@@ -94,7 +95,7 @@ export async function PUT(
         // from "cancelled" just because a correction changed how much was paid against it.
         const status = bill.status === "cancelled"
           ? "cancelled"
-          : paidAmount + 0.01 >= bill.total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+          : round2(bill.total - paidAmount) <= 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
 
         return tx.purchaseBill.update({
           where: { id },
@@ -112,7 +113,7 @@ export async function PUT(
     await logActivity(
       auth.session.user.id,
       "update_purchase_payment",
-      `Updated payment to ₹${fmt(parseFloat(amountStr))} via ${method || paymentCheck.method} for bill ${billCheck.billNumber}`,
+      `Updated payment to ₹${fmt(round2(parseFloat(amountStr)))} via ${method || paymentCheck.method} for bill ${billCheck.billNumber}`,
       id,
       "purchase_bill"
     );
@@ -164,7 +165,7 @@ export async function DELETE(
         const paidAmount = agg._sum.amount ?? 0;
         const status = bill.status === "cancelled"
           ? "cancelled"
-          : paidAmount + 0.01 >= bill.total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+          : round2(bill.total - paidAmount) <= 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
 
         return tx.purchaseBill.update({
           where: { id },

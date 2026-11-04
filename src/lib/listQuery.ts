@@ -38,3 +38,30 @@ export function monthYearToDateRange(month: string, year: string): { gte: Date; 
   }
   return { gte: istDayStartUtc(`${y}-01-01`), lt: istDayStartUtc(`${y + 1}-01-01`) };
 }
+
+// Financial-year aware range for list routes: `fy` is the FY's Apr start-year ("2026" = Apr 2026 – Mar 2027)
+// and `month` (optional, "0".."11" calendar index, same as the legacy param) narrows it to one month of that FY.
+// Months Jan–Mar (0–2) fall in the FY's SECOND calendar year. Without `fy` this behaves exactly like
+// monthYearToDateRange(month, year), so every older caller/URL keeps working. Malformed input → no filter.
+export function dateRangeFromParams(searchParams: URLSearchParams): { gte: Date; lt: Date } | undefined {
+  const fy = searchParams.get("fy") ?? "";
+  const month = searchParams.get("month") ?? "";
+  if (!fy) return monthYearToDateRange(month, searchParams.get("year") ?? "");
+  if (!/^\d{4}$/.test(fy)) return undefined;
+  if (month && !/^(\d|1[01])$/.test(month)) return undefined;
+  const start = Number(fy);
+  if (month) {
+    const m = Number(month);
+    const { start: s, end } = istMonthBoundsUtc(m >= 3 ? start : start + 1, m);
+    return { gte: s, lt: end };
+  }
+  return { gte: istDayStartUtc(`${start}-04-01`), lt: istDayStartUtc(`${start + 1}-04-01`) };
+}
+
+// The period a list is scoped to for the purpose of "money unpaid on documents from OTHER years": the whole
+// financial year even when a single month is selected, so the notice never counts the same year's other months.
+export function financialYearRangeFromParams(searchParams: URLSearchParams): { gte: Date; lt: Date } | undefined {
+  const params = new URLSearchParams(searchParams);
+  params.delete("month");
+  return dateRangeFromParams(params);
+}

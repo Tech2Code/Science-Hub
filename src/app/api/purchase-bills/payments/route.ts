@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSectionAccess } from "@/lib/apiAuth";
-import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
+import { parsePageParams, dateRangeFromParams } from "@/lib/listQuery";
 import { buildPurchasePaymentWhere, buildPurchasePaymentOrderBy, type PurchasePaymentSort } from "@/lib/purchasePaymentQuery";
 
 export async function GET(request: NextRequest) {
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") ?? undefined;
     const sort = (searchParams.get("sort") ?? undefined) as PurchasePaymentSort | undefined;
-    const dateRange = monthYearToDateRange(searchParams.get("month") ?? "", searchParams.get("year") ?? "");
+    const dateRange = dateRangeFromParams(searchParams);
     const { skip, take } = parsePageParams(searchParams, 5000);
 
     const where = buildPurchasePaymentWhere({ search, dateRange });

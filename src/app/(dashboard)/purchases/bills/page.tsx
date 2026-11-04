@@ -19,7 +19,11 @@ import { Cell, type Column } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
-import { MonthYearFilter } from "@/components/ui/MonthYearFilter";
+import { ListPeriodFilter } from "@/components/ui/ListPeriodFilter";
+import { OutsidePeriodNotice } from "@/components/ui/OutsidePeriodNotice";
+import { useListPeriod, setPeriodParams, periodMonthYear } from "@/lib/listPeriod";
+import { askSaveLocation, discardSaveTarget } from "@/lib/saveFile";
+import { useInvoicePdfRenderer } from "@/lib/useInvoicePdfRenderer";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { StatCardsRow } from "@/components/ui/StatCardsRow";
 import { StatusFilterTabs } from "@/components/ui/StatusFilterTabs";
@@ -61,6 +65,7 @@ interface PurchaseBillStats {
   totalPending: number;
   overdueCount: number;
   availableYears: number[];
+  outsidePeriod?: { count: number; amount: number };
 }
 
 type StatusFilter = "All" | "unpaid" | "partial" | "paid" | "cancelled" | "overdue";
@@ -101,8 +106,7 @@ export default function PurchasesPage() {
     urlFilter && (STATUS_TABS as string[]).includes(urlFilter) ? (urlFilter as StatusFilter) : "All"
   );
   const [search, setSearch] = useState("");
-  const [month, setMonth] = useState("");
-  const [year, setYear] = useState("");
+  const [period, setPeriod] = useListPeriod();
   const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
@@ -116,9 +120,9 @@ export default function PurchasesPage() {
   const [pdfPreviewBill, setPdfPreviewBill] = useState<{ number: string; vendor: string } | null>(null);
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [bulkDownloading, setBulkDownloading] = useState(false);
-  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
   const bulkBusyRef = useRef(false);
   const toast = useToast();
+  const { startDownloadJob, bulk } = useInvoicePdfRenderer();
 
   useEffect(() => {
     if (urlFilter && (STATUS_TABS as string[]).includes(urlFilter)) {
@@ -174,23 +178,30 @@ export default function PurchasesPage() {
     }
   }
 
-  // Downloads every bill for the currently selected Month+Year filter as one ZIP — the confirm
-  // dialog lets the user pick the generated PDF, the vendor's uploaded attachment, or both, per bill.
+  // Downloads every bill for the selected month of the selected financial year as one ZIP — the confirm dialog lets
+  // the user pick the generated PDF, the vendor's uploaded attachment, or both, per bill. Only the list fetch blocks the
+  // page; the (slow) ZIP itself is handed to the app-wide download job, so the user can keep using the app meanwhile.
   async function handleBulkDownload(opts: BulkDownloadOptions) {
     if (bulkBusyRef.current) return;
-    if (!month || !year) {
-      toast({ type: "error", title: "Select a period", message: "Choose a month and year first to bulk download." });
+    const bulkPeriod = periodMonthYear(period);
+    if (!bulkPeriod) {
+      toast({ type: "error", title: "Select a month", message: "Choose a month first to bulk download." });
       return;
     }
+    // Ask where to save FIRST (Chrome/Edge): the Save dialog only opens straight from the click, and this way the
+    // "Saved" toast can be true — the file is written where the user chose. Other browsers fall back to a normal download.
+    const monthLabel = MONTH_NAMES[bulkPeriod.month0];
+    const zipFileName = `PurchaseBills_${monthLabel}_${bulkPeriod.year}.zip`;
+    const saveTarget = await askSaveLocation(zipFileName);
+    if (saveTarget.kind === "cancelled") return;
     bulkBusyRef.current = true;
     setBulkDialogOpen(false);
     setBulkDownloading(true);
-    setBulkProgress({ done: 0, total: 0 });
+    let started = false;
     try {
       const params = new URLSearchParams();
       if (filter !== "All") params.set("status", filter);
-      params.set("month", month);
-      params.set("year", year);
+      setPeriodParams(params, period);
       params.set("sort", "oldest");
       params.set("page", "1");
       params.set("pageSize", "2000");
@@ -201,84 +212,92 @@ export default function PurchasesPage() {
         toast({ type: "error", title: "Nothing to download", message: "No purchase bills found for the selected period." });
         return;
       }
-      setBulkProgress({ done: 0, total: list.length });
-      const monthLabel = MONTH_NAMES[Number(month)];
+      const truncated = (json?.total ?? list.length) > list.length;
       // Only nested into Bills/Attachments subfolders when both are included — keeps a single-option
       // download flat, matching the plain "<BillNo>.pdf" naming already shipped for the PDF-only case.
       const nestInFolders = opts.includePdfs && opts.includeAttachments;
 
-      let pdfFailed = 0;
-      let attachmentsIncluded = 0;
-      let attachmentsMissing = 0;
-      let attachmentsFailed = 0;
+      started = startDownloadJob({
+        title: "purchase bill ZIP",
+        total: list.length,
+        run: async ({ setProgress, isCancelled }) => {
+          let pdfFailed = 0;
+          let attachmentsIncluded = 0;
+          let attachmentsMissing = 0;
+          let attachmentsFailed = 0;
 
-      const { entriesZipped } = await bulkZipDownload(
-        list,
-        async (b) => {
-          const entries: { name: string; blob: Blob }[] = [];
-          const baseName = sanitizeZipEntryName(b.billNumber);
+          const { entriesZipped, delivery, cancelled } = await bulkZipDownload(
+            list,
+            async (b) => {
+              const entries: { name: string; blob: Blob }[] = [];
+              const baseName = sanitizeZipEntryName(b.billNumber);
 
-          if (opts.includePdfs) {
-            // A thrown render error must count as a failed PDF (and not abort this bill's attachment
-            // below) — bulkZipDownload's own catch would otherwise drop the whole item silently while
-            // the success toast still counted its PDF.
-            let blob: Blob | null = null;
-            try { blob = await generatePdfViaIframe(b); } catch { blob = null; }
-            if (blob) {
-              entries.push({ name: nestInFolders ? `Bills/${baseName}.pdf` : `${baseName}.pdf`, blob });
-            } else {
-              pdfFailed++;
-            }
-          }
-
-          if (opts.includeAttachments) {
-            if (!b.attachmentUrl) {
-              attachmentsMissing++;
-            } else {
-              try {
-                const attRes = await fetch(purchaseBillAttachmentByIdHref(b.id, b.attachmentName || "attachment"));
-                if (attRes.ok) {
-                  const attBlob = await attRes.blob();
-                  const attName = sanitizeZipEntryName(b.attachmentName || "attachment");
-                  entries.push({ name: nestInFolders ? `Attachments/${baseName} - ${attName}` : `${baseName} - ${attName}`, blob: attBlob });
-                  attachmentsIncluded++;
+              if (opts.includePdfs) {
+                // A thrown render error must count as a failed PDF (and not abort this bill's attachment
+                // below) — bulkZipDownload's own catch would otherwise drop the whole item silently while
+                // the success toast still counted its PDF.
+                let blob: Blob | null = null;
+                try { blob = await generatePdfViaIframe(b); } catch { blob = null; }
+                if (blob) {
+                  entries.push({ name: nestInFolders ? `Bills/${baseName}.pdf` : `${baseName}.pdf`, blob });
                 } else {
-                  attachmentsFailed++;
+                  pdfFailed++;
                 }
-              } catch {
-                attachmentsFailed++;
               }
-            }
+
+              if (opts.includeAttachments) {
+                if (!b.attachmentUrl) {
+                  attachmentsMissing++;
+                } else {
+                  try {
+                    const attRes = await fetch(purchaseBillAttachmentByIdHref(b.id, b.attachmentName || "attachment"));
+                    if (attRes.ok) {
+                      const attBlob = await attRes.blob();
+                      const attName = sanitizeZipEntryName(b.attachmentName || "attachment");
+                      entries.push({ name: nestInFolders ? `Attachments/${baseName} - ${attName}` : `${baseName} - ${attName}`, blob: attBlob });
+                      attachmentsIncluded++;
+                    } else {
+                      attachmentsFailed++;
+                    }
+                  } catch {
+                    attachmentsFailed++;
+                  }
+                }
+              }
+
+              return entries;
+            },
+            zipFileName,
+            setProgress,
+            isCancelled,
+            saveTarget,
+          );
+
+          if (cancelled) return { type: "info", title: "Cancelled", message: "Bulk download cancelled — nothing was downloaded." };
+          if (entriesZipped === 0) return { type: "error", title: "Download failed", message: "Nothing could be generated for this period." };
+          if (truncated) return { type: "error", title: "Partial download", message: `Only the first ${list.length} of ${json?.total} matching bills were zipped (limit ${list.length}/request) — refine the filter (e.g. by status) and download the rest separately.` };
+          const parts: string[] = [];
+          if (opts.includePdfs) {
+            const pdfOk = list.length - pdfFailed;
+            parts.push(`${pdfOk} PDF${pdfOk === 1 ? "" : "s"}${pdfFailed ? ` (${pdfFailed} failed)` : ""}`);
           }
-
-          return entries;
+          if (opts.includeAttachments) {
+            const bits = [`${attachmentsIncluded} attachment${attachmentsIncluded === 1 ? "" : "s"}`];
+            if (attachmentsMissing) bits.push(`${attachmentsMissing} bill${attachmentsMissing === 1 ? "" : "s"} had none`);
+            if (attachmentsFailed) bits.push(`${attachmentsFailed} failed`);
+            parts.push(bits.join(", "));
+          }
+          // "saved" = written where the user chose; "started" = only handed to the browser, whose Save dialog/result we cannot see.
+          return delivery === "saved"
+            ? { type: "success", title: "Saved", message: `${parts.join(" · ")} saved as ${zipFileName}.` }
+            : { type: "success", title: "Download started", message: `${parts.join(" · ")} zipped — your browser is downloading ${zipFileName}.` };
         },
-        `PurchaseBills_${monthLabel}_${year}.zip`,
-        (done, total) => setBulkProgress({ done, total }),
-      );
-
-      const truncated = (json?.total ?? list.length) > list.length;
-      if (entriesZipped === 0) {
-        toast({ type: "error", title: "Download failed", message: "Nothing could be generated for this period." });
-      } else if (truncated) {
-        toast({ type: "error", title: "Partial download", message: `Only the first ${list.length} of ${json?.total} matching bills were zipped (limit ${list.length}/request) — refine the filter (e.g. by status) and download the rest separately.` });
-      } else {
-        const parts: string[] = [];
-        if (opts.includePdfs) {
-          const pdfOk = list.length - pdfFailed;
-          parts.push(`${pdfOk} PDF${pdfOk === 1 ? "" : "s"}${pdfFailed ? ` (${pdfFailed} failed)` : ""}`);
-        }
-        if (opts.includeAttachments) {
-          const bits = [`${attachmentsIncluded} attachment${attachmentsIncluded === 1 ? "" : "s"}`];
-          if (attachmentsMissing) bits.push(`${attachmentsMissing} bill${attachmentsMissing === 1 ? "" : "s"} had none`);
-          if (attachmentsFailed) bits.push(`${attachmentsFailed} failed`);
-          parts.push(bits.join(", "));
-        }
-        toast({ type: "success", title: "Downloaded", message: `${parts.join(" · ")} zipped and downloaded.` });
-      }
+      });
     } catch {
       toast({ type: "error", title: "Download failed", message: "Network error." });
     } finally {
+      // Nothing was handed to the download job → the Save dialog may have left an empty file behind.
+      if (!started) await discardSaveTarget(saveTarget);
       setBulkDownloading(false);
       bulkBusyRef.current = false;
     }
@@ -290,8 +309,8 @@ export default function PurchasesPage() {
   const listParams = new URLSearchParams();
   if (filter !== "All") listParams.set("status", filter);
   if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
-  if (month) listParams.set("month", month);
-  if (year) listParams.set("year", year);
+  // An active search looks across every year, so a bill is findable whatever period is selected.
+  setPeriodParams(listParams, period, !!debouncedSearch.trim());
   listParams.set("sort", sort);
   listParams.set("page", String(page));
   listParams.set("pageSize", String(pageSize));
@@ -299,8 +318,7 @@ export default function PurchasesPage() {
 
   const statsParams = new URLSearchParams();
   if (filter !== "All") statsParams.set("status", filter);
-  if (month) statsParams.set("month", month);
-  if (year) statsParams.set("year", year);
+  setPeriodParams(statsParams, period);
   const statsUrl = `/api/purchase-bills/stats?${statsParams.toString()}`;
 
   const { data, loading, error, mutate } = useFetch<PurchaseBillListResponse>(apiUrl);
@@ -315,7 +333,6 @@ export default function PurchasesPage() {
   const totalPaid      = stats?.totalPaid ?? 0;
   const totalPending   = stats?.totalPending ?? 0;
   const overdue        = stats?.overdueCount ?? 0;
-  const availableYears = stats?.availableYears ?? [];
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -362,9 +379,7 @@ export default function PurchasesPage() {
     />
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
     {openingEdit && <OverlayLoader text="Opening editor…" />}
-    {bulkDownloading && (
-      <OverlayLoader text={bulkProgress.total > 0 ? `Preparing ZIP… ${bulkProgress.done}/${bulkProgress.total}` : "Fetching bills…"} />
-    )}
+    {bulkDownloading && <OverlayLoader text="Fetching bills…" />}
 
     <BulkDownloadOptionsDialog
       open={bulkDialogOpen}
@@ -397,6 +412,7 @@ export default function PurchasesPage() {
         </Button>)}
       </div>
 
+      {stats?.outsidePeriod && <OutsidePeriodNotice count={stats.outsidePeriod.count} amount={stats.outsidePeriod.amount} noun="purchase bill" />}
       {/* Dashboard cards */}
       {(loading || totalPurchase > 0 || total > 0) && (
         <StatCardsRow
@@ -436,22 +452,16 @@ export default function PurchasesPage() {
               onChange={(v) => { setSort(v); setPage(1); }}
               options={SORT_OPTIONS}
             />
-            <MonthYearFilter
-              month={month}
-              year={year}
-              years={availableYears}
-              onMonthChange={(v) => { setMonth(v); setPage(1); }}
-              onYearChange={(v) => { setYear(v); setPage(1); }}
-            />
+            <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} />
             <Button
               variant="secondary"
               size="sm"
-              disabled={bulkDownloading}
-              ariaDisabled={!month || !year}
-              title={!month || !year ? "Select a month and year to bulk download" : "Download all bills for this period — choose PDFs, attachments, or both"}
+              disabled={bulkDownloading || bulk.running}
+              ariaDisabled={period.month0 === "all"}
+              title={period.month0 === "all" ? "Select a month to bulk download" : "Download all bills for this period — choose PDFs, attachments, or both"}
               onClick={() => {
-                if (!month || !year) {
-                  toast({ type: "error", title: "Select a period", message: "Choose a month and year first to bulk download." });
+                if (period.month0 === "all") {
+                  toast({ type: "error", title: "Select a month", message: "Choose a month first to bulk download." });
                   return;
                 }
                 setBulkDialogOpen(true);
@@ -482,7 +492,7 @@ export default function PurchasesPage() {
                 </td></tr>
               ) : bills.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
-                  {search.trim() ? `No bills match "${search}".` : (month || year) ? "No purchase bills found for this period." : "No purchase bills yet."}
+                  {search.trim() ? `No bills match "${search}".` : "No purchase bills found for this period."}
                 </td></tr>
               ) : bills.map(b => (
                 <tr key={b.id}>

@@ -5,7 +5,7 @@ import { toIstDateStr } from "@/lib/validation";
 // shared shape for both the Customer statement (Invoice=debit, Payment/CreditNote=credit, positive
 // balance = customer owes us) and the Vendor statement (PurchaseBill=credit, PurchasePayment=debit,
 // positive balance = we owe the vendor).
-export type LedgerEntryType = "invoice" | "payment" | "credit_note" | "purchase_bill" | "purchase_payment";
+export type LedgerEntryType = "invoice" | "payment" | "credit_note" | "refund" | "purchase_bill" | "purchase_payment";
 
 export interface LedgerEntry {
   date: Date;
@@ -36,7 +36,7 @@ export interface LedgerResult {
 
 // Documents (invoice/purchase bill) before settlements (payments/credit notes) within one IST day.
 const LEDGER_TYPE_RANK: Record<LedgerEntryType, number> = {
-  invoice: 0, purchase_bill: 0, payment: 1, credit_note: 1, purchase_payment: 1,
+  invoice: 0, purchase_bill: 0, payment: 1, credit_note: 1, refund: 1, purchase_payment: 1,
 };
 
 // Walks the (already date-filtered, if the caller pre-filtered at the DB layer) entry list once so
@@ -130,14 +130,14 @@ export async function fetchCustomerLedgerEntries(customerId: string, from?: Date
     }),
   ]);
 
+  // A credit note and its refund cancel out (see the credit-note entries below), so credit notes do not enter the seed.
   let openingBalanceSeed = 0;
   if (from) {
-    const [invBefore, payBefore, retBefore] = await Promise.all([
+    const [invBefore, payBefore] = await Promise.all([
       prisma.invoice.aggregate({ where: { customerId, deletedAt: null, date: { lt: from } }, _sum: { total: true } }),
       prisma.payment.aggregate({ where: { invoice: { customerId, deletedAt: null }, date: { lt: from } }, _sum: { amount: true } }),
-      prisma.return.aggregate({ where: { invoice: { customerId, deletedAt: null }, deletedAt: null, date: { lt: from } }, _sum: { total: true } }),
     ]);
-    openingBalanceSeed = (invBefore._sum.total ?? 0) - (payBefore._sum.amount ?? 0) - (retBefore._sum.total ?? 0);
+    openingBalanceSeed = (invBefore._sum.total ?? 0) - (payBefore._sum.amount ?? 0);
   }
 
   const entries: LedgerEntry[] = [];
@@ -147,8 +147,13 @@ export async function fetchCustomerLedgerEntries(customerId: string, from?: Date
   for (const p of payments) {
     entries.push({ date: p.date, type: "payment", label: `Payment received (${p.method}) — ${p.invoice.invoiceNumber}`, refId: p.id, debit: 0, credit: p.amount });
   }
+  // A credit note here is a REFUND of money already received: it is capped by the invoice's paid amount and can only be
+  // raised after a payment, and Invoice.balanceDue / Outstanding / credit-limit exposure ignore it. So the ledger shows
+  // the credit note AND the matching refund paid out — net zero on the running balance — which keeps the statement
+  // agreeing with every outstanding figure (invoice 1000, paid 600, credit note 500 → still 400 due, not −100).
   for (const r of returns) {
     entries.push({ date: r.date, type: "credit_note", label: `Credit Note ${r.creditNoteNumber ?? ""} — ${r.invoice.invoiceNumber}`, refId: r.id, debit: 0, credit: r.total });
+    entries.push({ date: r.date, type: "refund", label: `Refund paid — Credit Note ${r.creditNoteNumber ?? ""}`, refId: r.id, debit: r.total, credit: 0 });
   }
   return { entries, openingBalanceSeed };
 }

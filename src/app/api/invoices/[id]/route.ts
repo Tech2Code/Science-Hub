@@ -14,7 +14,7 @@ import { formatDate } from "@/lib/formatDate";
 
 class InvoiceConflictError extends Error {}
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
-import { computeRoundOff } from "@/lib/roundOff";
+import { computeRoundOff, round2 } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { checkCustomerCreditLimit, type CreditLimitCheck } from "@/lib/creditLimit";
 
@@ -336,6 +336,9 @@ export async function PUT(
     const biz = await getBusinessSettings();
     const derivedIsInterState = deriveIsInterState(String(placeOfSupply), biz.state);
     const inter = derivedIsInterState !== null ? derivedIsInterState : Boolean(clientIsInterState);
+    // Sums of 2-dp lines — rounded only to drop binary-float noise (0.1 + 0.2).
+    subtotal = round2(subtotal);
+    totalGst = round2(totalGst);
     const cgst = inter ? 0 : totalGst / 2;
     const sgst = inter ? 0 : totalGst / 2;
     const igst = inter ? totalGst : 0;
@@ -350,19 +353,14 @@ export async function PUT(
     if (!(transportChargeGstRateVal >= 0 && transportChargeGstRateVal <= 100)) {
       return NextResponse.json({ error: "Transport charge GST rate must be between 0 and 100%" }, { status: 400 });
     }
-    const transportChargeGstAmountVal = (transportChargeVal * transportChargeGstRateVal) / 100;
+    const transportChargeGstAmountVal = round2((transportChargeVal * transportChargeGstRateVal) / 100);
 
     const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + totalGst + transportChargeVal + transportChargeGstAmountVal);
 
-    // Recalculate status based on paidAmount — the +0.01 tolerance matches every other
-    // status-derivation site in the app (invoice/purchase-bill payment POST/PUT/DELETE, and the
-    // sibling PUT /api/purchase-bills/[id] edit route itself). paidAmount is an aggregate SUM of
-    // arbitrary-precision Payment.amount floats while `total` is rounded to the nearest whole
-    // rupee, so without this tolerance a sub-paisa IEEE-754 summation artifact could flip an
-    // already fully-paid invoice back to "partial" purely from float noise on an edit that never
-    // touched payments at all (e.g. just editing notes or a line item's HSN).
+    // Recalculate status based on paidAmount, compared in whole paise (round2) so float noise in the SUM of payments can't flip a
+    // fully-paid invoice to "partial" on an edit that never touched payments, and a real ₹0.01 shortfall is not hidden.
     // Fast-fail against the pre-transaction snapshot; re-checked against a fresh read inside the transaction below.
-    if (total < existing.paidAmount - 0.01) {
+    if (total < round2(existing.paidAmount)) {
       return NextResponse.json({ error: `Total can't be less than the amount already received (₹${existing.paidAmount.toFixed(2)}). Edit or delete payments first.` }, { status: 400 });
     }
 
@@ -382,7 +380,7 @@ export async function PUT(
       const fresh = await tx.invoice.findUniqueOrThrow({ where: { id }, select: { paidAmount: true, deletedAt: true } });
       if (fresh.deletedAt) throw new InvoiceEditValidationError("This invoice is in the bin — restore it before editing");
       const paidAmount = fresh.paidAmount;
-      if (total < paidAmount - 0.01) {
+      if (total < round2(paidAmount)) {
         throw new InvoiceEditValidationError(`Total can't be less than the amount already received (₹${paidAmount.toFixed(2)}). Edit or delete payments first.`);
       }
       // A payment or credit note can't predate the invoice it belongs to (their own create routes
@@ -403,15 +401,10 @@ export async function PUT(
           throw new InvoiceEditValidationError(`Invoice date can't be after a credit note's date (${formatDate(istDayStartUtc(earliestReturnDay))}). Edit or delete that credit note first.`);
         }
       }
-      // Recalculate status based on paidAmount — the +0.01 tolerance matches every other
-      // status-derivation site in the app (invoice/purchase-bill payment POST/PUT/DELETE, and the
-      // sibling PUT /api/purchase-bills/[id] edit route itself). paidAmount is an aggregate SUM of
-      // arbitrary-precision Payment.amount floats while `total` is rounded to the nearest whole
-      // rupee, so without this tolerance a sub-paisa IEEE-754 summation artifact could flip an
-      // already fully-paid invoice back to "partial" purely from float noise on an edit that never
-      // touched payments at all (e.g. just editing notes or a line item's HSN).
+      // Recalculate status based on paidAmount, compared in whole paise (round2) so float noise in the SUM of payments can't flip a
+    // fully-paid invoice to "partial" on an edit that never touched payments, and a real ₹0.01 shortfall is not hidden.
       let newStatus = "unpaid";
-      if (paidAmount + 0.01 >= total) newStatus = "paid";
+      if (round2(total - paidAmount) <= 0) newStatus = "paid";
       else if (paidAmount > 0) newStatus = "partial";
 
       // Excludes this invoice's own (pre-edit) balance from "current outstanding", then adds back

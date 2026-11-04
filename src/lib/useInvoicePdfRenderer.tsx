@@ -10,6 +10,8 @@ import { PdfRenderContext, type PdfRenderContextValue } from "@/components/pdf/P
  *
  * - renderInvoicePdf(id, copyLabels?, { priority?, settings? }) -> Blob | null (null on failure or after 45 s)
  * - startBulkZip({ label, items, produce, zipFileName, partialNote? }) -> false when one is already running
+ * - startDownloadJob({ title, total?, run }) -> any other download (a server-built ZIP/Excel, a bill ZIP with attachments) with the same
+ *   background progress card, Cancel and toast; run() gets { setProgress, isCancelled, signal } and returns the toast to show
  * - cancelBulk(), bulk (progress state, for disabling a "Bulk download" button)
  */
 export function useInvoicePdfRenderer(): PdfRenderContextValue {

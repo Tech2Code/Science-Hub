@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSectionAccess } from "@/lib/apiAuth";
-import { monthYearToDateRange } from "@/lib/listQuery";
+import { dateRangeFromParams } from "@/lib/listQuery";
 import { buildReturnWhere } from "@/lib/creditNoteQuery";
 import { istMonthStartUtc, istNextMonthStartUtc } from "@/lib/validation";
 
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(request.url);
-    const dateRange = monthYearToDateRange(searchParams.get("month") ?? "", searchParams.get("year") ?? "") ?? currentMonthRange();
+    const dateRange = dateRangeFromParams(searchParams) ?? currentMonthRange();
 
     const allTimeWhere = buildReturnWhere({});
     const periodWhere = buildReturnWhere({ dateRange });

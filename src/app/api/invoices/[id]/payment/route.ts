@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { round2 } from "@/lib/roundOff";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
@@ -21,7 +22,7 @@ export async function POST(
     const { amount, method, reference, notes, date, idempotencyKey } = body;
 
     const amountStr = (typeof amount === "string" || typeof amount === "number") ? String(amount).trim() : "";
-    if (!/^\d+(\.\d+)?$/.test(amountStr) || parseFloat(amountStr) <= 0) {
+    if (!/^\d+(\.\d+)?$/.test(amountStr) || round2(parseFloat(amountStr)) <= 0) {
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
     }
     if (typeof reference === "string" && reference.length > 500) {
@@ -83,16 +84,16 @@ export async function POST(
       return prisma.$transaction(async (tx) => {
         const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });
         const remaining = invoice.total - invoice.paidAmount;
-        if (parseFloat(amount) > remaining + 0.01) {
+        if (round2(parseFloat(amount)) > round2(remaining)) {
           throw new PaymentExceedsBalanceError(
-            `Payment (₹${parseFloat(amount).toFixed(2)}) exceeds the remaining balance (₹${remaining.toFixed(2)})`
+            `Payment (₹${round2(parseFloat(amount)).toFixed(2)}) exceeds the remaining balance (₹${remaining.toFixed(2)})`
           );
         }
 
         await tx.payment.create({
           data: {
             invoiceId: id,
-            amount: parseFloat(amount),
+            amount: round2(parseFloat(amount)),
             method: method || "cash",
             reference: reference || null,
             notes: notes || null,
@@ -107,7 +108,7 @@ export async function POST(
         });
 
         const paidAmount = agg._sum.amount ?? 0;
-        const status = paidAmount + 0.01 >= invoice.total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+        const status = round2(invoice.total - paidAmount) <= 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
 
         return tx.invoice.update({
           where: { id },
@@ -143,7 +144,7 @@ export async function POST(
     await logActivity(
       auth.session.user.id,
       "record_payment",
-      `Recorded payment ₹${fmt(parseFloat(amount))} via ${method || "Cash"} for invoice ${invoiceCheck.invoiceNumber} (${invoiceCheck.customer.name})`,
+      `Recorded payment ₹${fmt(round2(parseFloat(amount)))} via ${method || "Cash"} for invoice ${invoiceCheck.invoiceNumber} (${invoiceCheck.customer.name})`,
       id,
       "invoice"
     );

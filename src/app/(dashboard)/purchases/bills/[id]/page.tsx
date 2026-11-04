@@ -16,7 +16,7 @@ import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Modal } from "@/components/dialogs/Modal";
 import { rules, validate, toIstDateStr, isFutureIstDate } from "@/lib/validation";
-import { splitGstForDisplay } from "@/lib/roundOff";
+import { splitGstForDisplay, round2 } from "@/lib/roundOff";
 import { invalidateAfter } from "@/lib/cacheInvalidation";
 import { useToast } from "@/components/ui/Toast";
 import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
@@ -337,7 +337,7 @@ export default function PurchaseBillDetailPage() {
     // repeated clicks as each earlier field gets fixed.
     const amountErr = !payAmount || isNaN(amount) || amount <= 0
       ? "Enter a valid amount."
-      : amount > balance + 0.01
+      : round2(amount) > round2(balance)
         ? `Amount exceeds outstanding balance of ₹${fmt(balance)}.`
         : undefined;
     const otherMethodErr = payMethod === "Other" && !payOtherMethod.trim() ? "Please specify the payment method." : undefined;
@@ -389,7 +389,7 @@ export default function PurchaseBillDetailPage() {
     const balance = bill.total - bill.paidAmount + editingPayment.amount;
     const amountErr = !editPaymentForm.amount || isNaN(amount) || amount <= 0
       ? "Enter a valid amount."
-      : amount > balance + 0.01
+      : round2(amount) > round2(balance)
         ? `Amount exceeds outstanding balance of ₹${fmt(balance)}.`
         : undefined;
     const otherMethodErr = editPaymentForm.method === "Other" && !editPaymentOtherMethod.trim() ? "Please specify the payment method." : undefined;
@@ -780,7 +780,7 @@ export default function PurchaseBillDetailPage() {
                 {td(item.unit)}
                 {td(fmt(item.purchasePrice), "right")}
                 {td(item.discountPercent > 0 ? `${item.discountPercent}% (−₹${fmt(item.discountAmount)})` : "—", "right")}
-                {td(fmt(item.quantity * item.purchasePrice - item.discountAmount), "right")}
+                {td(fmt(round2(round2(item.quantity * item.purchasePrice) - item.discountAmount)), "right")}
                 {bill.isInterState ? (
                   td(`${item.gstRate}% (₹${fmt(item.gstAmount)})`, "right")
                 ) : (
@@ -1362,7 +1362,7 @@ export default function PurchaseBillDetailPage() {
                 </thead>
                 <tbody>
                   {bill.items.map((item, idx) => {
-                    const taxable = item.quantity * item.purchasePrice - item.discountAmount;
+                    const taxable = round2(round2(item.quantity * item.purchasePrice) - item.discountAmount);
                     const halfRate = item.gstRate / 2;
                     const { cgst: itemCgstM, sgst: itemSgstM } = splitGstForDisplay(item.gstAmount);
                     return (

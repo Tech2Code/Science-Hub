@@ -1,3 +1,4 @@
+import { round2 } from "@/lib/roundOff";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -240,7 +241,7 @@ export async function POST(
           });
 
           const otherTotal = otherReturns.reduce((s, r) => s + r.total, 0);
-          if (otherTotal + ret.total > invoice.paidAmount + 0.01) {
+          if (round2(otherTotal + ret.total) > round2(invoice.paidAmount)) {
             throw new BinValidationError(
               `Cannot restore — this credit note (₹${ret.total.toFixed(2)}) would exceed the invoice's paid amount (₹${Math.max(0, invoice.paidAmount - otherTotal).toFixed(2)} remaining after other credit notes).`
             );

@@ -330,11 +330,11 @@ async function getPurchaseDashboard(period?: PeriodInput, kpiOnly = false) {
     });
   }
 
-  // Unlike Invoice, PurchaseBill has its own bill-level `discount` netted out of the taxable value
-  // (before GST) — see the create route's `subtotal + taxAmount - discount + transportCharge + ...`
-  // total formula. GST = taxAmount + Transport Charge's own GST (a separate column, otherwise
-  // silently excluded).
-  const spendTaxable = (spendAgg._sum.subtotal ?? 0) - (spendAgg._sum.discount ?? 0) + (spendAgg._sum.transportCharge ?? 0);
+  // A bill's own `discount` is a post-tax cash rebate (documented decision in the create route): it lowers what is
+  // paid, NOT the taxable value or the input tax — so taxable = subtotal + transport charge, exactly what the GST
+  // Filing purchase register uses (gstFiling.ts), and this card can never disagree with it. GST = taxAmount +
+  // the transport charge's own GST (a separate column, otherwise silently excluded).
+  const spendTaxable = (spendAgg._sum.subtotal ?? 0) + (spendAgg._sum.transportCharge ?? 0);
   const spendGst = (spendAgg._sum.taxAmount ?? 0) + (spendAgg._sum.transportChargeGstAmount ?? 0);
 
   return {
@@ -526,14 +526,35 @@ async function getGstSummary(startDate?: string, endDate?: string) {
     ORDER BY month ASC
   `;
 
+  // Credit notes issued in the period are NETTED OUT, as GST Filing's summary does (they reduce output tax in the
+  // month they are issued, whatever month their invoice is from). Same IST month bucketing.
+  const creditRows = await prisma.$queryRaw<Array<{ month: Date; taxableValue: number; cgst: number; sgst: number; igst: number }>>`
+    SELECT date_trunc('month', "date" + interval '330 minutes') AS month,
+           COALESCE(SUM("subtotal"), 0) AS "taxableValue", COALESCE(SUM("cgst"), 0) AS cgst,
+           COALESCE(SUM("sgst"), 0) AS sgst, COALESCE(SUM("igst"), 0) AS igst
+    FROM "Return"
+    WHERE "deletedAt" IS NULL
+      ${gte ? Prisma.sql`AND "date" >= ${gte}` : Prisma.empty}
+      ${lte ? Prisma.sql`AND "date" <= ${lte}` : Prisma.empty}
+    GROUP BY month
+  `;
+  const byMonth = new Map<number, { month: Date; taxableValue: number; cgst: number; sgst: number; igst: number }>();
+  for (const r of rows) byMonth.set(new Date(r.month).getTime(), { month: r.month, taxableValue: Number(r.taxableValue) || 0, cgst: Number(r.cgst) || 0, sgst: Number(r.sgst) || 0, igst: Number(r.igst) || 0 });
+  for (const c of creditRows) {
+    const key = new Date(c.month).getTime();
+    const row = byMonth.get(key) ?? { month: c.month, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 };
+    row.taxableValue -= Number(c.taxableValue) || 0; row.cgst -= Number(c.cgst) || 0; row.sgst -= Number(c.sgst) || 0; row.igst -= Number(c.igst) || 0;
+    byMonth.set(key, row);
+  }
+
   // r.month already carries the IST-shifted instant used for grouping, so format it as UTC fields
   // (not the server's local timezone) to read back the correct IST month/year label.
-  return rows.map((r) => ({
+  return Array.from(byMonth.entries()).sort((a, b) => a[0] - b[0]).map(([, r]) => ({
     month: new Date(r.month).toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" }),
-    taxableValue: Number(r.taxableValue) || 0,
-    cgst: Number(r.cgst) || 0,
-    sgst: Number(r.sgst) || 0,
-    igst: Number(r.igst) || 0,
+    taxableValue: Math.round(r.taxableValue * 100) / 100,
+    cgst: Math.round(r.cgst * 100) / 100,
+    sgst: Math.round(r.sgst * 100) / 100,
+    igst: Math.round(r.igst * 100) / 100,
   }));
 }
 

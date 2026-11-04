@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { round2 } from "@/lib/roundOff";
 import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
@@ -18,10 +19,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { amount: rawAmount, method, reference, date, notes, idempotencyKey } = body;
 
     const amountStr = (typeof rawAmount === "string" || typeof rawAmount === "number") ? String(rawAmount).trim() : "";
-    if (!/^\d+(\.\d+)?$/.test(amountStr) || parseFloat(amountStr) <= 0) {
+    if (!/^\d+(\.\d+)?$/.test(amountStr) || round2(parseFloat(amountStr)) <= 0) {
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
     }
-    const amount = parseFloat(amountStr);
+    const amount = round2(parseFloat(amountStr));
     if (method !== undefined && method !== null && (typeof method !== "string" || method.length > 100)) {
       return NextResponse.json({ error: "Payment method is too long (max 100 characters)." }, { status: 400 });
     }
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           throw new PaymentExceedsBalanceError("Cannot record a payment against a cancelled bill.");
         }
         const balance = bill.total - bill.paidAmount;
-        if (amount > balance + 0.01) {
+        if (amount > round2(balance)) {
           throw new PaymentExceedsBalanceError(`Amount exceeds balance due (₹${balance.toFixed(2)}).`);
         }
 
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           _sum: { amount: true },
         });
         const newPaid = agg._sum.amount ?? 0;
-        const newStatus = newPaid >= bill.total - 0.01 ? "paid" : newPaid > 0 ? "partial" : "unpaid";
+        const newStatus = round2(bill.total - newPaid) <= 0 ? "paid" : newPaid > 0 ? "partial" : "unpaid";
 
         await tx.purchaseBill.update({
           where: { id },

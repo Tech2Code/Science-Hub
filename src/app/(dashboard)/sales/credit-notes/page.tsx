@@ -6,7 +6,8 @@ import Link from "next/link";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
-import { MonthYearFilter } from "@/components/ui/MonthYearFilter";
+import { ListPeriodFilter } from "@/components/ui/ListPeriodFilter";
+import { useListPeriod, setPeriodParams } from "@/lib/listPeriod";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { SearchField } from "@/components/ui/SearchField";
 import { Button } from "@/components/ui/Button";
@@ -82,8 +83,7 @@ export default function CreditNotesPage() {
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
   const [exportingCsv, setExportingCsv] = useState(false);
   const [search, setSearch] = useState("");
-  const [month, setMonth] = useState("");
-  const [year, setYear] = useState("");
+  const [period, setPeriod] = useListPeriod();
   const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
@@ -104,16 +104,15 @@ export default function CreditNotesPage() {
 
   const listParams = new URLSearchParams();
   if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
-  if (month) listParams.set("month", month);
-  if (year) listParams.set("year", year);
+  // An active search looks across every year, so a credit note is findable whatever period is selected.
+  setPeriodParams(listParams, period, !!debouncedSearch.trim());
   listParams.set("sort", sort);
   listParams.set("page", String(page));
   listParams.set("pageSize", String(pageSize));
   const apiUrl = `/api/credit-notes?${listParams.toString()}`;
 
   const statsParams = new URLSearchParams();
-  if (month) statsParams.set("month", month);
-  if (year) statsParams.set("year", year);
+  setPeriodParams(statsParams, period);
   const statsUrl = `/api/credit-notes/stats?${statsParams.toString()}`;
 
   const { data, loading, error, mutate } = useFetch<CreditNoteListResponse>(apiUrl);
@@ -127,7 +126,6 @@ export default function CreditNotesPage() {
   const totalCredited    = stats?.totalCredited ?? 0;
   const periodCount       = stats?.periodCount ?? 0;
   const periodCredited    = stats?.periodCredited ?? 0;
-  const availableYears    = stats?.availableYears ?? [];
 
   const handleSearch = (val: string) => { setSearch(val); setPage(1); };
 
@@ -276,8 +274,8 @@ export default function CreditNotesPage() {
             cards={[
               { label: "Total Credit Notes", value: String(totalCreditNotes),           tone: "default" },
               { label: "Total Credited",     value: `₹${fmt(totalCredited)}`,          tone: "warning" },
-              { label: month || year ? "Notes This Period" : "This Month", value: String(periodCount), tone: "default" },
-              { label: month || year ? "Credited This Period" : "Credited This Month", value: `₹${fmt(periodCredited)}`, tone: "warning" },
+              { label: "Notes This Period", value: String(periodCount), tone: "default" },
+              { label: "Credited This Period", value: `₹${fmt(periodCredited)}`, tone: "warning" },
             ]}
           />
         )}
@@ -293,13 +291,7 @@ export default function CreditNotesPage() {
                 className={styles.searchInput}
               />
               <SortSelect ariaLabel="Sort credit notes" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
-              <MonthYearFilter
-                month={month}
-                year={year}
-                years={availableYears}
-                onMonthChange={(v) => { setMonth(v); setPage(1); }}
-                onYearChange={(v) => { setYear(v); setPage(1); }}
-              />
+              <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} />
             </div>
             <HeaderActionsRow>
               {data && total > 0 && (
@@ -327,7 +319,7 @@ export default function CreditNotesPage() {
                   </td></tr>
                 ) : creditNotes.length === 0 ? (
                   <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
-                    {search ? "No credit notes match your search." : (month || year) ? "No credit notes found for this period." : "No credit notes recorded yet."}
+                    {search ? "No credit notes match your search." : "No credit notes found for this period."}
                   </td></tr>
                 ) : creditNotes.map((c) => (
                   <tr key={c.id}>

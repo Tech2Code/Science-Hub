@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
-import { DateRangeFilter } from "@/components/ui/DateRangeFilter";
+import { ReportPeriodFilter, defaultReportRange } from "@/components/ui/ReportPeriodFilter";
 import { HeaderActionsRow } from "@/components/ui/HeaderActionsRow";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
@@ -64,8 +64,9 @@ export default function SalesReportsPage() {
 
   const [tab, setTab] = useState<Tab>("outstanding");
   const [todayStr] = useState(() => toIstDateStr(new Date()));
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  // Default period: the current financial year, full year (to date); the filter below can pick another FY/month or a custom range.
+  const [startDate, setStartDate] = useState(() => defaultReportRange(todayStr).startDate);
+  const [endDate, setEndDate] = useState(() => defaultReportRange(todayStr).endDate);
   const dateQuery = startDate || endDate ? `&startDate=${startDate}&endDate=${endDate}` : "";
 
   const [outPage, setOutPage] = useState(1);
@@ -183,13 +184,12 @@ export default function SalesReportsPage() {
         </div>
 
         {(tab === "outstanding" || tab === "gst") && (
-          <DateRangeFilter
+          <ReportPeriodFilter
             startDate={startDate}
             endDate={endDate}
             todayStr={todayStr}
             onStartChange={(v) => { setStartDate(v); setOutPage(1); }}
             onEndChange={(v) => { setEndDate(v); setOutPage(1); }}
-            onClear={() => { setStartDate(""); setEndDate(""); setOutPage(1); }}
           />
         )}
 
@@ -289,7 +289,7 @@ export default function SalesReportsPage() {
             <div className="card-header">
               <div>
                 <h2 className="card-header-title">GST Summary</h2>
-                <p className="card-header-sub">Monthly GST breakdown across all invoices — gross output tax only, before netting credit notes/ITC. For net GST payable, see Reports → GST Reports.</p>
+                <p className="card-header-sub">Monthly output GST across all invoices, net of credit notes issued in the month (before ITC). For net GST payable, use GST Reports.</p>
               </div>
               {!loadingGst && gstRows.length > 0 && (
                 <Button variant="secondary" size="sm" loading={exportingGst} onClick={exportGstCsv}>Export Excel</Button>

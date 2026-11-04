@@ -8,6 +8,11 @@ import { splitGstForDisplay } from "@/lib/roundOff";
 
 const money = (n: number) => Math.round(n * 100) / 100;
 
+// CGST and SGST are two halves of one amount: round the combined figure once so the printed pair adds up to it.
+function splitHalves(r: { cgst: number; sgst: number }): { cgst: number; sgst: number } {
+  return splitGstForDisplay(r.cgst + r.sgst);
+}
+
 function addTable(wb: ExcelJS.Workbook, name: string, columns: Partial<ExcelJS.Column>[], rows: Record<string, unknown>[]) {
   const sheet = wb.addWorksheet(name);
   sheet.columns = columns;
@@ -98,7 +103,7 @@ export function buildGstFilingWorkbook(report: GstFilingReport): ExcelJS.Workboo
       creditNoteNumber: r.creditNoteNumber,
       date: formatDate(r.date), invoiceNumber: r.invoiceNumber, customerName: r.customerName, customerGstin: r.customerGstin,
       productName: r.productName, quantity: r.quantity, taxableValue: money(r.taxableValue), gstRate: r.gstRate,
-      cgst: money(r.cgst), sgst: money(r.sgst), igst: money(r.igst), total: money(r.total),
+      ...splitHalves(r), igst: money(r.igst), total: money(r.total),
     }))
   );
 
@@ -134,7 +139,7 @@ export function buildGstFilingWorkbook(report: GstFilingReport): ExcelJS.Workboo
     ],
     report.hsnSummary.map((r) => ({
       hsn: r.hsn, gstRate: r.gstRate, unit: r.unit, totalQuantity: r.totalQuantity, taxableValue: money(r.taxableValue),
-      cgst: money(r.cgst), sgst: money(r.sgst), igst: money(r.igst), total: money(r.total),
+      ...splitHalves(r), igst: money(r.igst), total: money(r.total),
     }))
   );
 

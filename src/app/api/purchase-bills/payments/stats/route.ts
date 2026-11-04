@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSectionAccess } from "@/lib/apiAuth";
-import { monthYearToDateRange } from "@/lib/listQuery";
+import { dateRangeFromParams } from "@/lib/listQuery";
 import { buildPurchasePaymentWhere } from "@/lib/purchasePaymentQuery";
 
 // Accepts the same search/month/year filters as the list route (same where-builder) — the Payments
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") ?? undefined;
-    const dateRange = monthYearToDateRange(searchParams.get("month") ?? "", searchParams.get("year") ?? "");
+    const dateRange = dateRangeFromParams(searchParams);
     const where = buildPurchasePaymentWhere({ search, dateRange });
     const [agg, total] = await Promise.all([
       prisma.purchasePayment.aggregate({ where, _sum: { amount: true } }),

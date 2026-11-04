@@ -9,7 +9,7 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SearchField } from "@/components/ui/SearchField";
-import { DateRangeFilter } from "@/components/ui/DateRangeFilter";
+import { ReportPeriodFilter, defaultReportRange } from "@/components/ui/ReportPeriodFilter";
 import { HeaderActionsRow } from "@/components/ui/HeaderActionsRow";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
@@ -112,8 +112,9 @@ export default function PurchaseReportsPage() {
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("outstanding");
   const [todayStr] = useState(() => toIstDateStr(new Date()));
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  // Default period: the current financial year, full year (to date); the filter below can pick another FY/month or a custom range.
+  const [startDate, setStartDate] = useState(() => defaultReportRange(todayStr).startDate);
+  const [endDate, setEndDate] = useState(() => defaultReportRange(todayStr).endDate);
   const dateQuery = startDate || endDate ? `&startDate=${startDate}&endDate=${endDate}` : "";
 
   const [outPage, setOutPage] = useState(1);
@@ -288,13 +289,12 @@ export default function PurchaseReportsPage() {
         </div>
 
         {tab === "outstanding" && (
-          <DateRangeFilter
+          <ReportPeriodFilter
             startDate={startDate}
             endDate={endDate}
             todayStr={todayStr}
             onStartChange={(v) => { setStartDate(v); setOutPage(1); }}
             onEndChange={(v) => { setEndDate(v); setOutPage(1); }}
-            onClear={() => { setStartDate(""); setEndDate(""); setOutPage(1); }}
           />
         )}
 

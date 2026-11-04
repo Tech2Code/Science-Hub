@@ -4,7 +4,7 @@ import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { deleteAttachmentBlob, isPurchaseBillBlobUrl } from "@/lib/blobStorage";
-import { computeRoundOff } from "@/lib/roundOff";
+import { computeRoundOff, round2 } from "@/lib/roundOff";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { purchaseBillLineBreakdown, normalizeCategoryInput } from "@/lib/purchaseBillForm";
 import { getBusinessSettings } from "@/lib/db";
@@ -229,8 +229,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           purchaseBillLineBreakdown(quantity, purchasePrice, gstRate, discountPercent);
         return { ...item, quantity, purchasePrice, gstRate, discountPercent, discountAmount, gstAmount, total, itemSubtotal, hsn: item.hsn ?? "" };
       });
-      subtotal = computedItems.reduce((s, i) => s + i.itemSubtotal, 0);
-      taxAmount = computedItems.reduce((s, i) => s + i.gstAmount, 0);
+      subtotal = round2(computedItems.reduce((s, i) => s + i.itemSubtotal, 0));
+      taxAmount = round2(computedItems.reduce((s, i) => s + i.gstAmount, 0));
     }
 
     // Re-derive GST type on every edit — keeps it correct if the vendor was switched or its state corrected after creation.
@@ -268,7 +268,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Transport charge GST rate must be between 0 and 100%" }, { status: 400 });
     }
     const effectiveTransportGstRate = parsedTransportGstRate !== undefined ? parsedTransportGstRate : existing.transportChargeGstRate;
-    const effectiveTransportGstAmount = (effectiveTransportCharge * effectiveTransportGstRate) / 100;
+    const effectiveTransportGstAmount = round2((effectiveTransportCharge * effectiveTransportGstRate) / 100);
 
     const rawTotal = (subtotal !== undefined && taxAmount !== undefined
       ? subtotal + taxAmount - effectiveDiscount
@@ -285,13 +285,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // A lower total can't drop below cash already paid — that would leave the bill claiming more was
     // paid than it's worth (negative balanceDue) with no matching payment correction.
-    if (totalChanged && total < existing.paidAmount - 0.01) {
+    if (totalChanged && total < round2(existing.paidAmount)) {
       return NextResponse.json(
         { error: `Total can't be less than the amount already paid (₹${existing.paidAmount.toFixed(2)}). Edit or delete payments first.` },
         { status: 400 }
       );
     }
-    const recomputedStatus = existing.paidAmount + 0.01 >= total ? "paid" : existing.paidAmount > 0 ? "partial" : "unpaid";
+    const recomputedStatus = round2(total - existing.paidAmount) <= 0 ? "paid" : existing.paidAmount > 0 ? "partial" : "unpaid";
     const effectiveStatus = totalChanged
       ? recomputedStatus
       : status === "cancelled"
@@ -300,7 +300,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           ? recomputedStatus
           : undefined;
 
-    if (effectiveStatus === "paid" && existing.paidAmount + 0.01 < total) {
+    if (effectiveStatus === "paid" && round2(total - existing.paidAmount) > 0) {
       return NextResponse.json(
         { error: "Cannot mark as paid — recorded payments don't cover the full total yet." },
         { status: 400 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { round2 } from "@/lib/roundOff";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
@@ -23,7 +24,7 @@ export async function PUT(
     const { amount, method, reference, date } = body;
 
     const amountStr = (typeof amount === "string" || typeof amount === "number") ? String(amount).trim() : "";
-    if (!/^\d+(\.\d+)?$/.test(amountStr) || parseFloat(amountStr) <= 0) {
+    if (!/^\d+(\.\d+)?$/.test(amountStr) || round2(parseFloat(amountStr)) <= 0) {
       return NextResponse.json({ error: "Valid amount is required" }, { status: 400 });
     }
     if (typeof reference === "string" && reference.length > 500) {
@@ -76,9 +77,9 @@ export async function PUT(
         });
         const otherPaymentsTotal = otherPayments._sum.amount ?? 0;
         const remaining = invoice.total - otherPaymentsTotal;
-        if (parseFloat(amountStr) > remaining + 0.01) {
+        if (round2(parseFloat(amountStr)) > round2(remaining)) {
           throw new PaymentExceedsBalanceError(
-            `Payment (₹${parseFloat(amountStr).toFixed(2)}) exceeds the remaining balance (₹${remaining.toFixed(2)})`
+            `Payment (₹${round2(parseFloat(amountStr)).toFixed(2)}) exceeds the remaining balance (₹${remaining.toFixed(2)})`
           );
         }
 
@@ -91,8 +92,8 @@ export async function PUT(
           _sum: { total: true },
         });
         const existingReturnTotal = existingReturns._sum.total ?? 0;
-        const newPaidAmount = otherPaymentsTotal + parseFloat(amountStr);
-        if (newPaidAmount < existingReturnTotal - 0.01) {
+        const newPaidAmount = otherPaymentsTotal + round2(parseFloat(amountStr));
+        if (round2(newPaidAmount) < round2(existingReturnTotal)) {
           throw new PaymentBelowReturnedError(
             `Cannot reduce this payment — ₹${existingReturnTotal.toFixed(2)} has already been refunded via credit note(s) against the paid amount.`
           );
@@ -101,7 +102,7 @@ export async function PUT(
         await tx.payment.update({
           where: { id: paymentId },
           data: {
-            amount: parseFloat(amountStr),
+            amount: round2(parseFloat(amountStr)),
             method: method || payment.method,
             reference: reference || null,
             ...(paymentDate ? { date: paymentDate } : {}),
@@ -113,7 +114,7 @@ export async function PUT(
           _sum: { amount: true },
         });
         const paidAmount = agg._sum.amount ?? 0;
-        const status = paidAmount + 0.01 >= invoice.total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+        const status = round2(invoice.total - paidAmount) <= 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
 
         return tx.invoice.update({
           where: { id },
@@ -132,7 +133,7 @@ export async function PUT(
     await logActivity(
       auth.session.user.id,
       "update_payment",
-      `Updated payment to ₹${fmt(parseFloat(amountStr))} via ${method} for invoice ${invoiceCheck.invoiceNumber} (${invoiceCheck.customer.name})`,
+      `Updated payment to ₹${fmt(round2(parseFloat(amountStr)))} via ${method} for invoice ${invoiceCheck.invoiceNumber} (${invoiceCheck.customer.name})`,
       id,
       "invoice"
     );
@@ -194,7 +195,7 @@ export async function DELETE(
           _sum: { total: true },
         });
         const existingReturnTotal = existingReturns._sum.total ?? 0;
-        if (newPaidAmount < existingReturnTotal - 0.01) {
+        if (round2(newPaidAmount) < round2(existingReturnTotal)) {
           throw new PaymentBelowReturnedError(
             `Cannot delete this payment — ₹${existingReturnTotal.toFixed(2)} has already been refunded via credit note(s) against the paid amount.`
           );
@@ -202,7 +203,7 @@ export async function DELETE(
 
         await tx.payment.delete({ where: { id: paymentId } });
 
-        const status = newPaidAmount + 0.01 >= invoice.total ? "paid" : newPaidAmount > 0 ? "partial" : "unpaid";
+        const status = round2(invoice.total - newPaidAmount) <= 0 ? "paid" : newPaidAmount > 0 ? "partial" : "unpaid";
 
         return tx.invoice.update({
           where: { id },

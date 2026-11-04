@@ -9,10 +9,10 @@ import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { retryOnWriteConflict, isIdempotencyKeyConflict } from "@/lib/retryOnWriteConflict";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
-import { computeRoundOff } from "@/lib/roundOff";
+import { computeRoundOff, round2 } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
 import { MAX_MONEY_VALUE, MAX_QUANTITY, istDayStartUtc, istTodayStartUtc } from "@/lib/validation";
-import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
+import { parsePageParams, dateRangeFromParams } from "@/lib/listQuery";
 import { checkCustomerCreditLimit, type CreditLimitCheck } from "@/lib/creditLimit";
 
 // Thrown from inside the create transaction so the credit-limit check can be re-validated
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     const customerId = searchParams.get("customerId");
     const search = searchParams.get("search") ?? undefined;
     const sort = (searchParams.get("sort") ?? undefined) as InvoiceSort | undefined;
-    const dateRange = monthYearToDateRange(searchParams.get("month") ?? "", searchParams.get("year") ?? "");
+    const dateRange = dateRangeFromParams(searchParams);
     const { skip, take } = parsePageParams(searchParams);
 
     const { data, total } = await getInvoices({ status, customerId, search, dateRange }, sort, skip, take);
@@ -239,6 +239,10 @@ export async function POST(request: NextRequest) {
       };
     });
 
+    // Sums of 2-dp lines — rounded only to drop binary-float noise (0.1 + 0.2).
+    subtotal = round2(subtotal);
+    totalGst = round2(totalGst);
+
     let cgst = 0;
     let sgst = 0;
     let igst = 0;
@@ -259,7 +263,7 @@ export async function POST(request: NextRequest) {
     if (!(transportChargeGstRateVal >= 0 && transportChargeGstRateVal <= 100)) {
       return NextResponse.json({ error: "Transport charge GST rate must be between 0 and 100%" }, { status: 400 });
     }
-    const transportChargeGstAmountVal = (transportChargeVal * transportChargeGstRateVal) / 100;
+    const transportChargeGstAmountVal = round2((transportChargeVal * transportChargeGstRateVal) / 100);
 
     const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + cgst + sgst + igst + transportChargeVal + transportChargeGstAmountVal);
 

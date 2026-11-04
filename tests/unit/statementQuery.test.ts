@@ -105,3 +105,16 @@ describe("buildLedger — same IST day ordering", () => {
     expect(buildLedger(entries).rows.map((r) => r.refId)).toEqual(["earlier-pay", "later-inv"]);
   });
 });
+
+describe("credit note + refund on a customer ledger", () => {
+  it("a credit note and its refund cancel, so the statement balance equals Invoice.balanceDue (1000 - 600 paid = 400 with a 500 credit note)", () => {
+    const e = (type: "invoice" | "payment" | "credit_note" | "refund", debit: number, credit: number, refId: string, day: string) =>
+      ({ date: new Date(`${day}T06:00:00Z`), type, label: type, refId, debit, credit });
+    const r = buildLedger([
+      e("invoice", 1000, 0, "i", "2026-05-01"), e("payment", 0, 600, "p", "2026-05-02"),
+      e("credit_note", 0, 500, "c", "2026-05-03"), e("refund", 500, 0, "c", "2026-05-03"),
+    ]);
+    expect(r.closingBalance).toBe(400);
+    expect(r.rows.map((x) => x.type)).toEqual(["invoice", "payment", "credit_note", "refund"]);
+  });
+});

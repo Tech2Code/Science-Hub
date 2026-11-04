@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/apiAuth";
-import { monthYearToDateRange } from "@/lib/listQuery";
+import { dateRangeFromParams, financialYearRangeFromParams } from "@/lib/listQuery";
 import { buildBillWhere } from "@/lib/purchaseBillQuery";
 import { istTodayStartUtc } from "@/lib/validation";
 
@@ -13,7 +13,8 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
-    const dateRange = monthYearToDateRange(searchParams.get("month") ?? "", searchParams.get("year") ?? "");
+    const dateRange = dateRangeFromParams(searchParams);
+    const outsideRange = financialYearRangeFromParams(searchParams);
 
     const where = buildBillWhere({ status, dateRange });
     // Every other purchase-spend aggregation in the app (Purchase Reports Summary/Category, GST
@@ -23,13 +24,20 @@ export async function GET(request: NextRequest) {
     // unset) by design, since the list view must still show them — so the stats aggregate gets its
     // own narrower where, excluding cancelled unless the user explicitly asked for the Cancelled tab.
     const aggWhere = status === "cancelled" ? where : { ...where, status: where.status ?? { not: "cancelled" as const } };
-    const [agg, overdueCount, years] = await Promise.all([
+    const [agg, overdueCount, years, outside] = await Promise.all([
       prisma.purchaseBill.aggregate({ where: aggWhere, _sum: { total: true, paidAmount: true } }),
       // Nested AND (not merged into `where`) so a status tab's own meaning isn't overwritten by the overdue condition's status constraint.
       prisma.purchaseBill.count({ where: { AND: [where, { status: { notIn: ["paid", "cancelled"] }, dueDate: { lt: istTodayStartUtc() } }] } }),
       // billDate is stored as IST midnight (= 18:30 UTC the previous day), so the year must be
       // extracted in IST — a bare EXTRACT on the UTC value put every 1 Jan bill in the previous year.
       prisma.$queryRaw<{ year: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM ("billDate" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata'))::int AS year FROM "PurchaseBill" WHERE "deletedAt" IS NULL ORDER BY year DESC`,
+      // Unpaid money on bills OUTSIDE the selected period, so the page can say the list is scoped to one financial year.
+      outsideRange
+        ? prisma.purchaseBill.aggregate({
+            where: { deletedAt: null, status: { notIn: ["paid", "cancelled"] }, OR: [{ billDate: { lt: outsideRange.gte } }, { billDate: { gte: outsideRange.lt } }] },
+            _sum: { balanceDue: true }, _count: true,
+          })
+        : null,
     ]);
     const totalPurchase = agg._sum.total ?? 0;
     const totalPaid = agg._sum.paidAmount ?? 0;
@@ -39,6 +47,7 @@ export async function GET(request: NextRequest) {
       totalPending: totalPurchase - totalPaid,
       overdueCount,
       availableYears: years.map((y) => y.year),
+      outsidePeriod: { count: outside?._count ?? 0, amount: outside?._sum.balanceDue ?? 0 },
     });
   } catch (error) {
     console.error("GET /api/purchase-bills/stats error:", error);

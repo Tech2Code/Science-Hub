@@ -20,7 +20,7 @@ interface FinancialYearsResponse {
 const FY_LABEL = (startYear: number) => `FY ${startYear}-${String(startYear + 1).slice(2)}`;
 
 // The calendar year an FY-month falls in: Jan–Mar (0–2) belong to the FY's SECOND year, Apr–Dec to the first.
-function calYearOf(fyStartYear: number, month0: number): number {
+export function calYearOf(fyStartYear: number, month0: number): number {
   return month0 >= 3 ? fyStartYear : fyStartYear + 1;
 }
 

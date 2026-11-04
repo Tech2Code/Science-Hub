@@ -42,6 +42,8 @@ export interface CreditNoteRow {
   returnId: string; creditNoteNumber: string; date: Date; invoiceNumber: string; customerName: string; customerGstin: string;
   productName: string; quantity: number; taxableValue: number; gstRate: number;
   cgst: number; sgst: number; igst: number; total: number;
+  /** The credit note's stored total (includes its round-off) — what the GSTR-1 cdnr "Note Value" must show; `total` above is this line's own value. */
+  noteValue?: number;
   // Resolved from the credit note's own original invoice (not from this period's Sales Register),
   // so a credit note dated in this period is still reported even when its invoice was dated in an
   // earlier period. placeOfSupply falls back to the customer's state, same as the Sales Register.
@@ -144,6 +146,22 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
   const hsnMap = new Map<string, HsnSummaryRow>();
   const hsnMapB2B = new Map<string, HsnSummaryRow>();
   const hsnMapB2C = new Map<string, HsnSummaryRow>();
+  // The HSN summary needs one row per (HSN, rate, UNIT): a quantity summed across different units (kg + nos) means
+  // nothing on the portal, so the unit is part of the key. A separately-billed transport charge is a supply of
+  // goods-transport service (SAC 9965) and gets its own row, so Table 12 totals tie to Tables 4/5/7.
+  const TRANSPORT_SAC = "9965";
+  const hsnKey = (hsn: string, rate: number, unit: string) => `${hsn}|${rate}|${unit.trim().toLowerCase()}`;
+  const foldHsn = (map: Map<string, HsnSummaryRow>, key: string, row: HsnSummaryRow) => {
+    const existing = map.get(key);
+    if (existing) {
+      existing.totalQuantity += row.totalQuantity;
+      existing.taxableValue += row.taxableValue;
+      existing.cgst += row.cgst; existing.sgst += row.sgst; existing.igst += row.igst;
+      existing.total += row.total;
+    } else {
+      map.set(key, { ...row });
+    }
+  };
   const seenInvoiceNumbers = new Map<string, number>();
   // Transport charge carries its own GST, kept in a separate DB column from cgst/sgst/igst by
   // design (Invoice.transportCharge) so the Sales Register's cgst/sgst/igst columns keep matching
@@ -197,7 +215,7 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
         issues.push(issue("warning", "Sales", `Unusual GST rate ${it.gstRate}% on invoice ${inv.invoiceNumber} for "${it.name}".`, inv.invoiceNumber));
       }
       const taxable = it.total - it.gstAmount;
-      const key = `${it.hsn.trim() || "—"}|${it.gstRate}`;
+      const key = hsnKey(it.hsn.trim() || "—", it.gstRate, it.unit);
       const existing = hsnMap.get(key);
       const cgstShare = inv.isInterState ? 0 : it.gstAmount / 2;
       const sgstShare = inv.isInterState ? 0 : it.gstAmount / 2;
@@ -207,7 +225,6 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
         existing.taxableValue += taxable;
         existing.cgst += cgstShare; existing.sgst += sgstShare; existing.igst += igstShare;
         existing.total += it.total;
-        if (existing.unit !== it.unit) existing.unit = "Mixed";
       } else {
         hsnMap.set(key, {
           hsn: it.hsn.trim() || "—", gstRate: it.gstRate, unit: it.unit, totalQuantity: it.quantity,
@@ -227,7 +244,6 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
           splitExisting.taxableValue += taxable;
           splitExisting.cgst += cgstShare; splitExisting.sgst += sgstShare; splitExisting.igst += igstShare;
           splitExisting.total += it.total;
-          if (splitExisting.unit !== it.unit) splitExisting.unit = "Mixed";
         } else {
           splitMap.set(key, {
             hsn: it.hsn.trim() || "—", gstRate: it.gstRate, unit: it.unit, totalQuantity: it.quantity,
@@ -281,6 +297,14 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
         transportOutputTaxable += inv.transportCharge;
         transportOutputCgst += tCgst; transportOutputSgst += tSgst; transportOutputIgst += tIgst;
       }
+      // HSN summary: its own SAC 9965 row (quantity is meaningless for a service, so 0 / unit NA).
+      const transportHsnKey = hsnKey(TRANSPORT_SAC, inv.transportChargeGstRate, "NA");
+      const transportHsnRow: HsnSummaryRow = {
+        hsn: TRANSPORT_SAC, gstRate: inv.transportChargeGstRate, unit: "NA", totalQuantity: 0,
+        taxableValue: inv.transportCharge, cgst: tCgst, sgst: tSgst, igst: tIgst, total: inv.transportCharge + inv.transportChargeGstAmount,
+      };
+      foldHsn(hsnMap, transportHsnKey, transportHsnRow);
+      if (posOk) foldHsn(isB2B ? hsnMapB2B : hsnMapB2C, transportHsnKey, transportHsnRow);
     }
 
     salesRegister.push({
@@ -328,7 +352,7 @@ export async function buildGstFilingReport(startDate: string, endDate: string): 
         customerGstin: (inv.customer.gstin ?? "").trim(), productName: ri.name, quantity: ri.quantity,
         taxableValue: ri.total - gstAmt, gstRate: ri.gstRate,
         cgst: inv.isInterState ? 0 : gstAmt / 2, sgst: inv.isInterState ? 0 : gstAmt / 2, igst: inv.isInterState ? gstAmt : 0,
-        total: ri.total,
+        total: ri.total, noteValue: ret.total,
         placeOfSupply: cnPos, reverseCharge: inv.reverseCharge, invoiceDate: inv.date, invoiceTotal: inv.total,
       });
     }

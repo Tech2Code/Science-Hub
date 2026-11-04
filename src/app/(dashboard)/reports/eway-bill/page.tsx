@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, usePagination } from "@/components/ui/Pagination";
-import { DateRangeFilter } from "@/components/ui/DateRangeFilter";
+import { ReportPeriodFilter, defaultReportRange } from "@/components/ui/ReportPeriodFilter";
 import { HeaderActionsRow } from "@/components/ui/HeaderActionsRow";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { downloadXlsx } from "@/lib/downloadXlsx";
@@ -84,8 +84,9 @@ export default function EwayBillReportPage() {
     }
   }, [session, router]);
 
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  // Default period: the current financial year, full year (to date); the filter below can pick another FY/month or a custom range.
+  const [startDate, setStartDate] = useState(() => defaultReportRange(todayStr()).startDate);
+  const [endDate, setEndDate] = useState(() => defaultReportRange(todayStr()).endDate);
   const [salesSort, setSalesSort] = useState<SortOption>("newest");
   const [purchasesSort, setPurchasesSort] = useState<SortOption>("newest");
   const [exporting, setExporting] = useState(false);
@@ -161,10 +162,9 @@ export default function EwayBillReportPage() {
             </Button>
           </HeaderActionsRow>
         </div>
-        <DateRangeFilter
+        <ReportPeriodFilter
           startDate={startDate} endDate={endDate} todayStr={todayS}
           onStartChange={setStartDate} onEndChange={setEndDate}
-          onClear={() => { setStartDate(""); setEndDate(""); }}
         />
       </div>
 

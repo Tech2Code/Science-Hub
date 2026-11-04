@@ -9,7 +9,10 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
-import { MonthYearFilter } from "@/components/ui/MonthYearFilter";
+import { ListPeriodFilter } from "@/components/ui/ListPeriodFilter";
+import { OutsidePeriodNotice } from "@/components/ui/OutsidePeriodNotice";
+import { useListPeriod, setPeriodParams, periodMonthYear } from "@/lib/listPeriod";
+import { askSaveLocation, discardSaveTarget } from "@/lib/saveFile";
 import { SearchField } from "@/components/ui/SearchField";
 import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
@@ -56,6 +59,7 @@ interface InvoiceStats {
   totalPending: number;
   overdueCount: number;
   availableYears: number[];
+  outsidePeriod?: { count: number; amount: number };
 }
 
 type StatusFilter = "All" | "unpaid" | "partial" | "paid" | "overdue";
@@ -99,8 +103,7 @@ export default function InvoicesPage() {
     urlFilter && (STATUS_TABS as string[]).includes(urlFilter) ? (urlFilter as StatusFilter) : "All"
   );
   const [search, setSearch] = useState("");
-  const [month, setMonth] = useState("");
-  const [year, setYear] = useState("");
+  const [period, setPeriod] = useListPeriod();
   const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
@@ -198,21 +201,27 @@ export default function InvoicesPage() {
     setPdfDialogInvoice(null);
   }
 
-  // Downloads every invoice for the currently selected Month+Year filter as one ZIP of individual PDFs
+  // Downloads every invoice for the currently selected month of the selected financial year as one ZIP of individual PDFs
   // (each still goes through the same cache invoice detail pages use, so a repeat download is fast).
   async function handleBulkDownload() {
     if (bulkBusyRef.current) return;
-    if (!month || !year) {
-      toast({ type: "error", title: "Select a period", message: "Choose a month and year first to bulk download." });
+    const bulkPeriod = periodMonthYear(period);
+    if (!bulkPeriod) {
+      toast({ type: "error", title: "Select a month", message: "Choose a month first to bulk download." });
       return;
     }
+    // Ask where to save FIRST (Chrome/Edge): the Save dialog only opens straight from the click, and this way the
+    // "Saved" toast can be true — the file is written where the user chose. Other browsers fall back to a normal download.
+    const monthLabel = MONTH_NAMES[bulkPeriod.month0];
+    const zipFileName = `Invoices_${monthLabel}_${bulkPeriod.year}.zip`;
+    const saveTarget = await askSaveLocation(zipFileName);
+    if (saveTarget.kind === "cancelled") return;
     bulkBusyRef.current = true;
     setBulkDownloading(true);
     try {
       const params = new URLSearchParams();
       if (filter !== "All") params.set("status", filter);
-      params.set("month", month);
-      params.set("year", year);
+      setPeriodParams(params, period);
       params.set("sort", "oldest");
       params.set("page", "1");
       params.set("pageSize", "2000");
@@ -221,21 +230,25 @@ export default function InvoicesPage() {
       const list = json?.data ?? [];
       if (!res.ok || list.length === 0) {
         toast({ type: "error", title: "Nothing to download", message: "No invoices found for the selected period." });
+        await discardSaveTarget(saveTarget);
         return;
       }
       const truncated = (json?.total ?? list.length) > list.length;
-      const monthLabel = MONTH_NAMES[Number(month)];
       // Hand the run to the app-wide provider: it keeps going (with a progress card + Cancel) if the user leaves this page,
       // runs each item at low priority so a View/PDF click jumps the queue, and reports the outcome with a toast.
-      startBulkZip({
+      const started = startBulkZip({
         label: "invoice",
         items: list.map((inv) => ({ ...inv, fileName: `${sanitizeZipEntryName(inv.invoiceNumber)}.pdf` })),
         produce: (item) => generateInvoicePdf(item, ["ORIGINAL COPY"], false, "low"),
-        zipFileName: `Invoices_${monthLabel}_${year}.zip`,
+        zipFileName,
+        saveTarget,
         partialNote: truncated ? `Only the first ${list.length} of ${json?.total} matching invoices were zipped (limit ${list.length}/request) — refine the filter (e.g. by status) and download the rest separately.` : undefined,
       });
+      // Another download was already running → nothing took the Save target, so drop the empty file the dialog created.
+      if (!started) await discardSaveTarget(saveTarget);
     } catch {
       toast({ type: "error", title: "Download failed", message: "Network error." });
+      await discardSaveTarget(saveTarget);
     } finally {
       setBulkDownloading(false);
       bulkBusyRef.current = false;
@@ -248,8 +261,8 @@ export default function InvoicesPage() {
   const listParams = new URLSearchParams();
   if (filter !== "All") listParams.set("status", filter);
   if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
-  if (month) listParams.set("month", month);
-  if (year) listParams.set("year", year);
+  // An active search looks across every year, so a document is findable whatever period is selected.
+  setPeriodParams(listParams, period, !!debouncedSearch.trim());
   listParams.set("sort", sort);
   listParams.set("page", String(page));
   listParams.set("pageSize", String(pageSize));
@@ -257,8 +270,7 @@ export default function InvoicesPage() {
 
   const statsParams = new URLSearchParams();
   if (filter !== "All") statsParams.set("status", filter);
-  if (month) statsParams.set("month", month);
-  if (year) statsParams.set("year", year);
+  setPeriodParams(statsParams, period);
   const statsUrl = `/api/invoices/stats?${statsParams.toString()}`;
 
   const { data, loading, error, mutate } = useFetch<InvoiceListResponse>(apiUrl);
@@ -274,7 +286,6 @@ export default function InvoicesPage() {
   const totalPaid     = stats?.totalPaid ?? 0;
   const totalPending  = stats?.totalPending ?? 0;
   const overdue       = stats?.overdueCount ?? 0;
-  const availableYears = stats?.availableYears ?? [];
 
   // Deleting the only row on the last page would otherwise leave the user on an empty page past
   // the end showing "No invoices found" even though earlier pages still have rows.
@@ -362,6 +373,7 @@ export default function InvoicesPage() {
         {canWrite && (<Button variant="primary" href="/sales/invoices/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>)}
       </div>
 
+      {stats?.outsidePeriod && <OutsidePeriodNotice count={stats.outsidePeriod.count} amount={stats.outsidePeriod.amount} noun="invoice" />}
       {/* Dashboard cards */}
       {(loading || totalInvoiced > 0 || total > 0) && (
         <StatCardsRow
@@ -401,19 +413,13 @@ export default function InvoicesPage() {
               onChange={(v) => { setSort(v); setPage(1); }}
               options={SORT_OPTIONS}
             />
-            <MonthYearFilter
-              month={month}
-              year={year}
-              years={availableYears}
-              onMonthChange={(v) => { setMonth(v); setPage(1); }}
-              onYearChange={(v) => { setYear(v); setPage(1); }}
-            />
+            <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} />
             <Button
               variant="secondary"
               size="sm"
               disabled={bulkDownloading || bulk.running}
-              ariaDisabled={!month || !year}
-              title={bulk.running ? "A bulk download is already running — see the progress card" : !month || !year ? "Select a month and year to bulk download" : "Download all invoices for this period as a ZIP of PDFs"}
+              ariaDisabled={period.month0 === "all"}
+              title={bulk.running ? "A bulk download is already running — see the progress card" : period.month0 === "all" ? "Select a month to bulk download" : "Download all invoices for this period as a ZIP of PDFs"}
               onClick={handleBulkDownload}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -441,7 +447,7 @@ export default function InvoicesPage() {
                 </td></tr>
               ) : invoices.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
-                  {search.trim() ? `No invoices match "${search}".` : (month || year) ? "No invoices found for this period." : "No invoices found."}
+                  {search.trim() ? `No invoices match "${search}".` : "No invoices found for this period."}
                 </td></tr>
               ) : invoices.map((inv) => (
                 <tr key={inv.id}>

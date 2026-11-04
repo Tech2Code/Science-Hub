@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { SearchField } from "@/components/ui/SearchField";
+import { ListPeriodFilter } from "@/components/ui/ListPeriodFilter";
+import { useListPeriod, setPeriodParams } from "@/lib/listPeriod";
 import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -83,6 +85,8 @@ export default function PurchasePaymentsPage() {
   }, [session, router]);
 
   const [search, setSearch] = useState("");
+  // Current financial year (Full year) by default; an active search looks across every year.
+  const [period, setPeriod] = useListPeriod();
   const [sort, setSort] = useState<SortOption>("newest");
   const [page, setPage] = useState(1);
   const [showAll, setShowAll] = useState(false);
@@ -92,6 +96,7 @@ export default function PurchasePaymentsPage() {
 
   const listParams = new URLSearchParams();
   if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
+  setPeriodParams(listParams, period, !!debouncedSearch.trim());
   listParams.set("sort", sort);
   listParams.set("page", String(page));
   listParams.set("pageSize", String(pageSize));
@@ -101,6 +106,7 @@ export default function PurchasePaymentsPage() {
   // Same search filter as the list, so the header's count and "Total paid" describe the same rows.
   const statsParams = new URLSearchParams();
   if (debouncedSearch.trim()) statsParams.set("search", debouncedSearch.trim());
+  setPeriodParams(statsParams, period, !!debouncedSearch.trim());
   const statsQuery = statsParams.toString();
   const { data: stats } = useFetch<PurchasePaymentStats>(`/api/purchase-bills/payments/stats${statsQuery ? `?${statsQuery}` : ""}`);
   const payments = data?.data ?? [];
@@ -132,6 +138,7 @@ export default function PurchasePaymentsPage() {
               onChange={(e) => handleSearch(e.target.value)}
               className={`${styles.searchInput}`}
             />
+            <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} />
             <SortSelect ariaLabel="Sort purchase payments" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
           {data && (
@@ -155,7 +162,7 @@ export default function PurchasePaymentsPage() {
                 </td></tr>
               ) : payments.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
-                  {search ? "No payments match your search." : "No purchase payments recorded yet."}
+                  {search ? "No payments match your search." : "No purchase payments found for this period."}
                 </td></tr>
               ) : payments.map((p) => {
                 const methodClass = styles[METHOD_CLASS[(p.method ?? "").trim().toLowerCase()] ?? METHOD_CLASS.other];

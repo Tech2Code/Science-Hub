@@ -1,3 +1,8 @@
+// Rounds to 2 decimal places (paise), guarding against binary-float noise like 1.005 -> 1.00.
+export function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
 // Commercial rounding to the nearest rupee: 100.40 -> 100, 100.60 -> 101.
 // roundOff is the signed adjustment (roundedTotal - rawTotal) so it can be
 // printed as "+0.40" / "-0.60" on invoices and purchase bills.

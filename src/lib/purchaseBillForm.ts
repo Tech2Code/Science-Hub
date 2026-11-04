@@ -1,4 +1,4 @@
-import { computeRoundOff } from "./roundOff";
+import { computeRoundOff, round2 } from "./roundOff";
 
 export interface PurchaseBillLineItem {
   key: string;
@@ -53,12 +53,14 @@ export const fmtCurrency = (n: number) => n.toLocaleString("en-IN", { minimumFra
 
 // Discount applied before GST (mirrors the sales invoice calc). Single source of truth for both
 // purchase-bill client forms (via calcPurchaseBillItem) and the create/edit API routes.
+// Rounded to whole paise at the line (same policy and reasoning as lineBreakdown() in invoiceCalc.ts), so the bill's
+// subtotal and tax are sums of the printed 2-dp lines and the document foots exactly.
 export function purchaseBillLineBreakdown(qty: number, price: number, rate: number, percent: number) {
-  const gross           = qty * price;
-  const discountAmount  = gross * percent / 100;
-  const subtotal  = gross - discountAmount;
-  const gstAmount = subtotal * rate / 100;
-  return { gross, discountAmount, subtotal, gstAmount, total: subtotal + gstAmount };
+  const gross           = round2(qty * price);
+  const discountAmount  = round2(gross * percent / 100);
+  const subtotal  = round2(gross - discountAmount);
+  const gstAmount = round2(subtotal * rate / 100);
+  return { gross, discountAmount, subtotal, gstAmount, total: round2(subtotal + gstAmount) };
 }
 
 export function calcPurchaseBillItem(item: PurchaseBillLineItem) {
@@ -119,12 +121,12 @@ export function resolveQuickAddLineRate(listPrice: string, discountPercent: stri
 
 // transportCharge/transportChargeGstRate mirror invoiceCalc.ts — own line/GST, added straight into the grand total.
 export function computePurchaseBillTotals(items: PurchaseBillLineItem[], discount: string, transportCharge = 0, transportChargeGstRate = 0) {
-  const grossTotal        = items.reduce((s, i) => s + calcPurchaseBillItem(i).gross, 0);
-  const itemDiscountTotal = items.reduce((s, i) => s + calcPurchaseBillItem(i).discountAmount, 0);
-  const subtotal          = items.reduce((s, i) => s + calcPurchaseBillItem(i).subtotal, 0);
-  const taxTotal          = items.reduce((s, i) => s + calcPurchaseBillItem(i).gstAmount, 0);
+  const grossTotal        = round2(items.reduce((s, i) => s + calcPurchaseBillItem(i).gross, 0));
+  const itemDiscountTotal = round2(items.reduce((s, i) => s + calcPurchaseBillItem(i).discountAmount, 0));
+  const subtotal          = round2(items.reduce((s, i) => s + calcPurchaseBillItem(i).subtotal, 0));
+  const taxTotal          = round2(items.reduce((s, i) => s + calcPurchaseBillItem(i).gstAmount, 0));
   const disc = toNum(discount);
-  const transportChargeGstAmount = (transportCharge * transportChargeGstRate) / 100;
+  const transportChargeGstAmount = round2((transportCharge * transportChargeGstRate) / 100);
   const rawTotal = subtotal + taxTotal - disc + transportCharge + transportChargeGstAmount;
   const { roundOff, roundedTotal } = computeRoundOff(rawTotal);
   return {

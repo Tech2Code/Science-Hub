@@ -121,14 +121,22 @@ export async function getInvoices(filters: InvoiceListFilters, sort: InvoiceSort
 }
 
 // Stats intentionally ignore `search` so typing in the search box doesn't trigger an extra aggregate query per keystroke.
-export async function getInvoiceStats(filters: Omit<InvoiceListFilters, "search">) {
+export async function getInvoiceStats(filters: Omit<InvoiceListFilters, "search">, outsideRange?: { gte: Date; lt: Date }) {
   const where = buildInvoiceWhere(filters);
   // AND'd as a separate nested condition so a status tab's own meaning isn't overwritten by the
   // overdue condition's status constraint (e.g. the "paid" tab always yields 0 overdue).
-  const [agg, overdueCount, years] = await Promise.all([
+  const [agg, overdueCount, years, outside] = await Promise.all([
     prisma.invoice.aggregate({ where, _sum: { total: true, paidAmount: true } }),
     prisma.invoice.count({ where: { AND: [where, { status: { not: "paid" }, dueDate: { lt: istTodayStartUtc() } }] } }),
     prisma.$queryRaw<{ year: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM ("date" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata'))::int AS year FROM "Invoice" WHERE "deletedAt" IS NULL ORDER BY year DESC`,
+    // Unpaid money on invoices OUTSIDE the selected period — the list is scoped to one financial year, and this
+    // lets the page say so instead of silently hiding what is still owed from other years.
+    outsideRange
+      ? prisma.invoice.aggregate({
+          where: { deletedAt: null, status: { not: "paid" }, OR: [{ date: { lt: outsideRange.gte } }, { date: { gte: outsideRange.lt } }] },
+          _sum: { balanceDue: true }, _count: true,
+        })
+      : null,
   ]);
   const totalInvoiced = agg._sum.total ?? 0;
   const totalPaid = agg._sum.paidAmount ?? 0;
@@ -138,6 +146,7 @@ export async function getInvoiceStats(filters: Omit<InvoiceListFilters, "search"
     totalPending: totalInvoiced - totalPaid,
     overdueCount,
     availableYears: years.map((y) => y.year),
+    outsidePeriod: { count: outside?._count ?? 0, amount: outside?._sum.balanceDue ?? 0 },
   };
 }
 

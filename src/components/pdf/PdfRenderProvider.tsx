@@ -11,6 +11,7 @@ import { generateInvoicePdfBlob } from "@/lib/generateInvoicePdf";
 import { nextFrame, waitForElementById, settleWithin } from "@/lib/domWait";
 import { createJobQueue, type JobPriority } from "@/lib/pdfJobQueue";
 import { bulkDownloadPdfsAsZip, type BulkZipItem } from "@/lib/bulkPdfDownload";
+import type { SaveTarget } from "@/lib/saveFile";
 import styles from "./PdfRenderProvider.module.css";
 
 // One PDF should take seconds; this only exists so a job that never settles (a stalled network request inside the PDF
@@ -49,6 +50,27 @@ export interface BulkZipRequest<T extends BulkZipItem> {
   zipFileName: string;
   /** When set, the finished run is reported as a partial download with this message (e.g. the list was truncated). */
   partialNote?: string;
+  /** From askSaveLocation() — where the user chose to save the ZIP. Omitted → a normal browser download. */
+  saveTarget?: SaveTarget;
+}
+
+/** What a background download job reports to the app-wide toast when it ends. */
+export interface DownloadOutcome { type: "success" | "error" | "info"; title: string; message: string }
+
+export interface DownloadJobContext {
+  setProgress: (done: number, total: number) => void;
+  /** True once the user pressed Cancel on the progress card. */
+  isCancelled: () => boolean;
+  /** Aborted on Cancel — pass it to fetch() so a server-built file stops too. */
+  signal: AbortSignal;
+}
+
+export interface DownloadJobRequest {
+  /** Shown on the progress card as "Preparing {title}…", e.g. "invoice ZIP" or "GST filing package". */
+  title: string;
+  /** Known item count (a bulk run); omit for a single server-built file (the card then has no count/bar). */
+  total?: number;
+  run: (ctx: DownloadJobContext) => Promise<DownloadOutcome>;
 }
 
 export interface BulkState {
@@ -65,6 +87,8 @@ export interface PdfRenderContextValue {
   renderInvoicePdf: (invoiceId: string, copyLabels?: string[], options?: RenderOptions) => Promise<Blob | null>;
   /** Starts a bulk ZIP that keeps running when the user navigates elsewhere. Returns false when one is already running. */
   startBulkZip: <T extends BulkZipItem>(request: BulkZipRequest<T>) => boolean;
+  /** Runs any download (a bulk ZIP of generated files, a server-built ZIP/Excel…) in the background with the shared progress card, Cancel and finish toast. Returns false when one is already running. */
+  startDownloadJob: (request: DownloadJobRequest) => boolean;
   cancelBulk: () => void;
   bulk: BulkState;
 }
@@ -137,50 +161,65 @@ export function PdfRenderProvider({ children }: { children: ReactNode }) {
   const bulkRunning = useRef(false);
   const bulkCancelled = useRef(false);
 
-  const startBulkZip = useCallback(<T extends BulkZipItem>(request: BulkZipRequest<T>): boolean => {
+  // The one place a long-running download is run, so every ZIP/Excel download in the app gets the same behavior:
+  // a progress card that follows the user, Cancel, a reload warning, one-at-a-time, and a toast when it ends.
+  const abortRef = useRef<AbortController | null>(null);
+  const startDownloadJob = useCallback((request: DownloadJobRequest): boolean => {
     if (bulkRunning.current) {
-      toast({ type: "error", title: "A download is already running", message: "Wait for the current bulk download to finish, or cancel it from the progress card." });
+      toast({ type: "error", title: "A download is already running", message: "Wait for the current download to finish, or cancel it from the progress card." });
       return false;
     }
     bulkRunning.current = true;
     bulkCancelled.current = false;
-    const { label, items, produce, zipFileName, partialNote } = request;
-    setBulk({ running: true, done: 0, total: items.length, label, cancelling: false });
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setBulk({ running: true, done: 0, total: request.total ?? 0, label: request.title, cancelling: false });
 
     void (async () => {
       try {
-        const result = await bulkDownloadPdfsAsZip(
-          items,
-          produce,
-          zipFileName,
-          (done, total) => setBulk((b) => ({ ...b, done, total })),
-          () => bulkCancelled.current,
-        );
-        const noun = `${label}${result.succeeded === 1 ? "" : "s"}`;
-        if (result.cancelled) {
-          toast({ type: "info", title: "Cancelled", message: "Bulk download cancelled — nothing was downloaded." });
-        } else if (result.succeeded === 0) {
-          toast({ type: "error", title: "Download failed", message: `Could not generate any ${label} PDFs.` });
-        } else if (partialNote) {
-          toast({ type: "error", title: "Partial download", message: partialNote });
-        } else if (result.failed.length > 0) {
-          toast({ type: "error", title: "Partial download", message: `${result.succeeded} downloaded, ${result.failed.length} failed — try again for those.` });
-        } else {
-          toast({ type: "success", title: "Downloaded", message: `${result.succeeded} ${noun} zipped and downloaded.` });
-        }
+        const outcome = await request.run({
+          setProgress: (done, total) => setBulk((s) => ({ ...s, done, total })),
+          isCancelled: () => bulkCancelled.current,
+          signal: controller.signal,
+        });
+        toast(outcome);
       } catch {
-        toast({ type: "error", title: "Download failed", message: "Something went wrong while preparing the ZIP." });
+        toast(bulkCancelled.current
+          ? { type: "info", title: "Cancelled", message: "Download cancelled — nothing was downloaded." }
+          : { type: "error", title: "Download failed", message: "Something went wrong while preparing the download." });
       } finally {
         bulkRunning.current = false;
+        abortRef.current = null;
         setBulk(IDLE);
       }
     })();
     return true;
   }, [toast]);
 
+  const startBulkZip = useCallback(<T extends BulkZipItem>(request: BulkZipRequest<T>): boolean => {
+    const { label, items, produce, zipFileName, partialNote, saveTarget } = request;
+    return startDownloadJob({
+      title: `${label} ZIP`,
+      total: items.length,
+      run: async ({ setProgress, isCancelled }) => {
+        const result = await bulkDownloadPdfsAsZip(items, produce, zipFileName, setProgress, isCancelled, saveTarget);
+        const noun = `${label}${result.succeeded === 1 ? "" : "s"}`;
+        if (result.cancelled) return { type: "info", title: "Cancelled", message: "Bulk download cancelled — nothing was downloaded." };
+        if (result.succeeded === 0) return { type: "error", title: "Download failed", message: `Could not generate any ${label} PDFs.` };
+        if (partialNote) return { type: "error", title: "Partial download", message: partialNote };
+        if (result.failed.length > 0) return { type: "error", title: "Partial download", message: `${result.succeeded} downloaded, ${result.failed.length} failed — try again for those.` };
+        // "saved" = we wrote the file where the user chose; "started" = we only handed it to the browser, whose Save dialog / download result we cannot see.
+        return result.delivery === "saved"
+          ? { type: "success", title: "Saved", message: `${result.succeeded} ${noun} saved as ${zipFileName}.` }
+          : { type: "success", title: "Download started", message: `${result.succeeded} ${noun} zipped — your browser is downloading ${zipFileName}.` };
+      },
+    });
+  }, [startDownloadJob]);
+
   const cancelBulk = useCallback(() => {
     if (!bulkRunning.current) return;
     bulkCancelled.current = true;
+    abortRef.current?.abort();
     setBulk((b) => ({ ...b, cancelling: true }));
   }, []);
 
@@ -192,7 +231,7 @@ export function PdfRenderProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [bulk.running]);
 
-  const value = useMemo<PdfRenderContextValue>(() => ({ renderInvoicePdf, startBulkZip, cancelBulk, bulk }), [renderInvoicePdf, startBulkZip, cancelBulk, bulk]);
+  const value = useMemo<PdfRenderContextValue>(() => ({ renderInvoicePdf, startBulkZip, startDownloadJob, cancelBulk, bulk }), [renderInvoicePdf, startBulkZip, startDownloadJob, cancelBulk, bulk]);
   const pct = bulk.total > 0 ? Math.min(100, Math.round((bulk.done / bulk.total) * 100)) : 0;
 
   return (
@@ -219,12 +258,14 @@ export function PdfRenderProvider({ children }: { children: ReactNode }) {
           <div className={styles.head}>
             <Spinner size="sm" />
             <span className={styles.title}>
-              {bulk.cancelling ? "Cancelling…" : `Preparing ${bulk.label} ZIP… ${bulk.done}/${bulk.total}`}
+              {bulk.cancelling ? "Cancelling…" : bulk.total > 0 ? `Preparing ${bulk.label}… ${bulk.done}/${bulk.total}` : `Preparing ${bulk.label}…`}
             </span>
           </div>
-          <div className={styles.track} role="progressbar" aria-label="Bulk download progress" aria-valuemin={0} aria-valuemax={bulk.total} aria-valuenow={bulk.done}>
-            <div className={styles.fill} style={{ width: `${pct}%` }} />
-          </div>
+          {bulk.total > 0 && (
+            <div className={styles.track} role="progressbar" aria-label="Bulk download progress" aria-valuemin={0} aria-valuemax={bulk.total} aria-valuenow={bulk.done}>
+              <div className={styles.fill} style={{ width: `${pct}%` }} />
+            </div>
+          )}
           <div className={styles.foot}>
             <span className={styles.hint}>You can keep using the app. Keep this tab open until it finishes.</span>
             <Button variant="secondary" size="sm" onClick={cancelBulk} disabled={bulk.cancelling}>Cancel</Button>

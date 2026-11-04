@@ -20,7 +20,7 @@ const FALLBACK_UQC = "OTH-OTHERS";
 type GstUqcCode = (typeof GST_UQC_CODES)[number];
 
 const UNIT_ALIASES: Record<string, GstUqcCode> = {
-  nos: "NOS-NUMBERS", no: "NOS-NUMBERS", number: "NOS-NUMBERS", numbers: "NOS-NUMBERS", pc: "PCS-PIECES",
+  na: "OTH-OTHERS", nos: "NOS-NUMBERS", no: "NOS-NUMBERS", number: "NOS-NUMBERS", numbers: "NOS-NUMBERS", pc: "PCS-PIECES",
   pcs: "PCS-PIECES", piece: "PCS-PIECES", pieces: "PCS-PIECES", unit: "UNT-UNITS", units: "UNT-UNITS",
   kg: "KGS-KILOGRAMS", kgs: "KGS-KILOGRAMS", kilogram: "KGS-KILOGRAMS", kilograms: "KGS-KILOGRAMS",
   gm: "GMS-GRAMMES", gms: "GMS-GRAMMES", g: "GMS-GRAMMES", gram: "GMS-GRAMMES", grams: "GMS-GRAMMES",

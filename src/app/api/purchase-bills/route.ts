@@ -6,14 +6,14 @@ import { logActivity } from "@/lib/activity";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { isPurchaseBillBlobUrl } from "@/lib/blobStorage";
 import { isFutureIstDate, toIstDateStr, istDayStartUtc, MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
-import { computeRoundOff } from "@/lib/roundOff";
+import { computeRoundOff, round2 } from "@/lib/roundOff";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
 import { retryOnWriteConflict, isIdempotencyKeyConflict } from "@/lib/retryOnWriteConflict";
 import { purchaseBillLineBreakdown, normalizeCategoryInput } from "@/lib/purchaseBillForm";
 import { getBusinessSettings } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
 import { computeNextNumber, numberFormatDbFilter, getIndianFinancialYear, formatFinancialYearLabel } from "@/lib/documentNumbering";
-import { parsePageParams, monthYearToDateRange } from "@/lib/listQuery";
+import { parsePageParams, dateRangeFromParams } from "@/lib/listQuery";
 import { buildBillWhere, buildBillOrderBy, type PurchaseBillSort } from "@/lib/purchaseBillQuery";
 
 const BILL_INCLUDE = {
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     const vendorId = searchParams.get("vendorId");
     const search = searchParams.get("search") ?? undefined;
     const sort = (searchParams.get("sort") ?? undefined) as PurchaseBillSort | undefined;
-    const dateRange = monthYearToDateRange(searchParams.get("month") ?? "", searchParams.get("year") ?? "");
+    const dateRange = dateRangeFromParams(searchParams);
     const { skip, take } = parsePageParams(searchParams);
 
     const where = buildBillWhere({ status, vendorId, search, dateRange });
@@ -233,8 +233,8 @@ export async function POST(req: NextRequest) {
         purchaseBillLineBreakdown(quantity, purchasePrice, gstRate, discountPercent);
       return { ...item, quantity, purchasePrice, gstRate, discountPercent, discountAmount, gstAmount, total, itemSubtotal, hsn: item.hsn ?? "" };
     });
-    const subtotal = computedItems.reduce((s, i) => s + i.itemSubtotal, 0);
-    const taxAmount = computedItems.reduce((s, i) => s + i.gstAmount, 0);
+    const subtotal = round2(computedItems.reduce((s, i) => s + i.itemSubtotal, 0));
+    const taxAmount = round2(computedItems.reduce((s, i) => s + i.gstAmount, 0));
     const parsedDiscount = discount !== undefined && discount !== null && discount !== "" ? parseFloat(String(discount)) : 0;
     if (Number.isNaN(parsedDiscount) || !(parsedDiscount >= 0 && parsedDiscount <= MAX_MONEY_VALUE)) {
       return NextResponse.json({ error: "Discount must be a valid, reasonable amount" }, { status: 400 });
@@ -259,7 +259,7 @@ export async function POST(req: NextRequest) {
     if (!(transportChargeGstRateVal >= 0 && transportChargeGstRateVal <= 100)) {
       return NextResponse.json({ error: "Transport charge GST rate must be between 0 and 100%" }, { status: 400 });
     }
-    const transportChargeGstAmountVal = (transportChargeVal * transportChargeGstRateVal) / 100;
+    const transportChargeGstAmountVal = round2((transportChargeVal * transportChargeGstRateVal) / 100);
 
     // NOTE (flagged by audit, unconfirmed design intent — do not "fix" without a product-owner
     // decision): this bill-level `discount` is a post-tax cash rebate (subtracted after `taxAmount`,
@@ -277,14 +277,14 @@ export async function POST(req: NextRequest) {
     let payAmt = 0;
     if (payment && payment.amount !== undefined && payment.amount !== null) {
       const amountStr = (typeof payment.amount === "string" || typeof payment.amount === "number") ? String(payment.amount).trim() : "";
-      if (!/^\d+(\.\d+)?$/.test(amountStr) || parseFloat(amountStr) <= 0) {
+      if (!/^\d+(\.\d+)?$/.test(amountStr) || round2(parseFloat(amountStr)) <= 0) {
         return NextResponse.json({ error: "Valid payment amount is required" }, { status: 400 });
       }
-      payAmt = parseFloat(amountStr);
+      payAmt = round2(parseFloat(amountStr));
     }
     const { roundOff, roundedTotal: billTotal } = computeRoundOff(subtotal + taxAmount - parsedDiscount + transportChargeVal + transportChargeGstAmountVal);
     if (billTotal < 0) return NextResponse.json({ error: "Discount cannot exceed the bill total" }, { status: 400 });
-    if (payAmt > billTotal + 0.01) {
+    if (round2(payAmt) > round2(billTotal)) {
       return NextResponse.json({ error: `Payment amount can't exceed the bill total (₹${billTotal.toFixed(2)}).` }, { status: 400 });
     }
     const paidAmount = Math.min(payAmt, billTotal);

@@ -7,6 +7,9 @@ import { useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { OverlayLoader } from "@/components/ui/Spinner";
+import { useToast } from "@/components/ui/Toast";
+import { useInvoicePdfRenderer } from "@/lib/useInvoicePdfRenderer";
+import { askSaveLocation, deliverBlob, discardSaveTarget } from "@/lib/saveFile";
 import { animateSection } from "@/lib/animateSection";
 import shared from "@/components/ui/ToolbarField.module.css";
 import styles from "./gstFiling.module.css";
@@ -92,8 +95,8 @@ export default function GstFilingPage() {
 
   const [report, setReport] = useState<GstFilingReport | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [downloadingCsv, setDownloadingCsv] = useState(false);
+  const toast = useToast();
+  const { startDownloadJob, bulk } = useInvoicePdfRenderer();
   const [error, setError] = useState<string | null>(null);
 
   const period = mode === "month" ? { startDate: fromDate, endDate: toDate } : periodFromFy(fyStart);
@@ -119,53 +122,54 @@ export default function GstFilingPage() {
     }
   }
 
-  async function handleDownload() {
-    // A clean period skips the zip (nothing to review) and downloads the workbook directly; issues still get zipped with the validation CSV.
-    const clean = report ? report.validation.errorCount === 0 && report.validation.warningCount === 0 : false;
-    const format = clean ? "xlsx" : "zip";
-    setDownloading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/gst-filing?startDate=${period.startDate}&endDate=${period.endDate}&format=${format}`);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Failed to download the GST filing package.");
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `GST-Filing-${period.startDate}_to_${period.endDate}.${format}`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch {
-      setError("Failed to download the GST filing package.");
-    } finally {
-      setDownloading(false);
+  // The three downloads (Excel, ZIP, GSTR-1 CSV bundle) are built by the server and can take a while, so they run as the
+  // app-wide background download job: a progress card follows the user, they can keep using the app, and the toast at
+  // the end is only "Saved" when the file really was written where the user chose (Chrome/Edge Save dialog).
+  async function startGstDownload(format: "xlsx" | "zip" | "gstr1csv") {
+    if (bulk.running) {
+      toast({ type: "error", title: "A download is already running", message: "Wait for the current download to finish, or cancel it from the progress card." });
+      return;
     }
+    const range = `${period.startDate}_to_${period.endDate}`;
+    const fileName = format === "gstr1csv" ? `GSTR1-CSV-${range}.zip` : `GST-Filing-${range}.${format}`;
+    const title = format === "gstr1csv" ? "GSTR-1 CSV bundle" : format === "xlsx" ? "GST filing workbook" : "GST filing package";
+    const mime = format === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/zip";
+    const saveTarget = await askSaveLocation(fileName, mime);
+    if (saveTarget.kind === "cancelled") return;
+    setError(null);
+    const started = startDownloadJob({
+      title,
+      run: async ({ signal }) => {
+        try {
+          const res = await fetch(`/api/gst-filing?startDate=${period.startDate}&endDate=${period.endDate}&format=${format}`, { signal });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            await discardSaveTarget(saveTarget);
+            return { type: "error", title: "Download failed", message: data.error ?? `Failed to download the ${title}.` };
+          }
+          const delivery = await deliverBlob(await res.blob(), fileName, saveTarget);
+          return delivery === "saved"
+            ? { type: "success", title: "Saved", message: `${title} saved as ${fileName}.` }
+            : { type: "success", title: "Download started", message: `${title} is ready — your browser is downloading ${fileName}.` };
+        } catch {
+          await discardSaveTarget(saveTarget);
+          return signal.aborted
+            ? { type: "info", title: "Cancelled", message: "Download cancelled — nothing was downloaded." }
+            : { type: "error", title: "Download failed", message: `Failed to download the ${title}.` };
+        }
+      },
+    });
+    if (!started) await discardSaveTarget(saveTarget);
   }
 
-  async function handleDownloadCsv() {
-    setDownloadingCsv(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/gst-filing?startDate=${period.startDate}&endDate=${period.endDate}&format=gstr1csv`);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Failed to download the GSTR-1 CSV bundle.");
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `GSTR1-CSV-${period.startDate}_to_${period.endDate}.zip`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch {
-      setError("Failed to download the GSTR-1 CSV bundle.");
-    } finally {
-      setDownloadingCsv(false);
-    }
+  function handleDownload() {
+    // A clean period skips the zip (nothing to review) and downloads the workbook directly; issues still get zipped with the validation CSV.
+    const clean = report ? report.validation.errorCount === 0 && report.validation.warningCount === 0 : false;
+    return startGstDownload(clean ? "xlsx" : "zip");
+  }
+
+  function handleDownloadCsv() {
+    return startGstDownload("gstr1csv");
   }
 
   return (
@@ -317,15 +321,11 @@ export default function GstFilingPage() {
               ))}
             </div>
             <div className={styles.downloadRow}>
-              <Button variant="primary" onClick={handleDownload} disabled={downloading || isReportEmpty}>
-                {downloading
-                  ? "Preparing…"
-                  : report.validation.errorCount === 0 && report.validation.warningCount === 0
-                    ? "Download Excel"
-                    : "Download ZIP"}
+              <Button variant="primary" onClick={handleDownload} disabled={bulk.running || isReportEmpty}>
+                {report.validation.errorCount === 0 && report.validation.warningCount === 0 ? "Download Excel" : "Download ZIP"}
               </Button>
-              <Button variant="secondary" onClick={handleDownloadCsv} disabled={downloadingCsv || isReportEmpty}>
-                {downloadingCsv ? "Preparing…" : "Download for GST Portal (Offline Tool CSVs)"}
+              <Button variant="secondary" onClick={handleDownloadCsv} disabled={bulk.running || isReportEmpty}>
+                Download for GST Portal (Offline Tool CSVs)
               </Button>
               {isReportEmpty && <p className={styles.errorText}>No sales, purchases, or credit notes in this period — nothing to download.</p>}
             </div>
@@ -336,9 +336,7 @@ export default function GstFilingPage() {
         </>
         );
       })()}
-      {(generating || downloading || downloadingCsv) && (
-        <OverlayLoader text={generating ? "Generating GST package…" : "Preparing download…"} />
-      )}
+      {generating && <OverlayLoader text="Generating GST package…" />}
     </div>
   );
 }

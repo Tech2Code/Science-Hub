@@ -123,6 +123,27 @@ describe("buildGstr1CsvFiles", () => {
   });
 });
 
+describe("buildGstr1CsvFiles — paise-level footing", () => {
+  it("HSN CGST + SGST always add up to the row's combined GST (0.01 must not print as 0.01 + 0.01)", () => {
+    const report = baseReport({
+      hsnSummaryB2B: [{ hsn: "3401", gstRate: 18, unit: "Nos", totalQuantity: 1, taxableValue: 0.05, cgst: 0.005, sgst: 0.005, igst: 0, total: 0.06 }],
+    });
+    const { files } = buildGstr1CsvFiles(report);
+    const row = files.find((f) => f.name === "hsn(b2b).csv")!.content.trim().split("\r\n")[1].split(",");
+    // columns: HSN, Description, UQC, Qty, Total Value, Taxable, IGST, CGST, SGST, Cess, Rate
+    expect(Number(row[7]) + Number(row[8])).toBeCloseTo(0.01, 10);
+  });
+
+  it("cdnr Note Value is the credit note's stored total (with its round-off), not the sum of line totals", () => {
+    const report = baseReport({
+      creditNotes: [creditNote({ taxableValue: 8.49, cgst: 0.76, sgst: 0.77, total: 10.02, noteValue: 10 })],
+    });
+    const { files } = buildGstr1CsvFiles(report);
+    const row = files.find((f) => f.name === "cdnr.csv")!.content.trim().split("\r\n")[1].split(",");
+    expect(Number(row[8])).toBe(10); // "Note Value" column
+  });
+});
+
 function creditNote(overrides: Partial<CreditNoteRow> = {}): CreditNoteRow {
   return {
     returnId: "r1", creditNoteNumber: "CN-2026-27-0001", date: new Date("2026-05-10T06:00:00Z"),

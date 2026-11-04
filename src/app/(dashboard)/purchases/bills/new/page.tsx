@@ -1,5 +1,6 @@
 "use client";
 
+import { round2 } from "@/lib/roundOff";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -313,7 +314,7 @@ export default function NewPurchaseBillPage() {
     if (addPayment && toNum(payAmount) > 0 && isFutureIstDate(payDate)) { setPaymentDateError("Payment date cannot be in the future."); return; }
     // The payment was validated against the total at the time it was added — items/discount edited
     // since can drop the total below it (the server would reject the whole bill).
-    if (addPayment && toNum(payAmount) > grandTotal + 0.01) { setPaymentDateError(`Payment (₹${fmtCurrency(toNum(payAmount))}) exceeds the bill total (₹${fmtCurrency(grandTotal)}) — edit or remove it.`); return; }
+    if (addPayment && round2(toNum(payAmount)) > round2(grandTotal)) { setPaymentDateError(`Payment (₹${fmtCurrency(toNum(payAmount))}) exceeds the bill total (₹${fmtCurrency(grandTotal)}) — edit or remove it.`); return; }
     setPaymentDateError(undefined);
     if (missingTransportAmount) {
       setTransportChargeError("Enter the transport charge amount.");

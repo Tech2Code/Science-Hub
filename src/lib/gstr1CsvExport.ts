@@ -14,6 +14,7 @@ import { getGstPosLabel } from "@/lib/gstStateCodes";
 import { mapUnitToUqc } from "@/lib/gstUqc";
 import { issue, type ValidationIssue } from "@/lib/gstValidation";
 import { neutralizeFormulaCell } from "@/lib/formulaSafety";
+import { splitGstForDisplay } from "@/lib/roundOff";
 import { toIstDateStr } from "@/lib/validation";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -186,7 +187,7 @@ export function buildGstr1CsvFiles(report: GstFilingReport): Gstr1CsvResult {
     Array.from(cdnrMap.values()).map(({ row, rate, taxableValue, pos }) => [
       row.customerGstin, neutralizeFormulaCell(row.customerName), row.creditNoteNumber, formatGstDate(row.date), "C", pos,
       row.reverseCharge ? "Y" : "N", "Regular B2B",
-      round2(creditNoteTotals.get(row.creditNoteNumber) ?? 0), "", rate, round2(taxableValue), "",
+      round2(row.noteValue ?? creditNoteTotals.get(row.creditNoteNumber) ?? 0), "", rate, round2(taxableValue), "",
     ]),
   );
 
@@ -201,9 +202,12 @@ export function buildGstr1CsvFiles(report: GstFilingReport): Gstr1CsvResult {
           h.hsn,
         ));
       }
+      // CGST/SGST are two halves of one amount: round the combined figure once so the pair always adds up to it
+      // (rounding each half alone prints 0.01 + 0.01 for a combined 0.01).
+      const { cgst: hsnCgst, sgst: hsnSgst } = splitGstForDisplay(h.cgst + h.sgst);
       return [
         neutralizeFormulaCell(h.hsn), "", uqc.code, h.totalQuantity, round2(h.total), round2(h.taxableValue),
-        round2(h.igst), round2(h.cgst), round2(h.sgst), "", h.gstRate,
+        round2(h.igst), hsnCgst, hsnSgst, "", h.gstRate,
       ];
     });
   }
