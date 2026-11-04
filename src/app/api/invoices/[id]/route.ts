@@ -6,6 +6,7 @@ import { deriveIsInterState } from "@/lib/gstLocation";
 import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
+import { retryOnWriteConflict } from "@/lib/retryOnWriteConflict";
 import { assertInvoiceQuantitiesNotBelowReturned, InvoiceQuantityValidationError } from "@/lib/invoiceReturns";
 import { isFutureIstDate, istDayStartUtc, toIstDateStr, MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
@@ -496,19 +497,7 @@ export async function PUT(
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });
     };
 
-    const maxAttempts = 5;
-    let editResult: Awaited<ReturnType<typeof attemptEdit>> | undefined;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        editResult = await attemptEdit();
-        break;
-      } catch (error) {
-        const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
-        if (isWriteConflict && attempt < maxAttempts) continue;
-        throw error;
-      }
-    }
-    const { invoice, stockWarnings, creditCheck } = editResult!;
+    const { invoice, stockWarnings, creditCheck } = await retryOnWriteConflict(attemptEdit);
 
     revalidateTag("invoices", { expire: 0 });
     revalidateTag("products", { expire: 0 });

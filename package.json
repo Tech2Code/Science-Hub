@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "prebuild": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\"",
-    "build": "node scripts/migrate-deploy-retry.js && next build",
+    "build": "next build && node scripts/migrate-deploy-retry.js",
     "start": "next start",
     "lint": "eslint",
     "check:dates": "node scripts/check-date-safety.js --all",

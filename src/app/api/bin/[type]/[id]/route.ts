@@ -6,6 +6,7 @@ import { logActivity } from "@/lib/activity";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { deleteAttachmentBlob } from "@/lib/blobStorage";
 import { requireWriteAccess, requireAdmin } from "@/lib/apiAuth";
+import { retryOnWriteConflict } from "@/lib/retryOnWriteConflict";
 
 type BinType = "invoice" | "customer" | "product" | "brand" | "category" | "vendor" | "purchase_bill" | "return" | "rate_list";
 const VALID_BIN_TYPES: BinType[] = ["invoice", "customer", "product", "brand", "category", "vendor", "purchase_bill", "return", "rate_list"];
@@ -280,18 +281,7 @@ export async function POST(
           return true;
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });
 
-        const maxAttempts = 5;
-        let restored = false;
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-          try {
-            restored = await attemptRestore();
-            break;
-          } catch (error) {
-            const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
-            if (isWriteConflict && attempt < maxAttempts) continue;
-            throw error;
-          }
-        }
+        const restored = await retryOnWriteConflict(attemptRestore);
         if (!restored) return NextResponse.json({ message: "Already restored" });
         revalidateTag("invoices", { expire: 0 });
         revalidateTag("products", { expire: 0 });

@@ -2,7 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
 import bcrypt from "bcryptjs";
-import { rateLimit } from "./rateLimit";
+import { rateLimitShared } from "./rateLimit";
 
 if (!process.env.NEXTAUTH_SECRET) {
   throw new Error("NEXTAUTH_SECRET environment variable is required");
@@ -31,10 +31,10 @@ export const authOptions: NextAuthOptions = {
           || headers["x-real-ip"]?.trim()
           || headers["x-forwarded-for"]?.split(",")[0]?.trim()
           || "unknown";
-        const ipLimit = rateLimit(`login:ip:${ip}`, 30, 15 * 60 * 1000);
+        const ipLimit = await rateLimitShared(`login:ip:${ip}`, 30, 15 * 60 * 1000);
         // Keyed by email+IP so an attacker can't lock a real user out of their own account
         // (login DoS) just by spamming wrong passwords for that email from elsewhere.
-        const accountLimit = rateLimit(`login:${email}:${ip}`, 8, 15 * 60 * 1000);
+        const accountLimit = await rateLimitShared(`login:${email}:${ip}`, 8, 15 * 60 * 1000);
         if (!ipLimit.allowed || !accountLimit.allowed) return null;
 
         // A DB error must not surface as a message distinct from "wrong password" (would leak which

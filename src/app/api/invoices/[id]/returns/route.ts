@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { revalidateTag } from "next/cache";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
+import { retryOnWriteConflict, isIdempotencyKeyConflict } from "@/lib/retryOnWriteConflict";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { isFutureIstDate, toIstDateStr, istDayStartUtc, MAX_MONEY_VALUE } from "@/lib/validation";
 import { lineBreakdown } from "@/lib/invoiceCalc";
@@ -347,31 +348,20 @@ export async function POST(
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });
     }
 
-    const maxAttempts = 5;
-    let ret: Awaited<ReturnType<typeof attemptCreate>> | undefined;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        ret = await attemptCreate();
-        break;
-      } catch (error) {
-        const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
-        if (isWriteConflict && attempt < maxAttempts) continue;
-        // Two near-simultaneous requests carrying the same idempotency key can both pass the
-        // pre-check above and race to insert — the loser hits the unique constraint here.
-        const isDuplicateKey = idempotencyKey
-          && error instanceof Prisma.PrismaClientKnownRequestError
-          && error.code === "P2002"
-          && Array.isArray((error.meta as { target?: unknown })?.target)
-          && (error.meta as { target: string[] }).target.includes("idempotencyKey");
-        if (isDuplicateKey) {
-          const racing = await prisma.return.findUnique({ where: { idempotencyKey }, include: { items: true } });
-          if (racing && racing.invoiceId === id) {
-            return NextResponse.json(racing, { status: 200 });
-          }
-          return NextResponse.json({ error: "This idempotency key was already used for a different credit note." }, { status: 409 });
+    let ret: Awaited<ReturnType<typeof attemptCreate>>;
+    try {
+      ret = await retryOnWriteConflict(attemptCreate);
+    } catch (error) {
+      // Two near-simultaneous requests carrying the same idempotency key can both pass the
+      // pre-check above and race to insert — the loser hits the unique constraint here.
+      if (idempotencyKey && isIdempotencyKeyConflict(error)) {
+        const racing = await prisma.return.findUnique({ where: { idempotencyKey }, include: { items: true } });
+        if (racing && racing.invoiceId === id) {
+          return NextResponse.json(racing, { status: 200 });
         }
-        throw error;
+        return NextResponse.json({ error: "This idempotency key was already used for a different credit note." }, { status: 409 });
       }
+      throw error;
     }
 
     revalidateTag("products", { expire: 0 });

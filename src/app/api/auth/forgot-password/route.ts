@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getBusinessSettings } from "@/lib/db";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
-import { rateLimit, getClientIp } from "@/lib/rateLimit";
+import { rateLimitShared, getClientIp } from "@/lib/rateLimit";
 import { escapeHtml } from "@/lib/html";
 
 // Always the same response regardless of whether the email is registered (anti-enumeration).
@@ -19,8 +19,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Email required." }, { status: 400 });
     }
 
-    const ipLimit = rateLimit(`forgot-password:ip:${getClientIp(req)}`, 10, 15 * 60 * 1000);
-    const emailLimit = rateLimit(`forgot-password:email:${email.trim().toLowerCase()}`, 3, 60 * 60 * 1000);
+    const ipLimit = await rateLimitShared(`forgot-password:ip:${getClientIp(req)}`, 10, 15 * 60 * 1000);
+    const emailLimit = await rateLimitShared(`forgot-password:email:${email.trim().toLowerCase()}`, 3, 60 * 60 * 1000);
     if (!ipLimit.allowed || !emailLimit.allowed) {
       // Still don't reveal whether the account exists — just stop sending.
       return genericOk();

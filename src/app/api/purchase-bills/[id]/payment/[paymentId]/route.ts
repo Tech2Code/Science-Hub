@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { isFutureIstDate, toIstDateStr, istDayStartUtc } from "@/lib/validation";
 import { requireWriteAccess } from "@/lib/apiAuth";
+import { retryOnWriteConflict } from "@/lib/retryOnWriteConflict";
 
 class PaymentExceedsBalanceError extends Error {}
 class PaymentConflictError extends Error {}
@@ -104,18 +104,7 @@ export async function PUT(
       }, { isolationLevel: "Serializable", timeout: 20000, maxWait: 10000 });
     }
 
-    const maxAttempts = 5;
-    let updated: Awaited<ReturnType<typeof attemptUpdate>> | undefined;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        updated = await attemptUpdate();
-        break;
-      } catch (error) {
-        const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
-        if (isWriteConflict && attempt < maxAttempts) continue;
-        throw error;
-      }
-    }
+    const updated = await retryOnWriteConflict(attemptUpdate);
 
     revalidateTag("purchase-bills", { expire: 0 });
 
@@ -185,18 +174,7 @@ export async function DELETE(
       }, { isolationLevel: "Serializable", timeout: 20000, maxWait: 10000 });
     }
 
-    const maxAttempts = 5;
-    let updated: Awaited<ReturnType<typeof attemptDelete>> | undefined;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        updated = await attemptDelete();
-        break;
-      } catch (error) {
-        const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
-        if (isWriteConflict && attempt < maxAttempts) continue;
-        throw error;
-      }
-    }
+    const updated = await retryOnWriteConflict(attemptDelete);
 
     revalidateTag("purchase-bills", { expire: 0 });
 

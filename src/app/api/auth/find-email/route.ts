@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rateLimit, getClientIp } from "@/lib/rateLimit";
+import { rateLimitShared, getClientIp } from "@/lib/rateLimit";
 import { rules, validate } from "@/lib/validation";
 
 function maskEmail(email: string): string {
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: nameErr }, { status: 400 });
     }
 
-    const limit = rateLimit(`find-email:${getClientIp(req)}`, 10, 15 * 60 * 1000);
+    const limit = await rateLimitShared(`find-email:${getClientIp(req)}`, 10, 15 * 60 * 1000);
     if (!limit.allowed) {
       return NextResponse.json({ results: [] });
     }

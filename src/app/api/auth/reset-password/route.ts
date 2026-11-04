@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { rateLimit, getClientIp } from "@/lib/rateLimit";
+import { rateLimitShared, getClientIp } from "@/lib/rateLimit";
 import { validateUserInput } from "@/lib/validation";
 
 export async function POST(req: NextRequest) {
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     const pwErr = validateUserInput({ password });
     if (pwErr) return NextResponse.json({ error: `${pwErr}.` }, { status: 400 });
 
-    const limit = rateLimit(`reset-password:${getClientIp(req)}`, 10, 15 * 60 * 1000);
+    const limit = await rateLimitShared(`reset-password:${getClientIp(req)}`, 10, 15 * 60 * 1000);
     if (!limit.allowed) {
       return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429 });
     }

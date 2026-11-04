@@ -7,6 +7,7 @@ import { deriveIsInterState } from "@/lib/gstLocation";
 import { deriveDefaultPrefix, computeNextNumber, numberFormatDbFilter, getIndianFinancialYear, formatFinancialYearLabel } from "@/lib/documentNumbering";
 import { logActivity } from "@/lib/activity";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
+import { retryOnWriteConflict, isIdempotencyKeyConflict } from "@/lib/retryOnWriteConflict";
 import { batchAdjustStock, ProductNotFoundError } from "@/lib/stockMovement";
 import { computeRoundOff } from "@/lib/roundOff";
 import { lineBreakdown } from "@/lib/invoiceCalc";
@@ -335,45 +336,34 @@ export async function POST(request: NextRequest) {
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });
     }
 
-    const maxAttempts = 5;
-    let result: Awaited<ReturnType<typeof attemptCreate>> | undefined;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        result = await attemptCreate();
-        break;
-      } catch (error) {
-        const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
-        if (isWriteConflict && attempt < maxAttempts) continue;
-        // Two near-simultaneous requests carrying the same idempotency key can both pass the
-        // pre-check above and race to insert — the loser hits the unique constraint here.
-        const isDuplicateKey = idempotencyKey
-          && error instanceof Prisma.PrismaClientKnownRequestError
-          && error.code === "P2002"
-          && Array.isArray((error.meta as { target?: unknown })?.target)
-          && (error.meta as { target: string[] }).target.includes("idempotencyKey");
-        if (isDuplicateKey) {
-          const existing = await prisma.invoice.findUnique({
-            where: { idempotencyKey },
-            include: { customer: true, items: true },
-          });
-          if (existing) {
-            if (existing.customerId !== customerId || existing.total !== total) {
-              return NextResponse.json({ error: "This idempotency key was already used for a different invoice." }, { status: 409 });
-            }
-            return NextResponse.json({ ...existing, stockWarnings: [] }, { status: 200 });
+    let result: Awaited<ReturnType<typeof attemptCreate>>;
+    try {
+      result = await retryOnWriteConflict(attemptCreate);
+    } catch (error) {
+      // Two near-simultaneous requests carrying the same idempotency key can both pass the
+      // pre-check above and race to insert — the loser hits the unique constraint here.
+      if (idempotencyKey && isIdempotencyKeyConflict(error)) {
+        const existing = await prisma.invoice.findUnique({
+          where: { idempotencyKey },
+          include: { customer: true, items: true },
+        });
+        if (existing) {
+          if (existing.customerId !== customerId || existing.total !== total) {
+            return NextResponse.json({ error: "This idempotency key was already used for a different invoice." }, { status: 409 });
           }
+          return NextResponse.json({ ...existing, stockWarnings: [] }, { status: 200 });
         }
-        if (error instanceof CreditLimitExceededError) {
-          return NextResponse.json({
-            error: `This invoice would take ${customer.name}'s outstanding balance to ₹${error.check.projectedOutstanding.toFixed(2)}, over their ₹${error.check.creditLimit.toFixed(2)} credit limit.`,
-            code: "CREDIT_LIMIT_EXCEEDED",
-            creditLimitCheck: error.check,
-          }, { status: 422 });
-        }
-        throw error;
       }
+      if (error instanceof CreditLimitExceededError) {
+        return NextResponse.json({
+          error: `This invoice would take ${customer.name}'s outstanding balance to ₹${error.check.projectedOutstanding.toFixed(2)}, over their ₹${error.check.creditLimit.toFixed(2)} credit limit.`,
+          code: "CREDIT_LIMIT_EXCEEDED",
+          creditLimitCheck: error.check,
+        }, { status: 422 });
+      }
+      throw error;
     }
-    const { invoice, stockWarnings, creditCheck } = result!;
+    const { invoice, stockWarnings, creditCheck } = result;
 
     const creditOverrideNote = creditCheck?.exceeded && overrideCreditLimit === true
       ? ` | Credit limit override: proceeded past ₹${creditCheck.creditLimit.toFixed(2)} limit (projected outstanding ₹${creditCheck.projectedOutstanding.toFixed(2)})`

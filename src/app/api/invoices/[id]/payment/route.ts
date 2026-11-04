@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity";
 import { requireWriteAccess } from "@/lib/apiAuth";
+import { retryOnWriteConflict, isIdempotencyKeyConflict } from "@/lib/retryOnWriteConflict";
 import { isFutureIstDate, toIstDateStr, istDayStartUtc } from "@/lib/validation";
 
 class PaymentExceedsBalanceError extends Error {}
@@ -117,37 +117,26 @@ export async function POST(
       }, { isolationLevel: "Serializable", timeout: 20000, maxWait: 10000 });
     }
 
-    const maxAttempts = 5;
-    let updated: Awaited<ReturnType<typeof attemptPayment>> | undefined;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        updated = await attemptPayment();
-        break;
-      } catch (error) {
-        const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
-        if (isWriteConflict && attempt < maxAttempts) continue;
-        // Two near-simultaneous requests carrying the same idempotency key can both pass the
-        // pre-check above (neither has committed yet) and race to insert — the loser hits the
-        // unique constraint here. Treat it the same as the pre-check hit: return the invoice as
-        // it already stands rather than surfacing a confusing 500.
-        const isDuplicateKey = idempotencyKey
-          && error instanceof Prisma.PrismaClientKnownRequestError
-          && error.code === "P2002"
-          && Array.isArray((error.meta as { target?: unknown })?.target)
-          && (error.meta as { target: string[] }).target.includes("idempotencyKey");
-        if (isDuplicateKey) {
-          const racingPayment = await prisma.payment.findUnique({ where: { idempotencyKey } });
-          if (racingPayment && racingPayment.invoiceId === id) {
-            const current = await prisma.invoice.findUnique({
-              where: { id },
-              include: { payments: { orderBy: { date: "desc" } } },
-            });
-            if (current) return NextResponse.json(current, { status: 200 });
-          }
-          return NextResponse.json({ error: "This idempotency key was already used for a different payment." }, { status: 409 });
+    let updated: Awaited<ReturnType<typeof attemptPayment>>;
+    try {
+      updated = await retryOnWriteConflict(attemptPayment);
+    } catch (error) {
+      // Two near-simultaneous requests carrying the same idempotency key can both pass the
+      // pre-check above (neither has committed yet) and race to insert — the loser hits the
+      // unique constraint here. Treat it the same as the pre-check hit: return the invoice as
+      // it already stands rather than surfacing a confusing 500.
+      if (idempotencyKey && isIdempotencyKeyConflict(error)) {
+        const racingPayment = await prisma.payment.findUnique({ where: { idempotencyKey } });
+        if (racingPayment && racingPayment.invoiceId === id) {
+          const current = await prisma.invoice.findUnique({
+            where: { id },
+            include: { payments: { orderBy: { date: "desc" } } },
+          });
+          if (current) return NextResponse.json(current, { status: 200 });
         }
-        throw error;
+        return NextResponse.json({ error: "This idempotency key was already used for a different payment." }, { status: 409 });
       }
+      throw error;
     }
 
     const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

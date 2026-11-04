@@ -8,6 +8,7 @@ import { isPurchaseBillBlobUrl } from "@/lib/blobStorage";
 import { isFutureIstDate, toIstDateStr, istDayStartUtc, MAX_MONEY_VALUE, MAX_QUANTITY } from "@/lib/validation";
 import { computeRoundOff } from "@/lib/roundOff";
 import { requireSession, requireWriteAccess } from "@/lib/apiAuth";
+import { retryOnWriteConflict, isIdempotencyKeyConflict } from "@/lib/retryOnWriteConflict";
 import { purchaseBillLineBreakdown, normalizeCategoryInput } from "@/lib/purchaseBillForm";
 import { getBusinessSettings } from "@/lib/db";
 import { deriveIsInterState } from "@/lib/gstLocation";
@@ -381,35 +382,23 @@ export async function POST(req: NextRequest) {
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000, maxWait: 10000 });
     }
 
-    const maxAttempts = 5;
-    let bill: Awaited<ReturnType<typeof attemptCreate>> | undefined;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        bill = await attemptCreate();
-        break;
-      } catch (error) {
-        const isWriteConflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
-        if (isWriteConflict && attempt < maxAttempts) continue;
-        // Two near-simultaneous requests carrying the same idempotency key can both pass the
-        // pre-check above and race to insert — the loser hits the unique constraint here.
-        const isDuplicateKey = idempotencyKey
-          && error instanceof Prisma.PrismaClientKnownRequestError
-          && error.code === "P2002"
-          && Array.isArray((error.meta as { target?: unknown })?.target)
-          && (error.meta as { target: string[] }).target.includes("idempotencyKey");
-        if (isDuplicateKey) {
-          const existing = await prisma.purchaseBill.findUnique({ where: { idempotencyKey }, include: BILL_INCLUDE });
-          if (existing) {
-            if (existing.vendorId !== vendorId || existing.total !== billTotal) {
-              return NextResponse.json({ error: "This idempotency key was already used for a different purchase bill." }, { status: 409 });
-            }
-            return NextResponse.json(existing, { status: 200 });
+    let bill: Awaited<ReturnType<typeof attemptCreate>>;
+    try {
+      bill = await retryOnWriteConflict(attemptCreate);
+    } catch (error) {
+      // Two near-simultaneous requests carrying the same idempotency key can both pass the
+      // pre-check above and race to insert — the loser hits the unique constraint here.
+      if (idempotencyKey && isIdempotencyKeyConflict(error)) {
+        const existing = await prisma.purchaseBill.findUnique({ where: { idempotencyKey }, include: BILL_INCLUDE });
+        if (existing) {
+          if (existing.vendorId !== vendorId || existing.total !== billTotal) {
+            return NextResponse.json({ error: "This idempotency key was already used for a different purchase bill." }, { status: 409 });
           }
+          return NextResponse.json(existing, { status: 200 });
         }
-        throw error;
       }
+      throw error;
     }
-    if (!bill) throw new Error("Failed to create purchase bill after retries");
 
     await logActivity(userId, "create_purchase_bill", `Created purchase bill ${bill.billNumber} from ${bill.vendor.name} — ₹${billTotal}`, bill.id, "purchase_bill");
     revalidateTag("purchase-bills", { expire: 0 });
