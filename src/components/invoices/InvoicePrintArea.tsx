@@ -22,8 +22,8 @@ interface InvoicePrintAreaProps {
  * Contracts with generateInvoicePdf.ts / pdfIframeGenerator.ts that must not be renamed or restructured
  * without updating them: id="invoice-print-area", id="invoice-copy-badge"/data-role="copy-badge",
  * the single <thead> (banner), the row marked data-header-item-cols="true", every item row marked
- * data-invoice-item-row, and the <tfoot>. The --inv-* CSS variables it uses are defined in the detail
- * page's <style> block (shared with the credit-note print area).
+ * data-invoice-item-row, and the <tfoot>. The --inv-* CSS variables it uses are defined once in
+ * PrintAreaStyles.tsx — any page that mounts this component must also render <PrintAreaStyles />.
  */
 export function InvoicePrintArea({ invoice, settings, returns, balance, showPaymentInPdf, showReturnInPdf }: InvoicePrintAreaProps) {
   return (

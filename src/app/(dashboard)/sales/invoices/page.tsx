@@ -11,7 +11,8 @@ import { MonthYearFilter } from "@/components/ui/MonthYearFilter";
 import { SearchField } from "@/components/ui/SearchField";
 import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { generatePdfViaIframe as pdfIframeGenerate } from "@/lib/pdfIframeGenerator";
+import { useInvoicePdfRenderer } from "@/lib/useInvoicePdfRenderer";
+import type { BusinessSettings } from "@/components/invoices/invoiceDetailTypes";
 import { withCachedPdf, invalidateCachedPdf, buildPdfVariantKey } from "@/lib/pdfCache";
 import { bulkDownloadPdfsAsZip, sanitizeZipEntryName } from "@/lib/bulkPdfDownload";
 import { MONTH_NAMES } from "@/lib/dateFilter";
@@ -52,11 +53,6 @@ interface InvoiceStats {
   totalPending: number;
   overdueCount: number;
   availableYears: number[];
-}
-
-interface BusinessSettings {
-  showLogoOnInvoices?: boolean;
-  updatedAt?: string;
 }
 
 type StatusFilter = "All" | "unpaid" | "partial" | "paid" | "overdue";
@@ -139,9 +135,9 @@ export default function InvoicesPage() {
     return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
   }, [pdfPreviewUrl]);
 
-  // Renders the invoice detail page's #invoice-print-area in a hidden iframe to build the PDF blob; the iframe
-  // always loads in its default state (payment/return toggles off), so the variant key can assume those are false.
-  async function generatePdfViaIframe(inv: Invoice, copyLabels?: string[], force = false): Promise<Blob | null> {
+  // Builds the PDF by mounting the invoice's print area off-screen in THIS page (no hidden iframe / full detail-page load —
+  // see useInvoicePdfRenderer). It always renders the default state (payment/return toggles off), so the variant key can assume those are false.
+  async function generateInvoicePdf(inv: Invoice, copyLabels?: string[], force = false): Promise<Blob | null> {
     const showLogoOnInvoices = settings?.showLogoOnInvoices !== false;
     const variantKey = buildPdfVariantKey(copyLabels, {
       p: false,
@@ -152,7 +148,7 @@ export default function InvoicesPage() {
     });
     return withCachedPdf(
       "invoice", inv.id, variantKey,
-      () => pdfIframeGenerate({ route: `/sales/invoices/${inv.id}`, printAreaId: "invoice-print-area", copyLabels, includeLogo: true }),
+      () => renderInvoicePdf(inv.id, copyLabels),
       force,
     );
   }
@@ -163,7 +159,7 @@ export default function InvoicesPage() {
     pdfBusyRef.current = true;
     setPdfLoading(inv.id);
     try {
-      const blob = await generatePdfViaIframe(inv, ["ORIGINAL COPY"], true);
+      const blob = await generateInvoicePdf(inv, ["ORIGINAL COPY"], true);
       if (blob) {
         const url = URL.createObjectURL(blob);
         setPdfPreviewUrl(url);
@@ -184,7 +180,7 @@ export default function InvoicesPage() {
     // Force a real paint before the (mostly synchronous) iframe setup + PDF
     // work runs, so the loading spinner is actually visible on screen.
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const blob = await generatePdfViaIframe(pdfDialogInvoice, copyLabels);
+    const blob = await generateInvoicePdf(pdfDialogInvoice, copyLabels);
     setPdfDialogLoading(false);
     if (!blob) {
       toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
@@ -231,7 +227,7 @@ export default function InvoicesPage() {
       const monthLabel = MONTH_NAMES[Number(month)];
       const { succeeded, failed } = await bulkDownloadPdfsAsZip(
         list.map((inv) => ({ ...inv, fileName: `${sanitizeZipEntryName(inv.invoiceNumber)}.pdf` })),
-        (item) => generatePdfViaIframe(item, ["ORIGINAL COPY"]),
+        (item) => generateInvoicePdf(item, ["ORIGINAL COPY"]),
         `Invoices_${monthLabel}_${year}.zip`,
         (done, total) => setBulkProgress({ done, total }),
       );
@@ -274,6 +270,7 @@ export default function InvoicesPage() {
   const { data, loading, error, mutate } = useFetch<InvoiceListResponse>(apiUrl);
   const { data: stats, mutate: mutateStats } = useFetch<InvoiceStats>(statsUrl);
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
+  const { renderInvoicePdf, host: pdfRenderHost } = useInvoicePdfRenderer(settings ?? null);
   const invoices = data?.data ?? [];
   const total = data?.total ?? 0;
   const showSkeleton = loading && !data;
@@ -338,6 +335,7 @@ export default function InvoicesPage() {
       onConfirm={handleDelete}
       onCancel={() => setDeleteTarget(null)}
     />
+    {pdfRenderHost}
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
     {openingEditId && <OverlayLoader text="Opening editor…" />}
     {bulkDownloading && (
@@ -477,7 +475,7 @@ export default function InvoicesPage() {
                         pdfBusyRef.current = true;
                         setPdfLoading(inv.id);
                         try {
-                          const blob = await generatePdfViaIframe(inv, ["ORIGINAL COPY"]);
+                          const blob = await generateInvoicePdf(inv, ["ORIGINAL COPY"]);
                           if (blob) {
                             const url = URL.createObjectURL(blob);
                             setPdfPreviewUrl(url);

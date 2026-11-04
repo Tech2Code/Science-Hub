@@ -21,7 +21,7 @@ interface CreditNotePrintAreaProps {
 /**
  * Credit note "paper" — mounted off-screen only while a credit note PDF is being generated, then fed to the
  * same generateInvoicePdfBlob() pipeline as the main invoice via id="credit-note-print-area". The --inv-*
- * CSS variables it uses are defined in the detail page's <style> block (shared with the invoice print area).
+ * CSS variables it uses are defined once in PrintAreaStyles.tsx (the detail page renders <PrintAreaStyles />).
  */
 export function CreditNotePrintArea({ ret, invoice, settings }: CreditNotePrintAreaProps) {
   return (

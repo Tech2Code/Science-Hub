@@ -27,6 +27,7 @@ import { useDirty } from "@/lib/useDirty";
 import { useMenuA11y } from "@/lib/useMenuA11y";
 import { PAYMENT_METHODS, resolvePaymentMethod, methodSelectValue, methodCustomText } from "@/lib/paymentMethods";
 import { InvoicePrintArea } from "@/components/invoices/InvoicePrintArea";
+import { PrintAreaStyles } from "@/components/invoices/PrintAreaStyles";
 import { InvoiceDetailSkeleton } from "./_components/InvoiceDetailSkeleton";
 import { CreditNotePrintArea } from "./_components/CreditNotePrintArea";
 import { PaymentHistoryCard } from "./_components/PaymentHistoryCard";
@@ -921,20 +922,7 @@ export default function InvoiceDetailPage() {
       {openingEdit && <OverlayLoader text="Opening editor…" />}
       {reassigning && <OverlayLoader text="Reassigning…" />}
 
-      <style>{`
-        #invoice-print-area, #credit-note-print-area {
-          --inv-bg:#fff;--inv-bg2:#f8fafc;--inv-bg3:#f1f5f9;--inv-bg4:#e2e8f0;
-          --inv-bd:#475569;--inv-bd2:#94a3b8;
-          --inv-tx:#0f172a;--inv-tx2:#334155;--inv-tx3:#64748b;
-          --inv-brand:#1e3a8a;--inv-green:#059669;--inv-blue:#2563eb;--inv-red:#dc2626;
-        }
-        .dark #invoice-print-area, .dark #credit-note-print-area {
-          --inv-bg:#0f172a;--inv-bg2:#1e293b;--inv-bg3:#1e293b;--inv-bg4:#334155;
-          --inv-bd:#475569;--inv-bd2:#334155;
-          --inv-tx:#f1f5f9;--inv-tx2:#cbd5e1;--inv-tx3:#94a3b8;
-          --inv-brand:#93c5fd;--inv-green:#34d399;--inv-blue:#60a5fa;--inv-red:#f87171;
-        }
-      `}</style>
+      <PrintAreaStyles />
 
       <div className="page-stack">
         {/* Toolbar */}
