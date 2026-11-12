@@ -216,12 +216,15 @@ export async function generateInvoicePdfBlob(
               c.style.borderBottom = `1px solid ${BD}`;
             }
           });
-          // First row in each table gets a top border; tfoot is excluded since the pinned-footer
-          // renderer draws that border on the canvas itself (a DOM one would grow past the measured height).
+          // First bordered row in each table gets a top border; unbordered banner rows (e.g. the
+          // "Original Copy" strip above the letterhead box) are skipped, and tfoot is excluded since
+          // the pinned-footer renderer draws that border on the canvas itself.
           printEl.querySelectorAll<HTMLElement>("table").forEach((t) => {
-            const firstRow = t.querySelector("tr");
-            if (firstRow) {
-              firstRow.querySelectorAll<HTMLElement>("td, th").forEach((c) => {
+            const firstBorderedRow = Array.from(t.querySelectorAll<HTMLElement>("thead tr, tbody tr")).find((r) =>
+              Array.from(r.querySelectorAll<HTMLElement>(":scope > td, :scope > th")).some((c) => Boolean(c.style.borderRight))
+            );
+            if (firstBorderedRow) {
+              firstBorderedRow.querySelectorAll<HTMLElement>(":scope > td, :scope > th").forEach((c) => {
                 if (c.style.borderRight) c.style.borderTop = `1px solid ${BD}`;
               });
             }

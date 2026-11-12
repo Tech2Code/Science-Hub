@@ -36,11 +36,8 @@ export function CreditNotePrintArea({ ret, invoice, settings }: CreditNotePrintA
             way the main invoice print area's own header repeats. */}
         <thead>
           <tr>
-            <td colSpan={6} style={{ padding: 0 }}>
-              <div style={{
-                display: "flex", alignItems: "center", gap: 14, padding: "10px 20px",
-                border: "1px solid var(--inv-bd)",
-              }}>
+            <td colSpan={6} style={{ padding: "10px 20px", border: "1px solid var(--inv-bd)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 {settings?.showLogoOnInvoices !== false && (
                   <div style={{ flexShrink: 0, width: 60, height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {/* eslint-disable-next-line @next/next/no-img-element -- html2canvas needs a plain <img>, swapped to a data URL during PDF generation */}
@@ -64,24 +61,24 @@ export function CreditNotePrintArea({ ret, invoice, settings }: CreditNotePrintA
                   )}
                 </div>
               </div>
-              {settings?.licenses && settings.licenses.length > 0 && (
+            </td>
+          </tr>
+          {settings?.licenses && settings.licenses.length > 0 && (
+            <tr>
+              <td colSpan={6} style={{ padding: "5px 20px", border: "1px solid var(--inv-bd)" }}>
                 <div
                   data-role="credit-note-licenses-strip"
                   style={{
                     display: "flex",
                     flexWrap: "wrap",
                     alignItems: "center",
-                    justifyContent: settings.licenses.length === 1 ? "center" : "space-around",
-                    gap: "4px 20px",
-                    padding: "5px 20px",
-                    borderLeft: "1px solid var(--inv-bd)",
-                    borderRight: "1px solid var(--inv-bd)",
-                    borderBottom: "1px solid var(--inv-bd)",
+                    justifyContent: "center",
+                    gap: "4px 28px",
                     fontSize: 10,
                   }}
                 >
                   {settings.licenses.map((lic, idx) => (
-                    <span key={idx}>
+                    <span key={idx} style={{ whiteSpace: "nowrap" }}>
                       <span style={{ color: "var(--inv-tx3)", fontWeight: 500 }}>
                         {`${lic.label.replace(/\s*[-:]+\s*$/, "")} - `}
                       </span>
@@ -91,11 +88,11 @@ export function CreditNotePrintArea({ ret, invoice, settings }: CreditNotePrintA
                     </span>
                   ))}
                 </div>
-              )}
-            </td>
-          </tr>
+              </td>
+            </tr>
+          )}
           <tr>
-            <td colSpan={6} style={{ padding: "10px 20px", border: "1px solid var(--inv-bd)", borderTop: "none" }}>
+            <td colSpan={6} style={{ padding: "10px 20px", border: "1px solid var(--inv-bd)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
                 <div>
                   <div><strong>Credit Note No.:</strong> {ret.creditNoteNumber ?? "—"}</div>

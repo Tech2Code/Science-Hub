@@ -52,32 +52,33 @@ export function InvoicePrintArea({ invoice, settings, returns, balance, showPaym
             {/* ── Letterhead header ── */}
             <thead>
               <tr>
+                {/* Thin top bar: copy label only (no border — only the
+                    rows below are boxed) */}
                 <th colSpan={invoice.isInterState ? 12 : 14}
-                  style={{ padding: 0, background: "var(--inv-bg)", fontWeight: "normal" }}>
-                  {/* Thin top bar: copy label only (no border — only the
-                      block below is boxed) */}
-                  <div style={{
-                    display: "flex", alignItems: "center", justifyContent: "flex-end",
-                    padding: "4px 14px",
-                    fontSize: 9, color: "var(--inv-tx3)"
+                  style={{
+                    padding: "4px 14px", background: "var(--inv-bg)", fontWeight: "normal",
+                    textAlign: "right", fontSize: 9, color: "var(--inv-tx3)"
                   }}>
-                    {/* "Original Copy" by default on screen; overwritten to
-                        "ORIGINAL COPY"/"DUPLICATE COPY" per pass during PDF
-                        generation / printing — data-role survives node cloning
-                        (ids get stripped there). */}
-                    <span id="invoice-copy-badge" data-role="copy-badge" style={{
-                      textAlign: "right",
-                      fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--inv-tx2)"
-                    }}>
-                      Original Copy
-                    </span>
-                  </div>
-                  {/* Logo + company block */}
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: 14, padding: "10px 20px",
-                    borderTop: "1px solid var(--inv-bd)", borderLeft: "1px solid var(--inv-bd)",
-                    borderRight: "1px solid var(--inv-bd)", borderBottom: "1px solid var(--inv-bd)"
+                  {/* "Original Copy" by default on screen; overwritten to
+                      "ORIGINAL COPY"/"DUPLICATE COPY" per pass during PDF
+                      generation / printing — data-role survives node cloning
+                      (ids get stripped there). */}
+                  <span id="invoice-copy-badge" data-role="copy-badge" style={{
+                    textAlign: "right",
+                    fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--inv-tx2)"
                   }}>
+                    Original Copy
+                  </span>
+                </th>
+              </tr>
+              <tr>
+                {/* Logo + company block */}
+                <th colSpan={invoice.isInterState ? 12 : 14}
+                  style={{
+                    border: "1px solid var(--inv-bd)", padding: "10px 20px",
+                    background: "var(--inv-bg)", fontWeight: "normal"
+                  }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                     {settings?.showLogoOnInvoices !== false && (
                       <div style={{ flexShrink: 0, width: 60, height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
                         {/* eslint-disable-next-line @next/next/no-img-element -- html2canvas needs a plain <img>, swapped to a data URL during PDF/print generation */}
@@ -120,24 +121,28 @@ export function InvoicePrintArea({ invoice, settings, returns, balance, showPaym
                     </div>
                     {settings?.showLogoOnInvoices !== false && <div style={{ flexShrink: 0, width: 60 }} aria-hidden="true" />}
                   </div>
-                  {settings?.licenses && settings.licenses.length > 0 && (
+                </th>
+              </tr>
+              {settings?.licenses && settings.licenses.length > 0 && (
+                <tr>
+                  <th colSpan={invoice.isInterState ? 12 : 14}
+                    style={{
+                      border: "1px solid var(--inv-bd)", padding: "5px 20px",
+                      background: "var(--inv-bg)", fontWeight: "normal"
+                    }}>
                     <div
                       data-role="invoice-licenses-strip"
                       style={{
                         display: "flex",
                         flexWrap: "wrap",
                         alignItems: "center",
-                        justifyContent: settings.licenses.length === 1 ? "center" : "space-around",
-                        gap: "4px 20px",
-                        padding: "5px 20px",
-                        borderLeft: "1px solid var(--inv-bd)",
-                        borderRight: "1px solid var(--inv-bd)",
-                        borderBottom: "1px solid var(--inv-bd)",
+                        justifyContent: "center",
+                        gap: "4px 28px",
                         fontSize: 10,
                       }}
                     >
                       {settings.licenses.map((lic, idx) => (
-                        <span key={idx}>
+                        <span key={idx} style={{ whiteSpace: "nowrap" }}>
                           <span style={{ color: "var(--inv-tx3)", fontWeight: 500 }}>
                             {`${lic.label.replace(/\s*[-:]+\s*$/, "")} - `}
                           </span>
@@ -147,9 +152,9 @@ export function InvoicePrintArea({ invoice, settings, returns, balance, showPaym
                         </span>
                       ))}
                     </div>
-                  )}
-                </th>
-              </tr>
+                  </th>
+                </tr>
+              )}
             </thead>
 
             <tbody>

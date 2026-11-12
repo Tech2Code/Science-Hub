@@ -298,8 +298,8 @@
 .licenseModalStack .licenseRowCard { display: grid; grid-template-columns: 1fr 1fr auto; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid var(--c-border); border-radius: 8px; background: var(--c-bg-sub); }
 .licenseRowCard .licenseRemoveWrap { display: flex; align-items: center; padding-top: 24px; }
 .licenseModalStack .licenseActionsBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.licenseModalStack .licensePreviewStrip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-around; gap: 6px 20px; padding: 8px 16px; border: 1px solid var(--c-border); border-radius: 6px; background: var(--c-surface, var(--c-bg)); font-size: 12px; }
-.licensePreviewStrip .licensePreviewItem { font-family: var(--font-mono); }
+.licenseModalStack .licensePreviewStrip { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 28px; padding: 6px 20px; border: 1px solid var(--c-border); border-radius: 6px; background: var(--c-surface, var(--c-bg)); font-size: 11px; }
+.licensePreviewStrip .licensePreviewItem { white-space: nowrap; }
 .licensePreviewItem .licensePreviewLabel { color: var(--c-text-3); font-weight: 500; }
 .licensePreviewItem .licensePreviewValue { color: var(--c-text-2); font-weight: 600; }
 @media (max-width: 640px) {
