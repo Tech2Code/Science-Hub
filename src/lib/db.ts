@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { safeDecrypt } from "@/lib/crypto";
-import { istDayStartUtc, istDayEndUtc, istMonthStartUtc, istNextMonthStartUtc, istTodayStartUtc } from "@/lib/validation";
+import { istDayStartUtc, istDayEndUtc, istMonthStartUtc, istNextMonthStartUtc, istTodayStartUtc, normalizeBusinessLicenses } from "@/lib/validation";
 
 export async function getBusinessSettings() {
   // Hot path (every server-rendered page). Prisma's upsert can still hit a real unique-constraint
@@ -23,8 +23,18 @@ export async function getBusinessSettings() {
   }
   const gmailAppPassword = settings.gmailAppPassword ? safeDecrypt(settings.gmailAppPassword) : { value: settings.gmailAppPassword, failed: false };
   const bankAccountNumber = settings.bankAccountNumber ? safeDecrypt(settings.bankAccountNumber) : { value: settings.bankAccountNumber, failed: false };
+  let rawLicenses = (settings as { licenses?: unknown }).licenses;
+  if (rawLicenses === undefined) {
+    try {
+      const rows = await prisma.$queryRaw<Array<{ licenses: unknown }>>`SELECT "licenses" FROM "BusinessSettings" WHERE "id" = 'singleton' LIMIT 1`;
+      rawLicenses = rows[0]?.licenses;
+    } catch {
+      rawLicenses = [];
+    }
+  }
   return {
     ...settings,
+    licenses: normalizeBusinessLicenses(rawLicenses),
     gmailAppPassword: gmailAppPassword.value,
     // Surfaced instead of silently treating a broken secret (e.g. NEXTAUTH_SECRET mismatch) as "not configured".
     gmailAppPasswordDecryptFailed: gmailAppPassword.failed,

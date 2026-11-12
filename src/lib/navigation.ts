@@ -65,7 +65,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "SYSTEM",
     items: [
       { href: "/admin",    label: "Admin",    iconKey: "admin",    adminOnly: true, keywords: ["users", "staff", "activity log", "profile"] },
-      { href: "/settings", label: "Settings", iconKey: "settings", adminOnly: true, keywords: ["business settings", "bank", "gmail", "email", "gstin", "pan", "terms"] },
+      { href: "/settings", label: "Settings", iconKey: "settings", adminOnly: true, keywords: ["business settings", "bank", "gmail", "email", "gstin", "pan", "licenses", "drug license", "msme", "terms"] },
     ],
   },
 ];
@@ -85,6 +85,7 @@ export interface SubPageEntry {
 export const SETTINGS_SUBSECTIONS: SubPageEntry[] = [
   { id: "branding", title: "Branding / Logo", href: "/settings#branding", keywords: ["logo"], adminOnly: true },
   { id: "identity", title: "Business Identity", href: "/settings#identity", keywords: ["business name", "gstin", "pan", "tagline"], adminOnly: true },
+  { id: "licenses", title: "Business Licenses", href: "/settings#licenses", keywords: ["license", "licence", "drug license", "md42", "msme", "udyam"], adminOnly: true },
   { id: "address", title: "Business Address", href: "/settings#address", keywords: ["city", "state", "pincode"], adminOnly: true },
   { id: "bank-details", title: "Bank Details", href: "/settings#bank-details", keywords: ["bank account", "ifsc", "branch"], adminOnly: true },
   { id: "terms", title: "Terms & Conditions", href: "/settings#terms", keywords: ["invoice terms"], adminOnly: true },

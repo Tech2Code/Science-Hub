@@ -120,6 +120,34 @@ export function InvoicePrintArea({ invoice, settings, returns, balance, showPaym
                     </div>
                     {settings?.showLogoOnInvoices !== false && <div style={{ flexShrink: 0, width: 60 }} aria-hidden="true" />}
                   </div>
+                  {settings?.licenses && settings.licenses.length > 0 && (
+                    <div
+                      data-role="invoice-licenses-strip"
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        justifyContent: settings.licenses.length === 1 ? "center" : "space-around",
+                        gap: "4px 20px",
+                        padding: "5px 20px",
+                        borderLeft: "1px solid var(--inv-bd)",
+                        borderRight: "1px solid var(--inv-bd)",
+                        borderBottom: "1px solid var(--inv-bd)",
+                        fontSize: 10,
+                      }}
+                    >
+                      {settings.licenses.map((lic, idx) => (
+                        <span key={idx}>
+                          <span style={{ color: "var(--inv-tx3)", fontWeight: 500 }}>
+                            {`${lic.label.replace(/\s*[-:]+\s*$/, "")} - `}
+                          </span>
+                          <span style={{ color: "var(--inv-tx2)", fontWeight: 600 }}>
+                            {lic.number}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </th>
               </tr>
             </thead>

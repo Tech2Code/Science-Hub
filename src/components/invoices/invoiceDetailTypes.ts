@@ -28,9 +28,15 @@ export interface Invoice {
   total: number; roundOff: number; paidAmount: number; notes: string;
 }
 
+export interface BusinessLicense {
+  label: string;
+  number: string;
+}
+
 export interface BusinessSettings {
   name: string; tagline: string; email: string; phone: string;
   address: string; city: string; state: string; pincode: string; gstin: string; pan?: string;
+  licenses?: BusinessLicense[];
   termsAndConditions?: string;
   bankName?: string; bankAccountName?: string; bankAccountNumber?: string; bankIfsc?: string; bankBranch?: string;
   logoUrl?: string;

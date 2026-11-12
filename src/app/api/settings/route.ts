@@ -3,7 +3,7 @@ import { getBusinessSettings } from "@/lib/db";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAdmin } from "@/lib/apiAuth";
 import { encrypt, safeDecrypt } from "@/lib/crypto";
-import { validateSettingsInput } from "@/lib/validation";
+import { validateSettingsInput, validateLicensesInput, normalizeBusinessLicenses, type BusinessLicense } from "@/lib/validation";
 import { deriveDefaultPrefix, getIndianFinancialYear, formatFinancialYearLabel, NUMBER_FORMATS, numberFormatDbFilter, findMaxSequence, resolveNumberFormat } from "@/lib/documentNumbering";
 import { logActivity } from "@/lib/activity";
 import { isLogoBlobUrl, deleteAttachmentBlob } from "@/lib/blobStorage";
@@ -59,6 +59,7 @@ const SETTINGS_FIELD_LABELS: Record<string, { section: string; label: string }> 
   gmailUser: { section: "Gmail sending account", label: "Gmail address" },
   gmailAppPassword: { section: "Gmail sending account", label: "App password" },
   showLogoOnInvoices: { section: "Logo", label: "Show logo on documents" },
+  licenses: { section: "Business licenses", label: "Business licenses" },
 };
 
 // null/undefined/"" are all "empty" in this table — a null column vs. a "" write is not a change.
@@ -72,7 +73,7 @@ export async function PUT(request: NextRequest) {
     if (!auth.ok) return auth.response;
     const body = await request.json();
     const {
-      name, tagline, email, phone, address, city, state, pincode, gstin, pan, gmailUser, gmailAppPassword,
+      name, tagline, email, phone, address, city, state, pincode, gstin, pan, licenses, gmailUser, gmailAppPassword,
       bankName, bankAccountName, bankAccountNumber, bankIfsc, bankBranch, termsAndConditions, logoUrl, showLogoOnInvoices, expectedUpdatedAt,
       invoiceNumberPrefix, nextInvoiceNumberOverride, purchaseBillNumberPrefix, nextPurchaseBillNumberOverride,
       invoiceNumberFormat, purchaseBillNumberFormat,
@@ -100,11 +101,18 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Business settings were updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
     }
 
-    const updateData: Record<string, string | boolean | number | null> = {};
+    const updateData: Record<string, string | boolean | number | null | Date> = {};
     for (const key of SIMPLE_STRING_KEYS) {
       if (key in body) updateData[key] = fieldValues[key] ?? "";
     }
     if ("pan" in body) updateData.pan = (pan ?? "").toUpperCase();
+    let validatedLicenses: BusinessLicense[] | undefined;
+    if ("licenses" in body) {
+      const licCheck = validateLicensesInput(licenses);
+      if (licCheck.error) return NextResponse.json({ error: licCheck.error }, { status: 400 });
+      validatedLicenses = licCheck.licenses;
+      updateData.updatedAt = new Date();
+    }
     // Only a real upload from /api/settings/logo (or clearing to "") is accepted — an arbitrary URL would become the authoritative logo shown app-wide.
     if (logoUrl !== undefined) {
       if (logoUrl && !isLogoBlobUrl(logoUrl)) {
@@ -311,6 +319,20 @@ export async function PUT(request: NextRequest) {
       }
       if (!sameSettingValue(prev, next)) changedFieldKeys.push(key);
     }
+    if (validatedLicenses !== undefined) {
+      let existingLicensesRaw = existingValues.licenses;
+      if (existingLicensesRaw === undefined && existing) {
+        try {
+          const rows = await prisma.$queryRaw<Array<{ licenses: unknown }>>`SELECT "licenses" FROM "BusinessSettings" WHERE "id" = 'singleton' LIMIT 1`;
+          existingLicensesRaw = rows[0]?.licenses;
+        } catch {
+          existingLicensesRaw = [];
+        }
+      }
+      const prevLicJson = JSON.stringify(normalizeBusinessLicenses(existingLicensesRaw));
+      const nextLicJson = JSON.stringify(validatedLicenses);
+      if (prevLicJson !== nextLicJson) changedFieldKeys.push("licenses");
+    }
     const logoChange: "update_logo" | "remove_logo" | null =
       logoUrl !== undefined && !sameSettingValue(existing?.logoUrl, logoUrl || "")
         ? (logoUrl ? "update_logo" : "remove_logo")
@@ -321,6 +343,10 @@ export async function PUT(request: NextRequest) {
       create: { id: "singleton", ...updateData },
       update: updateData,
     });
+    if (validatedLicenses !== undefined) {
+      const licJson = JSON.stringify(validatedLicenses);
+      await prisma.$executeRaw`UPDATE "BusinessSettings" SET "licenses" = ${licJson}::jsonb WHERE "id" = 'singleton'`;
+    }
     if (numberingActivityDetails.length > 0) {
       await logActivity(auth.session.user.id, "update_numbering_settings", `Updated document numbering: ${numberingActivityDetails.join(", ")}`);
     }
@@ -351,8 +377,22 @@ export async function PUT(request: NextRequest) {
     }
     revalidateTag("settings", { expire: 0 });
     const decryptedAccountNumber = storedAccountNumber ? safeDecrypt(storedAccountNumber) : { value: "", failed: false };
+    let returnedLicenses = validatedLicenses;
+    if (returnedLicenses === undefined) {
+      let rawLic = (settings as { licenses?: unknown }).licenses;
+      if (rawLic === undefined) {
+        try {
+          const rows = await prisma.$queryRaw<Array<{ licenses: unknown }>>`SELECT "licenses" FROM "BusinessSettings" WHERE "id" = 'singleton' LIMIT 1`;
+          rawLic = rows[0]?.licenses;
+        } catch {
+          rawLic = [];
+        }
+      }
+      returnedLicenses = normalizeBusinessLicenses(rawLic);
+    }
     return NextResponse.json({
       ...settings,
+      licenses: returnedLicenses,
       gmailAppPasswordSet: Boolean(storedPassword),
       bankAccountNumber: decryptedAccountNumber.value,
       bankAccountNumberDecryptFailed: decryptedAccountNumber.failed,

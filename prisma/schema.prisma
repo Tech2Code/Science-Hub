@@ -370,6 +370,7 @@ model BusinessSettings {
   creditNoteNumberPrefix         String?
   nextCreditNoteNumberOverride   Int?
   creditNoteNumberFormat         String?
+  licenses                       Json     @default("[{\"label\":\"MD42 License No\",\"number\":\"RMD/DCD/HO-2452/461\"},{\"label\":\"MSME License No\",\"number\":\"UDYAM-DL-06-0019811\"}]")
   updatedAt       DateTime @updatedAt
 }
 

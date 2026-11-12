@@ -64,6 +64,34 @@ export function CreditNotePrintArea({ ret, invoice, settings }: CreditNotePrintA
                   )}
                 </div>
               </div>
+              {settings?.licenses && settings.licenses.length > 0 && (
+                <div
+                  data-role="credit-note-licenses-strip"
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    justifyContent: settings.licenses.length === 1 ? "center" : "space-around",
+                    gap: "4px 20px",
+                    padding: "5px 20px",
+                    borderLeft: "1px solid var(--inv-bd)",
+                    borderRight: "1px solid var(--inv-bd)",
+                    borderBottom: "1px solid var(--inv-bd)",
+                    fontSize: 10,
+                  }}
+                >
+                  {settings.licenses.map((lic, idx) => (
+                    <span key={idx}>
+                      <span style={{ color: "var(--inv-tx3)", fontWeight: 500 }}>
+                        {`${lic.label.replace(/\s*[-:]+\s*$/, "")} - `}
+                      </span>
+                      <span style={{ color: "var(--inv-tx2)", fontWeight: 600 }}>
+                        {lic.number}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
             </td>
           </tr>
           <tr>
@@ -109,7 +137,7 @@ export function CreditNotePrintArea({ ret, invoice, settings }: CreditNotePrintA
             const { cgst: cnCgstDisplay, sgst: cnSgstDisplay } = splitGstForDisplay(ret.cgst + ret.sgst);
             return (
               <>
-                <tr>
+                <tr data-invoice-summary-start="true">
                   <td colSpan={4} rowSpan={cnTotalsRows} style={{ border: "1px solid var(--inv-bd)", padding: "10px 12px", verticalAlign: "top", fontSize: 9.5, color: "var(--inv-tx3)" }}>
                     <div style={{ fontStyle: "italic" }}><strong>Amount in Words:</strong> {amountInWordsINR(ret.total)}</div>
                     {ret.notes && <div style={{ marginTop: 6 }}><strong>Notes:</strong> {ret.notes}</div>}
@@ -148,6 +176,23 @@ export function CreditNotePrintArea({ ret, invoice, settings }: CreditNotePrintA
             );
           })()}
         </tbody>
+        <tfoot>
+          <tr>
+            <td
+              colSpan={6}
+              style={{
+                border: "1px solid var(--inv-bd)",
+                padding: "8px 16px",
+                textAlign: "center",
+                fontSize: 9.5,
+                color: "var(--inv-tx3)",
+                background: "var(--inv-bg2)",
+              }}
+            >
+              Thank you for your business · {settings?.name}{settings?.email ? ` · ${settings.email}` : ""}{settings?.phone ? ` · ${settings.phone}` : ""}
+            </td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   );

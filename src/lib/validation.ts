@@ -281,6 +281,71 @@ export function validateUserInput(
   return null;
 }
 
+export interface BusinessLicense {
+  label: string;
+  number: string;
+}
+
+export const MAX_BUSINESS_LICENSES = 20;
+
+export function normalizeBusinessLicenses(raw: unknown): BusinessLicense[] {
+  let parsed = raw;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(parsed)) return [];
+  const result: BusinessLicense[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const label = typeof rec.label === "string" ? rec.label.trim() : "";
+    const number = typeof rec.number === "string" ? rec.number.trim() : "";
+    if (label && number) {
+      result.push({ label, number });
+    }
+  }
+  return result;
+}
+
+export function validateLicensesInput(raw: unknown): { error: string | null; licenses: BusinessLicense[] } {
+  if (!Array.isArray(raw)) {
+    return { error: "Licenses must be an array.", licenses: [] };
+  }
+  if (raw.length > MAX_BUSINESS_LICENSES) {
+    return { error: `You can add at most ${MAX_BUSINESS_LICENSES} licenses.`, licenses: [] };
+  }
+  const licenses: BusinessLicense[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i];
+    if (!item || typeof item !== "object") {
+      return { error: `License #${i + 1} is invalid.`, licenses: [] };
+    }
+    const rec = item as Record<string, unknown>;
+    const label = typeof rec.label === "string" ? rec.label.trim() : "";
+    const number = typeof rec.number === "string" ? rec.number.trim() : "";
+    const labelErr = validate(
+      label,
+      rules.required(`License #${i + 1}: Label is required.`),
+      rules.minLength(2, `License #${i + 1}: Label must be at least 2 characters.`),
+      rules.maxLength(100, `License #${i + 1}: Label must be at most 100 characters.`),
+    );
+    if (labelErr) return { error: labelErr, licenses: [] };
+    const numberErr = validate(
+      number,
+      rules.required(`License #${i + 1}: License number is required.`),
+      rules.minLength(2, `License #${i + 1}: License number must be at least 2 characters.`),
+      rules.maxLength(100, `License #${i + 1}: License number must be at most 100 characters.`),
+    );
+    if (numberErr) return { error: numberErr, licenses: [] };
+    licenses.push({ label, number });
+  }
+  return { error: null, licenses };
+}
+
 // `isBankSectionUpdate` must be true only when the request actually writes bank fields — otherwise
 // saving an unrelated section re-validates untouched bank fields and can fail on decrypt errors.
 export function validateSettingsInput(input: {

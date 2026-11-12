@@ -6,7 +6,7 @@ import { Input, Textarea, Select, FormField } from "@/components/ui/Input";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
-import { rules, validate } from "@/lib/validation";
+import { rules, validate, normalizeBusinessLicenses, MAX_BUSINESS_LICENSES, type BusinessLicense } from "@/lib/validation";
 import { INDIA_STATES_FULL } from "@/lib/states";
 import { useBranding } from "@/lib/businessBranding";
 import { animateSection } from "@/lib/animateSection";
@@ -24,6 +24,7 @@ import styles from "./settings.module.css";
 interface BusinessSettings {
   name: string; tagline: string; email: string; phone: string;
   address: string; city: string; state: string; pincode: string; gstin: string; pan: string;
+  licenses: BusinessLicense[];
   gmailUser: string; gmailAppPasswordSet: boolean; gmailAppPasswordDecryptFailed: boolean;
   bankName: string; bankAccountName: string; bankAccountNumber: string; bankIfsc: string; bankBranch: string;
   bankAccountNumberDecryptFailed: boolean;
@@ -45,6 +46,7 @@ interface BusinessSettings {
 const EMPTY: BusinessSettings = {
   name: "", tagline: "", email: "", phone: "",
   address: "", city: "", state: "", pincode: "", gstin: "", pan: "",
+  licenses: [],
   gmailUser: "", gmailAppPasswordSet: false, gmailAppPasswordDecryptFailed: false,
   bankName: "", bankAccountName: "", bankAccountNumber: "", bankIfsc: "", bankBranch: "",
   bankAccountNumberDecryptFailed: false,
@@ -158,6 +160,12 @@ export default function SettingsPage() {
   const [savingIdentity, setSavingIdentity] = useState(false);
   const [identityErrors, setIdentityErrors] = useState<Partial<Record<keyof IdentityForm, string>>>({});
 
+  const [editingLicenses, setEditingLicenses] = useState(false);
+  const [licensesForm, setLicensesForm] = useState<BusinessLicense[]>([]);
+  const licensesDirty = useDirty(licensesForm);
+  const [savingLicenses, setSavingLicenses] = useState(false);
+  const [licenseErrors, setLicenseErrors] = useState<Array<{ label?: string; number?: string }>>([]);
+
   const [editingAddress, setEditingAddress] = useState(false);
   const [addressForm, setAddressForm] = useState<AddressForm>({ address: "", city: "", state: "", pincode: "" });
   const addressDirty = useDirty(addressForm);
@@ -207,6 +215,7 @@ export default function SettingsPage() {
   // Every section mutates the same singleton BusinessSettings row, so any save shows this same full-page overlay.
   const savingBusyText =
     savingIdentity ? "Saving business identity…" :
+    savingLicenses ? "Saving business licenses…" :
     savingAddress ? "Saving address…" :
     savingBank ? "Saving bank details…" :
     savingTerms ? "Saving terms & conditions…" :
@@ -215,12 +224,13 @@ export default function SettingsPage() {
     null;
   const anySettingsSaving = Boolean(savingBusyText) || brandingBusy;
 
-  function applyLoaded(d: Record<string, string | boolean | number | null>) {
+  function applyLoaded(d: Record<string, unknown>) {
     const s: BusinessSettings = {
       name: (d.name as string) ?? "", tagline: (d.tagline as string) ?? "", email: (d.email as string) ?? "",
       phone: (d.phone as string) ?? "", address: (d.address as string) ?? "", city: (d.city as string) ?? "",
       state: (d.state as string) ?? "", pincode: (d.pincode as string) ?? "", gstin: (d.gstin as string) ?? "",
       pan: (d.pan as string) ?? "",
+      licenses: normalizeBusinessLicenses(d.licenses),
       gmailUser: (d.gmailUser as string) ?? "", gmailAppPasswordSet: Boolean(d.gmailAppPasswordSet),
       gmailAppPasswordDecryptFailed: Boolean(d.gmailAppPasswordDecryptFailed),
       bankName: (d.bankName as string) ?? "", bankAccountName: (d.bankAccountName as string) ?? "",
@@ -324,6 +334,71 @@ export default function SettingsPage() {
       toast({ type: "error", title: "Save failed", message: result.error ?? "Could not save settings." });
     }
     setSavingIdentity(false);
+  }
+
+  // ── Business Licenses ───────────────────────────────────────────────────
+
+  function handleEditLicenses() {
+    const clean = saved.licenses.map((l) => ({ label: l.label, number: l.number }));
+    const initial = clean.length > 0 ? clean.map((l) => ({ ...l })) : [{ label: "", number: "" }];
+    setLicensesForm(initial);
+    licensesDirty.markClean(clean);
+    setLicenseErrors([]);
+    setEditingLicenses(true);
+  }
+  function handleCancelLicenses() {
+    setEditingLicenses(false);
+    setLicenseErrors([]);
+  }
+  function handleAddLicenseRow() {
+    if (licensesForm.length >= MAX_BUSINESS_LICENSES) return;
+    setLicensesForm((prev) => [...prev, { label: "", number: "" }]);
+    setLicenseErrors((prev) => [...prev, {}]);
+  }
+  function handleRemoveLicenseRow(index: number) {
+    setLicensesForm((prev) => prev.filter((_, i) => i !== index));
+    setLicenseErrors((prev) => prev.filter((_, i) => i !== index));
+  }
+  function handleLicenseFieldChange(index: number, field: "label" | "number", value: string) {
+    setLicensesForm((prev) => prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)));
+    setLicenseErrors((prev) => {
+      const next = [...prev];
+      if (next[index]) next[index] = { ...next[index], [field]: undefined };
+      return next;
+    });
+  }
+
+  async function handleSaveLicenses(e: React.FormEvent) {
+    e.preventDefault();
+    const rowErrors = licensesForm.map((lic) => ({
+      label: validate(
+        lic.label.trim(),
+        rules.required("License label is required."),
+        rules.minLength(2, "Label must be at least 2 characters."),
+        rules.maxLength(100, "Label must be at most 100 characters."),
+      ) ?? undefined,
+      number: validate(
+        lic.number.trim(),
+        rules.required("License number is required."),
+        rules.minLength(2, "License number must be at least 2 characters."),
+        rules.maxLength(100, "License number must be at most 100 characters."),
+      ) ?? undefined,
+    }));
+    setLicenseErrors(rowErrors);
+    if (rowErrors.some((r) => Boolean(r.label || r.number))) return;
+    const normalized = licensesForm.map((l) => ({ label: l.label.trim(), number: l.number.trim() }));
+    setSavingLicenses(true);
+    const result = await putSettings({ licenses: normalized });
+    if (result.ok) {
+      applyLoaded(result.data);
+      setEditingLicenses(false);
+      toast({ type: "success", title: "Settings saved", message: "Business licenses updated on all invoices and credit notes." });
+    } else if (result.conflict) {
+      toast({ type: "error", title: "Update conflict", message: result.error ?? "Business settings were changed by someone else. Please reload and try again." });
+    } else {
+      toast({ type: "error", title: "Save failed", message: result.error ?? "Could not save licenses." });
+    }
+    setSavingLicenses(false);
   }
 
   // ── Address ──────────────────────────────────────────────────────────────
@@ -759,8 +834,9 @@ export default function SettingsPage() {
           </div>
           {[
             { idx: 1, title: 140, count: 6 }, // Identity: Name/Tagline/Email/Phone/GSTIN/PAN
-            { idx: 2, title: 100, count: 4 }, // Address: Street/City/State/Pincode
-            { idx: 3, title: 110, count: 5 }, // Bank Details: Name/Account Name/Account No/IFSC/Branch
+            { idx: 2, title: 130, count: 2 }, // Licenses: MD42/MSME
+            { idx: 3, title: 100, count: 4 }, // Address: Street/City/State/Pincode
+            { idx: 4, title: 110, count: 5 }, // Bank Details: Name/Account Name/Account No/IFSC/Branch
           ].map((cfg) => (
             <div key={cfg.idx} {...animateSection(cfg.idx, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
               <Sk w={cfg.title} h={13} />
@@ -775,14 +851,14 @@ export default function SettingsPage() {
             </div>
           ))}
           {/* Terms & Conditions — numbered list preview */}
-          <div {...animateSection(4, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
+          <div {...animateSection(5, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
             <Sk w={160} h={13} />
             <Sk w="90%" h={12} />
             <Sk w="70%" h={12} />
             <Sk w="60%" h={12} />
           </div>
           {/* Email configuration — status dot + 2 fields */}
-          <div {...animateSection(5, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
+          <div {...animateSection(6, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
             <Sk w={220} h={13} />
             <Sk w={110} h={20} r={10} />
             <div className={styles.skeletonGrid}>
@@ -795,7 +871,7 @@ export default function SettingsPage() {
             </div>
           </div>
           {/* Document Numbering — 9 info rows (invoice/purchase-bill/credit-note x format/prefix/next-number) */}
-          <div {...animateSection(6, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
+          <div {...animateSection(7, `card ${styles.cardPad} ${styles.skeletonCardBody}`)}>
             <Sk w={180} h={13} />
             <div className={styles.skeletonGrid}>
               {Array.from({ length: 9 }).map((_, i) => (
@@ -904,8 +980,116 @@ export default function SettingsPage() {
             </form>
           </Modal>
 
+          {/* ── Business Licenses ──────────────────────────────────────── */}
+          <div id="licenses" {...animateSection(2, `card ${styles.cardPad}`)}>
+            <SectionHeader title="Business Licenses" editing={editingLicenses} onEdit={handleEditLicenses} />
+            <p className={styles.stateHint}>Printed in a bordered bar right below the company header on every invoice and credit note (old and new).</p>
+            {saved.licenses.length > 0 ? (
+              <div className={styles.infoGrid}>
+                {saved.licenses.map((lic, idx) => (
+                  <InfoRow key={idx} label={lic.label} value={lic.number} mono />
+                ))}
+              </div>
+            ) : (
+              <p className={styles.stateHint}>No licenses configured — the license strip will be hidden on invoices.</p>
+            )}
+          </div>
+
+          <Modal
+            open={editingLicenses}
+            title="Edit Business Licenses"
+            subtitle="Add or update license numbers shown below the letterhead on all invoices and credit notes."
+            onClose={() => { if (!savingLicenses) handleCancelLicenses(); }}
+            variant="fullscreen"
+            footer={
+              <>
+                <Button type="button" variant="secondary" disabled={savingLicenses} onClick={handleCancelLicenses}>Cancel</Button>
+                <Button
+                  type="submit"
+                  form="licenses-form"
+                  variant="primary"
+                  disabled={savingLicenses || !licensesDirty.isDirty || licensesForm.some((l) => !l.label.trim() || !l.number.trim())}
+                >
+                  {savingLicenses ? "Saving…" : "Save Changes"}
+                </Button>
+              </>
+            }
+          >
+            <form id="licenses-form" onSubmit={handleSaveLicenses} noValidate>
+              <div className={styles.licenseModalStack}>
+                {licensesForm.length === 0 ? (
+                  <p className={styles.stateHint}>No licenses added. Click &ldquo;+ Add License&rdquo; below to add one, or save to hide the license strip on invoices.</p>
+                ) : (
+                  licensesForm.map((lic, idx) => (
+                    <div key={idx} className={styles.licenseRowCard}>
+                      <FormField label="License Label / Name" required error={licenseErrors[idx]?.label}>
+                        <Input
+                          value={lic.label}
+                          onChange={(e) => handleLicenseFieldChange(idx, "label", e.target.value)}
+                          placeholder="e.g. MD42 License No"
+                          maxLength={100}
+                        />
+                      </FormField>
+                      <FormField label="License Number" required error={licenseErrors[idx]?.number}>
+                        <Input
+                          value={lic.number}
+                          onChange={(e) => handleLicenseFieldChange(idx, "number", e.target.value)}
+                          placeholder="e.g. RMD/DCD/HO-2452/461"
+                          className={styles.gstinInput}
+                          maxLength={100}
+                        />
+                      </FormField>
+                      <div className={styles.licenseRemoveWrap}>
+                        <Button
+                          type="button"
+                          variant="dangerOutline"
+                          size="sm"
+                          disabled={savingLicenses}
+                          onClick={() => handleRemoveLicenseRow(idx)}
+                          aria-label={`Remove license ${idx + 1}`}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+                <div className={styles.licenseActionsBar}>
+                  <Button
+                    type="button"
+                    variant="editOutline"
+                    size="sm"
+                    disabled={savingLicenses || licensesForm.length >= MAX_BUSINESS_LICENSES}
+                    onClick={handleAddLicenseRow}
+                  >
+                    + Add License
+                  </Button>
+                </div>
+                {licensesForm.some((l) => l.label.trim() && l.number.trim()) && (
+                  <div className={styles.termsLivePreview}>
+                    <span className={styles.termsLivePreviewLabel}>Preview — this is how it will print on the invoice</span>
+                    <div className={styles.licensePreviewStrip}>
+                      {licensesForm
+                        .filter((l) => l.label.trim() && l.number.trim())
+                        .map((lic, idx) => (
+                          <span key={idx} className={styles.licensePreviewItem}>
+                            <span className={styles.licensePreviewLabel}>
+                              {`${lic.label.trim().replace(/\s*[-:]+\s*$/, "")} - `}
+                            </span>
+                            <span className={styles.licensePreviewValue}>
+                              {lic.number.trim()}
+                            </span>
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </form>
+          </Modal>
+
           {/* ── Address ────────────────────────────────────────────────── */}
-          <div id="address" {...animateSection(2, `card ${styles.cardPad}`)}>
+          <div id="address" {...animateSection(3, `card ${styles.cardPad}`)}>
             <SectionHeader title="Address" editing={editingAddress} onEdit={handleEditAddress} />
             <div className={styles.infoGrid}>
               <InfoRow label="Street Address" value={saved.address} />
@@ -964,7 +1148,7 @@ export default function SettingsPage() {
           </Modal>
 
           {/* ── Bank Details ───────────────────────────────────────────── */}
-          <div id="bank-details" {...animateSection(3, `card ${styles.cardPad}`)}>
+          <div id="bank-details" {...animateSection(4, `card ${styles.cardPad}`)}>
             <SectionHeader title="Bank Details" editing={editingBank} onEdit={handleEditBank} />
             {saved.bankAccountNumberDecryptFailed && <DecryptWarning what="bank account number" />}
             <p className={styles.stateHint}>Printed on every invoice so customers can pay by bank transfer.</p>
@@ -1029,7 +1213,7 @@ export default function SettingsPage() {
           </Modal>
 
           {/* ── Terms & Conditions ────────────────────────────────────────── */}
-          <div id="terms" {...animateSection(4, `card ${styles.cardPad}`)}>
+          <div id="terms" {...animateSection(5, `card ${styles.cardPad}`)}>
             <SectionHeader title="Terms & Conditions" editing={editingTerms} onEdit={handleEditTerms} />
             <p className={styles.stateHint}>Printed on every invoice, below the item table. One line per point.</p>
             {saved.termsAndConditions.trim() ? (
@@ -1076,7 +1260,7 @@ export default function SettingsPage() {
           </Modal>
 
           {/* ── Email Configuration card (always visible, own edit state) ── */}
-          <div id="email" {...animateSection(5, `card ${styles.cardPad}`)}>
+          <div id="email" {...animateSection(6, `card ${styles.cardPad}`)}>
             <div className={styles.emailCardHeader}>
               <div>
                 <h2 className={styles.emailCardTitle}>
@@ -1197,7 +1381,7 @@ export default function SettingsPage() {
           </Modal>
 
           {/* ── Document Numbering ────────────────────────────────────────── */}
-          <div id="numbering" {...animateSection(6, `card ${styles.cardPad}`)}>
+          <div id="numbering" {...animateSection(7, `card ${styles.cardPad}`)}>
             <SectionHeader title="Document Numbering" editing={editingNumbering} onEdit={handleEditNumbering} />
             <p className={styles.stateHint}>
               Changing these only affects the <strong>next</strong> invoice/purchase bill/credit note created — existing documents keep their numbers.
