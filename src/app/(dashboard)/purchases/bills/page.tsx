@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
@@ -20,6 +20,7 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { ListPeriodFilter } from "@/components/ui/ListPeriodFilter";
+import { periodLabel as fmtPeriodLabel } from "@/components/dashboard/PeriodFilter";
 import { OutsidePeriodNotice } from "@/components/ui/OutsidePeriodNotice";
 import { useListPeriod, setPeriodParams, periodMonthYear } from "@/lib/listPeriod";
 import { askSaveLocation, discardSaveTarget } from "@/lib/saveFile";
@@ -403,7 +404,7 @@ export default function PurchasesPage() {
         <div>
           <h1 className="page-title">Purchase Bills</h1>
           <p className="page-sub">
-            {loading ? "Loading…" : `${total} bill${total === 1 ? "" : "s"}`}
+            {loading ? "Loading…" : `${total} bill${total === 1 ? "" : "s"} · ${debouncedSearch.trim() ? "Search" : fmtPeriodLabel(period)}`}
           </p>
         </div>
         {canWrite && (<Button variant="primary" href="/purchases/bills/new">
@@ -414,18 +415,21 @@ export default function PurchasesPage() {
 
       {stats?.outsidePeriod && <OutsidePeriodNotice count={stats.outsidePeriod.count} amount={stats.outsidePeriod.amount} noun="purchase bill" />}
       {/* Dashboard cards */}
-      {(loading || totalPurchase > 0 || total > 0) && (
-        <StatCardsRow
-          sectionIndex={0}
-          loading={loading}
-          cards={[
-            { label: "Total Purchase", value: `₹${fmt(totalPurchase)}`, tone: "default" },
-            { label: "Paid",           value: `₹${fmt(totalPaid)}`,     tone: "positive" },
-            { label: "Pending",        value: `₹${fmt(totalPending)}`,  tone: "warning" },
-            { label: "Overdue Bills",  value: String(overdue),          tone: overdue > 0 ? "danger" : "muted" },
-          ]}
-        />
-      )}
+      {(() => {
+        const activePeriodLabel = debouncedSearch.trim() ? "Search" : fmtPeriodLabel(period);
+        return (
+          <StatCardsRow
+            sectionIndex={0}
+            loading={loading}
+            cards={[
+              { label: `Purchases (${activePeriodLabel})`, value: `₹${fmt(totalPurchase)}`, tone: "default" },
+              { label: `Paid (${activePeriodLabel})`,      value: `₹${fmt(totalPaid)}`,     tone: "positive" },
+              { label: `Pending (${activePeriodLabel})`,   value: `₹${fmt(totalPending)}`,  tone: "warning" },
+              { label: `Overdue (${activePeriodLabel})`,   value: String(overdue),          tone: overdue > 0 ? "danger" : "muted" },
+            ]}
+          />
+        );
+      })()}
 
       {/* Status filter tabs */}
       <StatusFilterTabs

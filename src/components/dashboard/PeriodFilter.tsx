@@ -38,9 +38,16 @@ export function currentFyStartYear(): number {
   return getIndianFinancialYear(new Date());
 }
 
-// The default period shown on first load: the current FY, whole year.
+// The default period shown on first load: the current IST calendar month inside the current FY.
 export function defaultPeriod(): PeriodValue {
-  return { fyStartYear: currentFyStartYear(), month0: "all" };
+  return defaultCurrentMonthPeriod();
+}
+
+// Default period scoped to the current IST calendar month inside the current FY.
+export function defaultCurrentMonthPeriod(): PeriodValue {
+  const now = new Date();
+  const [, istM] = now.toLocaleString("en-CA", { year: "numeric", month: "2-digit", timeZone: "Asia/Kolkata" }).split("-");
+  return { fyStartYear: getIndianFinancialYear(now), month0: Number(istM) - 1 };
 }
 
 // Serialises a period into the query string the reports API expects (?fy=YYYY[&month=M]).

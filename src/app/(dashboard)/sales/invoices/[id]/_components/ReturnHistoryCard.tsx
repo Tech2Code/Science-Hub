@@ -2,11 +2,13 @@
 
 import { animateSection } from "@/lib/animateSection";
 import { formatDate } from "@/lib/formatDate";
+import { splitGstForDisplay } from "@/lib/roundOff";
 import { fmt, returnItemRate, type ReturnRecord } from "@/components/invoices/invoiceDetailTypes";
 import styles from "../invoiceDetail.module.css";
 
 interface ReturnHistoryCardProps {
   returns: ReturnRecord[];
+  isInterState: boolean;
   canWrite: boolean;
   showReturnInPdf: boolean;
   onTogglePdf: () => void;
@@ -16,7 +18,7 @@ interface ReturnHistoryCardProps {
   onDelete: (ret: ReturnRecord) => void;
 }
 
-export function ReturnHistoryCard({ returns, canWrite, showReturnInPdf, onTogglePdf, creditNoteDownloadingId, onDownload, onDelete }: ReturnHistoryCardProps) {
+export function ReturnHistoryCard({ returns, isInterState, canWrite, showReturnInPdf, onTogglePdf, creditNoteDownloadingId, onDownload, onDelete }: ReturnHistoryCardProps) {
   if (returns.length === 0) return null;
   const totalReturned = returns.reduce((s, r) => s + r.total, 0);
   return (
@@ -99,7 +101,10 @@ export function ReturnHistoryCard({ returns, canWrite, showReturnInPdf, onToggle
             </div>
             <div className={styles.returnTaxSummary}>
               Taxable ₹{fmt(ret.subtotal)}
-              {ret.igst > 0 ? ` · IGST ₹${fmt(ret.igst)}` : ` · CGST ₹${fmt(ret.cgst)} · SGST ₹${fmt(ret.sgst)}`}
+              {isInterState ? ` · IGST ₹${fmt(ret.igst)}` : (() => {
+                const { cgst, sgst } = splitGstForDisplay(ret.cgst + ret.sgst);
+                return ` · CGST ₹${fmt(cgst)} · SGST ₹${fmt(sgst)}`;
+              })()}
             </div>
           </div>
         ))}

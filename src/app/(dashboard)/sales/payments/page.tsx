@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -10,6 +10,7 @@ import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination
 import { SortSelect } from "@/components/ui/SortSelect";
 import { SearchField } from "@/components/ui/SearchField";
 import { ListPeriodFilter } from "@/components/ui/ListPeriodFilter";
+import { periodLabel as fmtPeriodLabel } from "@/components/dashboard/PeriodFilter";
 import { useListPeriod, setPeriodParams } from "@/lib/listPeriod";
 import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
@@ -122,7 +123,9 @@ export default function PaymentsPage() {
         <div>
           <h1 className="page-title">Payments</h1>
           <p className="page-sub">
-            {showSkeleton ? "Loading…" : `${total} payments · Total collected ₹${totalCollected.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            {showSkeleton
+              ? "Loading…"
+              : `${total} payment${total === 1 ? "" : "s"} · Collected (${debouncedSearch.trim() ? "Search" : fmtPeriodLabel(period)}): ₹${totalCollected.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </p>
         </div>
       </div>

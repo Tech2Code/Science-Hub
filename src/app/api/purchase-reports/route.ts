@@ -51,7 +51,7 @@ async function getPurchaseOutstanding(startDate: string | undefined, endDate: st
     ...(Object.keys(dateFilter).length > 0 && { billDate: dateFilter }),
   };
 
-  const [bills, total, agg, overdueCount] = await Promise.all([
+  const [bills, total, agg, overdueCount, periodAgg] = await Promise.all([
     prisma.purchaseBill.findMany({
       where,
       // id tiebreak — many bills share a billDate, and without a total order Postgres can return
@@ -66,6 +66,15 @@ async function getPurchaseOutstanding(startDate: string | undefined, endDate: st
     // IST-aware "today" boundary for the count — matches the Dashboard routes' own overdue
     // definition, so a bill due "today" isn't overdue on the Dashboard but overdue here.
     prisma.purchaseBill.count({ where: { ...where, dueDate: { lt: istTodayStartUtc(now) } } }),
+    prisma.purchaseBill.aggregate({
+      where: {
+        deletedAt: null,
+        status: { not: "cancelled" },
+        ...(Object.keys(dateFilter).length > 0 && { billDate: dateFilter }),
+      },
+      _sum: { total: true },
+      _count: true,
+    }),
   ]);
 
   const data = bills.map((b) => {
@@ -89,16 +98,30 @@ async function getPurchaseOutstanding(startDate: string | undefined, endDate: st
     };
   });
 
-  return { data, total, totalBalance: (agg._sum.total ?? 0) - (agg._sum.paidAmount ?? 0), overdueCount };
+  return {
+    data,
+    total,
+    totalBalance: (agg._sum.total ?? 0) - (agg._sum.paidAmount ?? 0),
+    overdueCount,
+    periodSpend: periodAgg._sum.total ?? 0,
+    periodBillsCount: periodAgg._count,
+  };
 }
 
-async function getPurchaseByCategory() {
+async function getPurchaseByCategory(startDate?: string, endDate?: string) {
+  const dateFilter: { gte?: Date; lte?: Date } = {};
+  if (startDate) dateFilter.gte = istDayStartUtc(startDate);
+  if (endDate) dateFilter.lte = istDayEndUtc(endDate);
   // Cancelled bills are excluded — see getPurchaseSummary above for why.
   // Aggregated DB-side (single groupBy) instead of fetching every non-cancelled bill ever created
   // into memory to reduce in JS — this only grows over the life of the business.
   const groups = await prisma.purchaseBill.groupBy({
     by: ["category"],
-    where: { deletedAt: null, status: { not: "cancelled" } },
+    where: {
+      deletedAt: null,
+      status: { not: "cancelled" },
+      ...(Object.keys(dateFilter).length > 0 && { billDate: dateFilter }),
+    },
     _sum: { total: true },
     _count: { _all: true },
   });
@@ -184,7 +207,7 @@ export async function GET(request: NextRequest) {
       const { skip, take } = parsePageParams(searchParams, 2000);
       return NextResponse.json(await getPurchaseOutstanding(startDate, endDate, skip, take));
     }
-    if (type === "category")     return NextResponse.json(await getPurchaseByCategory());
+    if (type === "category")     return NextResponse.json(await getPurchaseByCategory(startDate, endDate));
     if (type === "stock-ledger") {
       const search = searchParams.get("search") ?? undefined;
       const { skip, take } = parsePageParams(searchParams, 5000);

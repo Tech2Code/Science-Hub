@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { pdfFileName } from "@/lib/fileName";
 import { useEffect, useRef, useState } from "react";
@@ -1277,6 +1277,7 @@ export default function InvoiceDetailPage() {
         {/* Returns history */}
         <ReturnHistoryCard
           returns={returns}
+          isInterState={invoice.isInterState}
           canWrite={canWrite}
           showReturnInPdf={showReturnInPdf}
           onTogglePdf={() => setShowReturnInPdf(v => !v)}

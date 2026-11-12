@@ -43,7 +43,7 @@ export function PurchaseBillTotals({
               <span>GST</span><span>₹{fmtCurrency(taxTotal)}</span>
             </div>
             <div className={styles.totalsDiscountLine}>
-              <span>Additional Discount (₹)</span>
+              <span>Post-tax Rebate / Discount (₹)</span>
               <Input sz="sm" type="number" min="0" step="0.01" value={discount} onChange={(e) => onDiscountChange(e.target.value)} className={styles.discountInput} />
             </div>
             {transportCharge > 0 && (

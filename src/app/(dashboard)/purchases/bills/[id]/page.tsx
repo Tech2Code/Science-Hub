@@ -817,7 +817,7 @@ export default function PurchaseBillDetailPage() {
           {(() => {
             const bpLabelCell: CSSProperties = { border: `1px solid var(--bp-bd)`, padding: "5px 8px", color: "var(--bp-tx2)", background: "var(--bp-bg2)" };
             const bpValueCell: CSSProperties = { ...bpLabelCell, textAlign: "right" };
-            const bpTotalsRows = 5 + (bill.discount > 0 ? 2 : 0) + (bill.roundOff !== 0 ? 1 : 0);
+            const bpTotalsRows = 5 + (bill.discount > 0 ? 1 : 0) + (bill.roundOff !== 0 ? 1 : 0);
             const notesColSpan = (bill.isInterState ? 10 : 11) - 2;
             return (
               <>
@@ -837,18 +837,10 @@ export default function PurchaseBillDetailPage() {
                   <td style={bpValueCell}>₹{fmt(bill.taxAmount + (bill.transportChargeGstAmount ?? 0))}</td>
                 </tr>
                 {bill.discount > 0 && (
-                  <>
-                    <tr>
-                      <td style={bpLabelCell}>Discount</td>
-                      <td style={bpValueCell}>−₹{fmt(bill.discount)}</td>
-                    </tr>
-                    <tr>
-                      <td style={bpLabelCell}>Taxable Value</td>
-                      {/* Must include transport charge like "Subtotal" above does, or this row plus
-                          "GST" (which already includes transport GST) won't foot to "Total" below. */}
-                      <td style={bpValueCell}>₹{fmt(bill.subtotal + (bill.transportCharge ?? 0) - bill.discount)}</td>
-                    </tr>
-                  </>
+                  <tr>
+                    <td style={bpLabelCell}>Post-tax Rebate / Discount</td>
+                    <td style={bpValueCell}>−₹{fmt(bill.discount)}</td>
+                  </tr>
                 )}
                 {bill.roundOff !== 0 && (
                   <tr>
@@ -1235,7 +1227,7 @@ export default function PurchaseBillDetailPage() {
       <div {...animateSection(0, styles.statStrip)}>
         <StatCard label="Subtotal"    value={`₹${fmtShort(bill.subtotal + (bill.transportCharge ?? 0))}`} />
         <StatCard label="GST"         value={`₹${fmtShort(bill.taxAmount + (bill.transportChargeGstAmount ?? 0))}`} />
-        {bill.discount > 0 && <StatCard label="Discount" value={`−₹${fmtShort(bill.discount)}`} color="var(--c-red)" />}
+        {bill.discount > 0 && <StatCard label="Post-tax Rebate" value={`−₹${fmtShort(bill.discount)}`} color="var(--c-red)" />}
         <StatCard label="Total"       value={`₹${fmtShort(bill.total)}`}     color="var(--c-text)" />
         <StatCard label="Paid"        value={`₹${fmtShort(bill.paidAmount)}`} color="var(--c-green-text)" sub={`${bill.payments.length} payment(s)`} />
         <StatCard label="Balance Due" value={`₹${fmtShort(balance)}`}        color={balance > 0 ? "var(--c-amber)" : "var(--c-green-text)"} />
@@ -1416,16 +1408,10 @@ export default function PurchaseBillDetailPage() {
                     <td className={`${styles.textRight} ${styles.textMuted}`}>₹{fmt(bill.taxAmount + (bill.transportChargeGstAmount ?? 0))}</td>
                   </tr>
                   {bill.discount > 0 && (
-                    <>
-                      <tr>
-                        <td colSpan={footColSpan} className={`${styles.textRight} ${styles.textMuted}`}>Discount</td>
-                        <td className={`${styles.textRight} ${styles.textMuted}`}>−₹{fmt(bill.discount)}</td>
-                      </tr>
-                      <tr>
-                        <td colSpan={footColSpan} className={`${styles.textRight} ${styles.textMuted}`}>Taxable Value</td>
-                        <td className={`${styles.textRight} ${styles.textMuted}`}>₹{fmt(bill.subtotal + (bill.transportCharge ?? 0) - bill.discount)}</td>
-                      </tr>
-                    </>
+                    <tr>
+                      <td colSpan={footColSpan} className={`${styles.textRight} ${styles.textMuted}`}>Post-tax Rebate / Discount</td>
+                      <td className={`${styles.textRight} ${styles.textMuted}`}>−₹{fmt(bill.discount)}</td>
+                    </tr>
                   )}
                   {bill.roundOff !== 0 && (
                     <tr>

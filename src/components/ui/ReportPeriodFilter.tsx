@@ -22,9 +22,33 @@ export function periodToDateRange(p: PeriodValue, todayStr: string): { startDate
   return { startDate, endDate: endDate > todayStr ? todayStr : endDate };
 }
 
-// What a report page should start on: the current financial year, full year (to date).
+// What a report page should start on: the current IST calendar month inside the current FY.
 export function defaultReportRange(todayStr: string): { startDate: string; endDate: string } {
-  return periodToDateRange(defaultListPeriod(), todayStr);
+  return periodToDateRange(defaultListPeriod("current"), todayStr);
+}
+
+// Formats a startDate..endDate range into a compact period label for report banner cards
+// (e.g. "Nov 2026" for a single calendar month, "FY 2026-27" for a full financial year, or "YYYY-MM-DD – YYYY-MM-DD").
+export function formatRangePeriodLabel(startDate: string, endDate: string): string {
+  if (!startDate && !endDate) return "All Time";
+  if (startDate && endDate) {
+    // Check if startDate..endDate falls within a single calendar month starting on the 1st.
+    if (startDate.endsWith("-01") && startDate.slice(0, 7) === endDate.slice(0, 7)) {
+      const [yStr, mStr] = startDate.split("-");
+      const d = new Date(Date.UTC(Number(yStr), Number(mStr) - 1, 1, 12));
+      return d.toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+    }
+    // Check if startDate is Apr 1 of an FY and endDate is within that FY.
+    if (startDate.endsWith("-04-01")) {
+      const fyStart = Number(startDate.slice(0, 4));
+      const fyMaxEnd = `${fyStart + 1}-03-31`;
+      if (endDate <= fyMaxEnd && endDate > `${fyStart}-04-30`) {
+        return `FY ${fyStart}-${String(fyStart + 1).slice(2)}`;
+      }
+    }
+    return `${startDate} – ${endDate}`;
+  }
+  return startDate || endDate;
 }
 
 interface Props {

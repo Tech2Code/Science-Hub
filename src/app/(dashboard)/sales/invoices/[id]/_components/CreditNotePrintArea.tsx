@@ -125,7 +125,7 @@ export function CreditNotePrintArea({ ret, invoice, settings }: CreditNotePrintA
             </tr>
           ))}
           {(() => {
-            const cnTotalsRows = 1 + (ret.igst > 0 ? 1 : 2) + (ret.roundOff !== 0 ? 1 : 0) + 1;
+            const cnTotalsRows = 1 + (invoice.isInterState ? 1 : 2) + (ret.roundOff !== 0 ? 1 : 0) + 1;
             const cnLabelCell: CSSProperties = { border: "1px solid var(--inv-bd)", padding: "5px 8px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" };
             const cnValueCell: CSSProperties = { ...cnLabelCell, textAlign: "right" };
             // Same reconciliation fix as the main invoice footer — round the combined
@@ -142,7 +142,7 @@ export function CreditNotePrintArea({ ret, invoice, settings }: CreditNotePrintA
                   <td style={cnLabelCell}>Taxable Value</td>
                   <td style={cnValueCell}>₹{fmt(ret.subtotal)}</td>
                 </tr>
-                {ret.igst > 0 ? (
+                {invoice.isInterState ? (
                   <tr>
                     <td style={cnLabelCell}>IGST</td>
                     <td style={cnValueCell}>₹{fmt(ret.igst)}</td>

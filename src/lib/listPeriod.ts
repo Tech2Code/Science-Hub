@@ -13,11 +13,11 @@ function currentIstMonth0(): number {
   return Number(m) - 1;
 }
 
-export function defaultListPeriod(month: "all" | "current" = "all"): PeriodValue {
+export function defaultListPeriod(month: "all" | "current" = "current"): PeriodValue {
   return { fyStartYear: currentFyStartYear(), month0: month === "current" ? currentIstMonth0() : "all" };
 }
 
-export function useListPeriod(month: "all" | "current" = "all") {
+export function useListPeriod(month: "all" | "current" = "current") {
   return useState<PeriodValue>(() => defaultListPeriod(month));
 }
 

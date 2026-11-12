@@ -533,7 +533,7 @@ export function InvoicePrintArea({ invoice, settings, returns, balance, showPaym
                   </div>
                 </td>
                 <td colSpan={2} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>Subtotal</td>
-                <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.subtotal)}</td>
+                <td colSpan={invoice.isInterState ? 2 : 4} style={{ border: "1px solid var(--inv-bd)", padding: "5px 4px", textAlign: "right", color: "var(--inv-tx2)", background: "var(--inv-bg2)" }}>₹{fmt(invoice.subtotal + (invoice.transportCharge ?? 0))}</td>
               </tr>
               {/* Transportation Charges' own IGST/CGST/SGST (shown split
                   out on its own row above) must be folded into these
@@ -652,6 +652,7 @@ export function InvoicePrintArea({ invoice, settings, returns, balance, showPaym
               const totalCgst = returns.reduce((s, r) => s + r.cgst, 0);
               const totalSgst = returns.reduce((s, r) => s + r.sgst, 0);
               const totalIgst = returns.reduce((s, r) => s + r.igst, 0);
+              const { cgst: retCgstDisplay, sgst: retSgstDisplay } = splitGstForDisplay(totalCgst + totalSgst);
               const totalRoundOff = returns.reduce((s, r) => s + r.roundOff, 0);
               const totalReturnedAmt = returns.reduce((s, r) => s + r.total, 0);
               return (
@@ -689,7 +690,7 @@ export function InvoicePrintArea({ invoice, settings, returns, balance, showPaym
                     <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>Taxable Value</td>
                     <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(totalSubtotal)}</td>
                   </tr>
-                  {totalIgst > 0 ? (
+                  {invoice.isInterState ? (
                     <tr>
                       <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>IGST</td>
                       <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(totalIgst)}</td>
@@ -698,11 +699,11 @@ export function InvoicePrintArea({ invoice, settings, returns, balance, showPaym
                     <>
                       <tr>
                         <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>CGST</td>
-                        <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(totalCgst)}</td>
+                        <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(retCgstDisplay)}</td>
                       </tr>
                       <tr>
                         <td colSpan={allCols - amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>SGST</td>
-                        <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(totalSgst)}</td>
+                        <td colSpan={amountCols} style={{ ...bd, background: "var(--inv-bg2)", color: "var(--inv-tx2)", textAlign: "right" }}>−{fmt(retSgstDisplay)}</td>
                       </tr>
                     </>
                   )}

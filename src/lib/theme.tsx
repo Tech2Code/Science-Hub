@@ -12,18 +12,40 @@ function computeAutoTheme(): "light" | "dark" {
   return hour >= AUTO_DARK_START_HOUR || hour < AUTO_DARK_END_HOUR ? "dark" : "light";
 }
 
+let activeTransitionCount = 0;
+
 function applyTheme(next: "light" | "dark") {
+  const isDark = next === "dark";
   const apply = () => {
-    document.documentElement.classList.toggle("dark", next === "dark");
+    document.documentElement.classList.toggle("dark", isDark);
     document.documentElement.style.colorScheme = next;
   };
+
+  // No-op if the target theme is already applied — prevents redundant ViewTransitions
+  // during React StrictMode double-effects or the 60s auto-theme polling interval.
+  if (document.documentElement.classList.contains("dark") === isDark) {
+    document.documentElement.style.colorScheme = next;
+    return;
+  }
 
   // startViewTransition rejects when the document is hidden (e.g. backgrounded tab) — fall back to instant apply.
   if (document.startViewTransition && !document.hidden) {
     // Suppress CSS transitions during the View Transition to avoid a duplicate animation.
+    activeTransitionCount++;
     document.documentElement.setAttribute("data-vt", "");
     const vt = document.startViewTransition(apply);
-    vt.finished.catch(() => {}).finally(() => document.documentElement.removeAttribute("data-vt"));
+    // Both `ready` and `finished` reject with AbortError ("Transition was skipped. New ViewTransition started")
+    // when a newer transition supersedes this one — catch all three promises so none trigger an unhandled rejection.
+    vt.ready?.catch(() => {});
+    vt.updateCallbackDone?.catch(() => {});
+    vt.finished
+      .catch(() => {})
+      .finally(() => {
+        activeTransitionCount = Math.max(0, activeTransitionCount - 1);
+        if (activeTransitionCount === 0) {
+          document.documentElement.removeAttribute("data-vt");
+        }
+      });
   } else {
     apply();
   }

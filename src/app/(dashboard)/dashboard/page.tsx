@@ -5,7 +5,7 @@ import { useCanWrite } from "@/lib/useCanWrite";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
-import { PeriodFilter, defaultPeriod, periodLabel, periodToQuery, type PeriodValue } from "@/components/dashboard/PeriodFilter";
+import { PeriodFilter, defaultCurrentMonthPeriod, periodLabel, periodToQuery, type PeriodValue } from "@/components/dashboard/PeriodFilter";
 import { StatusBadge } from "@/components/ui/Badge";
 import { ArrowIcon } from "@/components/ui/ArrowIcon";
 import { useFetch } from "@/lib/useCache";
@@ -15,11 +15,14 @@ import styles from "./dashboardHome.module.css";
 interface RecentInvoice { id: string; invoiceNumber: string; date: string; customerName: string; total: number; paidAmount: number; status: string; }
 interface RecentBill { id: string; billNumber: string; billDate: string; vendorName: string; total: number; paidAmount: number; status: string; }
 interface FinancialFigures {
-  // Cash Flow section — simple totals, deliberately not netted against each other.
+  // Cash Flow section — net of credit notes (sales returns) dated in the period so Total Sales
+  // and GST Collected always reconcile with Net GST Payable.
   totalSales: number;
-  gstSales: number;      // GST portion already included within totalSales
+  gstSales: number;          // GST portion already included within totalSales (net of credit notes)
+  creditNotesSales?: number; // Credit note total already netted out of totalSales
+  creditNotesGst?: number;   // Credit note GST already netted out of gstSales
   totalPurchases: number;
-  gstPurchases: number;  // GST portion already included within totalPurchases
+  gstPurchases: number;      // GST portion already included within totalPurchases
 }
 interface FinancialMonth extends FinancialFigures { month: string; future: boolean; }
 interface DashboardFinancials {
@@ -81,8 +84,8 @@ function FinTile({ label, value, help, info, tone = "neutral", loading }: {
 type Tone = "blue" | "amber" | "red" | "green" | "neutral";
 
 export default function DashboardPage() {
-  // Financial Summary period: a financial year + (whole year | a month). Default = current FY, full year.
-  const [finPeriod, setFinPeriod] = useState<PeriodValue>(defaultPeriod());
+  // Financial Summary period: a financial year + (whole year | a month). Default = current IST month.
+  const [finPeriod, setFinPeriod] = useState<PeriodValue>(defaultCurrentMonthPeriod());
   // Fetch is scoped to the chosen FY (so a past FY refetches). Month drill-down within the loaded FY
   // is done client-side from financials.monthly, so switching months is instant with no refetch.
   const { data, loading, error } = useFetch<CombinedDashboard>(`/api/reports?type=combined-dashboard&fy=${finPeriod.fyStartYear}`);
@@ -113,7 +116,7 @@ export default function DashboardPage() {
     financials == null ? EMPTY_FIN
     : finPeriod.month0 === "all" ? financials.total
     : finMonth ?? EMPTY_FIN;   // a month with no data shows zeros, not the FY total
-  const cashFlowNet = finSelected.totalSales - finSelected.totalPurchases;
+  const cashFlowBeforeGst = finSelected.totalSales - finSelected.totalPurchases;
 
   // The real Net GST Payable — same figure and same computation (buildGstFilingReport) as the GST
   // Filing report's own "Net GST Payable (Rounded)", not a client-side approximation, so the two
@@ -125,6 +128,13 @@ export default function DashboardPage() {
   const { data: gstPayableData, loading: gstPayableLoading } = useFetch<{ netGstPayable: number }>(
     canSeeGstPayable ? `/api/reports?type=net-gst-payable&${periodToQuery(finPeriod)}` : null
   );
+  // Only positive Net GST Payable represents actual cash outflow to the government for the period;
+  // when excess ITC applies (netGstPayable <= 0), ₹0 is paid to the government that period.
+  const effectiveGstPayable = canSeeGstPayable && gstPayableData
+    ? gstPayableData.netGstPayable
+    : Math.round(finSelected.gstSales - finSelected.gstPurchases);
+  const gstCashOutflow = Math.max(0, effectiveGstPayable);
+  const cashFlowAfterGst = cashFlowBeforeGst - gstCashOutflow;
 
   const quickActionSections = [
     {
@@ -258,16 +268,24 @@ export default function DashboardPage() {
             <FinTile
               label="Total Sales" tone="blue" loading={loading}
               value={fmt(finSelected.totalSales)}
-              help={`Incl. ${fmt(finSelected.gstSales)} GST`}
-              info="Total invoice value including GST — the simple total billed, with nothing netted out."
+              help={
+                (finSelected.creditNotesSales ?? 0) > 0
+                  ? `Incl. ${fmt(finSelected.gstSales)} GST · After ${fmt(finSelected.creditNotesSales ?? 0)} CN`
+                  : `Incl. ${fmt(finSelected.gstSales)} GST`
+              }
+              info="Total invoice value including GST, net of any Credit Notes (sales returns) issued in this period — matches the GST Filing report."
             />
           )}
           {canSeeSales && (
             <FinTile
               label="GST Collected" tone="neutral" loading={loading}
               value={fmt(finSelected.gstSales)}
-              help="Within Total Sales"
-              info="The GST portion already included in Total Sales (CGST+SGST or IGST, plus GST on any transport charge)."
+              help={
+                (finSelected.creditNotesGst ?? 0) > 0
+                  ? `Net of ${fmt(finSelected.creditNotesGst ?? 0)} credit note GST`
+                  : "Within Total Sales"
+              }
+              info="The net output GST portion included in Total Sales (CGST+SGST or IGST plus transport GST, minus GST on any Credit Notes issued in this period)."
             />
           )}
           {canSeePurchases && (
@@ -288,10 +306,12 @@ export default function DashboardPage() {
           )}
           {canSeeSales && canSeePurchases && (
             <FinTile
-              label="Net (Sales − Purchases)" tone={cashFlowNet < 0 ? "red" : "neutral"} loading={loading}
-              value={fmt(cashFlowNet)}
-              help="Not profit — see note below"
-              info="Total Sales minus Total Purchases. This is a simple cash comparison, not profit — see the note below."
+              label="Net (After GST)"
+              tone={cashFlowAfterGst < 0 ? "red" : cashFlowAfterGst > 0 ? "green" : "neutral"}
+              loading={loading || (canSeeGstPayable && gstPayableLoading)}
+              value={fmt(cashFlowAfterGst)}
+              help={`Before GST: ${fmt(cashFlowBeforeGst)}`}
+              info="What remains from (Total Sales − Total Purchases) after paying Net GST Payable to the government. When excess input credit applies (Net GST Payable ≤ ₹0), nothing is owed to the government for the period so nothing extra is deducted."
             />
           )}
           {canSeeSales && canSeePurchases && canSeeGstPayable && (
@@ -321,7 +341,7 @@ export default function DashboardPage() {
         </div>
 
         <div className={styles.financialsNote}>
-          This is a simple cash comparison — total billed vs total spent — not profit. A bulk purchase of stock that hasn&apos;t sold yet will show up here as a big spend with nothing to offset it; that&apos;s expected for a cash-flow view. &quot;GST Collected&quot; and &quot;GST Paid (ITC)&quot; above are just the portion included in each total, not netted against each other — see &quot;Net GST Payable&quot; for the real amount owed (only shown with Sales Reports + Purchase Reports access, since it&apos;s the same figure as the GST Filing report).
+          &quot;Net (After GST)&quot; shows what remains from Total Sales minus Total Purchases after paying &quot;Net GST Payable&quot; to the government for the selected period (when excess ITC applies and nothing is due to the government, ₹0 GST outflow is deducted). A bulk purchase of stock that hasn&apos;t sold yet will still show up as a spend in that month; this is a cash-flow view, not accounting profit.
         </div>
       </div>
       )}

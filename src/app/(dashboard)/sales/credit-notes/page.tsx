@@ -7,6 +7,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { ListPeriodFilter } from "@/components/ui/ListPeriodFilter";
+import { periodLabel as fmtPeriodLabel } from "@/components/dashboard/PeriodFilter";
 import { useListPeriod, setPeriodParams } from "@/lib/listPeriod";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { SearchField } from "@/components/ui/SearchField";
@@ -261,24 +262,27 @@ export default function CreditNotesPage() {
           <div>
             <h1 className="page-title">Credit Notes</h1>
             <p className="page-sub">
-              {showSkeleton ? "Loading…" : `${total} credit note${total === 1 ? "" : "s"}`}
+              {showSkeleton ? "Loading…" : `${total} credit note${total === 1 ? "" : "s"} · ${debouncedSearch.trim() ? "Search" : fmtPeriodLabel(period)}`}
             </p>
           </div>
         </div>
 
         {/* Dashboard cards */}
-        {(loading || totalCreditNotes > 0 || total > 0) && (
-          <StatCardsRow
-            sectionIndex={0}
-            loading={loading}
-            cards={[
-              { label: "Total Credit Notes", value: String(totalCreditNotes),           tone: "default" },
-              { label: "Total Credited",     value: `₹${fmt(totalCredited)}`,          tone: "warning" },
-              { label: "Notes This Period", value: String(periodCount), tone: "default" },
-              { label: "Credited This Period", value: `₹${fmt(periodCredited)}`, tone: "warning" },
-            ]}
-          />
-        )}
+        {(() => {
+          const pLabel = fmtPeriodLabel(period);
+          return (
+            <StatCardsRow
+              sectionIndex={0}
+              loading={loading}
+              cards={[
+                { label: `Notes (${pLabel})`,        value: String(periodCount),         tone: "default" },
+                { label: `Credited (${pLabel})`,     value: `₹${fmt(periodCredited)}`,   tone: "warning" },
+                { label: "Total Notes (All Time)",    value: String(totalCreditNotes),    tone: "default" },
+                { label: "Total Credited (All Time)", value: `₹${fmt(totalCredited)}`,    tone: "warning" },
+              ]}
+            />
+          );
+        })()}
 
         <div {...animateSection(1, "card")}>
           <div className="card-toolbar">

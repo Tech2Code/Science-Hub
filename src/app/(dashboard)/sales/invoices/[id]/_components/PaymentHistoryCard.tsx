@@ -2,6 +2,7 @@
 
 import { animateSection } from "@/lib/animateSection";
 import { formatDate } from "@/lib/formatDate";
+import { round2 } from "@/lib/roundOff";
 import { fmt, type Invoice, type Payment, type ReturnRecord } from "@/components/invoices/invoiceDetailTypes";
 import styles from "../invoiceDetail.module.css";
 
@@ -31,11 +32,7 @@ export function PaymentHistoryCard({ invoice, returns, balance, canWrite, showPa
   };
   const paidTotal = invoice.payments.reduce((s, p) => s + p.amount, 0);
   const totalReturned = returns.reduce((s, r) => s + r.total, 0);
-  // Grand Total already bakes in roundOff (subtotal + tax + roundOff),
-  // so netting it out of "net paid" too shows the reconciled figure
-  // net of both what was returned and the sub-rupee rounding cushion.
-  const roundOffAdj = invoice.roundOff;
-  const netPaid = paidTotal - totalReturned - roundOffAdj;
+  const netPaid = round2(paidTotal - totalReturned);
   const paidPct = Math.min(100, (paidTotal / invoice.total) * 100);
 
   return (
@@ -74,16 +71,9 @@ export function PaymentHistoryCard({ invoice, returns, balance, canWrite, showPa
             <div>
               <div className={styles.historyStatLabel}>Total Paid</div>
               <div className={`${styles.historyStatValue} ${styles.historyStatValueGreen}`}>₹{fmt(paidTotal)}</div>
-              {(totalReturned > 0 || roundOffAdj !== 0) && (
+              {totalReturned > 0 && (
                 <div className={styles.historyNetLine}>
-                  {totalReturned > 0 && (
-                    <span className={styles.historyNetLineOrange}>− ₹{fmt(totalReturned)} returned</span>
-                  )}
-                  {roundOffAdj !== 0 && (
-                    <span className={styles.historyNetLineOrange}>
-                      {totalReturned > 0 ? ", " : ""}{roundOffAdj > 0 ? "− " : "+ "}₹{fmt(Math.abs(roundOffAdj))} round off
-                    </span>
-                  )}
+                  <span className={styles.historyNetLineOrange}>− ₹{fmt(totalReturned)} returned</span>
                   <span className={styles.historyNetLineNet}> = ₹{fmt(netPaid)}</span>
                   <span> net</span>
                 </div>

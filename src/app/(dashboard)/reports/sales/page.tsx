@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
-import { ReportPeriodFilter, defaultReportRange } from "@/components/ui/ReportPeriodFilter";
+import { ReportPeriodFilter, defaultReportRange, formatRangePeriodLabel } from "@/components/ui/ReportPeriodFilter";
 import { HeaderActionsRow } from "@/components/ui/HeaderActionsRow";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
@@ -20,7 +20,7 @@ import { formatDate } from "@/lib/formatDate";
 import { toIstDateStr } from "@/lib/validation";
 import styles from "./salesReports.module.css";
 
-interface SummaryRow { invoicesThisMonth: number; revenueThisMonth: number; totalRevenue: number; totalCollected: number; outstandingTotal: number; pendingCount: number; }
+interface SummaryRow { invoicesThisMonth: number; revenueThisMonth: number; periodInvoicesCount: number; periodRevenue: number; periodGrossRevenue?: number; periodReturnsTotal?: number; periodReturnsCount?: number; periodCollected: number; totalRevenue: number; totalCollected: number; outstandingTotal: number; pendingCount: number; }
 interface OutstandingItem { id: string; invoiceNumber: string; date: string; createdAt: string; dueDate?: string; customer: { name: string }; total: number; paidAmount: number; balance: number; status: string; }
 interface OutstandingResponse { data: OutstandingItem[]; total: number; totalBalance: number; }
 interface GstRow { month: string; taxableValue: number; cgst: number; sgst: number; igst: number; }
@@ -73,11 +73,12 @@ export default function SalesReportsPage() {
   const [outShowAll, setOutShowAll] = useState(false);
   const outPageSize = outShowAll ? 2000 : PAGE_SIZE;
 
-  const { data: summaryData, loading: loadingSummary } = useFetch<SummaryRow>("/api/reports?type=summary");
+  const { data: summaryData, loading: loadingSummary } = useFetch<SummaryRow>(`/api/reports?type=summary${dateQuery}`);
   const { data: outstandingResponse, loading: loadingOut } = useFetch<OutstandingResponse>(
     `/api/reports?type=outstanding${dateQuery}&page=${outPage}&pageSize=${outPageSize}`
   );
   const { data: gstData, loading: loadingGst } = useFetch<GstRow[]>(`/api/reports?type=gst-summary${dateQuery}`);
+  const rangeLabel = formatRangePeriodLabel(startDate, endDate);
 
   const outstanding = outstandingResponse?.data ?? [];
   const outTotal = outstandingResponse?.total ?? 0;
@@ -152,24 +153,30 @@ export default function SalesReportsPage() {
       {/* KPI banners */}
       <div {...animateSection(0, "stat-banners")}>
         <div className="stat-banner stat-banner-blue">
-          <div className="stat-banner-label">Revenue This Month</div>
-          <div className="stat-banner-value"><SkeletonSwap loading={loadingSummary} w={90} h={20}>{fmt(summaryData?.revenueThisMonth ?? 0)}</SkeletonSwap></div>
-          <div className="stat-banner-sub"><SkeletonSwap loading={loadingSummary} w={140} h={13}>{`${summaryData?.invoicesThisMonth ?? 0} invoice${(summaryData?.invoicesThisMonth ?? 0) !== 1 ? "s" : ""} this month`}</SkeletonSwap></div>
+          <div className="stat-banner-label">{`Revenue (${rangeLabel})`}</div>
+          <div className="stat-banner-value"><SkeletonSwap loading={loadingSummary} w={90} h={20}>{fmt(summaryData?.periodRevenue ?? 0)}</SkeletonSwap></div>
+          <div className="stat-banner-sub">
+            <SkeletonSwap loading={loadingSummary} w={140} h={13}>
+              {(summaryData?.periodReturnsTotal ?? 0) > 0
+                ? `${summaryData?.periodInvoicesCount ?? 0} inv (${fmt(summaryData?.periodGrossRevenue ?? 0)}) − CN ${fmt(summaryData?.periodReturnsTotal ?? 0)}`
+                : `${summaryData?.periodInvoicesCount ?? 0} invoice${(summaryData?.periodInvoicesCount ?? 0) !== 1 ? "s" : ""} in ${rangeLabel}`}
+            </SkeletonSwap>
+          </div>
         </div>
         <div className="stat-banner stat-banner-amber">
-          <div className="stat-banner-label">Total Outstanding</div>
+          <div className="stat-banner-label">{`Outstanding (${rangeLabel})`}</div>
           <div className="stat-banner-value"><SkeletonSwap loading={showOutSkeleton} w={90} h={20}>{fmt(outTotalBalance)}</SkeletonSwap></div>
-          <div className="stat-banner-sub"><SkeletonSwap loading={showOutSkeleton} w={140} h={13}>{`Across ${outTotal} unpaid/partial invoice${outTotal !== 1 ? "s" : ""}`}</SkeletonSwap></div>
+          <div className="stat-banner-sub"><SkeletonSwap loading={showOutSkeleton} w={140} h={13}>{`Across ${outTotal} unpaid/partial invoice${outTotal !== 1 ? "s" : ""} in ${rangeLabel}`}</SkeletonSwap></div>
         </div>
         <div className="stat-banner stat-banner-green">
-          <div className="stat-banner-label">Total Collected</div>
-          <div className="stat-banner-value"><SkeletonSwap loading={loadingSummary} w={90} h={20}>{fmt(summaryData?.totalCollected ?? 0)}</SkeletonSwap></div>
-          <div className="stat-banner-sub">All time payments received</div>
+          <div className="stat-banner-label">{`Collected (${rangeLabel})`}</div>
+          <div className="stat-banner-value"><SkeletonSwap loading={loadingSummary} w={90} h={20}>{fmt(summaryData?.periodCollected ?? 0)}</SkeletonSwap></div>
+          <div className="stat-banner-sub">{`Payments received in ${rangeLabel}`}</div>
         </div>
         <div className="stat-banner stat-banner-purple">
-          <div className="stat-banner-label">Total GST Collected</div>
+          <div className="stat-banner-label">{`GST Collected (${rangeLabel})`}</div>
           <div className="stat-banner-value"><SkeletonSwap loading={loadingGst} w={90} h={20}>{fmt(totalGst)}</SkeletonSwap></div>
-          <div className="stat-banner-sub">{dateQuery ? "CGST + SGST + IGST in selected date range" : "CGST + SGST + IGST across all invoices"}</div>
+          <div className="stat-banner-sub">{`Net CGST + SGST + IGST in ${rangeLabel}`}</div>
         </div>
       </div>
 

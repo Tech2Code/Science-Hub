@@ -101,13 +101,17 @@ async function getSalesDashboard(period?: PeriodInput, kpiOnly = false) {
   // Date filter reused by both the period-scoped revenue and collected aggregates so all figures share one range.
   const periodDateWhere = periodStart && periodEnd ? { date: { gte: periodStart, lt: periodEnd } } : {};
 
-  const [revenueAgg, collectedAgg, outstandingAgg, overdueCount] = await Promise.all([
+  const [revenueAgg, returnsAgg, collectedAgg, outstandingAgg, overdueCount] = await Promise.all([
     prisma.invoice.aggregate({
       where: { deletedAt: null, ...periodDateWhere },
       // subtotal/cgst/sgst/igst/transportCharge/transportChargeGstAmount summed alongside total
       // (one query, not a second round trip) so the KPI card can show the GST-exclusive taxable
       // value and the GST amount as their own figures, not just the GST-inclusive total.
       _sum: { total: true, subtotal: true, cgst: true, sgst: true, igst: true, transportCharge: true, transportChargeGstAmount: true },
+    }),
+    prisma.return.aggregate({
+      where: { deletedAt: null, invoice: { deletedAt: null }, ...periodDateWhere },
+      _sum: { total: true, subtotal: true, cgst: true, sgst: true, igst: true },
     }),
     // Collected in-period = actual Payment rows dated within the period (not the parent invoice's
     // cumulative paidAmount filtered by the invoice's own date — a payment can land in a different
@@ -184,34 +188,56 @@ async function getSalesDashboard(period?: PeriodInput, kpiOnly = false) {
     // One query for the whole FY, summed per IST calendar month in Postgres (+330-minute shift
     // before date_trunc, same bucketing as getDashboardFinancials/getGstSummary) — never loads every
     // FY invoice row into Node just to bucket it.
-    const fyInvoiceRows = await prisma.$queryRaw<Array<{ month: Date; total: number }>>`
-      SELECT date_trunc('month', "date" + interval '330 minutes') AS month,
-             COALESCE(SUM("total"), 0) AS total
-      FROM "Invoice"
-      WHERE "deletedAt" IS NULL
-        AND "date" >= ${fyStart} AND "date" < ${fyEnd}
-      GROUP BY month
-    `;
+    const [fyInvoiceRows, fyReturnRows] = await Promise.all([
+      prisma.$queryRaw<Array<{ month: Date; total: number }>>`
+        SELECT date_trunc('month', "date" + interval '330 minutes') AS month,
+               COALESCE(SUM("total"), 0) AS total
+        FROM "Invoice"
+        WHERE "deletedAt" IS NULL
+          AND "date" >= ${fyStart} AND "date" < ${fyEnd}
+        GROUP BY month
+      `,
+      prisma.$queryRaw<Array<{ month: Date; total: number }>>`
+        SELECT date_trunc('month', r."date" + interval '330 minutes') AS month,
+               COALESCE(SUM(r."total"), 0) AS total
+        FROM "Return" r
+        INNER JOIN "Invoice" i ON i."id" = r."invoiceId" AND i."deletedAt" IS NULL
+        WHERE r."deletedAt" IS NULL
+          AND r."date" >= ${fyStart} AND r."date" < ${fyEnd}
+        GROUP BY month
+      `,
+    ]);
     const fyRevenueByMonth = new Map(fyInvoiceRows.map((r) => [istMonthKeyOfBucket(r.month), Number(r.total) || 0]));
+    const fyReturnByMonth = new Map(fyReturnRows.map((r) => [istMonthKeyOfBucket(r.month), Number(r.total) || 0]));
     monthlyRevenue = Array.from({ length: 12 }, (_, i) => {
       const monthIndex0 = (3 + i) % 12;
       const year = fyYear + Math.floor((3 + i) / 12);
       const { start: d } = istMonthBoundsUtc(year, monthIndex0);
       const label = d.toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
       if (d > now) return { month: label, total: 0 };
-      return { month: label, total: fyRevenueByMonth.get(istMonthKeyOfStart(d)) ?? 0 };
+      const key = istMonthKeyOfStart(d);
+      return { month: label, total: (fyRevenueByMonth.get(key) ?? 0) - (fyReturnByMonth.get(key) ?? 0) };
     });
   }
 
   // Taxable value has no separate bill-level discount to net out (unlike PurchaseBill) — item-level
   // discounts are already baked into `subtotal` at create time. GST = the three tax columns +
   // Transport Charge's own GST (kept in a separate column, so it'd otherwise be silently excluded).
-  const revenueTaxable = (revenueAgg._sum.subtotal ?? 0) + (revenueAgg._sum.transportCharge ?? 0);
-  const revenueGst = (revenueAgg._sum.cgst ?? 0) + (revenueAgg._sum.sgst ?? 0) + (revenueAgg._sum.igst ?? 0) + (revenueAgg._sum.transportChargeGstAmount ?? 0);
+  // Credit Notes (`Return`) issued in the period reduce revenue, taxable value, and GST so Sales
+  // Overview matches Main Dashboard and GST Filing.
+  const grossRevenue = revenueAgg._sum.total ?? 0;
+  const returnsTotal = returnsAgg._sum.total ?? 0;
+  const revenueThisMonth = grossRevenue - returnsTotal;
+  const revenueTaxable = (revenueAgg._sum.subtotal ?? 0) + (revenueAgg._sum.transportCharge ?? 0) - (returnsAgg._sum.subtotal ?? 0);
+  const revenueGst =
+    (revenueAgg._sum.cgst ?? 0) + (revenueAgg._sum.sgst ?? 0) + (revenueAgg._sum.igst ?? 0) + (revenueAgg._sum.transportChargeGstAmount ?? 0) -
+    ((returnsAgg._sum.cgst ?? 0) + (returnsAgg._sum.sgst ?? 0) + (returnsAgg._sum.igst ?? 0));
 
   return {
     periodLabel,
-    revenueThisMonth: revenueAgg._sum.total ?? 0,   // now period-scoped (all-time when period="all")
+    revenueThisMonth,                                // net of credit notes in the period
+    grossRevenue,
+    returnsTotal,
     revenueTaxable,                                  // GST-exclusive portion of revenueThisMonth
     revenueGst,                                      // GST portion of revenueThisMonth
     totalCollected: collectedAgg._sum.amount ?? 0,  // actual payments dated within the period
@@ -439,6 +465,22 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
       `
     : [];
 
+  // Credit notes (sales returns) issued in the period reduce sales & output GST in the month the
+  // credit note is dated — matching buildGstFilingReport() and getGstSummary() so Cash Flow tiles
+  // never disagree with Net GST Payable when a month has credit notes.
+  const returnRows = canSeeSales
+    ? await prisma.$queryRaw<Array<{ month: Date; gross: number; gst: number }>>`
+        SELECT date_trunc('month', r."date" + interval '330 minutes') AS month,
+               COALESCE(SUM(r."total"), 0) AS gross,
+               COALESCE(SUM(r."cgst") + SUM(r."sgst") + SUM(r."igst"), 0) AS gst
+        FROM "Return" r
+        INNER JOIN "Invoice" i ON i."id" = r."invoiceId"
+        WHERE r."deletedAt" IS NULL AND i."deletedAt" IS NULL
+          AND r."date" >= ${fyStart} AND r."date" < ${fyEnd}
+        GROUP BY month
+      `
+    : [];
+
   const spendRows = canSeePurchases
     ? await prisma.$queryRaw<Array<{ month: Date; spend: number; gst: number }>>`
         SELECT date_trunc('month', "billDate" + interval '330 minutes') AS month,
@@ -454,6 +496,7 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
   // Key each SQL bucket by its IST year-month so we can line it up against the fixed 12-month grid.
   const keyOf = (d: Date) => new Date(d).toLocaleString("en-IN", { month: "2-digit", year: "numeric", timeZone: "UTC" });
   const salesByMonth = new Map(salesRows.map((r) => [keyOf(r.month), { gross: Number(r.gross) || 0, gst: Number(r.gst) || 0 }]));
+  const returnsByMonth = new Map(returnRows.map((r) => [keyOf(r.month), { gross: Number(r.gross) || 0, gst: Number(r.gst) || 0 }]));
   const spendByMonth = new Map(spendRows.map((r) => [keyOf(r.month), { spend: Number(r.spend) || 0, gst: Number(r.gst) || 0 }]));
 
   const monthly = Array.from({ length: 12 }, (_, i) => {
@@ -463,11 +506,16 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
     const label = start.toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
     const key = start.toLocaleString("en-IN", { month: "2-digit", year: "numeric", timeZone: "Asia/Kolkata" });
     const sales = salesByMonth.get(key);
+    const ret = returnsByMonth.get(key);
     const spend = spendByMonth.get(key);
+    const creditNotesSales = ret?.gross ?? 0;
+    const creditNotesGst = ret?.gst ?? 0;
     return {
       month: label,
-      totalSales: sales?.gross ?? 0,
-      gstSales: sales?.gst ?? 0,
+      totalSales: (sales?.gross ?? 0) - creditNotesSales,
+      gstSales: (sales?.gst ?? 0) - creditNotesGst,
+      creditNotesSales,
+      creditNotesGst,
       totalPurchases: spend?.spend ?? 0,
       gstPurchases: spend?.gst ?? 0,
       // Months that haven't happened yet stay at zero but are still returned so the selector shows the full FY.
@@ -479,10 +527,12 @@ async function getDashboardFinancials(canSeeSales: boolean, canSeePurchases: boo
     (acc, m) => ({
       totalSales: acc.totalSales + m.totalSales,
       gstSales: acc.gstSales + m.gstSales,
+      creditNotesSales: acc.creditNotesSales + m.creditNotesSales,
+      creditNotesGst: acc.creditNotesGst + m.creditNotesGst,
       totalPurchases: acc.totalPurchases + m.totalPurchases,
       gstPurchases: acc.gstPurchases + m.gstPurchases,
     }),
-    { totalSales: 0, gstSales: 0, totalPurchases: 0, gstPurchases: 0 },
+    { totalSales: 0, gstSales: 0, creditNotesSales: 0, creditNotesGst: 0, totalPurchases: 0, gstPurchases: 0 },
   );
 
   return {
@@ -529,13 +579,14 @@ async function getGstSummary(startDate?: string, endDate?: string) {
   // Credit notes issued in the period are NETTED OUT, as GST Filing's summary does (they reduce output tax in the
   // month they are issued, whatever month their invoice is from). Same IST month bucketing.
   const creditRows = await prisma.$queryRaw<Array<{ month: Date; taxableValue: number; cgst: number; sgst: number; igst: number }>>`
-    SELECT date_trunc('month', "date" + interval '330 minutes') AS month,
-           COALESCE(SUM("subtotal"), 0) AS "taxableValue", COALESCE(SUM("cgst"), 0) AS cgst,
-           COALESCE(SUM("sgst"), 0) AS sgst, COALESCE(SUM("igst"), 0) AS igst
-    FROM "Return"
-    WHERE "deletedAt" IS NULL
-      ${gte ? Prisma.sql`AND "date" >= ${gte}` : Prisma.empty}
-      ${lte ? Prisma.sql`AND "date" <= ${lte}` : Prisma.empty}
+    SELECT date_trunc('month', r."date" + interval '330 minutes') AS month,
+           COALESCE(SUM(r."subtotal"), 0) AS "taxableValue", COALESCE(SUM(r."cgst"), 0) AS cgst,
+           COALESCE(SUM(r."sgst"), 0) AS sgst, COALESCE(SUM(r."igst"), 0) AS igst
+    FROM "Return" r
+    INNER JOIN "Invoice" i ON i."id" = r."invoiceId" AND i."deletedAt" IS NULL
+    WHERE r."deletedAt" IS NULL
+      ${gte ? Prisma.sql`AND r."date" >= ${gte}` : Prisma.empty}
+      ${lte ? Prisma.sql`AND r."date" <= ${lte}` : Prisma.empty}
     GROUP BY month
   `;
   const byMonth = new Map<number, { month: Date; taxableValue: number; cgst: number; sgst: number; igst: number }>();
@@ -592,7 +643,7 @@ export async function GET(request: NextRequest) {
       if (!gate.ok) return gate.response;
     }
 
-    if (type === "summary")            return NextResponse.json(await getReportSummary());
+    if (type === "summary")            return NextResponse.json(await getReportSummary(startDate, endDate));
     if (type === "outstanding") {
       const { skip, take } = parsePageParams(searchParams, 2000);
       return NextResponse.json(await getReportOutstanding(startDate, endDate, skip, take));

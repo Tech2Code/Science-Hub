@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { pdfFileName } from "@/lib/fileName";
 import { useState, useRef, useEffect } from "react";
@@ -10,6 +10,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { ListPeriodFilter } from "@/components/ui/ListPeriodFilter";
+import { periodLabel as fmtPeriodLabel } from "@/components/dashboard/PeriodFilter";
 import { OutsidePeriodNotice } from "@/components/ui/OutsidePeriodNotice";
 import { useListPeriod, setPeriodParams, periodMonthYear } from "@/lib/listPeriod";
 import { askSaveLocation, discardSaveTarget } from "@/lib/saveFile";
@@ -367,7 +368,7 @@ export default function InvoicesPage() {
         <div>
           <h1 className="page-title">Invoices</h1>
           <p className="page-sub">
-            {showSkeleton ? "Loading…" : `${total} invoice${total === 1 ? "" : "s"}`}
+            {showSkeleton ? "Loading…" : `${total} invoice${total === 1 ? "" : "s"} · ${debouncedSearch.trim() ? "Search" : fmtPeriodLabel(period)}`}
           </p>
         </div>
         {canWrite && (<Button variant="primary" href="/sales/invoices/new"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Invoice</Button>)}
@@ -375,18 +376,21 @@ export default function InvoicesPage() {
 
       {stats?.outsidePeriod && <OutsidePeriodNotice count={stats.outsidePeriod.count} amount={stats.outsidePeriod.amount} noun="invoice" />}
       {/* Dashboard cards */}
-      {(loading || totalInvoiced > 0 || total > 0) && (
-        <StatCardsRow
-          sectionIndex={0}
-          loading={loading}
-          cards={[
-            { label: "Total Invoiced",   value: `₹${fmt(totalInvoiced)}`, tone: "default" },
-            { label: "Paid",             value: `₹${fmt(totalPaid)}`,     tone: "positive" },
-            { label: "Pending",          value: `₹${fmt(totalPending)}`,  tone: "warning" },
-            { label: "Overdue Invoices", value: String(overdue),          tone: overdue > 0 ? "danger" : "muted" },
-          ]}
-        />
-      )}
+      {(() => {
+        const activePeriodLabel = debouncedSearch.trim() ? "Search" : fmtPeriodLabel(period);
+        return (
+          <StatCardsRow
+            sectionIndex={0}
+            loading={loading}
+            cards={[
+              { label: `Invoiced (${activePeriodLabel})`, value: `₹${fmt(totalInvoiced)}`, tone: "default" },
+              { label: `Paid (${activePeriodLabel})`,     value: `₹${fmt(totalPaid)}`,     tone: "positive" },
+              { label: `Pending (${activePeriodLabel})`,  value: `₹${fmt(totalPending)}`,  tone: "warning" },
+              { label: `Overdue (${activePeriodLabel})`,  value: String(overdue),          tone: overdue > 0 ? "danger" : "muted" },
+            ]}
+          />
+        );
+      })()}
 
       {/* Status filter tabs */}
       <StatusFilterTabs

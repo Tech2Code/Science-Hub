@@ -322,18 +322,24 @@ export async function getProductStats() {
   return { totalCount, outOfStockCount, lowStockCount };
 }
 
-export async function getReportSummary() {
+export async function getReportSummary(startDate?: string, endDate?: string) {
   const now = new Date();
   const monthStart = istMonthStartUtc(now);
   const monthEnd = istNextMonthStartUtc(now);
+  const rangeStart = startDate ? istDayStartUtc(startDate) : monthStart;
+  const rangeEnd = endDate ? istDayEndUtc(endDate) : monthEnd;
 
-  // These 6 queries are independent — fire together instead of 6 sequential round-trips.
-  const [invoicesThisMonth, revenueAgg, unpaidAgg, allTimeAgg, lowStockCount, recent] = await Promise.all([
+  // These queries are independent — fire together instead of sequential round-trips.
+  const [invoicesThisMonth, revenueAgg, returnsThisMonthAgg, unpaidAgg, allTimeAgg, allTimeReturnsAgg, lowStockCount, recent, periodInvoicesCount, periodRevenueAgg, periodReturnsAgg, periodCollectedAgg] = await Promise.all([
     prisma.invoice.count({
       where: { deletedAt: null, date: { gte: monthStart, lt: monthEnd } },
     }),
     prisma.invoice.aggregate({
       where: { deletedAt: null, date: { gte: monthStart, lt: monthEnd } },
+      _sum: { total: true },
+    }),
+    prisma.return.aggregate({
+      where: { deletedAt: null, invoice: { deletedAt: null }, date: { gte: monthStart, lt: monthEnd } },
       _sum: { total: true },
     }),
     // balanceDue/isLowStock are real Postgres GENERATED columns — sum/count them in the DB rather than reducing/filtering in JS.
@@ -346,6 +352,10 @@ export async function getReportSummary() {
       where: { deletedAt: null },
       _sum: { total: true, paidAmount: true },
     }),
+    prisma.return.aggregate({
+      where: { deletedAt: null, invoice: { deletedAt: null } },
+      _sum: { total: true },
+    }),
     prisma.product.count({ where: { deletedAt: null, isLowStock: true } }),
     // createdAt, not date — matches invoiceNumber's creation-order sequence and stays immune to a
     // later backdate (see buildInvoiceOrderBy()'s comment for the full reasoning).
@@ -354,6 +364,22 @@ export async function getReportSummary() {
       orderBy: { createdAt: "desc" },
       take: 5,
       include: { customer: { select: { name: true } } },
+    }),
+    prisma.invoice.count({
+      where: { deletedAt: null, date: { gte: rangeStart, lte: rangeEnd } },
+    }),
+    prisma.invoice.aggregate({
+      where: { deletedAt: null, date: { gte: rangeStart, lte: rangeEnd } },
+      _sum: { total: true },
+    }),
+    prisma.return.aggregate({
+      where: { deletedAt: null, invoice: { deletedAt: null }, date: { gte: rangeStart, lte: rangeEnd } },
+      _sum: { total: true },
+      _count: true,
+    }),
+    prisma.payment.aggregate({
+      where: { invoice: { deletedAt: null }, date: { gte: rangeStart, lte: rangeEnd } },
+      _sum: { amount: true },
     }),
   ]);
   const outstandingAmount = unpaidAgg._sum.balanceDue ?? 0;
@@ -369,11 +395,19 @@ export async function getReportSummary() {
     balance: inv.total - inv.paidAmount,
     status: inv.status,
   }));
+  const periodGrossRevenue = periodRevenueAgg._sum.total ?? 0;
+  const periodReturnsTotal = periodReturnsAgg._sum.total ?? 0;
   return {
     invoicesThisMonth,
-    revenueThisMonth: revenueAgg._sum.total ?? 0,
+    revenueThisMonth: (revenueAgg._sum.total ?? 0) - (returnsThisMonthAgg._sum.total ?? 0),
+    periodInvoicesCount,
+    periodRevenue: periodGrossRevenue - periodReturnsTotal,
+    periodGrossRevenue,
+    periodReturnsTotal,
+    periodReturnsCount: periodReturnsAgg._count,
+    periodCollected: periodCollectedAgg._sum.amount ?? 0,
     outstandingAmount,
-    totalRevenue: allTimeAgg._sum.total ?? 0,
+    totalRevenue: (allTimeAgg._sum.total ?? 0) - (allTimeReturnsAgg._sum.total ?? 0),
     totalCollected: allTimeAgg._sum.paidAmount ?? 0,
     outstandingTotal: outstandingAmount,
     pendingCount,

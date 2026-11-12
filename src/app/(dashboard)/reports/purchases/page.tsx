@@ -9,7 +9,7 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton, SkeletonSwap } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SearchField } from "@/components/ui/SearchField";
-import { ReportPeriodFilter, defaultReportRange } from "@/components/ui/ReportPeriodFilter";
+import { ReportPeriodFilter, defaultReportRange, formatRangePeriodLabel } from "@/components/ui/ReportPeriodFilter";
 import { HeaderActionsRow } from "@/components/ui/HeaderActionsRow";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
@@ -28,7 +28,7 @@ interface OutstandingBill {
   vendor: { id: string; name: string };
   total: number; paidAmount: number; balance: number; status: string; aging: string;
 }
-interface OutstandingResponse { data: OutstandingBill[]; total: number; totalBalance: number; overdueCount: number; }
+interface OutstandingResponse { data: OutstandingBill[]; total: number; totalBalance: number; overdueCount: number; periodSpend?: number; periodBillsCount?: number; }
 interface CategoryRow { category: string; count: number; totalSpend: number; pct: number; }
 interface LedgerRow {
   id: string; productId: string | null; productName: string; type: string; documentType: string; quantity: number;
@@ -125,7 +125,8 @@ export default function PurchaseReportsPage() {
   const { data: outstandingResponse, loading: loadingOut } = useFetch<OutstandingResponse>(
     `/api/purchase-reports?type=outstanding${dateQuery}&page=${outPage}&pageSize=${outPageSize}`
   );
-  const { data: categoryData, loading: loadingCat } = useFetch<CategoryRow[]>("/api/purchase-reports?type=category");
+  const { data: categoryData, loading: loadingCat } = useFetch<CategoryRow[]>(`/api/purchase-reports?type=category${dateQuery}`);
+  const rangeLabel = formatRangePeriodLabel(startDate, endDate);
 
   const summaryRows = summaryData ?? [];
   const outstanding = outstandingResponse?.data ?? [];
@@ -242,8 +243,6 @@ export default function PurchaseReportsPage() {
     }
   }
 
-  const totalSpend = summaryRows.reduce((s, r) => s + r.totalSpend, 0);
-
   return (
     <div className="page-stack">
       {(exportingOutstanding || exportingCategory || exportingLedger) && <OverlayLoader text="Generating Excel file…" />}
@@ -257,24 +256,24 @@ export default function PurchaseReportsPage() {
       {/* KPI banners */}
       <div {...animateSection(0, "stat-banners")}>
         <div className="stat-banner stat-banner-amber">
-          <div className="stat-banner-label">Total Spend (12 months)</div>
-          <div className="stat-banner-value"><SkeletonSwap loading={loadingSummary} w={90} h={20}>{fmt(totalSpend)}</SkeletonSwap></div>
-          <div className="stat-banner-sub"><SkeletonSwap loading={loadingSummary} w={80} h={13}>{`${summaryRows.reduce((s, r) => s + r.count, 0)} bills`}</SkeletonSwap></div>
+          <div className="stat-banner-label">{`Spend (${rangeLabel})`}</div>
+          <div className="stat-banner-value"><SkeletonSwap loading={showOutSkeleton} w={90} h={20}>{fmt(outstandingResponse?.periodSpend ?? 0)}</SkeletonSwap></div>
+          <div className="stat-banner-sub"><SkeletonSwap loading={showOutSkeleton} w={80} h={13}>{`${outstandingResponse?.periodBillsCount ?? 0} bill${(outstandingResponse?.periodBillsCount ?? 0) !== 1 ? "s" : ""} in ${rangeLabel}`}</SkeletonSwap></div>
         </div>
         <div className="stat-banner stat-banner-red">
-          <div className="stat-banner-label">Total Payable</div>
+          <div className="stat-banner-label">{`Payable (${rangeLabel})`}</div>
           <div className="stat-banner-value"><SkeletonSwap loading={showOutSkeleton} w={90} h={20}>{fmt(outTotalBalance)}</SkeletonSwap></div>
-          <div className="stat-banner-sub"><SkeletonSwap loading={showOutSkeleton} w={140} h={13}>{`Across ${outTotal} unpaid/partial bill${outTotal !== 1 ? "s" : ""}`}</SkeletonSwap></div>
+          <div className="stat-banner-sub"><SkeletonSwap loading={showOutSkeleton} w={140} h={13}>{`Across ${outTotal} unpaid/partial bill${outTotal !== 1 ? "s" : ""} in ${rangeLabel}`}</SkeletonSwap></div>
         </div>
         <div className="stat-banner stat-banner-purple">
-          <div className="stat-banner-label">Overdue Bills</div>
+          <div className="stat-banner-label">{`Overdue Bills (${rangeLabel})`}</div>
           <div className="stat-banner-value"><SkeletonSwap loading={showOutSkeleton} w={50} h={20}>{outOverdueCount}</SkeletonSwap></div>
-          <div className="stat-banner-sub">Bills past their due date</div>
+          <div className="stat-banner-sub">{`Bills past due from ${rangeLabel}`}</div>
         </div>
         <div className="stat-banner stat-banner-blue">
-          <div className="stat-banner-label">Categories</div>
+          <div className="stat-banner-label">{`Categories (${rangeLabel})`}</div>
           <div className="stat-banner-value"><SkeletonSwap loading={loadingCat} w={50} h={20}>{categoryRows.length}</SkeletonSwap></div>
-          <div className="stat-banner-sub">Distinct purchase categories</div>
+          <div className="stat-banner-sub">{`Distinct purchase categories in ${rangeLabel}`}</div>
         </div>
       </div>
 
@@ -288,7 +287,7 @@ export default function PurchaseReportsPage() {
           ))}
         </div>
 
-        {tab === "outstanding" && (
+        {(tab === "outstanding" || tab === "category") && (
           <ReportPeriodFilter
             startDate={startDate}
             endDate={endDate}
