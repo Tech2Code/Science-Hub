@@ -159,7 +159,6 @@ export default function PurchaseBillDetailPage() {
     setPayDate(toIstDateStr(new Date()));
   }
 
-  const [updatingStatus] = useState(false);
   const [confirmCancel,  setConfirmCancel]  = useState(false);
   const [cancelling,     setCancelling]     = useState(false);
   const [confirmUncancel, setConfirmUncancel] = useState(false);
@@ -644,7 +643,7 @@ export default function PurchaseBillDetailPage() {
 
   return (
     <>
-    {(submitting || updatingStatus || cancelling || uncancelling) && <OverlayLoader text="Saving…" />}
+    {(submitting || cancelling || uncancelling) && <OverlayLoader text="Saving…" />}
     {deleting && <OverlayLoader text="Deleting…" />}
     {savingPaymentEdit && <OverlayLoader text="Updating payment…" />}
     {deletingPayment && <OverlayLoader text="Deleting payment…" />}
@@ -710,34 +709,34 @@ export default function PurchaseBillDetailPage() {
         {bill.vendor.gstin && <div style={{ fontSize: 11, color: "var(--bp-tx3)" }}>GSTIN: {bill.vendor.gstin}</div>}
       </div>
 
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 9.5 }}>
         <thead>
           {(() => {
-            const th = (label: string, align: "left" | "right" = "left", width?: number) => {
+            const th = (label: string, align: "left" | "right" = "left", nowrap = true, width?: number | string) => {
               const lastSpace = label.lastIndexOf(" ");
               const content = lastSpace === -1
                 ? label
                 : <>{label.slice(0, lastSpace)}<br />{label.slice(lastSpace + 1)}</>;
               return (
-                <th key={label} style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", textAlign: align, width, lineHeight: 1.25 }}>{content}</th>
+                <th key={label} style={{ border: `1px solid var(--bp-bd)`, padding: "5px 4px", textAlign: align, width, lineHeight: 1.25, whiteSpace: nowrap ? "nowrap" : "normal" }}>{content}</th>
               );
             };
             return (
               <tr style={{ background: "var(--bp-bg3)" }}>
-                {th("S.N.", "left", 28)}
-                {th("Description of Goods", "left", 170)}
-                {th("HSN/SAC Code")}
-                {th("Qty.", "right")}
-                {th("Unit")}
-                {th("List Price", "right")}
-                {th("Discount", "right")}
-                {th("Taxable Amount", "right")}
+                {th("S.N.", "left", true, "1%")}
+                {th("Description of Goods", "left", false)}
+                {th("HSN/SAC Code", "left", true, "1%")}
+                {th("Qty.", "right", true, "1%")}
+                {th("Unit", "left", true, "1%")}
+                {th("List Price", "right", true, "1%")}
+                {th("Discount", "right", true, "1%")}
+                {th("Taxable Amount", "right", true, "1%")}
                 {bill.isInterState ? (
-                  th("IGST", "right")
+                  th("IGST", "right", true, "1%")
                 ) : (
-                  <>{th("CGST", "right")}{th("SGST", "right")}</>
+                  <>{th("CGST", "right", true, "1%")}{th("SGST", "right", true, "1%")}</>
                 )}
-                {th("Amount(Rs.)", "right")}
+                {th("Amount(Rs.)", "right", true, "1%")}
               </tr>
             );
           })()}
@@ -747,32 +746,30 @@ export default function PurchaseBillDetailPage() {
             const rowBg = idx % 2 === 1 ? "var(--bp-bg2)" : "var(--bp-bg)";
             const halfRate = item.gstRate / 2;
             const { cgst: itemCgst, sgst: itemSgst } = splitGstForDisplay(item.gstAmount);
-            const td = (content: React.ReactNode, align: "left" | "right" = "left", width?: number) => (
-              <td style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", textAlign: align, width, background: rowBg }}>{content}</td>
+            const td = (content: React.ReactNode, align: "left" | "right" = "left", nowrap = true) => (
+              <td style={{ border: `1px solid var(--bp-bd)`, padding: "5px 4px", textAlign: align, background: rowBg, whiteSpace: nowrap ? "nowrap" : "normal" }}>{content}</td>
             );
             return (
               <tr key={item.id}>
                 {td(idx + 1, "left")}
-                {td(
-                  // 2-line clamp (see generateInvoicePdf.ts's ROW_SAFETY_MARGIN_PX); needs its own px width or an
-                  // unwrapped div's full text length wins as the column's min-content and stretches the table.
+                <td style={{ border: `1px solid var(--bp-bd)`, padding: "5px 6px", textAlign: "left", background: rowBg, minWidth: 110 }}>
+                  {/* 2-line clamp (see generateInvoicePdf.ts's ROW_SAFETY_MARGIN_PX); flexible width so all
+                      nowrap numeric columns fit on a single line without breaking while Description absorbs remaining width. */}
                   <div style={{
                     display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
                     overflow: "hidden", textOverflow: "ellipsis",
-                    width: 155, maxWidth: "100%",
+                    overflowWrap: "anywhere", wordBreak: "break-word",
                   }} title={item.name}>
                     {item.name}
-                  </div>,
-                  "left",
-                  170
-                )}
-                <td style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", textAlign: "left", background: rowBg }}>
+                  </div>
+                </td>
+                <td style={{ border: `1px solid var(--bp-bd)`, padding: "5px 4px", textAlign: "left", background: rowBg, whiteSpace: "nowrap" }}>
                   {/* Real HSN/SAC codes are numeric-only, max 8 digits — a
                       fixed single-line ellipsis (not a 2-line clamp, unlike
                       the item name) guards against a stray long/garbage
                       value wrapping unpredictably. Same fix as the invoice
                       detail page. */}
-                  <div style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", width: 55, maxWidth: "100%" }} title={item.hsn || "—"}>
+                  <div style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", maxWidth: 64 }} title={item.hsn || "—"}>
                     {item.hsn || "—"}
                   </div>
                 </td>
@@ -797,13 +794,13 @@ export default function PurchaseBillDetailPage() {
             const tcHalfRate = tcRate / 2;
             const { cgst: tcCgst, sgst: tcSgst } = splitGstForDisplay(tcGst);
             const tcTd = (content: React.ReactNode, bold = false) => (
-              <td style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", textAlign: "right", background: "var(--bp-bg)", fontWeight: bold ? 700 : undefined, color: bold ? "var(--bp-tx)" : undefined, whiteSpace: "nowrap" }}>
+              <td style={{ border: `1px solid var(--bp-bd)`, padding: "5px 4px", textAlign: "right", background: "var(--bp-bg)", fontWeight: bold ? 700 : undefined, color: bold ? "var(--bp-tx)" : undefined, whiteSpace: "nowrap" }}>
                 {content}
               </td>
             );
             return (
               <tr>
-                <td colSpan={7} style={{ border: `1px solid var(--bp-bd)`, padding: "6px 4px", background: "var(--bp-bg)", fontWeight: 600, color: "var(--bp-tx)" }}>
+                <td colSpan={7} style={{ border: `1px solid var(--bp-bd)`, padding: "5px 6px", background: "var(--bp-bg)", fontWeight: 600, color: "var(--bp-tx)", whiteSpace: "nowrap" }}>
                   Transportation Charges
                 </td>
                 {tcTd(fmt(tcTaxable))}
@@ -815,49 +812,51 @@ export default function PurchaseBillDetailPage() {
             );
           })()}
           {(() => {
-            const bpLabelCell: CSSProperties = { border: `1px solid var(--bp-bd)`, padding: "5px 8px", color: "var(--bp-tx2)", background: "var(--bp-bg2)" };
-            const bpValueCell: CSSProperties = { ...bpLabelCell, textAlign: "right" };
+            const bpLabelCell: CSSProperties = { border: `1px solid var(--bp-bd)`, padding: "5px 8px", color: "var(--bp-tx2)", background: "var(--bp-bg2)", whiteSpace: "nowrap" };
+            const bpValueCell: CSSProperties = { ...bpLabelCell, textAlign: "right", whiteSpace: "nowrap" };
             const bpTotalsRows = 5 + (bill.discount > 0 ? 1 : 0) + (bill.roundOff !== 0 ? 1 : 0);
-            const notesColSpan = (bill.isInterState ? 10 : 11) - 2;
+            const totalCols = bill.isInterState ? 10 : 11;
+            const summaryLabelSpan = 2;
+            const notesColSpan = totalCols - summaryLabelSpan - 1;
             return (
               <>
                 <tr data-invoice-summary-start="true">
-                  <td colSpan={notesColSpan} rowSpan={bpTotalsRows} style={{ border: `1px solid var(--bp-bd)`, padding: "10px 12px", verticalAlign: "top", fontSize: 10.5, color: "var(--bp-tx3)" }}>
+                  <td colSpan={notesColSpan} rowSpan={bpTotalsRows} style={{ border: `1px solid var(--bp-bd)`, padding: "10px 12px", verticalAlign: "top", fontSize: 10, color: "var(--bp-tx3)", overflowWrap: "anywhere", wordBreak: "break-word" }}>
                     <div style={{ fontStyle: "italic" }}><strong>Amount in Words:</strong> {amountInWordsINR(bill.total)}</div>
                     {bill.notes && <div style={{ marginTop: 6 }}><strong>Note:</strong> {bill.notes}</div>}
                   </td>
-                  <td style={bpLabelCell}>Subtotal</td>
+                  <td colSpan={summaryLabelSpan} style={bpLabelCell}>Subtotal</td>
                   <td style={bpValueCell}>₹{fmt(bill.subtotal + (bill.transportCharge ?? 0))}</td>
                 </tr>
                 {/* Includes Transportation Charges' own GST (shown split
                     out on its own row above) — otherwise this would
                     silently under-report the tax actually charged. */}
                 <tr>
-                  <td style={bpLabelCell}>GST</td>
+                  <td colSpan={summaryLabelSpan} style={bpLabelCell}>GST</td>
                   <td style={bpValueCell}>₹{fmt(bill.taxAmount + (bill.transportChargeGstAmount ?? 0))}</td>
                 </tr>
                 {bill.discount > 0 && (
                   <tr>
-                    <td style={bpLabelCell}>Post-tax Rebate / Discount</td>
+                    <td colSpan={summaryLabelSpan} style={bpLabelCell}>Post-tax Rebate / Discount</td>
                     <td style={bpValueCell}>−₹{fmt(bill.discount)}</td>
                   </tr>
                 )}
                 {bill.roundOff !== 0 && (
                   <tr>
-                    <td style={bpLabelCell}>Round Off</td>
+                    <td colSpan={summaryLabelSpan} style={bpLabelCell}>Round Off</td>
                     <td style={bpValueCell}>{bill.roundOff > 0 ? "+" : "−"}₹{fmt(Math.abs(bill.roundOff))}</td>
                   </tr>
                 )}
                 <tr>
-                  <td style={{ ...bpLabelCell, fontWeight: 700, color: "var(--bp-tx)", background: "var(--bp-bg4)", fontSize: 12 }}>Total</td>
-                  <td style={{ ...bpValueCell, fontWeight: 700, color: "var(--bp-tx)", background: "var(--bp-bg4)", fontSize: 12 }}>₹{fmt(bill.total)}</td>
+                  <td colSpan={summaryLabelSpan} style={{ ...bpLabelCell, fontWeight: 700, color: "var(--bp-tx)", background: "var(--bp-bg4)", fontSize: 11 }}>Total</td>
+                  <td style={{ ...bpValueCell, fontWeight: 700, color: "var(--bp-tx)", background: "var(--bp-bg4)", fontSize: 11 }}>₹{fmt(bill.total)}</td>
                 </tr>
                 <tr>
-                  <td style={bpLabelCell}>Paid</td>
+                  <td colSpan={summaryLabelSpan} style={bpLabelCell}>Paid</td>
                   <td style={bpValueCell}>₹{fmt(bill.paidAmount)}</td>
                 </tr>
                 <tr>
-                  <td style={{ ...bpLabelCell, fontWeight: 700, color: "var(--bp-tx)" }}>Balance Due</td>
+                  <td colSpan={summaryLabelSpan} style={{ ...bpLabelCell, fontWeight: 700, color: "var(--bp-tx)" }}>Balance Due</td>
                   <td style={{ ...bpValueCell, fontWeight: 700, color: "var(--bp-tx)" }}>₹{fmt(balance)}</td>
                 </tr>
               </>

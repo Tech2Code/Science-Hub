@@ -324,86 +324,30 @@
   margin-left: 0.375rem;
 }
 
-.tableScroll {
-  overflow-x: auto;
-}
-
-.itemsTable {
-  table-layout: fixed;
-}
-
-/* Explicit widths, shared by header and every body row, so <th>/<td> always resolve
-   to the same box — table-layout: auto let rows size cells independently and drift.
-   colGst (single IGST column) and colGstHalf×2 (CGST+SGST) are sized so the tax
-   portion of the row totals the same 20% either way — see itemColCount in the
-   items-table JSX for why the column count itself differs by isInterState. */
-.colNum       { width: 4%; }
-.colItem      { width: 20%; }
-.colHsn       { width: 8%; }
-.colQty       { width: 6%; }
-.colRate      { width: 10%; }
-.colDiscount  { width: 10%; }
-.colTaxable   { width: 10%; }
-.colGst       { width: 20%; }
-.colGstHalf   { width: 10%; }
-.colTotal     { width: 12%; }
-
-/* !important needed on <th>: global `.table-base th { text-align: left; }` has higher
-   specificity (0,1,1) than this class alone and would otherwise silently win. */
-.textRight {
-  text-align: right !important;
-}
-
-.textMuted {
-  color: var(--c-text-4);
-}
-
-.itemName {
-  font-weight: 600;
-  color: var(--c-text);
-}
-
-.itemUnit {
-  font-size: 0.75rem;
-  color: var(--c-text-4);
-  margin-top: 0.1rem;
-}
-
-.qtyCell {
-  text-align: right;
-  font-weight: 500;
-}
-
-.totalCell {
-  text-align: right;
-  font-weight: 700;
-}
-
-.tfootRow {
-  border-top: 2px solid var(--c-border);
-}
-
-.tfootLabelCell {
-  text-align: right;
-  color: var(--c-text-3);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  padding: 0.625rem 0.75rem 0.625rem 0;
-}
-
-.tfootValueCell {
-  text-align: right;
-  font-weight: 700;
-  font-size: 1rem;
-}
-
-.amountInWordsCell {
-  text-align: right;
-  color: var(--c-text-4);
-  font-size: 0.75rem;
-  font-style: italic;
-  padding: 0.375rem 0.75rem 0.625rem 0;
-}
+/* Section: Items & Payments Tables */
+.tableScroll { overflow-x: auto; }
+.itemsTable { table-layout: auto; width: 100%; }
+.itemsTable .colNum { width: 1%; white-space: nowrap; }
+.itemsTable .colItem { width: auto; min-width: 180px; }
+.itemsTable .colHsn { width: 1%; white-space: nowrap; }
+.itemsTable .colQty { width: 1%; white-space: nowrap; }
+.itemsTable .colRate { width: 1%; white-space: nowrap; }
+.itemsTable .colDiscount { width: 1%; white-space: nowrap; }
+.itemsTable .colTaxable { width: 1%; white-space: nowrap; }
+.itemsTable .colGst { width: 1%; white-space: nowrap; }
+.itemsTable .colGstHalf { width: 1%; white-space: nowrap; }
+.itemsTable .colTotal { width: 1%; white-space: nowrap; }
+/* !important needed on <th>: global `.table-base th { text-align: left; }` has higher specificity (0,1,1) than this class alone and would otherwise silently win. */
+.textRight { text-align: right !important; white-space: nowrap; }
+.textMuted { color: var(--c-text-4); white-space: nowrap; }
+.itemName { font-weight: 600; color: var(--c-text); white-space: normal; overflow-wrap: break-word; }
+.itemUnit { font-size: 12px; color: var(--c-text-4); margin-top: 2px; }
+.qtyCell { text-align: right; font-weight: 500; white-space: nowrap; }
+.totalCell { text-align: right; font-weight: 700; white-space: nowrap; }
+.tfootRow { border-top: 2px solid var(--c-border); }
+.tfootLabelCell { text-align: right; color: var(--c-text-3); font-size: 13px; font-weight: 600; padding: 10px 12px 10px 0; white-space: nowrap; }
+.tfootValueCell { text-align: right; font-weight: 700; font-size: 16px; white-space: nowrap; }
+.amountInWordsCell { text-align: right; color: var(--c-text-4); font-size: 12px; font-style: italic; padding: 6px 12px 10px 0; }
 
 /* ── Payment history status pills ── */
 .outstandingPill {
@@ -449,46 +393,15 @@
   text-decoration: underline;
 }
 
-.paymentDateCell {
-  color: var(--c-text-3);
-  font-size: 0.8125rem;
-}
-
-.methodPill {
-  font-weight: 600;
-  font-size: 0.8125rem;
-  background: var(--c-bg-sub);
-  border: 1px solid var(--c-border);
-  padding: 0.1rem 0.5rem;
-  border-radius: 0.375rem;
-}
-
-.referenceCell {
-  color: var(--c-text-4);
-  font-size: 0.8125rem;
-  font-family: var(--font-mono);
-}
-
-.paymentAmountCell {
-  text-align: right;
-  font-weight: 700;
-  color: var(--c-green-text);
-}
-
-.paymentActionsCell { display: flex; gap: 0.25rem; justify-content: flex-end; }
-.paymentEditBtn, .paymentDeleteBtn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; border-radius: var(--c-radius-xs); border: none;
-  background: transparent; color: var(--c-text-4); cursor: pointer;
-}
+.paymentDateCell { color: var(--c-text-3); font-size: 13px; white-space: nowrap; }
+.methodPill { font-weight: 600; font-size: 13px; background: var(--c-bg-sub); border: 1px solid var(--c-border); padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.referenceCell { color: var(--c-text-4); font-size: 13px; font-family: var(--font-mono); }
+.paymentAmountCell { text-align: right; font-weight: 700; color: var(--c-green-text); white-space: nowrap; }
+.paymentActionsCell { display: flex; gap: 4px; justify-content: flex-end; }
+.paymentEditBtn, .paymentDeleteBtn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--c-radius-xs); border: none; background: transparent; color: var(--c-text-4); cursor: pointer; }
 .paymentEditBtn:hover { background: var(--c-blue-bg); color: var(--c-blue); }
 .paymentDeleteBtn:hover { background: var(--c-red-bg); color: var(--c-red); }
-
-.tfootPaidValueCell {
-  text-align: right;
-  font-weight: 700;
-  color: var(--c-green-text);
-}
+.tfootPaidValueCell { text-align: right; font-weight: 700; color: var(--c-green-text); white-space: nowrap; }
 
 .footerActions {
   display: flex;
