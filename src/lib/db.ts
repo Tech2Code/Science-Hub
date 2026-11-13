@@ -136,7 +136,7 @@ export async function getInvoiceStats(filters: Omit<InvoiceListFilters, "search"
   // AND'd as a separate nested condition so a status tab's own meaning isn't overwritten by the
   // overdue condition's status constraint (e.g. the "paid" tab always yields 0 overdue).
   const [agg, overdueCount, years, outside] = await Promise.all([
-    prisma.invoice.aggregate({ where, _sum: { total: true, paidAmount: true } }),
+    prisma.invoice.aggregate({ where, _sum: { total: true, paidAmount: true }, _count: true }),
     prisma.invoice.count({ where: { AND: [where, { status: { not: "paid" }, dueDate: { lt: istTodayStartUtc() } }] } }),
     prisma.$queryRaw<{ year: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM ("date" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata'))::int AS year FROM "Invoice" WHERE "deletedAt" IS NULL ORDER BY year DESC`,
     // Unpaid money on invoices OUTSIDE the selected period — the list is scoped to one financial year, and this
@@ -151,6 +151,7 @@ export async function getInvoiceStats(filters: Omit<InvoiceListFilters, "search"
   const totalInvoiced = agg._sum.total ?? 0;
   const totalPaid = agg._sum.paidAmount ?? 0;
   return {
+    totalCount: agg._count,
     totalInvoiced,
     totalPaid,
     totalPending: totalInvoiced - totalPaid,

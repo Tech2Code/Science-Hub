@@ -255,7 +255,7 @@ export default function RateListsPage() {
                 </td></tr>
               ) : rateLists.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
-                  {search.trim() ? `No rate lists match "${search}".` : "No rate lists yet. Create your first one."}
+                  {search.trim() ? `No rate lists match "${search}".` : canWrite ? "No rate lists yet. Create your first one." : "No rate lists yet."}
                 </td></tr>
               ) : rateLists.map(rl => (
                 <tr key={rl.id}>

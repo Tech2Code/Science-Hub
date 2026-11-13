@@ -370,8 +370,8 @@ export default function ProductViewPage() {
           {
             label: "Stock",
             value: product ? `${product.stock} ${product.unit}` : "",
-            sub: product ? (isLow ? `⚠ Below min (${product.minStock})` : `Min: ${product.minStock}`) : undefined,
-            tone: isLow ? "negative" as const : "positive" as const,
+            sub: canWrite && product ? (isLow ? `⚠ Below min (${product.minStock})` : `Min: ${product.minStock}`) : undefined,
+            tone: canWrite ? (isLow ? "negative" as const : "positive" as const) : undefined,
           },
         ].map((s) => (
           <div key={s.label} className={`card ${styles.cardPadSm}`}>

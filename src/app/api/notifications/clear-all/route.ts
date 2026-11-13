@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/apiAuth";
+import { requireWriteAccess } from "@/lib/apiAuth";
 import { getAllActiveNotificationIds, canSeeNotificationCategory, type NotificationCategoryKey } from "@/lib/notifications";
 
 export async function POST() {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
     const userId = auth.session.user.id;
-    const includeBin = auth.session.user.role !== "manager";
 
-    const active = await getAllActiveNotificationIds(userId, includeBin);
+    const active = await getAllActiveNotificationIds(userId, true);
     const data = (Object.entries(active) as [NotificationCategoryKey, string[]][])
       .filter(([category]) => canSeeNotificationCategory(auth.session.user, category))
       .flatMap(([category, ids]) => ids.map((entityId) => ({ userId, category, entityId })));

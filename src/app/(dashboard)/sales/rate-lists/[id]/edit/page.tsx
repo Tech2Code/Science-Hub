@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { rules, validate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
@@ -41,9 +42,14 @@ interface RateListApi {
 }
 
 export default function EditRateListPage() {
+  const { data: session } = useSession();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();
+
+  useEffect(() => {
+    if (session?.user?.role === "manager") router.replace("/dashboard");
+  }, [session, router]);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");

@@ -593,7 +593,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <GlobalSearch mobile={mobile} />
 
           <div className={styles.topbarRight}>
-            <NotificationBell />
+            {role && role !== "manager" && <NotificationBell />}
             {condensed ? <MoreMenu /> : <><AccentPicker /><ThemeToggle /></>}
             <Link href={session?.user?.role === "admin" ? "/admin" : "/profile"} className={styles.plainLink}>
               <div className={[styles.userChip, styles.userChipLink].join(" ")}>

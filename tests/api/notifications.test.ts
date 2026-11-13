@@ -11,14 +11,12 @@ describe.skipIf(!hasTestDatabase)("GET /api/notifications", () => {
     await resetDb();
   });
 
-  it("omits binExpiring for a manager (no Bin access)", async () => {
+  it("rejects a manager with 403 (managers are read-only and do not receive notifications)", async () => {
     const user = await seedUser({ role: "manager" });
     mockSession({ id: user.id, role: "manager" });
     const { GET } = await import("@/app/api/notifications/route");
     const res = await GET();
-    expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(data.binExpiring).toBeNull();
+    expect(res.status).toBe(403);
   });
 
   it("includes binExpiring for staff/admin", async () => {

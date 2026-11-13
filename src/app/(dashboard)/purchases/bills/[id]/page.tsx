@@ -1147,7 +1147,9 @@ export default function PurchaseBillDetailPage() {
 
       {inBin && (
         <div role="status" className="error-banner">
-          This purchase bill is in the Recycle Bin. Restore it from the Bin to edit it or record payments.
+          {canWrite
+            ? "This purchase bill is in the Recycle Bin. Restore it from the Bin to edit it or record payments."
+            : "This purchase bill is in the Recycle Bin."}
         </div>
       )}
 

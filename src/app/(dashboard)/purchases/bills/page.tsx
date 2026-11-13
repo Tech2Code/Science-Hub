@@ -61,6 +61,7 @@ interface BusinessSettings {
 }
 
 interface PurchaseBillStats {
+  totalCount?: number;
   totalPurchase: number;
   totalPaid: number;
   totalPending: number;
@@ -183,10 +184,27 @@ export default function PurchasesPage() {
   // the user pick the generated PDF, the vendor's uploaded attachment, or both, per bill. Only the list fetch blocks the
   // page; the (slow) ZIP itself is handed to the app-wide download job, so the user can keep using the app meanwhile.
   async function handleBulkDownload(opts: BulkDownloadOptions) {
-    if (bulkBusyRef.current) return;
+    if (bulkBusyRef.current || loading) return;
     const bulkPeriod = periodMonthYear(period);
     if (!bulkPeriod) {
       toast({ type: "error", title: "Select a month", message: "Choose a month first to bulk download." });
+      return;
+    }
+    if (periodCount !== undefined && periodCount <= 0) {
+      setBulkDialogOpen(false);
+      toast({ type: "error", title: "Nothing to download", message: "No purchase bills found for the selected period." });
+      return;
+    }
+    if (
+      !opts.includePdfs &&
+      opts.includeAttachments &&
+      !debouncedSearch.trim() &&
+      data &&
+      bills.length === data.total &&
+      bills.every((b) => !b.attachmentUrl)
+    ) {
+      setBulkDialogOpen(false);
+      toast({ type: "error", title: "Nothing to download", message: "None of the purchase bills in this period have attached files." });
       return;
     }
     // Ask where to save FIRST (Chrome/Edge): the Save dialog only opens straight from the click, and this way the
@@ -327,6 +345,7 @@ export default function PurchasesPage() {
   const { data: settings } = useFetch<BusinessSettings>("/api/settings");
   const bills = data?.data ?? [];
   const total = data?.total ?? 0;
+  const periodCount = !debouncedSearch.trim() && data ? data.total : stats?.totalCount;
   const showSkeleton = loading && !data;
   const isRefetching = loading && !!data;
 
@@ -460,12 +479,25 @@ export default function PurchasesPage() {
             <Button
               variant="secondary"
               size="sm"
-              disabled={bulkDownloading || bulk.running}
-              ariaDisabled={period.month0 === "all"}
-              title={period.month0 === "all" ? "Select a month to bulk download" : "Download all bills for this period — choose PDFs, attachments, or both"}
+              disabled={bulkDownloading || bulk.running || showSkeleton}
+              ariaDisabled={period.month0 === "all" || periodCount === 0}
+              title={
+                bulk.running
+                  ? "A bulk download is already running — see the progress card"
+                  : period.month0 === "all"
+                    ? "Select a month to bulk download"
+                    : periodCount === 0
+                      ? "No purchase bills found for this period"
+                      : "Download all bills for this period — choose PDFs, attachments, or both"
+              }
               onClick={() => {
+                if (loading) return;
                 if (period.month0 === "all") {
                   toast({ type: "error", title: "Select a month", message: "Choose a month first to bulk download." });
+                  return;
+                }
+                if (periodCount !== undefined && periodCount <= 0) {
+                  toast({ type: "error", title: "Nothing to download", message: "No purchase bills found for the selected period." });
                   return;
                 }
                 setBulkDialogOpen(true);

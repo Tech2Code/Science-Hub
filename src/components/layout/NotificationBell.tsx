@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useMenuA11y } from "@/lib/useMenuA11y";
 import { PopoverScrim } from "@/components/ui/PopoverScrim";
 import { formatDateTime } from "@/lib/formatDate";
+import { useCanWrite } from "@/lib/useCanWrite";
 import {
   withoutItem, withItem, withoutItemFlat, withItemFlat,
   type NotificationCategoryKey, type NotificationItem, type NotificationSummary,
@@ -45,6 +46,7 @@ function buildSections(s: NotificationSummary, links: Partial<Record<Notificatio
 // "Clear all") is per-user and only lasts 24h — see src/lib/notifications.ts — so an unresolved
 // alert quietly resurfaces instead of being hidden forever.
 export function NotificationBell() {
+  const canWrite = useCanWrite();
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
@@ -78,8 +80,8 @@ export function NotificationBell() {
   // badge nobody's looked at yet; the badge count alone is worth a lightweight background poll. Both
   // hooks target the exact same URL, so they share one underlying cache entry — a mutate/patch
   // through either instance updates both (the badge keeps working even while the dropdown is closed).
-  const { data: summary, loading, mutate, patchData } = useFetch<NotificationSummary>(open ? "/api/notifications" : null);
-  const { data: badgeSummary, mutate: refreshBadge } = useFetch<NotificationSummary>("/api/notifications");
+  const { data: summary, loading, mutate, patchData } = useFetch<NotificationSummary>(canWrite && open ? "/api/notifications" : null);
+  const { data: badgeSummary, mutate: refreshBadge } = useFetch<NotificationSummary>(canWrite ? "/api/notifications" : null);
   // The shell (and this bell) stays mounted across navigation, and useFetch trusts its cache until
   // busted, so without this the badge count only updated on a full reload or on opening the
   // dropdown. Refresh on navigation instead — immediately if a mutation busted the cache (e.g. an
@@ -87,25 +89,26 @@ export function NotificationBell() {
   const pathname = usePathname();
   const lastBadgeRefreshRef = useRef(0);
   useEffect(() => {
+    if (!canWrite) return;
     if (lastBadgeRefreshRef.current === 0) { lastBadgeRefreshRef.current = Date.now(); return; }
     const busted = !isCached("/api/notifications");
     if (!busted && Date.now() - lastBadgeRefreshRef.current < 30_000) return;
     lastBadgeRefreshRef.current = Date.now();
     refreshBadge();
-  }, [pathname, refreshBadge]);
+  }, [pathname, refreshBadge, canWrite]);
   // Only fetched once the "Dismissed" panel is actually opened — the same lazy-loading rationale
   // as the main summary above.
   const { data: dismissedSummary, loading: dismissedLoading, patchData: patchDismissed } =
-    useFetch<NotificationSummary>(open && showDismissed ? "/api/notifications/dismissed" : null);
+    useFetch<NotificationSummary>(canWrite && open && showDismissed ? "/api/notifications/dismissed" : null);
 
   // One useFetch per category (fixed, always-called set — not a loop over a variable-length
   // list) backing each section's "Show all" expand; each only actually fetches once its category
   // is in `expanded`.
-  const expandStock = useFetch<{ items: NotificationItem[] }>(open && expanded.has("stock") ? categoryUrl("stock") : null);
-  const expandOverdueInvoices = useFetch<{ items: NotificationItem[] }>(open && expanded.has("overdueInvoices") ? categoryUrl("overdueInvoices") : null);
-  const expandOverdueBills = useFetch<{ items: NotificationItem[] }>(open && expanded.has("overdueBills") ? categoryUrl("overdueBills") : null);
-  const expandOverLimitCustomers = useFetch<{ items: NotificationItem[] }>(open && expanded.has("overLimitCustomers") ? categoryUrl("overLimitCustomers") : null);
-  const expandBinExpiring = useFetch<{ items: NotificationItem[] }>(open && expanded.has("binExpiring") ? categoryUrl("binExpiring") : null);
+  const expandStock = useFetch<{ items: NotificationItem[] }>(canWrite && open && expanded.has("stock") ? categoryUrl("stock") : null);
+  const expandOverdueInvoices = useFetch<{ items: NotificationItem[] }>(canWrite && open && expanded.has("overdueInvoices") ? categoryUrl("overdueInvoices") : null);
+  const expandOverdueBills = useFetch<{ items: NotificationItem[] }>(canWrite && open && expanded.has("overdueBills") ? categoryUrl("overdueBills") : null);
+  const expandOverLimitCustomers = useFetch<{ items: NotificationItem[] }>(canWrite && open && expanded.has("overLimitCustomers") ? categoryUrl("overLimitCustomers") : null);
+  const expandBinExpiring = useFetch<{ items: NotificationItem[] }>(canWrite && open && expanded.has("binExpiring") ? categoryUrl("binExpiring") : null);
   const expandHooks: Record<NotificationCategoryKey, ReturnType<typeof useFetch<{ items: NotificationItem[] }>>> = {
     stock: expandStock,
     overdueInvoices: expandOverdueInvoices,
@@ -329,6 +332,8 @@ export function NotificationBell() {
       </div>
     );
   }
+
+  if (!canWrite) return null;
 
   return (
     <div className={styles.wrap} ref={popRef}>

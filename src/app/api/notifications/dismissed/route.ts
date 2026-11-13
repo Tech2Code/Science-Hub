@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/apiAuth";
+import { requireWriteAccess } from "@/lib/apiAuth";
 import { getDismissedNotificationSummary, filterNotificationSummary } from "@/lib/notifications";
 
 export async function GET() {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
-    const includeBin = auth.session.user.role !== "manager";
-    const summary = await getDismissedNotificationSummary({ includeBin, userId: auth.session.user.id });
+    const summary = await getDismissedNotificationSummary({ includeBin: true, userId: auth.session.user.id });
     return NextResponse.json(filterNotificationSummary(summary, auth.session.user));
   } catch (error) {
     console.error("GET /api/notifications/dismissed error:", error);

@@ -332,7 +332,7 @@ export default function CategoriesPage() {
                 </td></tr>
               ) : categories.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
-                  {search ? "No categories match your search." : "No categories yet. Add one above."}
+                  {search ? "No categories match your search." : canWrite ? "No categories yet. Add one above." : "No categories yet."}
                 </td></tr>
               ) : categories.map((c, i) => (
                 <tr key={c.id}>

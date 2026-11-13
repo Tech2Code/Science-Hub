@@ -100,17 +100,18 @@ export default function ProductsPage() {
 
   const debouncedSearch = useDebouncedValue(search, 300);
   const pageSize = showAll ? 5000 : PAGE_SIZE;
+  const effectiveStockFilter: StockFilter = canWrite ? stockFilter : "all";
 
   const listParams = new URLSearchParams();
   if (debouncedSearch.trim()) listParams.set("search", debouncedSearch.trim());
-  if (stockFilter !== "all") listParams.set("stockFilter", stockFilter);
+  if (effectiveStockFilter !== "all") listParams.set("stockFilter", effectiveStockFilter);
   listParams.set("sort", sort);
   listParams.set("page", String(page));
   listParams.set("pageSize", String(pageSize));
   const apiUrl = `/api/products?${listParams.toString()}`;
 
   const { data, loading, error, mutate } = useFetch<ProductListResponse>(apiUrl);
-  const { data: stats, mutate: mutateStats } = useFetch<ProductStats>("/api/products/stats");
+  const { data: stats, mutate: mutateStats } = useFetch<ProductStats>(canWrite ? "/api/products/stats" : null);
   const products = data?.data ?? [];
   const total = data?.total ?? 0;
   const showSkeleton = loading && !data;
@@ -222,33 +223,35 @@ export default function ProductsPage() {
             <SortSelect ariaLabel="Sort products" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
           <div className="filter-tabs-row">
-            {/* Stock filter tabs */}
-            <div className="filter-tabs">
-              {([
-                { key: "all", label: "All", count: totalCount },
-                { key: "low", label: "Low Stock", count: lowStockCount, colorCls: styles.filterCountAmber },
-                { key: "out", label: "Out of Stock", count: outOfStockCount, colorCls: styles.filterCountRed },
-              ] as { key: StockFilter; label: string; count: number; colorCls?: string }[]).map(tab => (
-                <button
-                  key={tab.key}
-                  className={["filter-tab", styles.filterTabInner, stockFilter === tab.key ? "filter-tab-active" : ""].join(" ")}
-                  onClick={() => handleStockFilter(tab.key)}
-                  disabled={!data}
-                >
-                  {tab.label}
-                  {tab.count > 0 && (
-                    <span
-                      className={[
-                        styles.filterCount,
-                        stockFilter === tab.key && tab.colorCls ? `${styles.filterCountActive} ${tab.colorCls}` : "",
-                      ].join(" ")}
-                    >
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
+            {/* Stock filter tabs — restock / stockout alert filters are for write-capable users */}
+            {canWrite && (
+              <div className="filter-tabs">
+                {([
+                  { key: "all", label: "All", count: totalCount },
+                  { key: "low", label: "Low Stock", count: lowStockCount, colorCls: styles.filterCountAmber },
+                  { key: "out", label: "Out of Stock", count: outOfStockCount, colorCls: styles.filterCountRed },
+                ] as { key: StockFilter; label: string; count: number; colorCls?: string }[]).map(tab => (
+                  <button
+                    key={tab.key}
+                    className={["filter-tab", styles.filterTabInner, stockFilter === tab.key ? "filter-tab-active" : ""].join(" ")}
+                    onClick={() => handleStockFilter(tab.key)}
+                    disabled={!data}
+                  >
+                    {tab.label}
+                    {tab.count > 0 && (
+                      <span
+                        className={[
+                          styles.filterCount,
+                          stockFilter === tab.key && tab.colorCls ? `${styles.filterCountActive} ${tab.colorCls}` : "",
+                        ].join(" ")}
+                      >
+                        {tab.count}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
             {data && (
               <ShowAllToggle total={total} showAll={showAll} onToggle={() => { setShowAll((v) => !v); setPage(1); }} />
             )}
@@ -271,11 +274,11 @@ export default function ProductsPage() {
                 </td></tr>
               ) : products.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
-                  {stockFilter === "out" ? "No out-of-stock products." : stockFilter === "low" ? "No low-stock products." : search ? "No products match your search." : "No products yet. Add one to get started."}
+                  {effectiveStockFilter === "out" ? "No out-of-stock products." : effectiveStockFilter === "low" ? "No low-stock products." : search ? "No products match your search." : canWrite ? "No products yet. Add one to get started." : "No products yet."}
                 </td></tr>
               ) : products.map((p) => {
-                const out = isOutOfStock(p.stock);
-                const low = isLowStock(p.stock, p.minStock);
+                const out = canWrite && isOutOfStock(p.stock);
+                const low = canWrite && isLowStock(p.stock, p.minStock);
                 return (
                   <tr key={p.id}>
                     <Cell col={COLUMNS[0]}>

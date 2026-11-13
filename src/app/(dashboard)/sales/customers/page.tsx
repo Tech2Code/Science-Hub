@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -177,7 +177,7 @@ export default function CustomersPage() {
                 </td></tr>
               ) : customers.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className="table-empty-cell">
-                  {search ? "No customers match your search." : "No customers yet. Add one to get started."}
+                  {search ? "No customers match your search." : canWrite ? "No customers yet. Add one to get started." : "No customers yet."}
                 </td></tr>
               ) : customers.map((c) => (
                 <tr key={c.id}>

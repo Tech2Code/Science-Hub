@@ -331,7 +331,7 @@ export default function BrandsPage() {
                 </td></tr>
               ) : brands.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
-                  {search ? "No brands match your search." : "No brands yet. Add one above."}
+                  {search ? "No brands match your search." : canWrite ? "No brands yet. Add one above." : "No brands yet."}
                 </td></tr>
               ) : brands.map((b, i) => (
                 <tr key={b.id}>

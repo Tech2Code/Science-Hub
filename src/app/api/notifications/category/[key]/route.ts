@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/apiAuth";
+import { requireWriteAccess } from "@/lib/apiAuth";
 import { getNotificationCategoryItems, canSeeNotificationCategory, NOTIFICATION_CATEGORY_KEYS, type NotificationCategoryKey } from "@/lib/notifications";
 
 // Powers the notification popover's per-section "Show all" expand — the full (uncapped-to-5)
 // active item list for one category, so seeing everything doesn't require leaving the dropdown.
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ key: string }> }) {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const { key } = await params;
     if (!NOTIFICATION_CATEGORY_KEYS.includes(key as NotificationCategoryKey)) {
       return NextResponse.json({ error: "Invalid category" }, { status: 400 });
-    }
-    // Bin access mirrors requireWriteAccess()'s manager restriction (see getNotificationSummary's
-    // own includeBin handling) — a manager has no Bin page to expand into.
-    if (key === "binExpiring" && auth.session.user.role === "manager") {
-      return NextResponse.json({ items: [] });
     }
     // Money-related categories are section-gated (see canSeeNotificationCategory).
     if (!canSeeNotificationCategory(auth.session.user, key as NotificationCategoryKey)) {

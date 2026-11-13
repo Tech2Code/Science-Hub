@@ -408,8 +408,8 @@ export default function DashboardPage() {
       </div>
       )}
 
-      {/* Low stock / out of stock alert */}
-      {loading ? (
+      {/* Low stock / out of stock alert — actionable restock alert for write-capable users */}
+      {canWrite && (loading ? (
         <div className={`card ${styles.lowStockCard}`}>
           <div className={`${styles.lowStockIconWrap} ${styles.lowStockCardSkeleton} ${styles.skeletonPulse}`} />
           <div className={styles.lowStockBody}>
@@ -447,7 +447,7 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

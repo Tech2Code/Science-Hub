@@ -1,16 +1,14 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/apiAuth";
+import { requireWriteAccess } from "@/lib/apiAuth";
 import { getNotificationSummary, filterNotificationSummary } from "@/lib/notifications";
 
 export async function GET() {
   try {
-    const auth = await requireSession();
+    // Managers are read-only and do not use operational alerts (low stock, overdue, bin, etc.).
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
-    // Managers have no Bin access (see requireWriteAccess) — omit that category for them rather
-    // than surfacing a count they can't click through to.
-    const includeBin = auth.session.user.role !== "manager";
-    const summary = await getNotificationSummary({ includeBin, userId: auth.session.user.id });
+    const summary = await getNotificationSummary({ includeBin: true, userId: auth.session.user.id });
     return NextResponse.json(filterNotificationSummary(summary, auth.session.user));
   } catch (error) {
     console.error("GET /api/notifications error:", error);

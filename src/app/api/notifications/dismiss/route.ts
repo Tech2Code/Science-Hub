@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/apiAuth";
+import { requireWriteAccess } from "@/lib/apiAuth";
 import { NOTIFICATION_CATEGORY_KEYS, type NotificationCategoryKey } from "@/lib/notifications";
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 // addresses its target in the URL rather than a body.
 export async function DELETE(request: NextRequest) {
   try {
-    const auth = await requireSession();
+    const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const { searchParams } = new URL(request.url);

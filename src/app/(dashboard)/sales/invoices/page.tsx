@@ -55,6 +55,7 @@ interface InvoiceListResponse {
 }
 
 interface InvoiceStats {
+  totalCount?: number;
   totalInvoiced: number;
   totalPaid: number;
   totalPending: number;
@@ -205,10 +206,14 @@ export default function InvoicesPage() {
   // Downloads every invoice for the currently selected month of the selected financial year as one ZIP of individual PDFs
   // (each still goes through the same cache invoice detail pages use, so a repeat download is fast).
   async function handleBulkDownload() {
-    if (bulkBusyRef.current) return;
+    if (bulkBusyRef.current || loading) return;
     const bulkPeriod = periodMonthYear(period);
     if (!bulkPeriod) {
       toast({ type: "error", title: "Select a month", message: "Choose a month first to bulk download." });
+      return;
+    }
+    if (periodCount !== undefined && periodCount <= 0) {
+      toast({ type: "error", title: "Nothing to download", message: "No invoices found for the selected period." });
       return;
     }
     // Ask where to save FIRST (Chrome/Edge): the Save dialog only opens straight from the click, and this way the
@@ -280,6 +285,7 @@ export default function InvoicesPage() {
   const { renderInvoicePdf, startBulkZip, bulk } = useInvoicePdfRenderer();
   const invoices = data?.data ?? [];
   const total = data?.total ?? 0;
+  const periodCount = !debouncedSearch.trim() && data ? data.total : stats?.totalCount;
   const showSkeleton = loading && !data;
   const isRefetching = loading && !!data;
 
@@ -421,9 +427,17 @@ export default function InvoicesPage() {
             <Button
               variant="secondary"
               size="sm"
-              disabled={bulkDownloading || bulk.running}
-              ariaDisabled={period.month0 === "all"}
-              title={bulk.running ? "A bulk download is already running — see the progress card" : period.month0 === "all" ? "Select a month to bulk download" : "Download all invoices for this period as a ZIP of PDFs"}
+              disabled={bulkDownloading || bulk.running || showSkeleton}
+              ariaDisabled={period.month0 === "all" || periodCount === 0}
+              title={
+                bulk.running
+                  ? "A bulk download is already running — see the progress card"
+                  : period.month0 === "all"
+                    ? "Select a month to bulk download"
+                    : periodCount === 0
+                      ? "No invoices found for this period"
+                      : "Download all invoices for this period as a ZIP of PDFs"
+              }
               onClick={handleBulkDownload}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>

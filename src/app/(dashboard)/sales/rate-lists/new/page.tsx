@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { rules, validate } from "@/lib/validation";
 import { OverlayLoader } from "@/components/ui/Spinner";
@@ -22,8 +23,13 @@ const DRAFT_KEY = "rate-list:new";
 type RateListNewDraft = { title: string; note: string; items: RateListLineItem[] };
 
 export default function NewRateListPage() {
+  const { data: session } = useSession();
   const router = useRouter();
   const toast = useToast();
+
+  useEffect(() => {
+    if (session?.user?.role === "manager") router.replace("/dashboard");
+  }, [session, router]);
 
   const [title, setTitle] = useState("");
   const [titleError, setTitleError] = useState<string | undefined>(undefined);

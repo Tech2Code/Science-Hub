@@ -210,12 +210,14 @@ export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }
           <div className={styles.statLabel}>Products</div>
           <div className={styles.statValue}><SkeletonSwap loading={loading} w={40} h={22}>{products.length}</SkeletonSwap></div>
         </div>
-        <div className={`card ${styles.cardPadSm}`}>
-          <div className={styles.statLabel}>Low Stock</div>
-          <div className={`${styles.statValue} ${!loading && lowStockCount > 0 ? styles.negative : ""}`}>
-            <SkeletonSwap loading={loading} w={40} h={22}>{lowStockCount}</SkeletonSwap>
+        {canWrite && (
+          <div className={`card ${styles.cardPadSm}`}>
+            <div className={styles.statLabel}>Low Stock</div>
+            <div className={`${styles.statValue} ${!loading && lowStockCount > 0 ? styles.negative : ""}`}>
+              <SkeletonSwap loading={loading} w={40} h={22}>{lowStockCount}</SkeletonSwap>
+            </div>
           </div>
-        </div>
+        )}
         <div className={`card ${styles.cardPadSm}`}>
           <div className={styles.statLabel}>Catalog Value</div>
           <div className={styles.statValue}>
@@ -250,7 +252,7 @@ export function TaxonomyDetailPage({ entityLabel, apiBase, listHref, listLabel }
                   </td>
                   <td data-label="SKU" className={styles.mutedCell}>{p.sku || "—"}</td>
                   <td data-label="Selling Price" className="table-td-right">₹{p.price.toLocaleString("en-IN")}</td>
-                  <td data-label="Stock" className={`table-td-right ${needsRestock(p.stock, p.minStock) ? styles.stockLow : ""}`}>{p.stock}</td>
+                  <td data-label="Stock" className={`table-td-right ${canWrite && needsRestock(p.stock, p.minStock) ? styles.stockLow : ""}`}>{p.stock}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -167,7 +167,7 @@ export default function VendorsPage() {
                 </td></tr>
               ) : vendors.length === 0 ? (
                 <tr><td colSpan={COLUMNS.length} className={styles.emptyCell}>
-                  {search.trim() ? `No vendors match "${search}".` : "No vendors yet. Add your first vendor."}
+                  {search.trim() ? `No vendors match "${search}".` : canWrite ? "No vendors yet. Add your first vendor." : "No vendors yet."}
                 </td></tr>
               ) : vendors.map(v => (
                 <tr key={v.id}>

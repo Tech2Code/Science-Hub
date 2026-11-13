@@ -24,8 +24,9 @@ export async function GET(request: NextRequest) {
     // unset) by design, since the list view must still show them — so the stats aggregate gets its
     // own narrower where, excluding cancelled unless the user explicitly asked for the Cancelled tab.
     const aggWhere = status === "cancelled" ? where : { ...where, status: where.status ?? { not: "cancelled" as const } };
-    const [agg, overdueCount, years, outside] = await Promise.all([
+    const [agg, totalCount, overdueCount, years, outside] = await Promise.all([
       prisma.purchaseBill.aggregate({ where: aggWhere, _sum: { total: true, paidAmount: true } }),
+      prisma.purchaseBill.count({ where }),
       // Nested AND (not merged into `where`) so a status tab's own meaning isn't overwritten by the overdue condition's status constraint.
       prisma.purchaseBill.count({ where: { AND: [where, { status: { notIn: ["paid", "cancelled"] }, dueDate: { lt: istTodayStartUtc() } }] } }),
       // billDate is stored as IST midnight (= 18:30 UTC the previous day), so the year must be
@@ -42,6 +43,7 @@ export async function GET(request: NextRequest) {
     const totalPurchase = agg._sum.total ?? 0;
     const totalPaid = agg._sum.paidAmount ?? 0;
     return NextResponse.json({
+      totalCount,
       totalPurchase,
       totalPaid,
       totalPending: totalPurchase - totalPaid,
