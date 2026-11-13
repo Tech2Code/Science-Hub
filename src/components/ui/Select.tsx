@@ -225,7 +225,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
           style={{
             position: "fixed",
             left: pos.left,
-            ...(fitContent ? { minWidth: pos.width, width: "max-content" } : { width: pos.width }),
+            ...(fitContent ? { minWidth: pos.width, width: "max-content", maxWidth: `calc(100vw - ${Math.max(16, Math.round(pos.left + 8))}px)` } : { width: pos.width }),
             ...(pos.top !== undefined ? { top: pos.top } : { bottom: pos.bottom }),
           }}
         >

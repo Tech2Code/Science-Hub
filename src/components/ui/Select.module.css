@@ -12,6 +12,10 @@
 .trigger .valueGrid { display: inline-grid; align-items: center; text-align: left; flex: 1; }
 .valueGrid .valueSizer { grid-area: 1 / 1; visibility: hidden; height: 0; overflow: hidden; white-space: nowrap; font-weight: 600; padding-right: 4px; pointer-events: none; user-select: none; }
 .valueGrid .valueActive { grid-area: 1 / 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 640px) {
+  .fitWrap { flex: 1 1 auto; min-width: 0; width: 100%; }
+  .trigger .valueGrid { min-width: 0; }
+}
 .trigger .chevron { flex-shrink: 0; color: var(--c-text-4); transition: transform 0.15s; }
 .trigger[aria-expanded="true"] .chevron { transform: rotate(180deg); }
 .wrap .sm { padding: 6px 10px; font-size: 12px; gap: 6px; }

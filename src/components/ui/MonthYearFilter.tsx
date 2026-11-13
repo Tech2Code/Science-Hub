@@ -19,11 +19,11 @@ export function MonthYearFilter({ month, year, years, onMonthChange, onYearChang
   return (
     <div className={shared.wrap}>
       <span className={shared.label}>{label}</span>
-      <Select fitContent aria-label="Filter by month" value={month} onChange={(e) => onMonthChange(e.target.value)} className={styles.select}>
+      <Select fitContent aria-label="Filter by month" value={month} onChange={(e) => onMonthChange(e.target.value)} wrapClassName={styles.select}>
         <option value="">All Months</option>
         {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
       </Select>
-      <Select fitContent aria-label="Filter by year" value={year} onChange={(e) => onYearChange(e.target.value)} className={styles.select}>
+      <Select fitContent aria-label="Filter by year" value={year} onChange={(e) => onYearChange(e.target.value)} wrapClassName={styles.select}>
         <option value="">All Years</option>
         {years.map((y) => <option key={y} value={y}>{y}</option>)}
       </Select>

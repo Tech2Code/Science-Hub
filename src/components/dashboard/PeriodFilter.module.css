@@ -2,7 +2,10 @@
 .group { display: flex; gap: 8px; align-items: center; }
 .group .fySelect, .group .monthSelect { width: auto; }
 /* Section: Mobile Responsive */
+@media (max-width: 640px) {
+  .group { flex: 1 1 auto; width: 100%; min-width: 0; }
+  .group .fySelect, .group .monthSelect { flex: 1 1 auto; width: 100%; min-width: 0; }
+}
 @media (max-width: 520px) {
-  .group { width: 100%; flex-direction: column; align-items: stretch; }
-  .group .fySelect, .group .monthSelect { width: 100%; }
+  .group { flex-direction: column; align-items: stretch; }
 }
