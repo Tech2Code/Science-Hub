@@ -118,15 +118,19 @@ export async function POST(
               throw new BinValidationError(`Customer "${inv.customer.name}" is in the Recycle Bin — restore the customer first, then this invoice.`);
             }
           }
+          const invItems = await tx.invoiceItem.findMany({
+            where: { invoiceId: id },
+            select: { productId: true, quantity: true, product: { select: { name: true, deletedAt: true } } },
+          });
+          const binnedProduct = invItems.find((item) => item.product?.deletedAt);
+          if (binnedProduct?.product) {
+            throw new BinValidationError(`Product "${binnedProduct.product.name}" is in the Recycle Bin — restore the product first, then this invoice.`);
+          }
           const updateResult = await tx.invoice.updateMany({
             where: { id, deletedAt: { not: null } },
             data: { deletedAt: null },
           });
           if (updateResult.count === 0) return false;
-          const invItems = await tx.invoiceItem.findMany({
-            where: { invoiceId: id },
-            select: { productId: true, quantity: true },
-          });
           await batchAdjustStock(
             tx,
             invItems.filter((item) => item.productId).map((item) => ({ productId: item.productId!, quantity: -item.quantity })),
@@ -140,11 +144,22 @@ export async function POST(
         revalidateTag("reports", { expire: 0 });
         break;
       }
-      case "customer":
-        await prisma.customer.update({ where: { id }, data: { deletedAt: null } });
+      case "customer": {
+        const wasExplicitlyDeleted = await prisma.activityLog.findFirst({
+          where: { entityId: id, entityType: "customer", action: "delete_customer" },
+          select: { id: true },
+        });
+        if (!wasExplicitlyDeleted) {
+          return NextResponse.json({ error: "Customer is not in the Recycle Bin" }, { status: 400 });
+        }
+        await prisma.$transaction([
+          prisma.customer.update({ where: { id }, data: { deletedAt: null } }),
+          prisma.activityLog.deleteMany({ where: { entityId: id, entityType: "customer", action: "delete_customer" } }),
+        ]);
         revalidateTag("customers", { expire: 0 });
         revalidateTag("reports", { expire: 0 });
         break;
+      }
       case "product": {
         const duplicate = await prisma.product.findFirst({
           where: { name: { equals: name, mode: "insensitive" }, deletedAt: null, NOT: { id } },
@@ -153,7 +168,18 @@ export async function POST(
         if (duplicate) {
           return NextResponse.json({ error: `A product named "${name}" already exists — rename or remove it before restoring this one` }, { status: 409 });
         }
-        await prisma.product.update({ where: { id }, data: { deletedAt: null } });
+        const existingProd = await prisma.product.findUnique({
+          where: { id },
+          select: { brand: { select: { deletedAt: true } }, category: { select: { deletedAt: true } } },
+        });
+        await prisma.product.update({
+          where: { id },
+          data: {
+            deletedAt: null,
+            ...(existingProd?.brand?.deletedAt ? { brandId: null } : {}),
+            ...(existingProd?.category?.deletedAt ? { categoryId: null } : {}),
+          },
+        });
         revalidateTag("products", { expire: 0 });
         revalidateTag("reports", { expire: 0 });
         break;
@@ -168,10 +194,21 @@ export async function POST(
         revalidateTag("products", { expire: 0 });
         revalidateTag("reports", { expire: 0 });
         break;
-      case "vendor":
-        await prisma.vendor.update({ where: { id }, data: { deletedAt: null } });
+      case "vendor": {
+        const wasExplicitlyDeleted = await prisma.activityLog.findFirst({
+          where: { entityId: id, entityType: "vendor", action: "delete_vendor" },
+          select: { id: true },
+        });
+        if (!wasExplicitlyDeleted) {
+          return NextResponse.json({ error: "Vendor is not in the Recycle Bin" }, { status: 400 });
+        }
+        await prisma.$transaction([
+          prisma.vendor.update({ where: { id }, data: { deletedAt: null } }),
+          prisma.activityLog.deleteMany({ where: { entityId: id, entityType: "vendor", action: "delete_vendor" } }),
+        ]);
         revalidateTag("vendors", { expire: 0 });
         break;
+      }
       case "purchase_bill": {
         // Double-restore guard, symmetric to invoice. A cancelled bill's stock was already
         // reversed at cancel-time, so restoring must not re-apply it.
@@ -188,6 +225,14 @@ export async function POST(
               throw new BinValidationError(`Vendor "${pb.vendor.name}" is in the Recycle Bin — restore the vendor first, then this purchase bill.`);
             }
           }
+          const billItems = await tx.purchaseBillItem.findMany({
+            where: { purchaseBillId: id },
+            select: { productId: true, quantity: true, product: { select: { name: true, deletedAt: true } } },
+          });
+          const binnedBillProduct = billItems.find((item) => item.product?.deletedAt);
+          if (binnedBillProduct?.product) {
+            throw new BinValidationError(`Product "${binnedBillProduct.product.name}" is in the Recycle Bin — restore the product first, then this purchase bill.`);
+          }
           const updateResult = await tx.purchaseBill.updateMany({
             where: { id, deletedAt: { not: null } },
             data: { deletedAt: null },
@@ -195,10 +240,6 @@ export async function POST(
           if (updateResult.count === 0) return false;
           const bill = await tx.purchaseBill.findUnique({ where: { id }, select: { status: true } });
           if (bill?.status !== "cancelled") {
-            const billItems = await tx.purchaseBillItem.findMany({
-              where: { purchaseBillId: id },
-              select: { productId: true, quantity: true },
-            });
             await batchAdjustStock(
               tx,
               billItems.filter(i => i.productId).map((item) => ({ productId: item.productId!, quantity: item.quantity })),
@@ -222,14 +263,38 @@ export async function POST(
         const attemptRestore = () => prisma.$transaction(async (tx) => {
           const ret = await tx.return.findUnique({
             where: { id },
-            select: { deletedAt: true, total: true, invoiceId: true, items: { select: { productId: true, name: true, quantity: true } } },
+            select: {
+              deletedAt: true,
+              total: true,
+              invoiceId: true,
+              items: {
+                select: {
+                  productId: true,
+                  name: true,
+                  quantity: true,
+                  gstAmount: true,
+                  total: true,
+                  product: { select: { name: true, deletedAt: true } },
+                },
+              },
+            },
           });
           if (!ret) throw new BinValidationError("Credit note not found", 404);
           if (!ret.deletedAt) return false;
 
+          const binnedReturnProduct = ret.items.find((item) => item.product?.deletedAt);
+          if (binnedReturnProduct?.product) {
+            throw new BinValidationError(`Product "${binnedReturnProduct.product.name}" is in the Recycle Bin — restore the product first, then this credit note.`);
+          }
+
           const invoice = await tx.invoice.findUniqueOrThrow({
             where: { id: ret.invoiceId },
-            select: { deletedAt: true, paidAmount: true, invoiceNumber: true, items: { select: { productId: true, name: true, quantity: true } } },
+            select: {
+              deletedAt: true,
+              paidAmount: true,
+              invoiceNumber: true,
+              items: { select: { productId: true, name: true, quantity: true, gstAmount: true, total: true } },
+            },
           });
           if (invoice.deletedAt) {
             throw new BinValidationError(`Invoice ${invoice.invoiceNumber} is in the bin — restore the invoice before restoring this credit note.`);
@@ -237,7 +302,7 @@ export async function POST(
 
           const otherReturns = await tx.return.findMany({
             where: { invoiceId: ret.invoiceId, deletedAt: null, NOT: { id } },
-            select: { total: true, items: { select: { productId: true, name: true, quantity: true } } },
+            select: { total: true, items: { select: { productId: true, name: true, quantity: true, gstAmount: true, total: true } } },
           });
 
           const otherTotal = otherReturns.reduce((s, r) => s + r.total, 0);
@@ -249,22 +314,40 @@ export async function POST(
 
           // Catalog lines keyed by productId, custom lines by trimmed lowercase name (same as the returns route).
           const lineKey = (it: { productId: string | null; name: string }) => it.productId ? `p:${it.productId}` : `n:${it.name.trim().toLowerCase()}`;
-          const invoiced = new Map<string, number>();
-          for (const it of invoice.items) invoiced.set(lineKey(it), (invoiced.get(lineKey(it)) ?? 0) + it.quantity);
-          const alreadyReturned = new Map<string, number>();
-          for (const r of otherReturns) {
-            for (const ri of r.items) alreadyReturned.set(lineKey(ri), (alreadyReturned.get(lineKey(ri)) ?? 0) + ri.quantity);
+          const invoiced = new Map<string, { qty: number; gst: number; total: number }>();
+          for (const it of invoice.items) {
+            const prev = invoiced.get(lineKey(it)) ?? { qty: 0, gst: 0, total: 0 };
+            invoiced.set(lineKey(it), { qty: prev.qty + it.quantity, gst: round2(prev.gst + it.gstAmount), total: round2(prev.total + it.total) });
           }
-          const restoring = new Map<string, { quantity: number; name: string }>();
+          const alreadyReturned = new Map<string, { qty: number; gst: number; total: number }>();
+          for (const r of otherReturns) {
+            for (const ri of r.items) {
+              const prev = alreadyReturned.get(lineKey(ri)) ?? { qty: 0, gst: 0, total: 0 };
+              alreadyReturned.set(lineKey(ri), { qty: prev.qty + ri.quantity, gst: round2(prev.gst + ri.gstAmount), total: round2(prev.total + ri.total) });
+            }
+          }
+          const restoring = new Map<string, { quantity: number; gst: number; total: number; name: string }>();
           for (const ri of ret.items) {
             const prev = restoring.get(lineKey(ri));
-            restoring.set(lineKey(ri), { quantity: (prev?.quantity ?? 0) + ri.quantity, name: prev?.name ?? ri.name });
+            restoring.set(lineKey(ri), {
+              quantity: (prev?.quantity ?? 0) + ri.quantity,
+              gst: round2((prev?.gst ?? 0) + ri.gstAmount),
+              total: round2((prev?.total ?? 0) + ri.total),
+              name: prev?.name ?? ri.name,
+            });
           }
-          for (const [key, { quantity, name: itemName }] of restoring) {
-            const remaining = (invoiced.get(key) ?? 0) - (alreadyReturned.get(key) ?? 0);
+          for (const [key, { quantity, gst, total: lineTotal, name: itemName }] of restoring) {
+            const invLine = invoiced.get(key) ?? { qty: 0, gst: 0, total: 0 };
+            const retLine = alreadyReturned.get(key) ?? { qty: 0, gst: 0, total: 0 };
+            const remaining = invLine.qty - retLine.qty;
             if (quantity > remaining + 1e-9) {
               throw new BinValidationError(
                 `Cannot restore — "${itemName}" has only ${Math.max(0, remaining)} unit(s) left returnable on invoice ${invoice.invoiceNumber}, but this credit note returns ${quantity}.`
+              );
+            }
+            if (round2(retLine.gst + gst) > round2(invLine.gst) || round2(retLine.total + lineTotal) > round2(invLine.total)) {
+              throw new BinValidationError(
+                `Cannot restore — "${itemName}" credit amount or GST would exceed the original invoice line after other credit notes.`
               );
             }
           }
@@ -337,12 +420,20 @@ export async function DELETE(
     const name = await getItemName(binType, id);
 
     switch (binType) {
-      case "invoice":
+      case "invoice": {
+        const childReturnCount = await prisma.return.count({ where: { invoiceId: id } });
+        if (childReturnCount > 0) {
+          return NextResponse.json(
+            { error: `Cannot permanently delete "${name}" — it has ${childReturnCount} credit note(s) on record (including any in the bin). Permanently delete those credit notes first.` },
+            { status: 400 }
+          );
+        }
         // Prisma cascade handles items/payments
         await prisma.invoice.delete({ where: { id } });
         revalidateTag("invoices", { expire: 0 });
         revalidateTag("reports", { expire: 0 });
         break;
+      }
       case "customer": {
         // Check ANY invoices (active or soft-deleted) — the FK blocks the delete either way,
         // and an unpurged soft-deleted one would otherwise crash this with a raw 500.
@@ -361,11 +452,12 @@ export async function DELETE(
         break;
       }
       case "product": {
-        // Check every non-cascading FK referencing this product to avoid a raw 500. StockMovement
+        // Check every non-cascading FK referencing this product to avoid a raw 500 or unlinking credit notes. StockMovement
         // is skipped — its productId is nullable (onDelete: SetNull), so ledger rows just survive.
-        const [itemCount, purchaseItemCount] = await Promise.all([
+        const [itemCount, purchaseItemCount, returnItemCount] = await Promise.all([
           prisma.invoiceItem.count({ where: { productId: id } }),
           prisma.purchaseBillItem.count({ where: { productId: id } }),
+          prisma.returnItem.count({ where: { productId: id } }),
         ]);
         if (itemCount > 0) {
           return NextResponse.json(
@@ -376,6 +468,12 @@ export async function DELETE(
         if (purchaseItemCount > 0) {
           return NextResponse.json(
             { error: `Cannot permanently delete "${name}" — it appears in ${purchaseItemCount} purchase bill line item(s) (including any in the bin).` },
+            { status: 400 }
+          );
+        }
+        if (returnItemCount > 0) {
+          return NextResponse.json(
+            { error: `Cannot permanently delete "${name}" — it appears in ${returnItemCount} credit note line item(s) (including any in the bin).` },
             { status: 400 }
           );
         }

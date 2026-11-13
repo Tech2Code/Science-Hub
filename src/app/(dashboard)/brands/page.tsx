@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -90,6 +90,11 @@ export default function BrandsPage() {
   const total = data?.total ?? 0;
   const showSkeleton = loading && !data;
   const isRefetching = loading && !!data;
+
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  useEffect(() => {
+    if (data && !loading && page > lastPage) setPage(lastPage); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [data, loading, page, lastPage]);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();

@@ -73,13 +73,15 @@ export async function DELETE() {
     // Products — skip any still referenced by invoice/purchase items. Stock movements aren't checked since their productId is nullable (SetNull).
     if (products.length > 0) {
       const productIds = products.map((p) => p.id);
-      const [referencedByInvoiceItems, referencedByPurchaseItems] = await Promise.all([
+      const [referencedByInvoiceItems, referencedByPurchaseItems, referencedByReturnItems] = await Promise.all([
         prisma.invoiceItem.groupBy({ by: ["productId"], where: { productId: { in: productIds } } }),
         prisma.purchaseBillItem.groupBy({ by: ["productId"], where: { productId: { in: productIds } } }),
+        prisma.returnItem.groupBy({ by: ["productId"], where: { productId: { in: productIds } } }),
       ]);
       const blockedProductIds = new Set([
-        ...referencedByInvoiceItems.map((r) => r.productId),
+        ...referencedByInvoiceItems.map((r) => r.productId).filter((id): id is string => id !== null),
         ...referencedByPurchaseItems.map((r) => r.productId).filter((id): id is string => id !== null),
+        ...referencedByReturnItems.map((r) => r.productId).filter((id): id is string => id !== null),
       ]);
       const deletableProductIds = productIds.filter((id) => !blockedProductIds.has(id));
       if (deletableProductIds.length > 0) {

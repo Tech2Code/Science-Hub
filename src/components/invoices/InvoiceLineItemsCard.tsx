@@ -87,7 +87,13 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
     addProduct(d, outcome.qty);
   }
 
-  function removeItem(idx: number) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
+  function removeItem(idx: number) {
+    if (items.length <= 2) {
+      setReorderMode(false);
+      setDraggedKey(null);
+    }
+    setItems((prev) => prev.filter((_, i) => i !== idx));
+  }
 
   // Reordering is off by default, only enabled via the explicit "Reorder Items" toggle.
   const [reorderMode, setReorderMode] = useState(false);
@@ -220,9 +226,7 @@ export function InvoiceLineItemsCard({ sectionIndex, products, setProducts, item
     if (!/^\d*(\.\d{0,3})?$/.test(cleaned)) return;
     setQtyDrafts((prev) => ({ ...prev, [key]: raw }));
     const parsed = parseFloat(cleaned);
-    // While the draft is empty/"0" (mid-edit), leave the stored qty alone — writing a fallback 1
-    // here made totals show a qty the field didn't. Blur normalizes it (see commitQtyDraft).
-    if (!isNaN(parsed) && parsed > 0) updateItem(idx, "qty", parsed);
+    updateItem(idx, "qty", isNaN(parsed) ? 0 : parsed);
   }
 
   // On blur: an empty/zero draft falls back to qty 1 (unchanged behavior), then the draft is dropped

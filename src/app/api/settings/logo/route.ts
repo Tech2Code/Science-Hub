@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { requireAdmin } from "@/lib/apiAuth";
+import { prisma } from "@/lib/prisma";
 import { deleteAttachmentBlob, isLogoBlobUrl } from "@/lib/blobStorage";
 import { revalidateTag } from "next/cache";
 
@@ -68,6 +69,13 @@ export async function DELETE(req: NextRequest) {
     const { url } = await req.json();
     if (typeof url !== "string" || !isLogoBlobUrl(url)) {
       return NextResponse.json({ error: "Invalid url" }, { status: 400 });
+    }
+    const current = await prisma.businessSettings.findUnique({
+      where: { id: "singleton" },
+      select: { logoUrl: true },
+    });
+    if (current?.logoUrl === url) {
+      return NextResponse.json({ error: "Cannot delete the currently active business logo" }, { status: 400 });
     }
     await deleteAttachmentBlob(url);
     revalidateTag("settings", { expire: 0 });

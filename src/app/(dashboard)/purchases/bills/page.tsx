@@ -354,6 +354,11 @@ export default function PurchasesPage() {
   const totalPending   = stats?.totalPending ?? 0;
   const overdue        = stats?.overdueCount ?? 0;
 
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  useEffect(() => {
+    if (data && !loading && page > lastPage) setPage(lastPage); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [data, loading, page, lastPage]);
+
   async function handleDelete() {
     if (!deleteTarget) return;
     const target = deleteTarget;
@@ -365,8 +370,12 @@ export default function PurchasesPage() {
         // Sibling caches (Payments Made list, other filter/page variants) also include this bill.
         bustCachePrefix("/api/purchase-bills");
         // Deleting the last row of the last page would otherwise leave an empty "No bills" page.
-        if (bills.length === 1 && page > 1) setPage(page - 1);
-        await Promise.all([mutate(), mutateStats()]);
+        if (bills.length === 1 && page > 1 && !showAll) {
+          setPage((p) => p - 1);
+          await mutateStats();
+        } else {
+          await Promise.all([mutate(), mutateStats()]);
+        }
         bustCachePrefix("/api/products");
         bustCachePrefix("/api/reports");
         bustCachePrefix("/api/purchase-reports");

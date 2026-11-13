@@ -268,7 +268,6 @@ export async function POST(request: NextRequest) {
     const { roundOff, roundedTotal: total } = computeRoundOff(subtotal + cgst + sgst + igst + transportChargeVal + transportChargeGstAmountVal);
 
     // Number generation + create run in one Serializable transaction, retried on write-conflict, to prevent duplicate invoice numbers under concurrent requests.
-    const invoicePrefix = biz.invoiceNumberPrefix || deriveDefaultPrefix(biz.name);
     async function attemptCreate() {
       return prisma.$transaction(async (tx) => {
         // A new invoice's balanceDue equals its total (paidAmount is always 0 at creation).
@@ -281,18 +280,20 @@ export async function POST(request: NextRequest) {
           throw new CreditLimitExceededError(creditCheck);
         }
 
+        const freshBiz = (await tx.businessSettings.findUnique({ where: { id: "singleton" } })) ?? biz;
+        const invoicePrefix = freshBiz.invoiceNumberPrefix || deriveDefaultPrefix(freshBiz.name);
         const candidatesThisYear = await tx.invoice.findMany({
-          where: { invoiceNumber: numberFormatDbFilter(biz.invoiceNumberFormat, invoicePrefix, currentYearLabel) },
+          where: { invoiceNumber: numberFormatDbFilter(freshBiz.invoiceNumberFormat, invoicePrefix, currentYearLabel) },
           select: { invoiceNumber: true },
         });
-        const { documentNumber: invoiceNumber, overrideUsed } = computeNextNumber(
+        const { documentNumber: invoiceNumber, overrideUsed, overrideStale } = computeNextNumber(
           candidatesThisYear.map((c) => c.invoiceNumber),
-          biz.invoiceNumberFormat,
+          freshBiz.invoiceNumberFormat,
           invoicePrefix,
           currentYearLabel,
-          biz.nextInvoiceNumberOverride
+          freshBiz.nextInvoiceNumberOverride
         );
-        if (overrideUsed) {
+        if (overrideUsed || overrideStale) {
           await tx.businessSettings.update({ where: { id: "singleton" }, data: { nextInvoiceNumberOverride: null } });
         }
 

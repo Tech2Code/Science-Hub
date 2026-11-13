@@ -166,8 +166,8 @@ export default function PurchaseBillDetailPage() {
   const [confirmDelete,  setConfirmDelete]  = useState(false);
   const [deleting,       setDeleting]       = useState(false);
 
-  function load() {
-    setLoading(true);
+  function load(silent = false) {
+    if (!silent) setLoading(true);
     fetch(`/api/purchase-bills/${id}`)
       // A non-2xx response (e.g. a deleted/invalid bill id) still parses as valid JSON — without
       // this check, the {error: "..."} body would silently be treated as the bill itself, pass
@@ -175,7 +175,7 @@ export default function PurchaseBillDetailPage() {
       // the many unguarded bill.vendor.* accesses.
       .then(r => { if (!r.ok) throw new Error("Bill not found."); return r.json(); })
       .then(d => { setBill(d); setLoading(false); })
-      .catch(() => { setError("Failed to load purchase bill."); setLoading(false); });
+      .catch(() => { if (!silent) setError("Failed to load purchase bill."); setLoading(false); });
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch-on-id-change; load() sets loading/bill state
@@ -360,7 +360,7 @@ export default function PurchaseBillDetailPage() {
         toast({ type: "success", title: "Payment recorded", message: `₹${fmt(amount)} via ${method}.` });
         setShowPayForm(false);
         resetPaymentForm();
-        load();
+        load(true);
       } else {
         toast({ type: "error", title: "Failed", message: data.error ?? "Failed to record payment." });
       }
@@ -411,7 +411,7 @@ export default function PurchaseBillDetailPage() {
         invalidateAfter({ type: "bill-payment-changed", billId: id });
         toast({ type: "success", title: "Payment updated" });
         setEditingPayment(null);
-        load();
+        load(true);
       } else {
         toast({ type: "error", title: "Failed", message: data.error ?? "Failed to update payment." });
       }
@@ -431,7 +431,7 @@ export default function PurchaseBillDetailPage() {
         invalidateAfter({ type: "bill-payment-changed", billId: id });
         toast({ type: "success", title: "Payment deleted" });
         setPaymentDeleteConfirm(null);
-        load();
+        load(true);
       } else {
         toast({ type: "error", title: "Failed", message: data.error ?? "Failed to delete payment." });
       }
@@ -450,9 +450,11 @@ export default function PurchaseBillDetailPage() {
         body: JSON.stringify({ status: "cancelled" }),
       });
       if (res.ok) {
+        setShowPayForm(false);
+        resetPaymentForm();
         invalidateAfter({ type: "bill-stock-changed", billId: id });
         toast({ type: "success", title: "Bill cancelled", message: "Status updated to cancelled." });
-        load();
+        load(true);
       } else {
         const d = await res.json().catch(() => ({}));
         toast({ type: "error", title: "Failed", message: d.error ?? "Could not cancel bill." });
@@ -475,7 +477,7 @@ export default function PurchaseBillDetailPage() {
       if (res.ok) {
         invalidateAfter({ type: "bill-stock-changed", billId: id });
         toast({ type: "success", title: "Bill un-cancelled", message: "Status restored." });
-        load();
+        load(true);
       } else {
         const d = await res.json().catch(() => ({}));
         toast({ type: "error", title: "Failed", message: d.error ?? "Could not un-cancel bill." });
@@ -498,7 +500,7 @@ export default function PurchaseBillDetailPage() {
       if (res.ok) {
         setReassignOpen(false);
         invalidateAfter({ type: "bill-reassigned" });
-        load();
+        load(true);
         toast({ type: "success", title: "Reassigned", message: "Bill creator updated." });
       } else {
         const d = await res.json().catch(() => ({}));
@@ -1056,20 +1058,20 @@ export default function PurchaseBillDetailPage() {
               {showPayForm ? "Hide Payment" : "Record Payment"}
             </Button>
           )}
-          <Button variant="secondary" size="sm" title="Discard the cached PDF and download a freshly generated copy" aria-label="Regenerate PDF" onClick={() => handleDownloadPdf(true)} disabled={pdfDownloading}>
+          <Button variant="secondary" size="sm" title="Discard the cached PDF and download a freshly generated copy" aria-label="Regenerate PDF" onClick={() => handleDownloadPdf(true)} disabled={pdfDownloading || pdfViewing || shareLoading}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
           </Button>
-          <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing}>
+          <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing} disabled={pdfDownloading || pdfViewing || shareLoading}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             View
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => handleDownloadPdf(false)} disabled={pdfDownloading}>
+          <Button variant="secondary" size="sm" onClick={() => handleDownloadPdf(false)} disabled={pdfDownloading || pdfViewing || shareLoading}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             {pdfDownloading ? "Generating…" : "PDF"}
           </Button>
           {/* Share PDF button */}
           <div className={styles.shareWrap} ref={shareContainerRef}>
-            <Button variant="secondary" size="sm" disabled={shareLoading} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
+            <Button variant="secondary" size="sm" disabled={pdfDownloading || pdfViewing || shareLoading} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
               setShareOpen(o => {
                 const next = !o;
                 if (next && shareContainerRef.current) {
@@ -1124,7 +1126,13 @@ export default function PurchaseBillDetailPage() {
             )}
           </div>
           {canEditBill && bill.status !== "cancelled" && (
-            <Button variant="dangerOutline" size="sm" onClick={() => setConfirmCancel(true)}>
+            <Button
+              variant="dangerOutline"
+              size="sm"
+              disabled={bill.paidAmount > 0}
+              title={bill.paidAmount > 0 ? "Bills with recorded payments cannot be cancelled — delete the payments first" : undefined}
+              onClick={() => setConfirmCancel(true)}
+            >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
               Cancel Bill
             </Button>
@@ -1468,7 +1476,7 @@ export default function PurchaseBillDetailPage() {
             {canEditBill && bill.status !== "paid" && bill.status !== "cancelled" && (
               <div className={styles.emptyPaymentsAction}>
                 <button
-                  onClick={() => setShowPayForm(true)}
+                  onClick={() => { resetPaymentForm(); setShowPayForm(true); }}
                   className={styles.linkButton}
                 >
                   Record a payment <ArrowIcon />

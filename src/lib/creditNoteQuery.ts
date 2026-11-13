@@ -12,7 +12,7 @@ export interface CreditNoteListFilters {
 // text match (e.g. "25 jul") since that has no clean server-side equivalent.
 export function buildReturnWhere(filters: CreditNoteListFilters): Prisma.ReturnWhereInput {
   const { search, dateRange } = filters;
-  const where: Prisma.ReturnWhereInput = { deletedAt: null };
+  const where: Prisma.ReturnWhereInput = { deletedAt: null, invoice: { deletedAt: null } };
   if (dateRange) where.date = dateRange;
   if (search?.trim()) {
     const q = search.trim();

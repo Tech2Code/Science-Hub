@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
@@ -10,7 +10,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Sk } from "@/components/ui/Skeleton";
 import { fetchCached, bustCache, bustCachePrefix } from "@/lib/useCache";
-import { invalidateCachedPdf } from "@/lib/pdfCache";
+import { invalidateCachedPdf, clearAllCachedPdfs } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate, validateForm, hasErrors, toIstDateStr, type FormErrors } from "@/lib/validation";
 import { useDirty } from "@/lib/useDirty";
@@ -147,7 +147,7 @@ export default function EditInvoicePage() {
   useFormDraft(DRAFT_KEY, {
     customerId, isInterState, placeOfSupply, reverseCharge, ewayBillNumber, items, notes, dueDate, invoiceDate,
     transportChargeEnabled, transportCharge, transportChargeGstRate,
-  }, !draftReady || saving || !isDirty);
+  }, !draftReady || saving || !isDirty, { active: showDraftBanner, onTakeOver: () => { setShowDraftBanner(false); setDraftReady(true); } });
 
   // Resolves customerId → full customer details whenever it's set from elsewhere without an object
   // in hand (draft-restore) — handleCustomerSelect/saveNewCustomer/saveCustomerEdit and the initial
@@ -278,9 +278,12 @@ export default function EditInvoicePage() {
       if (res.ok) {
         setSelectedCustomer(data);
         setCustomerSearch(data.name);
+        setPlaceOfSupply(data.state ?? "");
+        if (data.state && businessState) setIsInterState(data.state !== businessState);
         bustCachePrefix("/api/customers");
         bustCachePrefix("/api/invoices");
         bustCachePrefix("/api/reports");
+        void clearAllCachedPdfs();
         setCustomerModalOpen(false);
         setCustomerEditId(null);
         setCustomerForm(BLANK_CUSTOMER_FORM);

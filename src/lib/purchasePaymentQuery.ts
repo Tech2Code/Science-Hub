@@ -12,7 +12,7 @@ export interface PurchasePaymentListFilters {
 // filter client-side: vendor name, bill number, method, reference.
 export function buildPurchasePaymentWhere(filters: PurchasePaymentListFilters): Prisma.PurchasePaymentWhereInput {
   const { search, dateRange } = filters;
-  const where: Prisma.PurchasePaymentWhereInput = { purchaseBill: { deletedAt: null } };
+  const where: Prisma.PurchasePaymentWhereInput = { purchaseBill: { deletedAt: null, status: { not: "cancelled" } } };
   if (dateRange) where.date = dateRange;
   if (search?.trim()) {
     const q = search.trim();

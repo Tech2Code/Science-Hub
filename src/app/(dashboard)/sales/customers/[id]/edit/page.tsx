@@ -11,6 +11,7 @@ import { CustomerFormFields } from "@/components/customers/CustomerFormFields";
 import { Sk, SkeletonSwap } from "@/components/ui/Skeleton";
 import { BLANK_CUSTOMER_FORM, validateCustomerForm, normalizeCustomerField, type CustomerFormData } from "@/lib/customerForm";
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
+import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
 import { hasErrors, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -75,8 +76,13 @@ export default function EditCustomerPage() {
         setInitialForm(loaded);
         setLoadedUpdatedAt(d.updatedAt ?? null);
         setLoading(false);
-        if (loadFormDraft(DRAFT_KEY)) setShowDraftBanner(true);
-        else setDraftReady(true);
+        const existingDraft = loadFormDraft<CustomerFormData>(DRAFT_KEY);
+        if (existingDraft && JSON.stringify(existingDraft.values) !== JSON.stringify(loaded)) {
+          setShowDraftBanner(true);
+        } else {
+          if (existingDraft) clearFormDraft(DRAFT_KEY);
+          setDraftReady(true);
+        }
       })
       .catch((err: unknown) => { setLoadError(err instanceof Error ? err.message : "Failed to load customer."); setLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- DRAFT_KEY is derived from id, already a dependency
@@ -104,6 +110,7 @@ export default function EditCustomerPage() {
     }
     if (res.ok) {
       clearFormDraft(DRAFT_KEY);
+      void clearAllCachedPdfs();
       bustCachePrefix("/api/customers");
       bustCache(`/api/customers/${id}`);
       bustCachePrefix("/api/invoices");
@@ -133,7 +140,7 @@ export default function EditCustomerPage() {
   const noChanges = initialForm !== null && JSON.stringify(form) === JSON.stringify(initialForm);
   const disabled = loading || saving;
 
-  useFormDraft(DRAFT_KEY, form, !draftReady || saving || noChanges);
+  useFormDraft(DRAFT_KEY, form, !draftReady || saving || noChanges, { active: showDraftBanner, onTakeOver: () => { setShowDraftBanner(false); setDraftReady(true); } });
 
   if (loadError) {
     return (

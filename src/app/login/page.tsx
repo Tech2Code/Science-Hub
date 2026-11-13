@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -20,6 +20,13 @@ export default function LoginPage() {
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [stage, setStage] = useState<"idle" | "verifying" | "verified">("idle");
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+    };
+  }, []);
 
   function handleEmailBlur() {
     setEmailError(validate(email, rules.required("Email is required."), rules.email()) ?? "");
@@ -54,7 +61,7 @@ export default function LoginPage() {
       // Credentials matched — only now is a real login happening.
       setStage("verified");
       // Brief pause so the success checkmark is actually visible before navigating away.
-      setTimeout(() => router.push("/dashboard"), 500);
+      redirectTimerRef.current = setTimeout(() => router.push("/dashboard"), 500);
     }
   }
 
@@ -85,6 +92,7 @@ export default function LoginPage() {
                 onBlur={handleEmailBlur}
                 placeholder="you@sciencehub.in"
                 maxLength={254}
+                disabled={loading}
               />
             </FormField>
             <FormField label="Password" error={passwordError}>

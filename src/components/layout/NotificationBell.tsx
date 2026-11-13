@@ -80,7 +80,7 @@ export function NotificationBell() {
   // badge nobody's looked at yet; the badge count alone is worth a lightweight background poll. Both
   // hooks target the exact same URL, so they share one underlying cache entry — a mutate/patch
   // through either instance updates both (the badge keeps working even while the dropdown is closed).
-  const { data: summary, loading, mutate, patchData } = useFetch<NotificationSummary>(canWrite && open ? "/api/notifications" : null);
+  const { data: summary, loading, mutate } = useFetch<NotificationSummary>(canWrite && open ? "/api/notifications" : null);
   const { data: badgeSummary, mutate: refreshBadge } = useFetch<NotificationSummary>(canWrite ? "/api/notifications" : null);
   // The shell (and this bell) stays mounted across navigation, and useFetch trusts its cache until
   // busted, so without this the badge count only updated on a full reload or on opening the
@@ -195,7 +195,7 @@ export function NotificationBell() {
   }
 
   function handleDismiss(category: NotificationCategoryKey, item: NotificationItem) {
-    patchData((prev) => (prev ? withoutItem(prev, category, item) : prev as unknown as NotificationSummary));
+    patchCacheIfPresent<NotificationSummary>("/api/notifications", (prev) => withoutItem(prev, category, item));
     // Also reflects instantly in the "Dismissed" panel's own cache (if it's already been loaded
     // this session) — that panel is fetched from a separate URL, so without this it'd keep showing
     // whatever it last fetched until the panel happened to remount/refetch. item.sortKey puts it
@@ -215,7 +215,7 @@ export function NotificationBell() {
   }
 
   function handleUndo(category: NotificationCategoryKey, item: NotificationItem) {
-    patchData((prev) => (prev ? withItem(prev, category, item) : prev as unknown as NotificationSummary));
+    patchCacheIfPresent<NotificationSummary>("/api/notifications", (prev) => withItem(prev, category, item));
     patchCacheIfPresent<NotificationSummary>(DISMISSED_URL, (prev) => withoutItem(prev, category, item));
     patchCacheIfPresent<{ items: NotificationItem[] }>(categoryUrl(category), (prev) => ({ items: withItemFlat(prev.items, item) }));
     callDismissApi("DELETE", category, item.id);
@@ -240,7 +240,7 @@ export function NotificationBell() {
   // active list immediately, same as Undo — no refetch needed just to learn where it belongs.
   function handleRestore(category: NotificationCategoryKey, item: NotificationItem) {
     patchDismissed((prev) => (prev ? withoutItem(prev, category, item) : prev as unknown as NotificationSummary));
-    patchData((prev) => (prev ? withItem(prev, category, item) : prev as unknown as NotificationSummary));
+    patchCacheIfPresent<NotificationSummary>("/api/notifications", (prev) => withItem(prev, category, item));
     patchCacheIfPresent<{ items: NotificationItem[] }>(categoryUrl(category), (prev) => ({ items: withItemFlat(prev.items, item) }));
     callDismissApi("DELETE", category, item.id);
     toast({ type: "success", title: "Notification restored", message: `"${item.label}" will show in your notifications again.` });

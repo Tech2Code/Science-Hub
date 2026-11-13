@@ -377,7 +377,7 @@ export async function PUT(
       // Re-read paidAmount inside the transaction — a payment recorded/edited/deleted after the
       // outer snapshot would otherwise leave status (and the total >= paid check) derived from a
       // stale value. Same reasoning as the in-transaction re-read in the returns route.
-      const fresh = await tx.invoice.findUniqueOrThrow({ where: { id }, select: { paidAmount: true, deletedAt: true } });
+      const fresh = await tx.invoice.findUniqueOrThrow({ where: { id }, select: { paidAmount: true, deletedAt: true, isInterState: true } });
       if (fresh.deletedAt) throw new InvoiceEditValidationError("This invoice is in the bin — restore it before editing");
       const paidAmount = fresh.paidAmount;
       if (total < round2(paidAmount)) {
@@ -404,7 +404,7 @@ export async function PUT(
       // Recalculate status based on paidAmount, compared in whole paise (round2) so float noise in the SUM of payments can't flip a
     // fully-paid invoice to "partial" on an edit that never touched payments, and a real ₹0.01 shortfall is not hidden.
       let newStatus = "unpaid";
-      if (round2(total - paidAmount) <= 0) newStatus = "paid";
+      if (paidAmount > 0 && round2(total - paidAmount) <= 0) newStatus = "paid";
       else if (paidAmount > 0) newStatus = "partial";
 
       // Excludes this invoice's own (pre-edit) balance from "current outstanding", then adds back
@@ -431,6 +431,14 @@ export async function PUT(
       // A returned line's rate is what the credit note was computed from — changing it would leave
       // the credit note crediting a different value than the invoice now charges for those units.
       await assertReturnedLinesRatesUnchanged(tx, id, invoiceItems);
+      if (Boolean(fresh.isInterState) !== Boolean(inter)) {
+        const activeReturnCount = await tx.return.count({ where: { invoiceId: id, deletedAt: null } });
+        if (activeReturnCount > 0) {
+          throw new InvoiceEditValidationError(
+            "Cannot change intra-state / inter-state tax type (Place of Supply) while active credit notes exist on this invoice. Delete the credit note(s) first."
+          );
+        }
+      }
 
       // Restore stock for old items before replacing them — batched into one UPDATE to avoid a per-line round trip.
       const oldItems = await tx.invoiceItem.findMany({

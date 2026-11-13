@@ -143,7 +143,7 @@ export default function EditRateListPage() {
     return false;
   })();
 
-  useFormDraft(DRAFT_KEY, { title, note, items }, !draftReady || saving || !isDirty);
+  useFormDraft(DRAFT_KEY, { title, note, items }, !draftReady || saving || !isDirty, { active: showDraftBanner, onTakeOver: () => { setShowDraftBanner(false); setDraftReady(true); } });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

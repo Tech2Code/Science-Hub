@@ -14,14 +14,24 @@ interface GeneratePdfViaIframeOptions {
 // Shared by Invoices/Purchase Bills list pages so iframe-polling/cleanup/timeout logic can't drift apart.
 export function generatePdfViaIframe({ route, printAreaId, copyLabels, includeLogo }: GeneratePdfViaIframeOptions): Promise<Blob | null> {
   return new Promise((resolve) => {
+    let settled = false;
     const iframe = document.createElement("iframe");
     Object.assign(iframe.style, { position: "fixed", width: "850px", height: "1200px", top: "-9999px", left: "-9999px", border: "none", opacity: "0", pointerEvents: "none" });
     const cleanup = () => { try { document.body.removeChild(iframe); } catch {} };
-    const safetyTimer = setTimeout(() => { cleanup(); resolve(null); }, 45000);
+    const finish = (blob: Blob | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(safetyTimer);
+      cleanup();
+      resolve(blob);
+    };
+    const safetyTimer = setTimeout(() => finish(null), 45000);
     iframe.onload = async () => {
+      if (settled) return;
       const el = await new Promise<HTMLElement | null>(resolveEl => {
         let tries = 0;
         const check = () => {
+          if (settled) { resolveEl(null); return; }
           const area = iframe.contentDocument?.getElementById(printAreaId);
           if (area?.querySelector("tbody tr")) { resolveEl(area); return; }
           if (++tries > 40) { resolveEl(null); return; }
@@ -29,16 +39,16 @@ export function generatePdfViaIframe({ route, printAreaId, copyLabels, includeLo
         };
         setTimeout(check, 250);
       });
-      if (!el) { clearTimeout(safetyTimer); cleanup(); resolve(null); return; }
+      if (!el || settled) { finish(null); return; }
       await new Promise(r => setTimeout(r, 400));
+      if (settled) return;
       // Read the logo's already-resolved src from the iframe's DOM so continuation-page stamps match page 1.
       const logoUrl = includeLogo ? el.querySelector<HTMLImageElement>('img[alt="Logo"]')?.src || undefined : undefined;
       let blob: Blob | null = null;
       try {
         blob = await generateInvoicePdfBlob(el, { ...(copyLabels ? { copyLabels } : {}), ...(logoUrl ? { logoUrl } : {}) });
       } catch { /* resolved as null below */ }
-      clearTimeout(safetyTimer); cleanup();
-      resolve(blob);
+      finish(blob);
     };
     document.body.appendChild(iframe);
     iframe.src = route;

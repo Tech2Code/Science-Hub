@@ -20,9 +20,10 @@ export async function DELETE(
     const result = await prisma.$transaction(async (tx) => {
       const ret = await tx.return.findFirst({
         where: { id: returnId, invoiceId: id },
-        include: { items: true },
+        include: { items: true, invoice: { select: { deletedAt: true } } },
       });
-      if (!ret) return { found: false, alreadyDeleted: false };
+      if (!ret) return { found: false, alreadyDeleted: false, invoiceBinned: false };
+      if (ret.invoice.deletedAt) return { found: true, alreadyDeleted: false, invoiceBinned: true, ret };
 
       // Double-delete safe: only reverse stock if this call is the one that
       // actually transitions deletedAt from null to set.
@@ -30,7 +31,7 @@ export async function DELETE(
         where: { id: returnId, deletedAt: null },
         data: { deletedAt: new Date() },
       });
-      if (updateResult.count === 0) return { found: true, alreadyDeleted: true, ret };
+      if (updateResult.count === 0) return { found: true, alreadyDeleted: true, invoiceBinned: false, ret };
 
       await batchAdjustStock(
         tx,
@@ -38,12 +39,14 @@ export async function DELETE(
         { type: "return_delete_reverse", reference: ret.creditNoteNumber ?? undefined, notes: "Credit note deleted", createdByUserId: auth.session.user.id }
       );
 
-      return { found: true, alreadyDeleted: false, ret };
+      return { found: true, alreadyDeleted: false, invoiceBinned: false, ret };
     }, { timeout: 20000, maxWait: 10000 });
 
     if (!result.found) return NextResponse.json({ error: "Credit note not found" }, { status: 404 });
+    if (result.invoiceBinned) return NextResponse.json({ error: "This invoice is in the bin — restore it before deleting a credit note" }, { status: 400 });
     if (result.alreadyDeleted) return NextResponse.json({ message: "Already moved to bin" });
 
+    revalidateTag("invoices", { expire: 0 });
     revalidateTag("products", { expire: 0 });
     revalidateTag("reports", { expire: 0 });
 

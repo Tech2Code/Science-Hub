@@ -116,6 +116,10 @@ export default function RateListDetailPage() {
       .catch(() => setSettingsFailed(true));
   }, []);
 
+  useEffect(() => {
+    return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
+  }, [pdfPreviewUrl]);
+
   async function generateRateListPdfBlob(force = false): Promise<Blob | null> {
     // Never render (or cache) before settings have loaded — see settingsFailed above.
     if (!rateList || !settings) return null;
@@ -488,14 +492,14 @@ export default function RateListDetailPage() {
               Edit
             </Button>
           )}
-          <Button variant="secondary" size="sm" title={pdfReady ? "Discard the cached PDF and view a freshly generated copy" : pdfNotReadyTitle} aria-label="Regenerate PDF" disabled={!pdfReady} onClick={handleRegeneratePdf}>
+          <Button variant="secondary" size="sm" title={pdfReady ? "Discard the cached PDF and view a freshly generated copy" : pdfNotReadyTitle} aria-label="Regenerate PDF" disabled={!pdfReady || pdfRegenerating || pdfViewing || pdfDownloading || shareLoading} onClick={handleRegeneratePdf}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
           </Button>
-          <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing} disabled={!pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle}>
+          <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing} disabled={!pdfReady || pdfRegenerating || pdfViewing || pdfDownloading || shareLoading} title={pdfReady ? undefined : pdfNotReadyTitle}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             Preview
           </Button>
-          <Button variant="secondary" size="sm" onClick={handleDownloadPdf} loading={pdfDownloading} disabled={!pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle}>
+          <Button variant="secondary" size="sm" onClick={handleDownloadPdf} loading={pdfDownloading} disabled={!pdfReady || pdfRegenerating || pdfViewing || pdfDownloading || shareLoading} title={pdfReady ? undefined : pdfNotReadyTitle}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Download PDF
           </Button>
@@ -504,7 +508,7 @@ export default function RateListDetailPage() {
             Export Excel
           </Button>
           <div className={styles.shareWrap} ref={shareContainerRef}>
-            <Button variant="secondary" size="sm" disabled={shareLoading || !pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
+            <Button variant="secondary" size="sm" disabled={pdfRegenerating || pdfViewing || pdfDownloading || shareLoading || !pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
               setShareOpen((o) => {
                 const next = !o;
                 if (next && shareContainerRef.current) {

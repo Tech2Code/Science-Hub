@@ -311,7 +311,10 @@ export default function AdminPage() {
     if (field === "email") {
       setAddFieldErrors(prev => ({ ...prev, email: undefined }));
       if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current);
-      if (!value.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return;
+      if (!value.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) {
+        setEmailCheckLoading(false);
+        return;
+      }
       setEmailCheckLoading(true);
       emailCheckTimer.current = setTimeout(async () => {
         const match = users.find(u => u.email.toLowerCase() === value.trim().toLowerCase());
@@ -506,7 +509,7 @@ export default function AdminPage() {
   }
 
   async function clearAllLogs() {
-    if (clearLogsInput !== CLEAR_LOGS_PHRASE) return;
+    if (clearLogsInput !== CLEAR_LOGS_PHRASE || clearLogsLoading) return;
     setClearLogsLoading(true);
     try {
       const res = await fetch("/api/admin/activity", { method: "DELETE" });
@@ -561,7 +564,7 @@ export default function AdminPage() {
         title="Delete User"
         message={`Delete "${deleteConfirm?.name}"? This cannot be undone.`}
         confirmLabel="Delete" variant="danger" loading={deleteLoading}
-        onConfirm={deleteUser} onCancel={() => setDeleteConfirm(null)}
+        onConfirm={deleteUser} onCancel={() => { if (!deleteLoading) setDeleteConfirm(null); }}
       />
 
       <Modal
@@ -611,7 +614,7 @@ export default function AdminPage() {
         title="Delete Log Entry"
         message="Delete this activity log entry? This cannot be undone."
         confirmLabel="Delete" variant="danger" loading={logDeleteLoading}
-        onConfirm={deleteLog} onCancel={() => setLogDeleteConfirm(null)}
+        onConfirm={deleteLog} onCancel={() => { if (!logDeleteLoading) setLogDeleteConfirm(null); }}
       />
 
       <ConfirmDialog
@@ -679,10 +682,10 @@ export default function AdminPage() {
           open={addOpen}
           title="New User"
           variant="fullscreen"
-          onClose={() => { if (addSaving) return; setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}
+          onClose={() => { if (addSaving) return; if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current); setEmailCheckLoading(false); setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}
           footer={
             <>
-              <Button type="button" variant="secondary" onClick={() => { setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}>Cancel</Button>
+              <Button type="button" variant="secondary" disabled={addSaving} onClick={() => { if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current); setEmailCheckLoading(false); setAddOpen(false); setAddForm({ name: "", email: "", password: "", confirmPassword: "", role: "staff" }); setAddMsg(null); setAddFieldErrors({}); }}>Cancel</Button>
               <Button type="submit" form="add-user-form" variant="primary" disabled={addSaving || !!addFieldErrors.name || !!addFieldErrors.email || !!addFieldErrors.password || !!addFieldErrors.confirmPassword || emailCheckLoading}>Create User</Button>
             </>
           }

@@ -29,9 +29,14 @@ async function sendResetEmail(normalizedEmail: string): Promise<void> {
     return;
   }
 
-  // Invalidate any existing unexpired tokens for this user
+  // Invalidate any existing tokens for this user and opportunistic cleanup of expired tokens
   await prisma.passwordResetToken.deleteMany({
-    where: { userId: user.id, usedAt: null, expiresAt: { gt: new Date() } },
+    where: {
+      OR: [
+        { userId: user.id },
+        { expiresAt: { lte: new Date() } },
+      ],
+    },
   });
 
   // 64-char hex token, expires in 1 hour. Only its SHA-256 hash is stored (see src/lib/resetToken.ts) — the raw

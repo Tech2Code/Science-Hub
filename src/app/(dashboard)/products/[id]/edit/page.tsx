@@ -106,8 +106,13 @@ export default function EditProductPage() {
         setInitialForm(loaded);
         setLoadedUpdatedAt(product.updatedAt ?? null);
         setBrands(b); setCategories(c); setLoading(false);
-        if (loadFormDraft(DRAFT_KEY)) setShowDraftBanner(true);
-        else setDraftReady(true);
+        const existingDraft = loadFormDraft<ProductFormData>(DRAFT_KEY);
+        if (existingDraft && JSON.stringify(existingDraft.values) !== JSON.stringify(loaded)) {
+          setShowDraftBanner(true);
+        } else {
+          if (existingDraft) clearFormDraft(DRAFT_KEY);
+          setDraftReady(true);
+        }
       })
       .catch((err: unknown) => { setLoadError(err instanceof Error ? err.message : "Couldn't load this product."); setLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- DRAFT_KEY is derived from id, already a dependency
@@ -178,7 +183,7 @@ export default function EditProductPage() {
   const noChanges = initialForm !== null && JSON.stringify(form) === JSON.stringify(initialForm);
   const disabled = loading || saving;
 
-  useFormDraft(DRAFT_KEY, form, !draftReady || saving || noChanges);
+  useFormDraft(DRAFT_KEY, form, !draftReady || saving || noChanges, { active: showDraftBanner, onTakeOver: () => { setShowDraftBanner(false); setDraftReady(true); } });
 
   if (!loading && loadError)
     return <div className="loading-center">{loadError}</div>;

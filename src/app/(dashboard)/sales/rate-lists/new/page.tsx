@@ -77,7 +77,7 @@ export default function NewRateListPage() {
     setConfirmDiscardDraftOpen(false);
   }
 
-  useFormDraft(DRAFT_KEY, { title, note, items }, !draftReady || saving);
+  useFormDraft(DRAFT_KEY, { title, note, items }, !draftReady || saving, { active: showDraftBanner, onTakeOver: () => { setShowDraftBanner(false); setDraftReady(true); } });
 
   const visibleItemsError = itemsError && itemsErrorFor === items ? itemsError : undefined;
   const missingTitle = !title.trim();

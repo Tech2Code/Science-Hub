@@ -28,7 +28,12 @@ export function useFetch<T>(url: string | null) {
   const [error, setError]     = useState(false);
 
   useEffect(() => {
-    if (!url) return;
+    if (!url) {
+      setData(null); // eslint-disable-line react-hooks/set-state-in-effect
+      setLoading(false);
+      setError(false);
+      return;
+    }
     let active = true;
 
     const onUpdate = (d: unknown) => { if (active) setData(d as T); };
@@ -38,7 +43,7 @@ export function useFetch<T>(url: string | null) {
     // Shows cached data immediately (no skeleton); trusted until explicitly busted, so an unchanged remount triggers no network request.
     const hasCache = cache.has(url);
     if (hasCache) {
-      setData(cache.get(url) as T); // eslint-disable-line react-hooks/set-state-in-effect -- seeds from the module-level cache synchronously so the first paint shows it, not a skeleton
+      setData(cache.get(url) as T);
       setLoading(false);
       setError(false);
       return () => { active = false; listeners.get(url)?.delete(onUpdate); };

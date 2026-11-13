@@ -11,6 +11,7 @@ import { VendorFormFields } from "@/components/vendors/VendorFormFields";
 import { Sk } from "@/components/ui/Skeleton";
 import { BLANK_VENDOR_FORM, validateVendorForm, normalizeVendorField, type VendorFormData } from "@/lib/vendorForm";
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
+import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
 import { hasErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -76,8 +77,13 @@ export default function EditVendorPage() {
         setInitialForm(loaded);
         setLoadedUpdatedAt(d.updatedAt ?? null);
         setLoading(false);
-        if (loadFormDraft(DRAFT_KEY)) setShowDraftBanner(true);
-        else setDraftReady(true);
+        const existingDraft = loadFormDraft<VendorFormData>(DRAFT_KEY);
+        if (existingDraft && JSON.stringify(existingDraft.values) !== JSON.stringify(loaded)) {
+          setShowDraftBanner(true);
+        } else {
+          if (existingDraft) clearFormDraft(DRAFT_KEY);
+          setDraftReady(true);
+        }
       })
       // Without an error state a failed load rendered a blank, permanently-disabled form.
       .catch(() => { setLoadError("Vendor not found or failed to load."); setLoading(false); });
@@ -108,6 +114,7 @@ export default function EditVendorPage() {
     }
     if (res.ok) {
       clearFormDraft(DRAFT_KEY);
+      void clearAllCachedPdfs();
       bustCachePrefix("/api/vendors");
       bustCachePrefix("/api/purchase-bills");
       bustCachePrefix("/api/reports"); // dashboard/purchase overview show the vendor name
@@ -140,7 +147,7 @@ export default function EditVendorPage() {
   const hasChanges = initialForm !== null && JSON.stringify(form) !== JSON.stringify(initialForm);
   const disabled = loading || saving;
 
-  useFormDraft(DRAFT_KEY, form, !draftReady || saving || !hasChanges);
+  useFormDraft(DRAFT_KEY, form, !draftReady || saving || !hasChanges, { active: showDraftBanner, onTakeOver: () => { setShowDraftBanner(false); setDraftReady(true); } });
 
   return (
     <>

@@ -24,6 +24,24 @@ export async function GET(req: NextRequest) {
 
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
+    // One-off customers/vendors are soft-deleted at creation with no delete_* log entry — resolve
+    // which soft-deleted rows were explicitly moved to the Bin up front so neither the 30-day
+    // auto-purge nor the Bin listing below touches one-off records.
+    const [softDeletedCustomerRows, softDeletedVendorRows] = await Promise.all([
+      prisma.customer.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
+      prisma.vendor.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
+    ]);
+    const [explicitlyDeletedCustomers, explicitlyDeletedVendors] = await Promise.all([
+      softDeletedCustomerRows.length > 0
+        ? prisma.activityLog.findMany({ where: { entityType: "customer", action: "delete_customer", entityId: { in: softDeletedCustomerRows.map((c) => c.id) } }, select: { entityId: true } })
+        : Promise.resolve([] as { entityId: string | null }[]),
+      softDeletedVendorRows.length > 0
+        ? prisma.activityLog.findMany({ where: { entityType: "vendor", action: "delete_vendor", entityId: { in: softDeletedVendorRows.map((v) => v.id) } }, select: { entityId: true } })
+        : Promise.resolve([] as { entityId: string | null }[]),
+    ]);
+    const explicitlyDeletedCustomerIds = [...new Set(explicitlyDeletedCustomers.map((l) => l.entityId).filter((id): id is string => !!id))];
+    const explicitlyDeletedVendorIds = [...new Set(explicitlyDeletedVendors.map((l) => l.entityId).filter((id): id is string => !!id))];
+
     // Invoices/purchase bills/credit notes are exempt from auto-purge — their numbers are legally significant GST sequences; purge only via explicit admin action.
 
     // Products — only purge if not referenced by invoice/purchase items (an unguarded deleteMany would throw on the FK constraint).
@@ -34,13 +52,15 @@ export async function GET(req: NextRequest) {
     if (oldProducts.length > 0) {
       const oldProductIds = oldProducts.map((p) => p.id);
       // Batched groupBy (2 queries total) instead of a per-product COUNT round-trip to avoid N+1.
-      const [referencedByInvoiceItems, referencedByPurchaseItems] = await Promise.all([
+      const [referencedByInvoiceItems, referencedByPurchaseItems, referencedByReturnItems] = await Promise.all([
         prisma.invoiceItem.groupBy({ by: ["productId"], where: { productId: { in: oldProductIds } } }),
         prisma.purchaseBillItem.groupBy({ by: ["productId"], where: { productId: { in: oldProductIds } } }),
+        prisma.returnItem.groupBy({ by: ["productId"], where: { productId: { in: oldProductIds } } }),
       ]);
       const blockedProductIds = new Set([
-        ...referencedByInvoiceItems.map((r) => r.productId),
+        ...referencedByInvoiceItems.map((r) => r.productId).filter((id): id is string => id !== null),
         ...referencedByPurchaseItems.map((r) => r.productId).filter((id): id is string => id !== null),
+        ...referencedByReturnItems.map((r) => r.productId).filter((id): id is string => id !== null),
       ]);
       const deletableProductIds = oldProductIds.filter((id) => !blockedProductIds.has(id));
       if (deletableProductIds.length > 0) {
@@ -48,11 +68,13 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Customers — only purge if no invoices reference them at all
-    const oldCustomers = await prisma.customer.findMany({
-      where: { deletedAt: { not: null, lt: cutoff } },
-      select: { id: true },
-    });
+    // Customers — only purge explicitly binned customers when no invoices reference them at all
+    const oldCustomers = explicitlyDeletedCustomerIds.length > 0
+      ? await prisma.customer.findMany({
+          where: { id: { in: explicitlyDeletedCustomerIds }, deletedAt: { not: null, lt: cutoff } },
+          select: { id: true },
+        })
+      : [];
     if (oldCustomers.length > 0) {
       const oldCustomerIds = oldCustomers.map((c) => c.id);
       const referencedByInvoices = await prisma.invoice.groupBy({
@@ -88,11 +110,13 @@ export async function GET(req: NextRequest) {
       await prisma.category.deleteMany({ where: { id: { in: oldCategoryIds } } });
     }
 
-    // Vendors — only purge if no purchase bills reference them at all
-    const oldVendors = await prisma.vendor.findMany({
-      where: { deletedAt: { not: null, lt: cutoff } },
-      select: { id: true },
-    });
+    // Vendors — only purge explicitly binned vendors when no purchase bills reference them at all
+    const oldVendors = explicitlyDeletedVendorIds.length > 0
+      ? await prisma.vendor.findMany({
+          where: { id: { in: explicitlyDeletedVendorIds }, deletedAt: { not: null, lt: cutoff } },
+          select: { id: true },
+        })
+      : [];
     if (oldVendors.length > 0) {
       const oldVendorIds = oldVendors.map((v) => v.id);
       const referencedByBills = await prisma.purchaseBill.groupBy({
@@ -127,24 +151,6 @@ export async function GET(req: NextRequest) {
 
     // Fetch remaining soft-deleted items
     const now = Date.now();
-
-    // One-off customers/vendors are soft-deleted at creation with no delete_* log entry — exclude them here since the user never asked to delete them.
-    // Scope the log lookup to currently soft-deleted ids — the activity log grows forever, so an
-    // unfiltered findMany over every delete_customer/delete_vendor entry ever written is unbounded.
-    const [softDeletedCustomerRows, softDeletedVendorRows] = await Promise.all([
-      prisma.customer.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
-      prisma.vendor.findMany({ where: { deletedAt: { not: null } }, select: { id: true } }),
-    ]);
-    const [explicitlyDeletedCustomers, explicitlyDeletedVendors] = await Promise.all([
-      softDeletedCustomerRows.length > 0
-        ? prisma.activityLog.findMany({ where: { entityType: "customer", action: "delete_customer", entityId: { in: softDeletedCustomerRows.map((c) => c.id) } }, select: { entityId: true } })
-        : Promise.resolve([] as { entityId: string | null }[]),
-      softDeletedVendorRows.length > 0
-        ? prisma.activityLog.findMany({ where: { entityType: "vendor", action: "delete_vendor", entityId: { in: softDeletedVendorRows.map((v) => v.id) } }, select: { entityId: true } })
-        : Promise.resolve([] as { entityId: string | null }[]),
-    ]);
-    const explicitlyDeletedCustomerIds = [...new Set(explicitlyDeletedCustomers.map((l) => l.entityId).filter((id): id is string => !!id))];
-    const explicitlyDeletedVendorIds = [...new Set(explicitlyDeletedVendors.map((l) => l.entityId).filter((id): id is string => !!id))];
 
     const [invoices, customers, products, brands, categories, vendors, purchaseBills, returns, rateLists, retainedCounts] = await Promise.all([
       prisma.invoice.findMany({
@@ -222,7 +228,7 @@ export async function GET(req: NextRequest) {
     const productIds = products.map((p) => p.id);
     const vendorIds = vendors.map((v) => v.id);
     const [
-      customerInvoiceCounts, productInvoiceItemCounts, productPurchaseItemCounts, vendorBillCounts,
+      customerInvoiceCounts, productInvoiceItemCounts, productPurchaseItemCounts, productReturnItemCounts, vendorBillCounts,
     ] = await Promise.all([
       customerIds.length
         ? prisma.invoice.groupBy({ by: ["customerId"], where: { customerId: { in: customerIds } }, _count: { _all: true } })
@@ -232,6 +238,9 @@ export async function GET(req: NextRequest) {
         : [],
       productIds.length
         ? prisma.purchaseBillItem.groupBy({ by: ["productId"], where: { productId: { in: productIds } }, _count: { _all: true } })
+        : [],
+      productIds.length
+        ? prisma.returnItem.groupBy({ by: ["productId"], where: { productId: { in: productIds } }, _count: { _all: true } })
         : [],
       vendorIds.length
         ? prisma.purchaseBill.groupBy({ by: ["vendorId"], where: { vendorId: { in: vendorIds } }, _count: { _all: true } })
@@ -244,13 +253,18 @@ export async function GET(req: NextRequest) {
     const productPurchaseItemCountMap = new Map(
       productPurchaseItemCounts.filter((r) => r.productId !== null).map((r) => [r.productId as string, r._count._all])
     );
+    const productReturnItemCountMap = new Map(
+      productReturnItemCounts.filter((r) => r.productId !== null).map((r) => [r.productId as string, r._count._all])
+    );
     const productBlockMap = new Map(
       productIds.map((id) => {
         const itemCount = productInvoiceItemCountMap.get(id) ?? 0;
         const purchaseItemCount = productPurchaseItemCountMap.get(id) ?? 0;
+        const returnItemCount = productReturnItemCountMap.get(id) ?? 0;
         let reason: string | undefined;
         if (itemCount > 0) reason = `Used in ${itemCount} invoice line item(s) (including any in the bin)`;
         else if (purchaseItemCount > 0) reason = `Used in ${purchaseItemCount} purchase bill line item(s) (including any in the bin)`;
+        else if (returnItemCount > 0) reason = `Used in ${returnItemCount} credit note line item(s) (including any in the bin)`;
         return [id, reason] as const;
       })
     );

@@ -117,13 +117,15 @@ export function computeNextNumber(
   prefix: string,
   yearLabel: string,
   override: number | null | undefined
-): { documentNumber: string; overrideUsed: boolean } {
+): { documentNumber: string; overrideUsed: boolean; overrideStale: boolean } {
   const format = resolveNumberFormat(formatId);
   const lastSequentialNumber = findMaxSequence(existingNumbers, format.matcher(prefix, yearLabel));
   const overrideUsed = override != null && override > lastSequentialNumber;
+  const overrideStale = override != null && override <= lastSequentialNumber;
   const sequentialNumber = overrideUsed ? (override as number) : lastSequentialNumber + 1;
   return {
     documentNumber: format.render(prefix, yearLabel, sequentialNumber),
     overrideUsed,
+    overrideStale,
   };
 }

@@ -165,7 +165,10 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
     pasteText,
     rows: rows.map((r) => (r.status === "saving" ? { ...r, status: "pending" } : r)),
   };
-  useFormDraft(DRAFT_KEY, draftValue, !draftReady || importing || !open);
+  useFormDraft(DRAFT_KEY, draftValue, !draftReady || importing || !open, {
+    active: showDraftBanner && step === "input",
+    onTakeOver: () => setShowDraftBanner(false),
+  });
 
   function reset() {
     setStep("input");
@@ -177,7 +180,7 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
 
   // Closing just hides the popup with no confirm prompt — everything on screen is already autosaved to the draft, reopened via the banner above.
   function handleClose() {
-    if (importing) return;
+    if (importing || parsing) return;
     onClose();
   }
 
@@ -265,7 +268,19 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
   }
 
   function updateRow<K extends keyof ReviewRow>(idx: number, field: K, value: ReviewRow[K]) {
-    setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, [field]: value, errors: { ...r.errors, [field]: undefined } } : r)));
+    setRows((prev) =>
+      prev.map((r, i) =>
+        i === idx
+          ? {
+              ...r,
+              [field]: value,
+              errors: { ...r.errors, [field]: undefined },
+              status: r.status === "error" ? "pending" : r.status,
+              errorMsg: r.status === "error" ? undefined : r.errorMsg,
+            }
+          : r
+      )
+    );
   }
   function removeRow(idx: number) {
     const next = rows.filter((_, i) => i !== idx);
@@ -468,31 +483,31 @@ export function ProductBulkImportModal({ open, onClose, onImported }: ProductBul
                 <Fragment key={row.key}>
                   <tr className={row.status === "error" ? styles.rowError : row.status === "done" ? styles.rowDone : row.status === "saving" ? styles.rowSaving : undefined}>
                     <td>{idx + 1}</td>
-                    <td><Input sz="sm" value={row.name} onChange={(e) => updateRow(idx, "name", e.target.value)} style={row.errors.name ? errorBorderStyle : undefined} disabled={importing} /></td>
-                    <td><Input sz="sm" value={row.sku} onChange={(e) => updateRow(idx, "sku", e.target.value)} disabled={importing} /></td>
-                    <td><Input sz="sm" value={row.hsn} onChange={(e) => updateRow(idx, "hsn", e.target.value)} disabled={importing} /></td>
-                    <td><Input sz="sm" value={row.unit} onChange={(e) => updateRow(idx, "unit", e.target.value)} style={row.errors.unit ? errorBorderStyle : undefined} disabled={importing} /></td>
-                    <td><Input sz="sm" type="text" inputMode="decimal" value={row.listPrice} onChange={(e) => updateRow(idx, "listPrice", e.target.value.replace(/[^\d.]/g, ""))} style={row.errors.listPrice ? errorBorderStyle : undefined} disabled={importing} /></td>
-                    <td><Input sz="sm" type="text" inputMode="decimal" value={row.discountPercent} onChange={(e) => updateRow(idx, "discountPercent", e.target.value.replace(/[^\d.]/g, ""))} style={row.errors.discountPercent ? errorBorderStyle : undefined} disabled={importing} /></td>
+                    <td><Input sz="sm" value={row.name} onChange={(e) => updateRow(idx, "name", e.target.value)} style={row.errors.name ? errorBorderStyle : undefined} disabled={importing || row.status === "done"} /></td>
+                    <td><Input sz="sm" value={row.sku} onChange={(e) => updateRow(idx, "sku", e.target.value)} disabled={importing || row.status === "done"} /></td>
+                    <td><Input sz="sm" value={row.hsn} onChange={(e) => updateRow(idx, "hsn", e.target.value)} disabled={importing || row.status === "done"} /></td>
+                    <td><Input sz="sm" value={row.unit} onChange={(e) => updateRow(idx, "unit", e.target.value)} style={row.errors.unit ? errorBorderStyle : undefined} disabled={importing || row.status === "done"} /></td>
+                    <td><Input sz="sm" type="text" inputMode="decimal" value={row.listPrice} onChange={(e) => updateRow(idx, "listPrice", e.target.value.replace(/[^\d.]/g, ""))} style={row.errors.listPrice ? errorBorderStyle : undefined} disabled={importing || row.status === "done"} /></td>
+                    <td><Input sz="sm" type="text" inputMode="decimal" value={row.discountPercent} onChange={(e) => updateRow(idx, "discountPercent", e.target.value.replace(/[^\d.]/g, ""))} style={row.errors.discountPercent ? errorBorderStyle : undefined} disabled={importing || row.status === "done"} /></td>
                     <td><Input sz="sm" type="text" value={purchasePriceOf(row)} disabled readOnly /></td>
-                    <td><Input sz="sm" type="text" inputMode="decimal" value={row.gstRate} onChange={(e) => updateRow(idx, "gstRate", e.target.value.replace(/[^\d.]/g, ""))} style={row.errors.gstRate ? errorBorderStyle : undefined} disabled={importing} /></td>
-                    <td><Input sz="sm" type="text" inputMode="decimal" value={row.price} onChange={(e) => updateRow(idx, "price", e.target.value.replace(/[^\d.]/g, ""))} style={row.errors.price ? errorBorderStyle : undefined} disabled={importing} /></td>
-                    <td><Input sz="sm" type="text" inputMode="numeric" value={row.stock} onChange={(e) => updateRow(idx, "stock", e.target.value.replace(/[^\d]/g, ""))} style={row.errors.stock ? errorBorderStyle : undefined} disabled={importing} /></td>
-                    <td><Input sz="sm" type="text" inputMode="numeric" value={row.minStock} onChange={(e) => updateRow(idx, "minStock", e.target.value.replace(/[^\d]/g, ""))} style={row.errors.minStock ? errorBorderStyle : undefined} disabled={importing} /></td>
+                    <td><Input sz="sm" type="text" inputMode="decimal" value={row.gstRate} onChange={(e) => updateRow(idx, "gstRate", e.target.value.replace(/[^\d.]/g, ""))} style={row.errors.gstRate ? errorBorderStyle : undefined} disabled={importing || row.status === "done"} /></td>
+                    <td><Input sz="sm" type="text" inputMode="decimal" value={row.price} onChange={(e) => updateRow(idx, "price", e.target.value.replace(/[^\d.]/g, ""))} style={row.errors.price ? errorBorderStyle : undefined} disabled={importing || row.status === "done"} /></td>
+                    <td><Input sz="sm" type="text" inputMode="numeric" value={row.stock} onChange={(e) => updateRow(idx, "stock", e.target.value.replace(/[^\d]/g, ""))} style={row.errors.stock ? errorBorderStyle : undefined} disabled={importing || row.status === "done"} /></td>
+                    <td><Input sz="sm" type="text" inputMode="numeric" value={row.minStock} onChange={(e) => updateRow(idx, "minStock", e.target.value.replace(/[^\d]/g, ""))} style={row.errors.minStock ? errorBorderStyle : undefined} disabled={importing || row.status === "done"} /></td>
                     <td>
-                      <Select sz="sm" value={row.brandId} onChange={(e) => updateRow(idx, "brandId", e.target.value)} disabled={importing}>
+                      <Select sz="sm" value={row.brandId} onChange={(e) => updateRow(idx, "brandId", e.target.value)} disabled={importing || row.status === "done"}>
                         <option value="">— none —</option>
                         {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                       </Select>
                     </td>
                     <td>
-                      <Select sz="sm" value={row.categoryId} onChange={(e) => updateRow(idx, "categoryId", e.target.value)} disabled={importing}>
+                      <Select sz="sm" value={row.categoryId} onChange={(e) => updateRow(idx, "categoryId", e.target.value)} disabled={importing || row.status === "done"}>
                         <option value="">— none —</option>
                         {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </Select>
                     </td>
                     <td>
-                      <button type="button" onClick={() => removeRow(idx)} aria-label="Remove" className={styles.removeRowBtn} disabled={importing}>×</button>
+                      <button type="button" onClick={() => removeRow(idx)} aria-label="Remove" className={styles.removeRowBtn} disabled={importing || row.status === "done"}>×</button>
                     </td>
                   </tr>
                   {row.status === "error" && (

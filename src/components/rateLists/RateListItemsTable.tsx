@@ -94,6 +94,10 @@ export function RateListItemsTable({ sectionIndex, items, setItems }: RateListIt
     setItems((prev) => [...prev, emptyItem()]);
   }
   function removeItem(idx: number) {
+    if (items.length <= 2) {
+      setReorderMode(false);
+      setDraggedKey(null);
+    }
     setItems((prev) => prev.filter((_, i) => i !== idx));
   }
   function updateItem(idx: number, field: keyof RateListLineItem, value: string | boolean) {
@@ -180,7 +184,7 @@ export function RateListItemsTable({ sectionIndex, items, setItems }: RateListIt
       <div className={styles.itemsHeader}>
         <h2 className="form-section-title">Items</h2>
         <div className={styles.importActions}>
-          <button type="button" className={styles.importLinkBtn} onClick={() => setPasteModalOpen(true)}>
+          <button type="button" className={styles.importLinkBtn} disabled={importing} onClick={() => setPasteModalOpen(true)}>
             Paste from Excel
           </button>
           <span className={styles.importSep}>·</span>

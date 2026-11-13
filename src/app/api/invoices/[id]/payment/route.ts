@@ -83,6 +83,12 @@ export async function POST(
     async function attemptPayment() {
       return prisma.$transaction(async (tx) => {
         const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });
+        if (invoice.deletedAt) {
+          throw new PaymentExceedsBalanceError("This invoice is in the bin — restore it before recording a payment");
+        }
+        if (date && date < toIstDateStr(invoice.date)) {
+          throw new PaymentExceedsBalanceError("Payment date cannot be before the invoice date");
+        }
         const remaining = invoice.total - invoice.paidAmount;
         if (round2(parseFloat(amount)) > round2(remaining)) {
           throw new PaymentExceedsBalanceError(
@@ -108,7 +114,7 @@ export async function POST(
         });
 
         const paidAmount = agg._sum.amount ?? 0;
-        const status = round2(invoice.total - paidAmount) <= 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+        const status = paidAmount > 0 && round2(invoice.total - paidAmount) <= 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
 
         return tx.invoice.update({
           where: { id },

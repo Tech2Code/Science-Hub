@@ -103,8 +103,18 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
         { status: 400 }
       );
     }
-    const vendor = await prisma.vendor.update({ where: { id }, data: { deletedAt: new Date() } });
-    await logActivity(auth.session.user.id, "delete_vendor", `Deleted vendor "${vendor.name}"`, vendor.id, "vendor");
+    await prisma.$transaction([
+      prisma.vendor.update({ where: { id }, data: { deletedAt: new Date() } }),
+      prisma.activityLog.create({
+        data: {
+          userId: auth.session.user.id,
+          action: "delete_vendor",
+          details: `Deleted vendor "${existing.name}"`,
+          entityId: id,
+          entityType: "vendor",
+        },
+      }),
+    ]);
     revalidateTag("vendors", { expire: 0 });
     return NextResponse.json({ message: "Vendor deleted" });
   } catch {

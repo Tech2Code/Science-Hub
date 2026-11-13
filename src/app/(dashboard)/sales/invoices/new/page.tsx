@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -24,6 +24,7 @@ import { EWAY_BILL_THRESHOLD } from "@/lib/ewayBill";
 import { splitGstForDisplay } from "@/lib/roundOff";
 import styles from "./new.module.css";
 import { bustCache, bustCachePrefix } from "@/lib/useCache";
+import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { useToast } from "@/components/ui/Toast";
 import { rules, validate, validateForm, hasErrors, toIstDateStr } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
@@ -155,7 +156,7 @@ export default function NewInvoicePage() {
   useFormDraft(DRAFT_KEY, {
     customerId, customerSearch, isInterState, placeOfSupply, reverseCharge, ewayBillNumber,
     items, notes, dueDate, transportChargeEnabled, transportCharge, transportChargeGstRate,
-  }, !draftReady || saving);
+  }, !draftReady || saving, { active: showDraftBanner, onTakeOver: () => { setShowDraftBanner(false); setDraftReady(true); } });
 
   useEffect(() => {
     // The resolve-by-id effect below fetches full customer details for this once it's set — no
@@ -216,7 +217,7 @@ export default function NewInvoicePage() {
   const customPincodeLookup = usePincodeAutofill((city, state) => {
     setCustomCustomer((p) => ({ ...p, city: city || p.city, state: state || p.state }));
     if (city) clearErr("city");
-    if (state) { clearErr("state"); applyPlaceOfSupply(state); }
+    if (state) clearErr("state");
   });
 
   function handleCustomPincodeChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -292,6 +293,7 @@ export default function NewInvoicePage() {
         bustCachePrefix("/api/customers");
         bustCachePrefix("/api/invoices");
         bustCachePrefix("/api/reports");
+        void clearAllCachedPdfs();
         setCustomerEditId(null);
         setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
         setCustomModalOpen(false);
@@ -665,7 +667,6 @@ export default function NewInvoicePage() {
               onClose={() => {
                 if (customerSaving) return;
                 setCustomModalOpen(false);
-                applyPlaceOfSupply(customerEditId ? (selectedCustomer?.state ?? "") : "");
                 setCustomerEditId(null);
                 setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
                 customPincodeLookup.reset();
@@ -680,8 +681,6 @@ export default function NewInvoicePage() {
                     variant="secondary"
                     disabled={customerSaving}
                     onClick={() => {
-                      // Undo the live placeOfSupply preview from the State field's onChange if the draft is abandoned.
-                      applyPlaceOfSupply(customerEditId ? (selectedCustomer?.state ?? "") : "");
                       setCustomerEditId(null);
                       setCustomCustomer({ name: "", phone: "", email: "", address: "", city: "", state: "", pincode: "", gstin: "" });
                       setDontSaveCustomer(false);
@@ -739,7 +738,6 @@ export default function NewInvoicePage() {
                       onChange={(e) => {
                         const state = e.target.value;
                         setCustomCustomer((p) => ({ ...p, state }));
-                        applyPlaceOfSupply(state);
                         clearErr("state");
                       }}
                     >

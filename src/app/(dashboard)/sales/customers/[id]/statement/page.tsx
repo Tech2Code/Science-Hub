@@ -98,6 +98,10 @@ export default function CustomerStatementPage() {
       .then((d) => setSettings(d))
       .catch(() => setSettingsFailed(true));
   }, []);
+
+  useEffect(() => {
+    return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
+  }, [pdfPreviewUrl]);
   const hasStatementData = !!statement && (statement.rows.length > 0 || statement.openingBalance !== 0);
   const pdfReady = !!settings && hasStatementData;
   const pdfNotReadyTitle = settingsFailed
@@ -365,14 +369,14 @@ export default function CustomerStatementPage() {
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>Account Statement{statement ? ` — ${statement.customer.name}` : ""}</h2>
           <div className={styles.toolbarActions}>
-            <Button variant="secondary" size="sm" title={pdfReady ? "Discard the cached PDF and view a freshly generated copy" : pdfNotReadyTitle} aria-label="Regenerate PDF" onClick={handleRegeneratePdf} disabled={loading || !pdfReady}>
+            <Button variant="secondary" size="sm" title={pdfReady ? "Discard the cached PDF and view a freshly generated copy" : pdfNotReadyTitle} aria-label="Regenerate PDF" onClick={handleRegeneratePdf} disabled={loading || !pdfReady || pdfRegenerating || viewingPdf || downloadingPdf || shareLoading}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>
             </Button>
-            <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={viewingPdf} disabled={loading || !pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle}>
+            <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={viewingPdf} disabled={loading || !pdfReady || pdfRegenerating || viewingPdf || downloadingPdf || shareLoading} title={pdfReady ? undefined : pdfNotReadyTitle}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
               View PDF
             </Button>
-            <Button variant="secondary" size="sm" onClick={handleDownloadPdf} loading={downloadingPdf} disabled={loading || !pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle}>
+            <Button variant="secondary" size="sm" onClick={handleDownloadPdf} loading={downloadingPdf} disabled={loading || !pdfReady || pdfRegenerating || viewingPdf || downloadingPdf || shareLoading} title={pdfReady ? undefined : pdfNotReadyTitle}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
               Download PDF
             </Button>
@@ -381,7 +385,7 @@ export default function CustomerStatementPage() {
               Export Excel
             </Button>
             <div className={styles.shareWrap} ref={shareContainerRef}>
-              <Button variant="secondary" size="sm" disabled={loading || shareLoading || !pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
+              <Button variant="secondary" size="sm" disabled={loading || pdfRegenerating || viewingPdf || downloadingPdf || shareLoading || !pdfReady} title={pdfReady ? undefined : pdfNotReadyTitle} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
                 setShareOpen(o => {
                   const next = !o;
                   if (next && shareContainerRef.current) {

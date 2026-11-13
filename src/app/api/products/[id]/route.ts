@@ -72,7 +72,10 @@ export async function PUT(
     const body = await request.json();
     const { name, description, sku, hsn, unit, price, purchasePrice, listPrice, discountPercent, gstRate, minStock, categoryId, brandId, expectedUpdatedAt } = body;
 
-    const existing = await prisma.product.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true, brandId: true, categoryId: true } });
+    const existing = await prisma.product.findUnique({
+      where: { id },
+      select: { deletedAt: true, updatedAt: true, brandId: true, categoryId: true, listPrice: true, discountPercent: true },
+    });
     if (!existing) return NextResponse.json({ error: "Product not found" }, { status: 404 });
     if (existing.deletedAt) {
       return NextResponse.json({ error: "This product is in the bin — restore it before editing" }, { status: 400 });
@@ -135,6 +138,13 @@ export async function PUT(
       if (err) return NextResponse.json({ error: err }, { status: 400 });
       data[key] = parsed;
     }
+    if (data.listPrice !== undefined || data.discountPercent !== undefined) {
+      const effListPrice = (data.listPrice as number | undefined) ?? existing.listPrice;
+      const effDiscount = (data.discountPercent as number | undefined) ?? existing.discountPercent;
+      if (effListPrice !== null && effListPrice !== undefined) {
+        data.purchasePrice = Math.round(effListPrice * (1 - (effDiscount ?? 0) / 100) * 100) / 100;
+      }
+    }
     // Re-sending the product's current brand/category unchanged is always allowed (it may have been
     // binned after assignment); a newly-chosen one must exist and not be in the bin.
     if (categoryId && categoryId !== existing.categoryId) {
@@ -157,7 +167,7 @@ export async function PUT(
     return NextResponse.json(product);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json({ error: "SKU already in use" }, { status: 409 });
+      return NextResponse.json({ error: "SKU already in use (check active products and the Recycle Bin)" }, { status: 409 });
     }
     console.error(error);
     return NextResponse.json({ error: "Failed to update product" }, { status: 500 });

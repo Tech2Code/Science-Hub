@@ -94,9 +94,39 @@ async function getActiveDismissalMap(userId: string, categories: NotificationCat
 
   const rows = await prisma.notificationDismissal.findMany({
     where: { userId, category: { in: categories }, dismissedAt: { gte: new Date(Date.now() - DISMISSAL_TTL_MS) } },
-    select: { category: true, entityId: true },
+    select: { id: true, category: true, entityId: true },
   });
-  for (const row of rows) map.get(row.category as NotificationCategoryKey)?.add(row.entityId);
+  if (rows.length > 0) {
+    const stockIds = rows.filter((r) => r.category === "stock").map((r) => r.entityId);
+    const invIds = rows.filter((r) => r.category === "overdueInvoices").map((r) => r.entityId);
+    const billIds = rows.filter((r) => r.category === "overdueBills").map((r) => r.entityId);
+    const [healthyStock, paidInvoices, settledBills] = await Promise.all([
+      stockIds.length > 0
+        ? prisma.product.findMany({ where: { id: { in: stockIds }, deletedAt: null, stock: { gt: 0 }, isLowStock: false }, select: { id: true } })
+        : Promise.resolve([] as { id: string }[]),
+      invIds.length > 0
+        ? prisma.invoice.findMany({ where: { id: { in: invIds }, OR: [{ status: "paid" }, { deletedAt: { not: null } }] }, select: { id: true } })
+        : Promise.resolve([] as { id: string }[]),
+      billIds.length > 0
+        ? prisma.purchaseBill.findMany({ where: { id: { in: billIds }, OR: [{ status: { in: ["paid", "cancelled"] } }, { deletedAt: { not: null } }] }, select: { id: true } })
+        : Promise.resolve([] as { id: string }[]),
+    ]);
+    const resolvedSet = new Set([
+      ...healthyStock.map((p) => `stock:${p.id}`),
+      ...paidInvoices.map((i) => `overdueInvoices:${i.id}`),
+      ...settledBills.map((b) => `overdueBills:${b.id}`),
+    ]);
+    if (resolvedSet.size > 0) {
+      const resolvedDismissalIds = rows.filter((r) => resolvedSet.has(`${r.category}:${r.entityId}`)).map((r) => r.id);
+      prisma.notificationDismissal.deleteMany({ where: { id: { in: resolvedDismissalIds } } }).catch(() => {});
+    }
+    for (const row of rows) {
+      if (!resolvedSet.has(`${row.category}:${row.entityId}`)) {
+        map.get(row.category as NotificationCategoryKey)?.add(row.entityId);
+      }
+    }
+    return map;
+  }
   return map;
 }
 
@@ -171,7 +201,7 @@ async function fetchBinExpiringEntities(idFilter?: IdFilter): Promise<BinExpirin
   const cutoffSoon = new Date(now.getTime() - (BIN_PURGE_DAYS - BIN_SOON_THRESHOLD_DAYS) * 24 * 60 * 60 * 1000);
   const soonWhere = { deletedAt: { not: null, gte: cutoffPurge, lte: cutoffSoon }, ...(idFilter ? { id: idFilter } : {}) };
 
-  const [customers, products, brands, categories, vendors, rateLists] = await Promise.all([
+  const [rawCustomers, rawProducts, brands, categories, rawVendors, rateLists] = await Promise.all([
     prisma.customer.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
     prisma.product.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
     prisma.brand.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
@@ -179,6 +209,54 @@ async function fetchBinExpiringEntities(idFilter?: IdFilter): Promise<BinExpirin
     prisma.vendor.findMany({ where: soonWhere, select: { id: true, name: true, deletedAt: true } }),
     prisma.rateList.findMany({ where: soonWhere, select: { id: true, title: true, deletedAt: true } }),
   ]);
+
+  // Exclude one-off customers/vendors (soft-deleted at birth with no delete_* ActivityLog entry)
+  // and exclude records blocked from auto-purge by FK references (invoices/bills/line items).
+  const [
+    explicitlyDeletedCustLogs,
+    explicitlyDeletedVendLogs,
+    custWithInvoices,
+    prodInInvItems,
+    prodInBillItems,
+    prodInRetItems,
+    vendWithBills,
+  ] = await Promise.all([
+    rawCustomers.length > 0
+      ? prisma.activityLog.findMany({ where: { entityType: "customer", action: "delete_customer", entityId: { in: rawCustomers.map((c) => c.id) } }, select: { entityId: true } })
+      : Promise.resolve([] as { entityId: string | null }[]),
+    rawVendors.length > 0
+      ? prisma.activityLog.findMany({ where: { entityType: "vendor", action: "delete_vendor", entityId: { in: rawVendors.map((v) => v.id) } }, select: { entityId: true } })
+      : Promise.resolve([] as { entityId: string | null }[]),
+    rawCustomers.length > 0
+      ? prisma.invoice.groupBy({ by: ["customerId"], where: { customerId: { in: rawCustomers.map((c) => c.id) } } })
+      : Promise.resolve([] as { customerId: string }[]),
+    rawProducts.length > 0
+      ? prisma.invoiceItem.groupBy({ by: ["productId"], where: { productId: { in: rawProducts.map((p) => p.id) } } })
+      : Promise.resolve([] as { productId: string | null }[]),
+    rawProducts.length > 0
+      ? prisma.purchaseBillItem.groupBy({ by: ["productId"], where: { productId: { in: rawProducts.map((p) => p.id) } } })
+      : Promise.resolve([] as { productId: string | null }[]),
+    rawProducts.length > 0
+      ? prisma.returnItem.groupBy({ by: ["productId"], where: { productId: { in: rawProducts.map((p) => p.id) } } })
+      : Promise.resolve([] as { productId: string | null }[]),
+    rawVendors.length > 0
+      ? prisma.purchaseBill.groupBy({ by: ["vendorId"], where: { vendorId: { in: rawVendors.map((v) => v.id) } } })
+      : Promise.resolve([] as { vendorId: string }[]),
+  ]);
+
+  const explicitCustSet = new Set(explicitlyDeletedCustLogs.map((l) => l.entityId).filter((id): id is string => !!id));
+  const explicitVendSet = new Set(explicitlyDeletedVendLogs.map((l) => l.entityId).filter((id): id is string => !!id));
+  const blockedCustSet = new Set(custWithInvoices.map((r) => r.customerId));
+  const blockedProdSet = new Set([
+    ...prodInInvItems.map((r) => r.productId).filter((id): id is string => !!id),
+    ...prodInBillItems.map((r) => r.productId).filter((id): id is string => !!id),
+    ...prodInRetItems.map((r) => r.productId).filter((id): id is string => !!id),
+  ]);
+  const blockedVendSet = new Set(vendWithBills.map((r) => r.vendorId));
+
+  const customers = rawCustomers.filter((c) => explicitCustSet.has(c.id) && !blockedCustSet.has(c.id));
+  const products = rawProducts.filter((p) => !blockedProdSet.has(p.id));
+  const vendors = rawVendors.filter((v) => explicitVendSet.has(v.id) && !blockedVendSet.has(v.id));
   const dayMs = 24 * 60 * 60 * 1000;
   return [
     ...customers.map((c) => ({ id: c.id, name: c.name, deletedAt: c.deletedAt as Date })),

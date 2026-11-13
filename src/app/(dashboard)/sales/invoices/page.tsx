@@ -182,25 +182,30 @@ export default function InvoicesPage() {
   }
 
   async function handlePdfDialogConfirm(copyLabels: string[]) {
-    if (!pdfDialogInvoice) return;
+    if (!pdfDialogInvoice || pdfBusyRef.current) return;
+    pdfBusyRef.current = true;
     setPdfDialogLoading(true);
-    // Force a real paint before the (mostly synchronous) iframe setup + PDF
-    // work runs, so the loading spinner is actually visible on screen.
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const blob = await generateInvoicePdf(pdfDialogInvoice, copyLabels);
-    setPdfDialogLoading(false);
-    if (!blob) {
-      toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
-      return;
+    try {
+      // Force a real paint before the (mostly synchronous) iframe setup + PDF
+      // work runs, so the loading spinner is actually visible on screen.
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const blob = await generateInvoicePdf(pdfDialogInvoice, copyLabels);
+      if (!blob) {
+        toast({ type: "error", title: "PDF failed", message: "Could not generate PDF." });
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = pdfFileName(pdfDialogInvoice.invoiceNumber);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setPdfDialogInvoice(null);
+    } finally {
+      setPdfDialogLoading(false);
+      pdfBusyRef.current = false;
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = pdfFileName(pdfDialogInvoice.invoiceNumber);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    setPdfDialogInvoice(null);
   }
 
   // Downloads every invoice for the currently selected month of the selected financial year as one ZIP of individual PDFs
@@ -345,7 +350,7 @@ export default function InvoicesPage() {
       variant="danger"
       loading={deleting}
       onConfirm={handleDelete}
-      onCancel={() => setDeleteTarget(null)}
+      onCancel={() => { if (!deleting) setDeleteTarget(null); }}
     />
     {pdfLoading && <OverlayLoader text="Preparing PDF…" />}
     {openingEditId && <OverlayLoader text="Opening editor…" />}

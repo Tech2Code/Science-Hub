@@ -11,6 +11,7 @@ import { OverlayLoader } from "@/components/ui/Spinner";
 import { AttachmentPicker } from "@/components/purchases/AttachmentPicker";
 import { useToast } from "@/components/ui/Toast";
 import { bustCachePrefix } from "@/lib/useCache";
+import { clearAllCachedPdfs } from "@/lib/pdfCache";
 import { rules, validateForm, hasErrors, toIstDateStr, type FormErrors } from "@/lib/validation";
 import { animateSection } from "@/lib/animateSection";
 import { useDirty } from "@/lib/useDirty";
@@ -214,7 +215,7 @@ export function BillDetailsCard({
         setVendorSearch("");
         closeVendorCreate();
         if (ivEditId || !ivDontSave) bustCachePrefix("/api/vendors");
-        if (ivEditId) { bustCachePrefix("/api/purchase-bills"); bustCachePrefix("/api/reports"); bustCachePrefix("/api/purchase-reports"); }
+        if (ivEditId) { bustCachePrefix("/api/purchase-bills"); bustCachePrefix("/api/reports"); bustCachePrefix("/api/purchase-reports"); void clearAllCachedPdfs(); }
         toast(ivEditId
           ? { type: "success", title: "Vendor updated", message: `${data.name} saved.` }
           : { type: "success", title: "Vendor created", message: ivDontSave ? `${data.name} added and selected for this bill only.` : `${data.name} added and selected.` }

@@ -518,11 +518,13 @@ export default function SettingsPage() {
 
   async function handleSaveBank(e: React.FormEvent) {
     e.preventDefault();
+    if (ifscLookup.status === "loading") return;
+    const formatIfscErr = validate(bankForm.bankIfsc, rules.required("IFSC code is required."), rules.ifsc()) ?? undefined;
     const errors: Partial<Record<keyof BankForm, string>> = {
       bankName: validate(bankForm.bankName, rules.required("Bank name is required."), rules.minLength(2), rules.maxLength(200)) ?? undefined,
       bankAccountName: validate(bankForm.bankAccountName, rules.required("Account holder name is required."), rules.minLength(2), rules.maxLength(200)) ?? undefined,
       bankAccountNumber: validate(bankForm.bankAccountNumber, rules.required("Account number is required."), rules.accountNumber()) ?? undefined,
-      bankIfsc: validate(bankForm.bankIfsc, rules.required("IFSC code is required."), rules.ifsc()) ?? undefined,
+      bankIfsc: formatIfscErr ?? (ifscLookup.status === "error" && bankErrors.bankIfsc ? bankErrors.bankIfsc : undefined),
       bankBranch: validate(bankForm.bankBranch, rules.required("Branch is required."), rules.minLength(2), rules.maxLength(100)) ?? undefined,
     };
     setBankErrors(errors);
@@ -1170,7 +1172,7 @@ export default function SettingsPage() {
             footer={
               <>
                 <Button type="button" variant="secondary" disabled={savingBank} onClick={handleCancelBank}>Cancel</Button>
-                <Button type="submit" form="bank-form" variant="primary" disabled={savingBank || !bankDirty.isDirty}>{savingBank ? "Saving…" : "Save Changes"}</Button>
+                <Button type="submit" form="bank-form" variant="primary" disabled={savingBank || ifscLookup.status === "loading" || !bankDirty.isDirty}>{savingBank ? "Saving…" : "Save Changes"}</Button>
               </>
             }
           >

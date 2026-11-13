@@ -87,10 +87,11 @@ export default function FindEmailPage() {
                 type="text"
                 autoComplete="name"
                 value={name}
-                onChange={(e) => { setName(e.target.value); setResults(null); if (nameError) setNameError(""); }}
+                onChange={(e) => { setName(e.target.value); setResults(null); if (nameError) setNameError(""); if (error) setError(""); }}
                 onBlur={handleNameBlur}
                 placeholder="e.g. Enter Your Name"
                 maxLength={200}
+                disabled={loading}
               />
             </FormField>
             <button type="submit" className={styles.submitBtn} disabled={loading}>

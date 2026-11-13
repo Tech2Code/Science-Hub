@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
 import { SortSelect } from "@/components/ui/SortSelect";
 import { SearchField } from "@/components/ui/SearchField";
-import { useFetch } from "@/lib/useCache";
+import { useFetch, bustCachePrefix } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useToast } from "@/components/ui/Toast";
 import { Cell, type Column } from "@/components/ui/Table";
@@ -83,6 +83,11 @@ export default function VendorsPage() {
   const showSkeleton = loading && !data;
   const isRefetching = loading && !!data;
 
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  useEffect(() => {
+    if (data && !loading && page > lastPage) setPage(lastPage); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [data, loading, page, lastPage]);
+
   async function handleDelete() {
     if (!deleteTarget) return;
     const target = deleteTarget;
@@ -91,9 +96,13 @@ export default function VendorsPage() {
       const res = await fetch(`/api/vendors/${target.id}`, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
+        bustCachePrefix("/api/vendors");
         // Deleting the last row of the last page would otherwise leave an empty page.
-        if (data && data.data.length === 1 && page > 1) setPage(page - 1);
-        await mutate();
+        if (vendors.length === 1 && page > 1 && !showAll) {
+          setPage((p) => p - 1);
+        } else {
+          await mutate();
+        }
         toast({ type: "success", title: "Moved to bin", message: `"${target.name}" moved to bin. You can restore it within 30 days.` });
       } else {
         toast({ type: "error", title: "Delete failed", message: d.error ?? "Could not delete vendor." });

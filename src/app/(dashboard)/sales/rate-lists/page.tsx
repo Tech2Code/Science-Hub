@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -105,8 +105,15 @@ export default function RateListsPage() {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewTitle, setPdfPreviewTitle] = useState("");
   const [exportingId, setExportingId] = useState<string | null>(null);
+  const pdfBusyRef = useRef(false);
+
+  useEffect(() => {
+    return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
+  }, [pdfPreviewUrl]);
 
   async function handlePreview(rl: RateListSummary) {
+    if (pdfBusyRef.current) return;
+    pdfBusyRef.current = true;
     setPreviewLoadingId(rl.id);
     try {
       const res = await fetch(`/api/rate-lists/${rl.id}`);
@@ -129,10 +136,13 @@ export default function RateListsPage() {
     } finally {
       setPreviewLoadingId(null);
       setPreviewTarget(null);
+      pdfBusyRef.current = false;
     }
   }
 
   async function handleExport(rl: RateListSummary) {
+    if (pdfBusyRef.current) return;
+    pdfBusyRef.current = true;
     setExportingId(rl.id);
     try {
       const res = await fetch(`/api/rate-lists/${rl.id}`);
@@ -159,6 +169,7 @@ export default function RateListsPage() {
       toast({ type: "error", title: "Export failed", message: "Could not generate the Excel file." });
     } finally {
       setExportingId(null);
+      pdfBusyRef.current = false;
     }
   }
 
@@ -207,7 +218,7 @@ export default function RateListsPage() {
       variant="danger"
       loading={deleting}
       onConfirm={handleDelete}
-      onCancel={() => setDeleteTarget(null)}
+      onCancel={() => { if (!deleting) setDeleteTarget(null); }}
     />
 
     <div className="page-stack">
@@ -272,11 +283,11 @@ export default function RateListsPage() {
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         View
                       </Button>
-                      <Button variant="secondary" size="sm" loading={previewLoadingId === rl.id} onClick={() => handlePreview(rl)}>
+                      <Button variant="secondary" size="sm" loading={previewLoadingId === rl.id} disabled={previewLoadingId !== null || exportingId !== null} onClick={() => handlePreview(rl)}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                         Preview
                       </Button>
-                      <Button variant="secondary" size="sm" loading={exportingId === rl.id} onClick={() => handleExport(rl)}>
+                      <Button variant="secondary" size="sm" loading={exportingId === rl.id} disabled={previewLoadingId !== null || exportingId !== null} onClick={() => handleExport(rl)}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="17"/><line x1="15" y1="13" x2="9" y2="17"/></svg>
                         Export
                       </Button>

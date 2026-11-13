@@ -64,7 +64,7 @@ export default function NewVendorPage() {
     setConfirmDiscardDraftOpen(false);
   }
 
-  useFormDraft(DRAFT_KEY, form, !draftReady || saving);
+  useFormDraft(DRAFT_KEY, form, !draftReady || saving, { active: showDraftBanner, onTakeOver: () => { setShowDraftBanner(false); setDraftReady(true); } });
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
     const { name, value, type } = e.target;

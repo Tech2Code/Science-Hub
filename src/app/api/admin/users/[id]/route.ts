@@ -155,35 +155,47 @@ export async function PUT(
     }
 
     const roleChanged = role !== undefined && role !== targetUser.role;
-    // Demoting the only remaining admin would lock everyone out of Settings/Admin permanently.
-    if (roleChanged && targetUser.role === "admin" && role !== "admin") {
-      const adminCount = await prisma.user.count({ where: { role: "admin" } });
-      if (adminCount <= 1) {
-        return NextResponse.json({ error: "Can't remove the last admin" }, { status: 400 });
-      }
-    }
-
     // A role/email/password change invalidates the user's existing JWTs (forces re-login),
     // so e.g. a demoted admin loses admin access immediately rather than at token expiry.
     const bumpTokenVersion = hashedPassword !== undefined || roleChanged || emailChanged;
 
-    const updated = await prisma.user.update({
-      where: { id },
-      data: {
-        ...(name !== undefined && { name }),
-        ...(normalizedEmail !== undefined && { email: normalizedEmail }),
-        ...(role !== undefined && { role }),
-        ...(hashedPassword !== undefined && { password: hashedPassword }),
-        ...(bumpTokenVersion && { tokenVersion: { increment: 1 } }),
-      },
-      select: USER_SELECT,
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const freshTarget = await tx.user.findUnique({ where: { id }, select: { role: true } });
+      if (!freshTarget) throw new Error("NOT_FOUND");
+      // Demoting the only remaining admin would lock everyone out of Settings/Admin permanently.
+      if (role !== undefined && freshTarget.role === "admin" && role !== "admin") {
+        const adminCount = await tx.user.count({ where: { role: "admin" } });
+        if (adminCount <= 1) {
+          throw new Error("LAST_ADMIN");
+        }
+      }
+      if (role === "admin" && freshTarget.role !== "admin") {
+        await tx.sectionPermission.deleteMany({ where: { userId: id } });
+      }
+      return tx.user.update({
+        where: { id },
+        data: {
+          ...(name !== undefined && { name }),
+          ...(normalizedEmail !== undefined && { email: normalizedEmail }),
+          ...(role !== undefined && { role }),
+          ...(hashedPassword !== undefined && { password: hashedPassword }),
+          ...(bumpTokenVersion && { tokenVersion: { increment: 1 } }),
+        },
+        select: USER_SELECT,
+      });
+    }, { isolationLevel: "Serializable" });
     revalidateTag("users", { expire: 0 });
 
     const pwChanged = hashedPassword !== undefined;
     await logActivity(session.user.id, "update_user", `Updated user "${updated.name}" | Email: ${updated.email} | Role: ${updated.role}${pwChanged ? " | Password reset" : ""}`, id, "user");
     return NextResponse.json(updated);
   } catch (error) {
+    if (error instanceof Error && error.message === "LAST_ADMIN") {
+      return NextResponse.json({ error: "Can't remove the last admin" }, { status: 400 });
+    }
+    if (error instanceof Error && error.message === "NOT_FOUND") {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
     console.error("PUT /api/admin/users/[id] error:", error);
     return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
   }
@@ -257,12 +269,28 @@ export async function DELETE(
       );
     }
 
-    await prisma.user.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      const freshTarget = await tx.user.findUnique({ where: { id }, select: { role: true } });
+      if (!freshTarget) throw new Error("NOT_FOUND");
+      if (freshTarget.role === "admin") {
+        const adminCount = await tx.user.count({ where: { role: "admin" } });
+        if (adminCount <= 1) {
+          throw new Error("LAST_ADMIN");
+        }
+      }
+      await tx.user.delete({ where: { id } });
+    }, { isolationLevel: "Serializable" });
     revalidateTag("users", { expire: 0 });
 
     await logActivity(session.user.id, "delete_user", `Deleted user "${targetUser.name}" | Role: ${targetUser.role} | Email: ${targetUser.email}`, id, "user");
     return NextResponse.json({ message: "User deleted" });
   } catch (error) {
+    if (error instanceof Error && error.message === "LAST_ADMIN") {
+      return NextResponse.json({ error: "Cannot delete the last admin account" }, { status: 400 });
+    }
+    if (error instanceof Error && error.message === "NOT_FOUND") {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
     console.error("DELETE /api/admin/users/[id] error:", error);
     return NextResponse.json({ error: "Failed to delete user" }, { status: 500 });
   }

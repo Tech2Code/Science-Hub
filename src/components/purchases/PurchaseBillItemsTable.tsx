@@ -85,7 +85,13 @@ export function PurchaseBillItemsTable({ sectionIndex, products, setProducts, it
     }]);
   }
 
-  function removeItem(idx: number) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
+  function removeItem(idx: number) {
+    if (items.length <= 2) {
+      setReorderMode(false);
+      setDraggedKey(null);
+    }
+    setItems((prev) => prev.filter((_, i) => i !== idx));
+  }
   function updateItem(idx: number, field: keyof PurchaseBillLineItem, value: string) {
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
   }

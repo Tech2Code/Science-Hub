@@ -108,8 +108,11 @@ export async function DELETE(
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
-    const customer = await prisma.customer.findUnique({ where: { id }, select: { name: true, phone: true, city: true, gstin: true } });
+    const customer = await prisma.customer.findUnique({ where: { id }, select: { name: true, phone: true, city: true, gstin: true, deletedAt: true } });
     if (!customer) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
+    if (customer.deletedAt) {
+      return NextResponse.json({ error: "This customer is already in the bin." }, { status: 400 });
+    }
     const invoiceCount = await prisma.invoice.count({ where: { customerId: id, deletedAt: null } });
     if (invoiceCount > 0) {
       return NextResponse.json(
@@ -117,8 +120,18 @@ export async function DELETE(
         { status: 400 }
       );
     }
-    await prisma.customer.update({ where: { id }, data: { deletedAt: new Date() } });
-    await logActivity(auth.session.user.id, "delete_customer", `Moved customer "${customer.name}" to bin | Phone: ${customer.phone || "—"} | City: ${customer.city || "—"} | GSTIN: ${customer.gstin || "—"}`, id, "customer");
+    await prisma.$transaction([
+      prisma.customer.update({ where: { id }, data: { deletedAt: new Date() } }),
+      prisma.activityLog.create({
+        data: {
+          userId: auth.session.user.id,
+          action: "delete_customer",
+          details: `Moved customer "${customer.name}" to bin | Phone: ${customer.phone || "—"} | City: ${customer.city || "—"} | GSTIN: ${customer.gstin || "—"}`,
+          entityId: id,
+          entityType: "customer",
+        },
+      }),
+    ]);
     revalidateTag("customers", { expire: 0 });
     return NextResponse.json({ message: "Customer moved to bin" });
   } catch (error) {

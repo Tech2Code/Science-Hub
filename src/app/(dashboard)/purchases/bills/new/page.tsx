@@ -213,7 +213,7 @@ export default function NewPurchaseBillPage() {
     vendorId, billDate, dueDate, category, discount, notes, items, attachmentUrl, attachmentName, attachmentSize,
     transportChargeEnabled, transportCharge, transportChargeGstRate,
     addPayment, payAmount, payMethod, payReference, payDate,
-  }, !draftReady || saving);
+  }, !draftReady || saving, { active: showDraftBanner, onTakeOver: () => { setShowDraftBanner(false); setDraftReady(true); } });
 
   // The itemsError message auto-hides once the items array it was raised
   // against has since changed (add/remove/edit a line) — see itemsErrorFor.
@@ -241,6 +241,9 @@ export default function NewPurchaseBillPage() {
       const res = await fetch("/api/purchase-bills/upload", { method: "POST", body: form });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        if (attachmentUrl && attachmentUrl !== data.url) {
+          discardUnsavedAttachment(attachmentUrl);
+        }
         setAttachmentUrl(data.url);
         setAttachmentName(data.name);
         setAttachmentSize(typeof data.size === "number" ? data.size : null);

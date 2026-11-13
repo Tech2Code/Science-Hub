@@ -369,6 +369,7 @@ export default function InvoiceDetailPage() {
         setReturns(prev => [created, ...prev]);
         setShowReturnForm(false);
         invalidateAfter({ type: "invoice-return-changed", invoiceId: id });
+        load(true);
         toast({ type: "success", title: "Return recorded", message: `${selected.length} item(s) returned.` });
       } else {
         const d = await res.json().catch(() => ({}));
@@ -388,6 +389,7 @@ export default function InvoiceDetailPage() {
       if (res.ok) {
         setReturns(prev => prev.filter(r => r.id !== returnDeleteConfirm.id));
         invalidateAfter({ type: "invoice-return-changed", invoiceId: id, returnId: returnDeleteConfirm.id });
+        load(true);
         toast({ type: "success", title: "Deleted", message: "Credit note moved to bin." });
       } else {
         const d = await res.json().catch(() => ({}));
@@ -415,22 +417,31 @@ export default function InvoiceDetailPage() {
     });
     return withCachedPdf("return", ret.id, variantKey, async () => {
       setCreditNoteToRender(ret);
-      // Wait for the hidden print area to actually mount/paint before
-      // html2canvas reads it off the DOM — same two-frame + fonts wait used
-      // by the main invoice PDF download.
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-      await document.fonts.ready;
-      const el = document.getElementById("credit-note-print-area");
-      const blob = el ? await generateInvoicePdfBlob(el, { logoUrl: showLogo ? settings?.logoUrl || undefined : undefined }) : null;
-      setCreditNoteToRender(null);
-      return blob;
+      try {
+        // Wait for the hidden print area to actually mount/paint before
+        // html2canvas reads it off the DOM — same two-frame + fonts wait used
+        // by the main invoice PDF download.
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        await document.fonts.ready;
+        const el = document.getElementById("credit-note-print-area");
+        return el ? await generateInvoicePdfBlob(el, { logoUrl: showLogo ? settings?.logoUrl || undefined : undefined }) : null;
+      } finally {
+        if (!searchParams.get("creditNoteId")) {
+          setCreditNoteToRender(null);
+        }
+      }
     });
   }
 
   async function handleDownloadCreditNotePdf(ret: ReturnRecord) {
+    if (creditNoteDownloadingId !== null) return;
     setCreditNoteDownloadingId(ret.id);
-    const blob = await getOrRenderCreditNotePdf(ret);
-    setCreditNoteDownloadingId(null);
+    let blob: Blob | null = null;
+    try {
+      blob = await getOrRenderCreditNotePdf(ret);
+    } finally {
+      setCreditNoteDownloadingId(null);
+    }
     if (!blob) { toast({ type: "error", title: "Failed", message: "Could not generate credit note PDF." }); return; }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -919,7 +930,7 @@ export default function InvoiceDetailPage() {
       {deletingPayment && <OverlayLoader text="Deleting payment…" />}
       {addingReturn && <OverlayLoader text="Saving return…" />}
       {deletingReturn && <OverlayLoader text="Deleting credit note…" />}
-      {creditNoteToRender && <OverlayLoader text="Preparing credit note PDF…" />}
+      {creditNoteDownloadingId !== null && <OverlayLoader text="Preparing credit note PDF…" />}
       {openingEdit && <OverlayLoader text="Opening editor…" />}
       {reassigning && <OverlayLoader text="Reassigning…" />}
 
@@ -989,24 +1000,24 @@ export default function InvoiceDetailPage() {
               </Button>
             </span>
             )}
-            <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" aria-label="Regenerate PDF" onClick={handleRegeneratePdf}>
+            <Button variant="secondary" size="sm" title="Discard the cached PDF and view a freshly generated copy" aria-label="Regenerate PDF" onClick={handleRegeneratePdf} disabled={pdfRegenerating || pdfViewing || pdfDownloading || pdfPrinting || shareLoading}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>
             </Button>
-            <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing}>
+            <Button variant="viewOutline" size="sm" onClick={handleViewPdf} loading={pdfViewing} disabled={pdfRegenerating || pdfViewing || pdfDownloading || pdfPrinting || shareLoading}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
               View
             </Button>
-            <Button variant="secondary" size="sm" onClick={handleDownloadClick}>
+            <Button variant="secondary" size="sm" onClick={handleDownloadClick} disabled={pdfRegenerating || pdfViewing || pdfDownloading || pdfPrinting || shareLoading}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
               PDF
             </Button>
-            <Button variant="secondary" size="sm" onClick={handlePrint}>
+            <Button variant="secondary" size="sm" onClick={handlePrint} disabled={pdfRegenerating || pdfViewing || pdfDownloading || pdfPrinting || shareLoading}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
               Print
             </Button>
             {/* Share PDF button */}
             <div className={styles.shareWrap} ref={shareContainerRef}>
-              <Button variant="secondary" size="sm" disabled={shareLoading} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
+              <Button variant="secondary" size="sm" disabled={pdfRegenerating || pdfViewing || pdfDownloading || pdfPrinting || shareLoading} aria-haspopup="menu" aria-expanded={shareOpen} onClick={() => {
                 setShareOpen(o => {
                   const next = !o;
                   if (next && shareContainerRef.current) {
@@ -1071,7 +1082,7 @@ export default function InvoiceDetailPage() {
         </div>
 
         {/* Payment form */}
-        {showPaymentForm && (
+        {showPaymentForm && balance > 0 && (
           <div className={`card ${styles.paymentFormCard}`}>
             <h3 className={styles.paymentFormTitle}>Record Payment</h3>
             <form onSubmit={handleAddPayment} noValidate>
@@ -1225,9 +1236,10 @@ export default function InvoiceDetailPage() {
                       const raw = e.target.value.replace(/\D/g, "");
                       setReturnItemsError(undefined);
                       if (raw === "") { setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: "" } : r)); return; }
-                      const clamped = String(Math.min(ri.maxQty, parseInt(raw, 10)));
-                      if (clamped === ri.qtyText) { e.target.value = clamped; return; }
-                      setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qtyText: clamped } : r));
+                      const num = Math.max(1, Math.min(ri.maxQty, parseInt(raw, 10)));
+                      const clamped = String(num);
+                      if (clamped === ri.qtyText && num === ri.qty) { e.target.value = clamped; return; }
+                      setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qty: num, qtyText: clamped } : r));
                     }}
                     onBlur={() => {
                       const num = parseInt(ri.qtyText, 10);

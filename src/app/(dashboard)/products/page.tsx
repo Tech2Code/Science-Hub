@@ -120,6 +120,11 @@ export default function ProductsPage() {
   const lowStockCount = stats?.lowStockCount ?? 0;
   const totalCount = stats?.totalCount ?? 0;
 
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  useEffect(() => {
+    if (data && !loading && page > lastPage) setPage(lastPage); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [data, loading, page, lastPage]);
+
   function handleDelete(id: string, name: string) {
     setConfirmState({
       title: "Move to Bin",

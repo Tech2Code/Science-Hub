@@ -386,19 +386,20 @@ async function getCombinedDashboard(canSeeSales: boolean, canSeePurchases: boole
   const todayEnd = new Date(todayStart.getTime() + 86400000);
 
   const [
-    salesMonthAgg, salesOutstandingAgg, salesOverdue, collectedTodayAgg,
+    salesMonthAgg, returnMonthAgg, salesOutstandingAgg, salesOverdue, collectedTodayAgg,
     spendMonthAgg, purchaseUnpaidAgg, purchaseOverdue, paidTodayAgg,
     recentInvoices, recentBills, lowStockCount, outOfStockCount,
   ] = await Promise.all([
     prisma.invoice.aggregate({ where: { deletedAt: null, date: { gte: monthStart, lt: monthEnd } }, _sum: { total: true } }),
+    prisma.return.aggregate({ where: { deletedAt: null, invoice: { deletedAt: null }, date: { gte: monthStart, lt: monthEnd } }, _sum: { total: true } }),
     // balanceDue is a real Postgres GENERATED column — sum it in the DB rather than reducing every row in JS (same fix as getSalesDashboard/getPurchaseDashboard).
     prisma.invoice.aggregate({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] } }, _sum: { balanceDue: true } }),
     prisma.invoice.count({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } } }),
-    prisma.payment.aggregate({ where: { date: { gte: todayStart, lt: todayEnd } }, _sum: { amount: true } }),
+    prisma.payment.aggregate({ where: { invoice: { deletedAt: null }, date: { gte: todayStart, lt: todayEnd } }, _sum: { amount: true } }),
     prisma.purchaseBill.aggregate({ where: { deletedAt: null, status: { not: "cancelled" }, billDate: { gte: monthStart, lt: monthEnd } }, _sum: { total: true } }),
     prisma.purchaseBill.aggregate({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] } }, _sum: { balanceDue: true } }),
     prisma.purchaseBill.count({ where: { deletedAt: null, status: { in: ["unpaid", "partial"] }, dueDate: { lt: todayStart } } }),
-    prisma.purchasePayment.aggregate({ where: { date: { gte: todayStart, lt: todayEnd } }, _sum: { amount: true } }),
+    prisma.purchasePayment.aggregate({ where: { purchaseBill: { deletedAt: null, status: { not: "cancelled" } }, date: { gte: todayStart, lt: todayEnd } }, _sum: { amount: true } }),
     // Both createdAt, not date/billDate — matches each document's numbering sequence, immune to a later backdate.
     prisma.invoice.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "desc" }, take: 5, include: { customer: { select: { name: true } } } }),
     prisma.purchaseBill.findMany({ where: { deletedAt: null }, orderBy: { createdAt: "desc" }, take: 5, include: { vendor: { select: { name: true } } } }),
@@ -411,7 +412,7 @@ async function getCombinedDashboard(canSeeSales: boolean, canSeePurchases: boole
   // Redact sales/purchase figures server-side for callers not granted the matching section — the dashboard's own client-side hiding isn't sufficient on its own.
   return {
     sales: canSeeSales ? {
-      revenueThisMonth: salesMonthAgg._sum.total ?? 0,
+      revenueThisMonth: (salesMonthAgg._sum.total ?? 0) - (returnMonthAgg._sum.total ?? 0),
       outstandingAmount: salesOutstandingAgg._sum.balanceDue ?? 0,
       overdueInvoices: salesOverdue,
       collectedToday: collectedTodayAgg._sum.amount ?? 0,

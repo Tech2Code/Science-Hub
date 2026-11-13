@@ -19,15 +19,8 @@ const USER_SELECT = {
 } as const;
 
 async function resolveSessionUser(session: Awaited<ReturnType<typeof getServerSession<typeof authOptions>>>) {
-  if (!session?.user) return null;
-  // Prefer id lookup; fall back to email for sessions created before token.id was wired up
-  if (session.user.id) {
-    return prisma.user.findUnique({ where: { id: session.user.id } });
-  }
-  if (session.user.email) {
-    return prisma.user.findUnique({ where: { email: session.user.email } });
-  }
-  return null;
+  if (!session?.user?.id) return null;
+  return prisma.user.findUnique({ where: { id: session.user.id } });
 }
 
 export async function GET() {

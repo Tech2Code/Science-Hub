@@ -1,7 +1,7 @@
 "use client";
 
 import { pdfFileName } from "@/lib/fileName";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Pagination, ShowAllToggle, PAGE_SIZE } from "@/components/ui/Pagination";
@@ -156,10 +156,15 @@ export default function CreditNotesPage() {
   }
 
   function closePdfPreview() {
-    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); // each View/Regenerate creates a fresh blob URL — release it
     setPdfPreviewUrl(null);
     setPdfPreviewNote(null);
   }
+
+  useEffect(() => {
+    return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
+  }, [pdfPreviewUrl]);
+
+  const anyPdfBusy = () => viewBusyRef.current || downloadBusyRef.current || regenerateBusyRef.current;
 
   // Line items never change after creation, so the PDF is cached by return id + a variant key over the only
   // things that still can change (settings, customer) — regenerated only when those change or the note is deleted.
@@ -182,7 +187,7 @@ export default function CreditNotesPage() {
   }
 
   async function handleViewPdf(c: CreditNote) {
-    if (viewBusyRef.current) return;
+    if (anyPdfBusy()) return;
     viewBusyRef.current = true;
     setViewingId(c.id);
     try {
@@ -202,7 +207,7 @@ export default function CreditNotesPage() {
 
   // Bypasses the cache — re-renders and overwrites the stored variant so the fresh PDF is confirmed immediately.
   async function handleRegeneratePdf(c: CreditNote) {
-    if (regenerateBusyRef.current) return;
+    if (anyPdfBusy()) return;
     regenerateBusyRef.current = true;
     setRegeneratingId(c.id);
     try {
@@ -222,7 +227,7 @@ export default function CreditNotesPage() {
   }
 
   async function handleDownloadPdf(c: CreditNote) {
-    if (downloadBusyRef.current) return;
+    if (anyPdfBusy()) return;
     downloadBusyRef.current = true;
     setDownloadingId(c.id);
     try {
@@ -342,15 +347,15 @@ export default function CreditNotesPage() {
                     <Cell col={COLUMNS[6]} className={styles.customerCell}>{c.createdBy ?? "—"}</Cell>
                     <Cell col={COLUMNS[7]}>
                       <div className="table-actions">
-                        <Button variant="viewOutline" size="sm" loading={viewingId === c.id} disabled={downloadingId === c.id} onClick={() => handleViewPdf(c)}>
+                        <Button variant="viewOutline" size="sm" loading={viewingId === c.id} disabled={viewingId !== null || downloadingId !== null || regeneratingId !== null} onClick={() => handleViewPdf(c)}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                           View
                         </Button>
-                        <Button variant="secondary" size="sm" title="Download PDF" loading={downloadingId === c.id} disabled={viewingId === c.id || regeneratingId === c.id} onClick={() => handleDownloadPdf(c)}>
+                        <Button variant="secondary" size="sm" title="Download PDF" loading={downloadingId === c.id} disabled={viewingId !== null || downloadingId !== null || regeneratingId !== null} onClick={() => handleDownloadPdf(c)}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
                           PDF
                         </Button>
-                        <Button variant="secondary" size="sm" title="Regenerate PDF (bypass cache)" aria-label="Regenerate PDF" disabled={viewingId === c.id || downloadingId === c.id || regeneratingId === c.id} onClick={() => handleRegeneratePdf(c)}>
+                        <Button variant="secondary" size="sm" title="Regenerate PDF (bypass cache)" aria-label="Regenerate PDF" loading={regeneratingId === c.id} disabled={viewingId !== null || downloadingId !== null || regeneratingId !== null} onClick={() => handleRegeneratePdf(c)}>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>
                         </Button>
                       </div>

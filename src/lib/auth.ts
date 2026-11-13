@@ -77,45 +77,38 @@ export const authOptions: NextAuthOptions = {
       }
       if (!token.id) return token;
 
-      // Reload section permissions every 30 seconds so permission changes
-      // by admin take effect quickly without hitting DB on every request.
-      const PERMS_INTERVAL_MS = 30 * 1000;
-      const lastPermsCheck = typeof token.permsCheckedAt === "number" ? token.permsCheckedAt : 0;
-      if (trigger === "update" || Date.now() - lastPermsCheck >= PERMS_INTERVAL_MS) {
-        try {
-          const freshPerms = await prisma.sectionPermission.findMany({
-            where: { userId: token.id as string, enabled: true },
-            select: { section: true },
-          });
-          token.sections = freshPerms.map((p) => p.section);
-          token.permsCheckedAt = Date.now();
-        } catch {
-          // Keep existing sections on failure
-        }
-      }
-
-      // Checking tokenVersion against the DB on every request made the app noticeably slow —
-      // only re-check every few minutes (or on explicit update()), bounding revocation delay instead.
-      const CHECK_INTERVAL_MS = 5 * 60 * 1000;
+      // Reload user role, tokenVersion, and section permissions every 30 seconds so
+      // permission/role/password changes by admin take effect quickly without hitting DB on every request.
+      const CHECK_INTERVAL_MS = 30 * 1000;
       const lastChecked = typeof token.tvCheckedAt === "number" ? token.tvCheckedAt : 0;
       if (trigger !== "update" && Date.now() - lastChecked < CHECK_INTERVAL_MS) {
         return token;
       }
 
-      // A password change/reset bumps tokenVersion server-side to invalidate an issued JWT early.
+      // A password change/reset or role change bumps tokenVersion server-side to invalidate an issued JWT early.
       // Client-triggered update() must never be trusted for name/email/role — always re-derive from DB.
-      const current = await prisma.user.findUnique({
-        where: { id: token.id as string },
-        select: { name: true, email: true, role: true, tokenVersion: true },
-      });
-      if (!current) return { ...token, id: undefined };
+      const [current, freshPerms] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { name: true, email: true, role: true, tokenVersion: true },
+        }),
+        prisma.sectionPermission.findMany({
+          where: { userId: token.id as string, enabled: true },
+          select: { section: true },
+        }).catch(() => null),
+      ]);
+      if (!current) return { ...token, id: undefined, email: undefined, name: undefined, role: undefined, sections: [] };
       // A JWT issued before this field existed has tokenVersion undefined, not stale — backfill it
       // rather than invalidating, or every logged-in user gets signed out when this ships.
       if (token.tokenVersion !== undefined && current.tokenVersion !== token.tokenVersion) {
-        return { ...token, id: undefined };
+        return { ...token, id: undefined, email: undefined, name: undefined, role: undefined, sections: [] };
       }
       token.tokenVersion = current.tokenVersion;
       token.tvCheckedAt = Date.now();
+      token.permsCheckedAt = Date.now();
+      if (freshPerms) {
+        token.sections = freshPerms.map((p) => p.section);
+      }
 
       // Always refresh from the DB on each periodic re-check (not only on update()) so a role
       // change by an admin propagates within the check interval even if the user never calls update().
@@ -131,6 +124,12 @@ export const authOptions: NextAuthOptions = {
         session.user.id   = token.id   as string;
         session.user.role = token.role as string;
         session.user.sections = (token.sections as string[]) ?? [];
+      } else if (session.user) {
+        session.user.id = "";
+        session.user.email = "";
+        session.user.name = "";
+        session.user.role = "";
+        session.user.sections = [];
       }
       return session;
     },

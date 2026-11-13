@@ -224,6 +224,45 @@ export async function PUT(request: NextRequest) {
         pushNumberingDetail("creditNoteNumberFormat", `credit note number format -> ${updateData.creditNoteNumberFormat ?? "(default)"}`);
       }
 
+      const getInvoiceLastSeq = async () => {
+        const effectivePrefix =
+          ("invoiceNumberPrefix" in body ? (updateData.invoiceNumberPrefix as string | null) : existing?.invoiceNumberPrefix)
+          || deriveDefaultPrefix(existing?.name || "Science Hub");
+        const effectiveFormat = "invoiceNumberFormat" in body ? (updateData.invoiceNumberFormat as string | null) : existing?.invoiceNumberFormat;
+        const candidatesThisYear = await prisma.invoice.findMany({
+          where: { invoiceNumber: numberFormatDbFilter(effectiveFormat, effectivePrefix, currentYearLabel) },
+          select: { invoiceNumber: true },
+        });
+        return findMaxSequence(candidatesThisYear.map((c) => c.invoiceNumber), resolveNumberFormat(effectiveFormat).matcher(effectivePrefix, currentYearLabel));
+      };
+
+      const getPurchaseBillLastSeq = async () => {
+        const effectivePrefix =
+          ("purchaseBillNumberPrefix" in body ? (updateData.purchaseBillNumberPrefix as string | null) : existing?.purchaseBillNumberPrefix)
+          || "PB";
+        const effectiveFormat = "purchaseBillNumberFormat" in body ? (updateData.purchaseBillNumberFormat as string | null) : existing?.purchaseBillNumberFormat;
+        const candidatesThisYear = await prisma.purchaseBill.findMany({
+          where: { billNumber: numberFormatDbFilter(effectiveFormat, effectivePrefix, currentYearLabel) },
+          select: { billNumber: true },
+        });
+        return findMaxSequence(candidatesThisYear.map((c) => c.billNumber), resolveNumberFormat(effectiveFormat).matcher(effectivePrefix, currentYearLabel));
+      };
+
+      const getCreditNoteLastSeq = async () => {
+        const effectivePrefix =
+          ("creditNoteNumberPrefix" in body ? (updateData.creditNoteNumberPrefix as string | null) : existing?.creditNoteNumberPrefix)
+          || "CN";
+        const effectiveFormat = "creditNoteNumberFormat" in body ? (updateData.creditNoteNumberFormat as string | null) : existing?.creditNoteNumberFormat;
+        const candidatesThisYear = await prisma.return.findMany({
+          where: { creditNoteNumber: numberFormatDbFilter(effectiveFormat, effectivePrefix, currentYearLabel) },
+          select: { creditNoteNumber: true },
+        });
+        return findMaxSequence(
+          candidatesThisYear.map((c) => c.creditNoteNumber).filter((v): v is string => v !== null),
+          resolveNumberFormat(effectiveFormat).matcher(effectivePrefix, currentYearLabel)
+        );
+      };
+
       if ("nextInvoiceNumberOverride" in body) {
         if (nextInvoiceNumberOverride === null || nextInvoiceNumberOverride === "" || nextInvoiceNumberOverride === undefined) {
           updateData.nextInvoiceNumberOverride = null;
@@ -232,21 +271,17 @@ export async function PUT(request: NextRequest) {
           if (!Number.isInteger(n) || n <= 0) {
             return NextResponse.json({ error: "Next invoice number must be a whole number greater than 0." }, { status: 400 });
           }
-          const effectivePrefix =
-            ("invoiceNumberPrefix" in body ? (updateData.invoiceNumberPrefix as string | null) : existing?.invoiceNumberPrefix)
-            || deriveDefaultPrefix(existing?.name || "Science Hub");
-          const effectiveFormat = "invoiceNumberFormat" in body ? (updateData.invoiceNumberFormat as string | null) : existing?.invoiceNumberFormat;
-          const candidatesThisYear = await prisma.invoice.findMany({
-            where: { invoiceNumber: numberFormatDbFilter(effectiveFormat, effectivePrefix, currentYearLabel) },
-            select: { invoiceNumber: true },
-          });
-          const lastSeq = findMaxSequence(candidatesThisYear.map((c) => c.invoiceNumber), resolveNumberFormat(effectiveFormat).matcher(effectivePrefix, currentYearLabel));
+          const lastSeq = await getInvoiceLastSeq();
           if (n <= lastSeq) {
             return NextResponse.json({ error: `Next invoice number must be greater than the highest existing number this year (${lastSeq}).` }, { status: 400 });
           }
           updateData.nextInvoiceNumberOverride = n;
         }
         pushNumberingDetail("nextInvoiceNumberOverride", `next invoice # -> ${updateData.nextInvoiceNumberOverride ?? "(cleared)"}`);
+      } else if (("invoiceNumberPrefix" in body || "invoiceNumberFormat" in body) && existing?.nextInvoiceNumberOverride) {
+        if (existing.nextInvoiceNumberOverride <= await getInvoiceLastSeq()) {
+          updateData.nextInvoiceNumberOverride = null;
+        }
       }
 
       if ("nextPurchaseBillNumberOverride" in body) {
@@ -257,21 +292,17 @@ export async function PUT(request: NextRequest) {
           if (!Number.isInteger(n) || n <= 0) {
             return NextResponse.json({ error: "Next purchase bill number must be a whole number greater than 0." }, { status: 400 });
           }
-          const effectivePrefix =
-            ("purchaseBillNumberPrefix" in body ? (updateData.purchaseBillNumberPrefix as string | null) : existing?.purchaseBillNumberPrefix)
-            || "PB";
-          const effectiveFormat = "purchaseBillNumberFormat" in body ? (updateData.purchaseBillNumberFormat as string | null) : existing?.purchaseBillNumberFormat;
-          const candidatesThisYear = await prisma.purchaseBill.findMany({
-            where: { billNumber: numberFormatDbFilter(effectiveFormat, effectivePrefix, currentYearLabel) },
-            select: { billNumber: true },
-          });
-          const lastSeq = findMaxSequence(candidatesThisYear.map((c) => c.billNumber), resolveNumberFormat(effectiveFormat).matcher(effectivePrefix, currentYearLabel));
+          const lastSeq = await getPurchaseBillLastSeq();
           if (n <= lastSeq) {
             return NextResponse.json({ error: `Next purchase bill number must be greater than the highest existing number this year (${lastSeq}).` }, { status: 400 });
           }
           updateData.nextPurchaseBillNumberOverride = n;
         }
         pushNumberingDetail("nextPurchaseBillNumberOverride", `next purchase bill # -> ${updateData.nextPurchaseBillNumberOverride ?? "(cleared)"}`);
+      } else if (("purchaseBillNumberPrefix" in body || "purchaseBillNumberFormat" in body) && existing?.nextPurchaseBillNumberOverride) {
+        if (existing.nextPurchaseBillNumberOverride <= await getPurchaseBillLastSeq()) {
+          updateData.nextPurchaseBillNumberOverride = null;
+        }
       }
 
       if ("nextCreditNoteNumberOverride" in body) {
@@ -282,24 +313,17 @@ export async function PUT(request: NextRequest) {
           if (!Number.isInteger(n) || n <= 0) {
             return NextResponse.json({ error: "Next credit note number must be a whole number greater than 0." }, { status: 400 });
           }
-          const effectivePrefix =
-            ("creditNoteNumberPrefix" in body ? (updateData.creditNoteNumberPrefix as string | null) : existing?.creditNoteNumberPrefix)
-            || "CN";
-          const effectiveFormat = "creditNoteNumberFormat" in body ? (updateData.creditNoteNumberFormat as string | null) : existing?.creditNoteNumberFormat;
-          const candidatesThisYear = await prisma.return.findMany({
-            where: { creditNoteNumber: numberFormatDbFilter(effectiveFormat, effectivePrefix, currentYearLabel) },
-            select: { creditNoteNumber: true },
-          });
-          const lastSeq = findMaxSequence(
-            candidatesThisYear.map((c) => c.creditNoteNumber).filter((v): v is string => v !== null),
-            resolveNumberFormat(effectiveFormat).matcher(effectivePrefix, currentYearLabel)
-          );
+          const lastSeq = await getCreditNoteLastSeq();
           if (n <= lastSeq) {
             return NextResponse.json({ error: `Next credit note number must be greater than the highest existing number this year (${lastSeq}).` }, { status: 400 });
           }
           updateData.nextCreditNoteNumberOverride = n;
         }
         pushNumberingDetail("nextCreditNoteNumberOverride", `next credit note # -> ${updateData.nextCreditNoteNumberOverride ?? "(cleared)"}`);
+      } else if (("creditNoteNumberPrefix" in body || "creditNoteNumberFormat" in body) && existing?.nextCreditNoteNumberOverride) {
+        if (existing.nextCreditNoteNumberOverride <= await getCreditNoteLastSeq()) {
+          updateData.nextCreditNoteNumberOverride = null;
+        }
       }
     }
 

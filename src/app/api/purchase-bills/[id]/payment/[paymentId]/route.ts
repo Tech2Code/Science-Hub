@@ -39,6 +39,9 @@ export async function PUT(
     }
     const billCheck = await prisma.purchaseBill.findFirst({ where: { id, deletedAt: null } });
     if (!billCheck) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+    if (billCheck.status === "cancelled") {
+      return NextResponse.json({ error: "Cannot edit a payment on a cancelled bill." }, { status: 400 });
+    }
 
     let paymentDate: Date | undefined;
     if (date) {
@@ -63,6 +66,15 @@ export async function PUT(
           throw new PaymentConflictError("Payment not found");
         }
         const bill = await tx.purchaseBill.findUniqueOrThrow({ where: { id } });
+        if (bill.deletedAt) {
+          throw new PaymentExceedsBalanceError("This purchase bill is in the bin — restore it before editing a payment.");
+        }
+        if (bill.status === "cancelled") {
+          throw new PaymentExceedsBalanceError("Cannot edit a payment on a cancelled bill.");
+        }
+        if (date && date < toIstDateStr(bill.billDate)) {
+          throw new PaymentExceedsBalanceError("Payment date cannot be before the bill date");
+        }
 
         const otherPayments = await tx.purchasePayment.aggregate({
           where: { purchaseBillId: id, id: { not: paymentId } },
@@ -95,7 +107,7 @@ export async function PUT(
         // from "cancelled" just because a correction changed how much was paid against it.
         const status = bill.status === "cancelled"
           ? "cancelled"
-          : round2(bill.total - paidAmount) <= 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+          : paidAmount > 0 && round2(bill.total - paidAmount) <= 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
 
         return tx.purchaseBill.update({
           where: { id },
@@ -108,6 +120,7 @@ export async function PUT(
     const updated = await retryOnWriteConflict(attemptUpdate);
 
     revalidateTag("purchase-bills", { expire: 0 });
+    revalidateTag("reports", { expire: 0 });
 
     const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     await logActivity(
@@ -147,6 +160,9 @@ export async function DELETE(
     }
     const billCheck = await prisma.purchaseBill.findFirst({ where: { id, deletedAt: null } });
     if (!billCheck) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+    if (billCheck.status === "cancelled") {
+      return NextResponse.json({ error: "Cannot edit a payment on a cancelled bill." }, { status: 400 });
+    }
 
     async function attemptDelete() {
       return prisma.$transaction(async (tx) => {
@@ -155,6 +171,12 @@ export async function DELETE(
           throw new PaymentConflictError("Payment not found");
         }
         const bill = await tx.purchaseBill.findUniqueOrThrow({ where: { id } });
+        if (bill.deletedAt) {
+          throw new PaymentExceedsBalanceError("This purchase bill is in the bin — restore it before deleting a payment.");
+        }
+        if (bill.status === "cancelled") {
+          throw new PaymentExceedsBalanceError("Cannot delete a payment on a cancelled bill.");
+        }
 
         await tx.purchasePayment.delete({ where: { id: paymentId } });
 
@@ -165,7 +187,7 @@ export async function DELETE(
         const paidAmount = agg._sum.amount ?? 0;
         const status = bill.status === "cancelled"
           ? "cancelled"
-          : round2(bill.total - paidAmount) <= 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+          : paidAmount > 0 && round2(bill.total - paidAmount) <= 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
 
         return tx.purchaseBill.update({
           where: { id },
@@ -178,6 +200,7 @@ export async function DELETE(
     const updated = await retryOnWriteConflict(attemptDelete);
 
     revalidateTag("purchase-bills", { expire: 0 });
+    revalidateTag("reports", { expire: 0 });
 
     const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     await logActivity(
@@ -190,6 +213,9 @@ export async function DELETE(
 
     return NextResponse.json(updated);
   } catch (error) {
+    if (error instanceof PaymentExceedsBalanceError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     if (error instanceof PaymentConflictError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }

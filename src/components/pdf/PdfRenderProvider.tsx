@@ -122,23 +122,27 @@ export function PdfRenderProvider({ children }: { children: ReactNode }) {
 
       const work = async (): Promise<Blob | null> => {
         const res = await fetch(`/api/invoices/${invoiceId}`, { headers: { "x-no-loader": "1" }, cache: "no-store", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-        if (!res.ok) return null;
+        if (!res.ok || activeJob.current !== jobId) return null;
         const invoice = (await res.json()) as Invoice;
+        if (activeJob.current !== jobId) return null;
 
         // The print area is meaningless without the business header, so never render before settings exist.
         let resolved = options?.settings ?? null;
         if (!resolved) {
           const sres = await fetch("/api/settings", { headers: { "x-no-loader": "1" }, cache: "no-store", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-          if (!sres.ok) return null;
+          if (!sres.ok || activeJob.current !== jobId) return null;
           resolved = (await sres.json()) as BusinessSettings;
+          if (activeJob.current !== jobId) return null;
         }
 
         setTarget({ invoice, settings: resolved });
         await nextFrame();
         await document.fonts.ready;
+        if (activeJob.current !== jobId) return null;
         const el = await waitForElementById(HOST_ELEMENT_ID);
-        if (!el) return null;
+        if (!el || activeJob.current !== jobId) return null;
         await waitForImages(el);
+        if (activeJob.current !== jobId) return null;
         // Same logo source the iframe version used: whatever the rendered <img alt="Logo"> resolved to (none when the logo is turned off).
         const logoUrl = el.querySelector<HTMLImageElement>('img[alt="Logo"]')?.src || undefined;
         return await generateInvoicePdfBlob(el, { ...(copyLabels ? { copyLabels } : {}), ...(logoUrl ? { logoUrl } : {}) });

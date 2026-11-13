@@ -123,7 +123,7 @@ const BIN_COLUMNS: Column[] = [
 ];
 
 function TypeSection({
-  type, items, index, onRestore, onDeleteForever, canDeleteForever, retainedCounts, loadingMore, onLoadMore,
+  type, items, index, onRestore, onDeleteForever, canDeleteForever, actionBusy, retainedCounts, loadingMore, onLoadMore,
 }: {
   type: BinType;
   items: BinItem[];
@@ -132,6 +132,7 @@ function TypeSection({
   onDeleteForever: (item: BinItem) => void;
   /** Permanent delete is admin-only server-side (requireAdmin) — hide it for staff. */
   canDeleteForever: boolean;
+  actionBusy?: boolean;
   retainedCounts?: RetainedCounts;
   loadingMore?: boolean;
   onLoadMore?: () => void;
@@ -201,11 +202,11 @@ function TypeSection({
                   </Cell>
                   <Cell col={BIN_COLUMNS[5]}>
                     <div className="table-actions">
-                      <Button variant="editOutline" size="sm" onClick={() => onRestore(item)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>Restore</Button>
+                      <Button variant="editOutline" size="sm" disabled={actionBusy} onClick={() => onRestore(item)}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>Restore</Button>
                       {canDeleteForever && (<Button
                         variant="dangerOutline"
                         size="sm"
-                        disabled={!!item.protectedReason}
+                        disabled={!!item.protectedReason || actionBusy}
                         title={item.protectedReason}
                         onClick={() => onDeleteForever(item)}
                       >
@@ -239,13 +240,16 @@ const RETAINED_LOAD_MORE_STEP = 200;
 
 export default function BinPage() {
   const [retainedLimit, setRetainedLimit] = useState(100);
+  const [loadingMoreType, setLoadingMoreType] = useState<BinType | null>(null);
   const { data, loading, error, mutate } = useFetch<BinResponse>(`/api/bin?limit=${retainedLimit}`);
   const items = useMemo(() => data?.items ?? [], [data]);
   // Only the very first load (no data cached yet at any limit) should show the full-page
   // skeleton — bumping the limit via "Load more" re-fetches a new URL but the previous data
   // should stay visible with just the clicked button spinning, not flash back to a skeleton.
   const isInitialLoad = loading && !data;
-  const loadingMore = loading && !!data;
+  useEffect(() => {
+    if (!loading && loadingMoreType !== null) setLoadingMoreType(null); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [loading, loadingMoreType]);
   // useFetch trusts a cached URL until it's explicitly busted, and nothing outside this page busts
   // "/api/bin" when an item is deleted elsewhere (products, invoices, customers, ...). Without this,
   // revisiting the Bin in the same session showed the snapshot from the first visit — newly deleted
@@ -255,7 +259,8 @@ export default function BinPage() {
     if (data) void mutate();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only revalidation
   }, []);
-  function handleLoadMoreRetained() {
+  function handleLoadMoreRetained(type: BinType) {
+    setLoadingMoreType(type);
     setRetainedLimit((l) => l + RETAINED_LOAD_MORE_STEP);
   }
   const toast = useToast();
@@ -280,12 +285,14 @@ export default function BinPage() {
   const [emptyBinLoading, setEmptyBinLoading] = useState(false);
 
   function handleRestore(item: BinItem) {
+    if (confirmLoading || emptyBinLoading) return;
     setConfirmState({
       title: "Restore Item",
       message: `Restore "${item.name}"? It will be moved back to its original section.`,
       confirmLabel: "Restore",
       variant: "default",
       onConfirm: async () => {
+        if (confirmLoading) return;
         setConfirmLoading(true);
         try {
           const res = await fetch(`/api/bin/${item.type}/${item.id}`, { method: "POST" });
@@ -312,6 +319,7 @@ export default function BinPage() {
   }
 
   function handleDeleteForever(item: BinItem) {
+    if (confirmLoading || emptyBinLoading) return;
     const isNumberedDocument = item.type === "invoice" || item.type === "purchase_bill" || item.type === "return";
     setConfirmState({
       title: "Delete Forever",
@@ -327,6 +335,7 @@ export default function BinPage() {
         </div>
       ) : undefined,
       onConfirm: async () => {
+        if (confirmLoading) return;
         setConfirmLoading(true);
         try {
           const res = await fetch(`/api/bin/${item.type}/${item.id}`, { method: "DELETE" });
@@ -353,6 +362,7 @@ export default function BinPage() {
   }
 
   function handleEmptyBin() {
+    if (confirmLoading || emptyBinLoading) return;
     setEmptyBinInput("");
     setEmptyBinOpen(true);
   }
@@ -477,7 +487,7 @@ export default function BinPage() {
           </p>
         </div>
         {isAdmin && !isInitialLoad && totalCount > 0 && (
-          <Button variant="dangerOutline" size="sm" onClick={handleEmptyBin}>
+          <Button variant="dangerOutline" size="sm" disabled={confirmLoading || emptyBinLoading} onClick={handleEmptyBin}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
             Empty Recycle Bin
           </Button>
@@ -544,9 +554,10 @@ export default function BinPage() {
             onRestore={handleRestore}
             onDeleteForever={handleDeleteForever}
             canDeleteForever={isAdmin}
+            actionBusy={confirmLoading || emptyBinLoading}
             retainedCounts={RETAINED_TYPES.includes(type) ? data?.retained[type as "invoice" | "purchase_bill" | "return"] : undefined}
-            loadingMore={loadingMore}
-            onLoadMore={handleLoadMoreRetained}
+            loadingMore={loading && loadingMoreType === type}
+            onLoadMore={() => handleLoadMoreRetained(type)}
           />
         ))
       )}

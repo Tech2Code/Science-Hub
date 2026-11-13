@@ -14,6 +14,11 @@ import { formatDate } from "@/lib/formatDate";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
 
 class BillConflictError extends Error {}
+class BillValidationError extends Error {
+  constructor(message: string, public readonly status = 400) {
+    super(message);
+  }
+}
 
 const BILL_INCLUDE = {
   vendor: { select: { id: true, name: true, company: true, phone: true, email: true, gstin: true, address: true, city: true, pincode: true, state: true, isActive: true, updatedAt: true } },
@@ -283,6 +288,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const totalChanged = items !== undefined || parsedDiscount !== undefined
       || parsedTransportCharge !== undefined || parsedTransportGstRate !== undefined;
 
+    if (status === "cancelled" && totalChanged) {
+      return NextResponse.json(
+        { error: "Cannot edit bill items or amounts and cancel the bill at the same time." },
+        { status: 400 }
+      );
+    }
+    if (status === "cancelled" && existing.status !== "cancelled" && round2(existing.paidAmount) > 0) {
+      return NextResponse.json(
+        { error: "Cannot cancel a purchase bill that has recorded payments. Delete the payment(s) first, then cancel the bill." },
+        { status: 400 }
+      );
+    }
+
     // A lower total can't drop below cash already paid — that would leave the bill claiming more was
     // paid than it's worth (negative balanceDue) with no matching payment correction.
     if (totalChanged && total < round2(existing.paidAmount)) {
@@ -291,13 +309,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         { status: 400 }
       );
     }
-    const recomputedStatus = round2(total - existing.paidAmount) <= 0 ? "paid" : existing.paidAmount > 0 ? "partial" : "unpaid";
+    const computeStatusFromPaid = (paidAmt: number) =>
+      paidAmt > 0 && round2(total - paidAmt) <= 0 ? "paid" : paidAmt > 0 ? "partial" : "unpaid";
+
+    const preRecomputedStatus = computeStatusFromPaid(existing.paidAmount);
     const effectiveStatus = totalChanged
-      ? recomputedStatus
+      ? preRecomputedStatus
       : status === "cancelled"
         ? "cancelled"
         : status !== undefined
-          ? recomputedStatus
+          ? preRecomputedStatus
           : undefined;
 
     if (effectiveStatus === "paid" && round2(total - existing.paidAmount) > 0) {
@@ -312,6 +333,30 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const isUncancelling = effectiveStatus !== undefined && effectiveStatus !== "cancelled" && existing.status === "cancelled";
 
     const bill = await prisma.$transaction(async (tx) => {
+      const fresh = await tx.purchaseBill.findUnique({ where: { id }, select: { paidAmount: true, status: true, deletedAt: true } });
+      if (!fresh || fresh.deletedAt) throw new BillValidationError("Bill not found", 404);
+      if (totalChanged && total < round2(fresh.paidAmount)) {
+        throw new BillValidationError(`Total can't be less than the amount already paid (₹${fresh.paidAmount.toFixed(2)}). Edit or delete payments first.`);
+      }
+      if (isCancelling && round2(fresh.paidAmount) > 0) {
+        throw new BillValidationError("Cannot cancel a purchase bill that has recorded payments. Delete the payment(s) first, then cancel the bill.");
+      }
+      if (newBillDay !== undefined && newBillDay !== toIstDateStr(new Date(existing.billDate))) {
+        const txPayments = await tx.purchasePayment.findMany({ where: { purchaseBillId: id }, select: { date: true } });
+        const earliestTxPaymentDay = txPayments.map((p) => toIstDateStr(p.date)).sort()[0];
+        if (earliestTxPaymentDay && newBillDay > earliestTxPaymentDay) {
+          throw new BillValidationError(`Bill date can't be after a recorded payment date (${formatDate(istDayStartUtc(earliestTxPaymentDay))}). Edit that payment first.`);
+        }
+      }
+      const freshRecomputedStatus = computeStatusFromPaid(fresh.paidAmount);
+      const finalStatus = totalChanged
+        ? freshRecomputedStatus
+        : status === "cancelled"
+          ? "cancelled"
+          : status !== undefined
+            ? freshRecomputedStatus
+            : undefined;
+
       // Re-check the optimistic-lock atomically under a row lock — the earlier check ran as a
       // separate query before this transaction started, leaving a race window where two concurrent
       // edits could both pass the pre-check and silently corrupt the item/stock state (mirrors
@@ -333,7 +378,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           where: isCancelling
             ? { id, deletedAt: null, status: { not: "cancelled" } }
             : { id, deletedAt: null, status: "cancelled" },
-          data: { status: effectiveStatus },
+          data: { status: finalStatus },
         });
         if (transition.count !== 1) throw new BillConflictError();
       }
@@ -379,7 +424,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           roundOff,
           ...(notes !== undefined && { notes: notes || null }),
           ...(category !== undefined && { category: normalizeCategoryInput(category) }),
-          ...(effectiveStatus !== undefined && { status: effectiveStatus }),
+          ...(finalStatus !== undefined && { status: finalStatus }),
           ...(attachmentUrl !== undefined && { attachmentUrl: attachmentUrl || null }),
           ...(attachmentName !== undefined && { attachmentName: attachmentName || null }),
           // Size tracks the URL: keep it only while there's an attachment, clear it when removed.
@@ -457,6 +502,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json(bill);
   } catch (err) {
     console.error("PUT /api/purchase-bills/[id] error:", err);
+    if (err instanceof BillValidationError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     if (err instanceof BillConflictError) {
       return NextResponse.json({ error: "This purchase bill was updated by someone else since you opened this page. Please refresh and try again." }, { status: 409 });
     }

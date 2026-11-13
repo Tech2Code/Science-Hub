@@ -103,6 +103,15 @@ export async function POST(req: NextRequest) {
     // Not filtered by deletedAt: a "just for this bill" vendor is soft-deleted at creation but must still be usable here.
     const vendor = await prisma.vendor.findUnique({ where: { id: vendorId } });
     if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 400 });
+    if (vendor.deletedAt) {
+      const wasExplicitlyDeleted = await prisma.activityLog.findFirst({
+        where: { entityId: vendor.id, entityType: "vendor", action: "delete_vendor" },
+        select: { id: true },
+      });
+      if (wasExplicitlyDeleted) {
+        return NextResponse.json({ error: "This vendor is in the bin — restore it before creating a purchase bill for them." }, { status: 400 });
+      }
+    }
 
     // `billDate` arrives as a plain "YYYY-MM-DD" string (a bill can be entered late for an earlier
     // period, so unlike Invoice this is genuinely user-supplied at creation) — istDayStartUtc()
@@ -291,23 +300,26 @@ export async function POST(req: NextRequest) {
     const status = paidAmount >= billTotal && billTotal > 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
     // Indian FY of the bill's own billDate (not "now"), since a bill can be entered late for an earlier period.
     const yearLabel = formatFinancialYearLabel(getIndianFinancialYear(effectiveBillDate));
+    const currentFyLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date()));
 
     // Number generation + create run in one Serializable transaction, retried on write-conflict, to prevent duplicate bill numbers under concurrent requests.
-    const billPrefix = biz.purchaseBillNumberPrefix || "PB";
     async function attemptCreate() {
       return prisma.$transaction(async (tx) => {
+        const freshBiz = (await tx.businessSettings.findUnique({ where: { id: "singleton" } })) ?? biz;
+        const billPrefix = freshBiz.purchaseBillNumberPrefix || "PB";
+        const isCurrentFy = yearLabel === currentFyLabel;
         const candidatesThisYear = await tx.purchaseBill.findMany({
-          where: { billNumber: numberFormatDbFilter(biz.purchaseBillNumberFormat, billPrefix, yearLabel) },
+          where: { billNumber: numberFormatDbFilter(freshBiz.purchaseBillNumberFormat, billPrefix, yearLabel) },
           select: { billNumber: true },
         });
-        const { documentNumber: billNumber, overrideUsed } = computeNextNumber(
+        const { documentNumber: billNumber, overrideUsed, overrideStale } = computeNextNumber(
           candidatesThisYear.map((c) => c.billNumber),
-          biz.purchaseBillNumberFormat,
+          freshBiz.purchaseBillNumberFormat,
           billPrefix,
           yearLabel,
-          biz.nextPurchaseBillNumberOverride
+          isCurrentFy ? freshBiz.nextPurchaseBillNumberOverride : null
         );
-        if (overrideUsed) {
+        if (isCurrentFy && (overrideUsed || overrideStale)) {
           await tx.businessSettings.update({ where: { id: "singleton" }, data: { nextPurchaseBillNumberOverride: null } });
         }
 

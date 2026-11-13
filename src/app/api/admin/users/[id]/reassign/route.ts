@@ -48,6 +48,8 @@ export async function POST(
       // and the Recycle-Bin markers for customers/vendors they binned) move with the documents — the log
       // rows would otherwise cascade-delete with the user. See src/lib/activityProtection.ts.
       prisma.activityLog.updateMany({ where: { userId: id, action: { in: [...STATE_BEARING_ACTIONS] } }, data: { userId: targetUserId } }),
+      prisma.return.updateMany({ where: { createdByUserId: id }, data: { createdByUserId: targetUserId } }),
+      prisma.stockMovement.updateMany({ where: { createdByUserId: id }, data: { createdByUserId: targetUserId } }),
     ]);
 
     const invoiceCount = invoiceResult.count;

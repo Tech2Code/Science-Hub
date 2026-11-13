@@ -160,8 +160,8 @@ export async function POST(
 
     // Credit note numbering follows the same configurable FY-based pattern as invoices/bills, generated in the same Serializable transaction with retry-on-conflict.
     const biz = await getBusinessSettings();
-    const creditNotePrefix = biz.creditNoteNumberPrefix || "CN";
     const creditNoteYearLabel = formatFinancialYearLabel(getIndianFinancialYear(returnDate));
+    const currentFyLabel = formatFinancialYearLabel(getIndianFinancialYear(new Date()));
     async function attemptCreate() {
       return prisma.$transaction(async (tx) => {
         // Re-read the invoice's own paidAmount/items INSIDE this transaction rather than trusting
@@ -183,6 +183,9 @@ export async function POST(
         // Re-checked under the transaction too — the invoice could have been binned after the outer check.
         if (currentInvoice.deletedAt) {
           throw new ReturnValidationError("This invoice is in the bin — restore it before recording a return");
+        }
+        if (currentInvoice.paidAmount <= 0) {
+          throw new ReturnValidationError("No payment received yet. Record a payment before processing a return.");
         }
 
         // Custom (unlinked) invoice lines, keyed by trimmed lowercase name — the only link a custom
@@ -335,18 +338,21 @@ export async function POST(
           }
         }
 
+        const freshBiz = (await tx.businessSettings.findUnique({ where: { id: "singleton" } })) ?? biz;
+        const creditNotePrefix = freshBiz.creditNoteNumberPrefix || "CN";
+        const isCurrentFy = creditNoteYearLabel === currentFyLabel;
         const candidatesThisYear = await tx.return.findMany({
-          where: { creditNoteNumber: numberFormatDbFilter(biz.creditNoteNumberFormat, creditNotePrefix, creditNoteYearLabel) },
+          where: { creditNoteNumber: numberFormatDbFilter(freshBiz.creditNoteNumberFormat, creditNotePrefix, creditNoteYearLabel) },
           select: { creditNoteNumber: true },
         });
-        const { documentNumber: creditNoteNumber, overrideUsed } = computeNextNumber(
+        const { documentNumber: creditNoteNumber, overrideUsed, overrideStale } = computeNextNumber(
           candidatesThisYear.map((c) => c.creditNoteNumber).filter((n): n is string => n !== null),
-          biz.creditNoteNumberFormat,
+          freshBiz.creditNoteNumberFormat,
           creditNotePrefix,
           creditNoteYearLabel,
-          biz.nextCreditNoteNumberOverride
+          isCurrentFy ? freshBiz.nextCreditNoteNumberOverride : null
         );
-        if (overrideUsed) {
+        if (isCurrentFy && (overrideUsed || overrideStale)) {
           await tx.businessSettings.update({ where: { id: "singleton" }, data: { nextCreditNoteNumberOverride: null } });
         }
 

@@ -100,10 +100,10 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
     fetch(`/api/products?search=${encodeURIComponent(q)}&pageSize=5`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!d?.data) return;
+        if (!d?.data) { setSimilarProducts([]); return; }
         setSimilarProducts((d.data as { id: string; name: string }[]).map((p) => ({ id: p.id, name: p.name })));
       })
-      .catch(() => {});
+      .catch((err) => { if (err?.name !== "AbortError") setSimilarProducts([]); });
     return () => controller.abort();
   }, [debouncedName]);
 
@@ -115,7 +115,7 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
 
   function handleListPriceChange(e: React.ChangeEvent<HTMLInputElement>) {
     const cleaned = e.target.value.replace(/[^\d.]/g, "");
-    setForm((p) => ({ ...p, listPrice: cleaned }));
+    setForm((p) => ({ ...p, listPrice: cleaned, ...(cleaned === "" ? { discountPercent: "" } : {}) }));
     setErrors((p) => ({ ...p, listPrice: undefined }));
   }
 
@@ -142,7 +142,7 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
       onAdd({
         skipCatalog: true, name: form.name.trim(), quantity: form.quantity, qty,
         unit: form.unit.trim() || defaultUnit, hsn: form.hsn.trim(), gstRate: form.gstRate,
-        listPrice: form.listPrice, discountPercent: form.discountPercent, purchasePriceNum,
+        listPrice: form.listPrice, discountPercent: clampedDiscount, purchasePriceNum,
       });
       toast({ type: "success", title: "Item added", message: `"${form.name.trim()}" added to this ${entityLabel} only.` });
       onClose();
@@ -176,7 +176,7 @@ export function QuickAddProductModal({ onClose, onAdd, entityLabel, defaultUnit,
       onAdd({
         skipCatalog: false, name: form.name.trim(), quantity: form.quantity, qty,
         unit: form.unit.trim() || defaultUnit, hsn: form.hsn.trim(), gstRate: form.gstRate,
-        listPrice: form.listPrice, discountPercent: form.discountPercent, purchasePriceNum, product: d,
+        listPrice: form.listPrice, discountPercent: clampedDiscount, purchasePriceNum, product: d,
       });
       toast({ type: "success", title: "Product added", message: `"${d.name}" was created and added to this ${entityLabel}.` });
       onClose();

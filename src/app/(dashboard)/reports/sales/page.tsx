@@ -87,6 +87,11 @@ export default function SalesReportsPage() {
   const isOutRefetching = loadingOut && !!outstandingResponse;
   const gstRows = gstData ?? [];
 
+  const outLastPage = Math.max(1, Math.ceil(outTotal / outPageSize));
+  useEffect(() => {
+    if (outstandingResponse && !loadingOut && outPage > outLastPage) setOutPage(outLastPage); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [outstandingResponse, loadingOut, outPage, outLastPage]);
+
   const [exportingOutstanding, setExportingOutstanding] = useState(false);
   const [exportingGst, setExportingGst] = useState(false);
 

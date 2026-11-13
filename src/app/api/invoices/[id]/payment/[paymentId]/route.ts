@@ -70,6 +70,12 @@ export async function PUT(
           throw new PaymentConflictError("Payment not found");
         }
         const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });
+        if (invoice.deletedAt) {
+          throw new PaymentExceedsBalanceError("This invoice is in the bin — restore it before editing a payment");
+        }
+        if (date && date < toIstDateStr(invoice.date)) {
+          throw new PaymentExceedsBalanceError("Payment date cannot be before the invoice date");
+        }
 
         const otherPayments = await tx.payment.aggregate({
           where: { invoiceId: id, id: { not: paymentId } },
@@ -114,7 +120,7 @@ export async function PUT(
           _sum: { amount: true },
         });
         const paidAmount = agg._sum.amount ?? 0;
-        const status = round2(invoice.total - paidAmount) <= 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+        const status = paidAmount > 0 && round2(invoice.total - paidAmount) <= 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
 
         return tx.invoice.update({
           where: { id },
@@ -181,6 +187,9 @@ export async function DELETE(
           throw new PaymentConflictError("Payment not found");
         }
         const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });
+        if (invoice.deletedAt) {
+          throw new PaymentExceedsBalanceError("This invoice is in the bin — restore it before deleting a payment");
+        }
 
         const otherPayments = await tx.payment.aggregate({
           where: { invoiceId: id, id: { not: paymentId } },
@@ -203,7 +212,7 @@ export async function DELETE(
 
         await tx.payment.delete({ where: { id: paymentId } });
 
-        const status = round2(invoice.total - newPaidAmount) <= 0 ? "paid" : newPaidAmount > 0 ? "partial" : "unpaid";
+        const status = newPaidAmount > 0 && round2(invoice.total - newPaidAmount) <= 0 ? "paid" : newPaidAmount > 0 ? "partial" : "unpaid";
 
         return tx.invoice.update({
           where: { id },

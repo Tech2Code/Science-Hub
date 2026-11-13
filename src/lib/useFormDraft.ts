@@ -12,20 +12,46 @@ interface StoredDraft<T> {
   savedAt: number;
 }
 
+export interface DraftPromptBinding {
+  active: boolean;
+  onTakeOver: () => void;
+}
+
 // Debounced localStorage autosave for long forms, so an accidental navigation mid-fill doesn't lose
 // input (see loadFormDraft/clearFormDraft). `values` should be user-editable fields only, not UI state.
-export function useFormDraft<T>(key: string, values: T, skip: boolean) {
+export function useFormDraft<T>(key: string, values: T, skip: boolean, prompting?: DraftPromptBinding) {
   const storageKey = DRAFT_PREFIX + key;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Captures values at the moment autosaving turns on — without this, the first debounce tick
   // after skip flips false would resurrect a draft the user just dismissed/cleared.
   const baselineRef = useRef<string | null>(null);
+  const promptBaselineRef = useRef<string | null>(null);
   const serialized = JSON.stringify(values);
 
   useEffect(() => {
+    if (prompting?.active) {
+      if (promptBaselineRef.current === null) {
+        promptBaselineRef.current = serialized;
+        return;
+      }
+      if (serialized !== promptBaselineRef.current) {
+        // User began editing the form directly without clicking "Resume" or "×" on the draft banner —
+        // seed the baseline from the pre-edit state and activate autosave for their new work.
+        baselineRef.current = promptBaselineRef.current;
+        promptBaselineRef.current = null;
+        prompting.onTakeOver();
+      }
+      return;
+    }
+    promptBaselineRef.current = null;
+
     if (skip) { baselineRef.current = null; return; }
     if (baselineRef.current === null) { baselineRef.current = serialized; return; }
-    if (serialized === baselineRef.current) return;
+    if (serialized === baselineRef.current) {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      try { localStorage.removeItem(storageKey); } catch {}
+      return;
+    }
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       try {
@@ -38,7 +64,7 @@ export function useFormDraft<T>(key: string, values: T, skip: boolean) {
     }, 800);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- serialized already captures every field in `values`
-  }, [serialized, skip, storageKey]);
+  }, [serialized, skip, storageKey, prompting?.active]);
 }
 
 // `onExpire` fires synchronously, with the about-to-be-discarded values, only when this call is the

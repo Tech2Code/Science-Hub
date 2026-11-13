@@ -20,7 +20,7 @@ export function useEntitySearch<T>(endpoint: string, query: string, opts?: { pag
     // Resets results when the caller toggles search off (e.g. a picker collapses once something is
     // selected) — a legitimate prop-driven external-state reset, not derivable during render.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!enabled) { setResults([]); setLoading(false); return; }
+    if (!enabled) { setResults([]); setTotal(0); setLoading(false); return; }
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -33,7 +33,7 @@ export function useEntitySearch<T>(endpoint: string, query: string, opts?: { pag
         setResults(res.data ?? []);
         setTotal(res.total ?? 0);
       })
-      .catch((err) => { if (err?.name !== "AbortError") setResults([]); })
+      .catch((err) => { if (err?.name !== "AbortError") { setResults([]); setTotal(0); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [endpoint, debounced, pageSize, enabled]);

@@ -55,20 +55,27 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let rawSkuForError = "";
   try {
     const auth = await requireWriteAccess();
     if (!auth.ok) return auth.response;
 
     const body = await request.json();
     const { name, description, sku, hsn, unit, price, purchasePrice, listPrice, discountPercent, gstRate, stock, minStock, categoryId, brandId } = body;
+    rawSkuForError = typeof sku === "string" ? sku.trim() : "";
     const coreErr = validateProductInput({ name, price, sku, hsn, description }, true);
     if (coreErr) return NextResponse.json({ error: coreErr }, { status: 400 });
     const trimmedName = (name as string).trim();
 
     const parsedPrice = parseFloat(price);
-    const parsedPurchasePrice = purchasePrice !== undefined && purchasePrice !== null && purchasePrice !== "" ? parseFloat(purchasePrice) : null;
     const parsedListPrice = listPrice !== undefined && listPrice !== null && listPrice !== "" ? parseFloat(listPrice) : null;
     const parsedDiscountPercent = discountPercent !== undefined && discountPercent !== null && discountPercent !== "" ? parseFloat(discountPercent) : 0;
+    const parsedPurchasePrice =
+      parsedListPrice !== null && !isNaN(parsedListPrice) && !isNaN(parsedDiscountPercent)
+        ? Math.round(parsedListPrice * (1 - parsedDiscountPercent / 100) * 100) / 100
+        : purchasePrice !== undefined && purchasePrice !== null && purchasePrice !== ""
+          ? parseFloat(purchasePrice)
+          : null;
     const parsedGstRate = gstRate !== undefined ? parseFloat(gstRate) : 18;
     const parsedStock = stock !== undefined ? parseFloat(stock) : 0;
     const parsedMinStock = minStock !== undefined ? parseFloat(minStock) : 5;
@@ -107,20 +114,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `A product named "${trimmedName}" already exists` }, { status: 409 });
     }
 
-    const product = await prisma.product.create({
-      data: {
-        name: trimmedName, description, sku: trimmedSku, hsn: trimmedHsn, unit: trimmedUnit,
-        price: parsedPrice,
-        purchasePrice: parsedPurchasePrice,
-        listPrice: parsedListPrice,
-        discountPercent: parsedDiscountPercent,
-        gstRate: parsedGstRate,
-        stock: parsedStock,
-        minStock: parsedMinStock,
-        categoryId: categoryId || null,
-        brandId: brandId || null,
-      },
-      include: { category: true, brand: true },
+    const product = await prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({
+        data: {
+          name: trimmedName, description, sku: trimmedSku, hsn: trimmedHsn, unit: trimmedUnit,
+          price: parsedPrice,
+          purchasePrice: parsedPurchasePrice,
+          listPrice: parsedListPrice,
+          discountPercent: parsedDiscountPercent,
+          gstRate: parsedGstRate,
+          stock: parsedStock,
+          minStock: parsedMinStock,
+          categoryId: categoryId || null,
+          brandId: brandId || null,
+        },
+        include: { category: true, brand: true },
+      });
+      if (parsedStock > 0) {
+        await tx.stockMovement.create({
+          data: {
+            productId: created.id,
+            productName: created.name,
+            type: "manual",
+            documentType: "manual",
+            quantity: parsedStock,
+            balanceAfter: parsedStock,
+            notes: "Opening stock on product creation",
+            createdByUserId: auth.session.user.id,
+          },
+        });
+      }
+      return created;
     });
 
     await logActivity(auth.session.user.id, "add_product", `Added product "${trimmedName}" | SKU: ${trimmedSku || "—"} | Price: ₹${parsedPrice.toFixed(2)} | GST: ${parsedGstRate}% | Stock: ${parsedStock} ${trimmedUnit}`, product.id, "product");
@@ -129,6 +153,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(product, { status: 201 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      if (rawSkuForError) {
+        const binned = await prisma.product.findFirst({ where: { sku: rawSkuForError, deletedAt: { not: null } }, select: { name: true } }).catch(() => null);
+        if (binned) {
+          return NextResponse.json(
+            { error: `SKU "${rawSkuForError}" is used by "${binned.name}" in the Recycle Bin — restore or permanently delete it first` },
+            { status: 409 }
+          );
+        }
+      }
       return NextResponse.json({ error: "SKU already in use" }, { status: 409 });
     }
     console.error("POST /api/products error:", error);

@@ -76,8 +76,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     async function attemptPayment() {
       return prisma.$transaction(async (tx) => {
         const bill = await tx.purchaseBill.findUniqueOrThrow({ where: { id } });
+        if (bill.deletedAt) {
+          throw new PaymentExceedsBalanceError("This purchase bill is in the bin — restore it before recording a payment.");
+        }
         if (bill.status === "cancelled") {
           throw new PaymentExceedsBalanceError("Cannot record a payment against a cancelled bill.");
+        }
+        if (date && date < toIstDateStr(bill.billDate)) {
+          throw new PaymentExceedsBalanceError("Payment date cannot be before the bill date");
         }
         const balance = bill.total - bill.paidAmount;
         if (amount > round2(balance)) {
@@ -102,7 +108,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           _sum: { amount: true },
         });
         const newPaid = agg._sum.amount ?? 0;
-        const newStatus = round2(bill.total - newPaid) <= 0 ? "paid" : newPaid > 0 ? "partial" : "unpaid";
+        const newStatus = newPaid > 0 && round2(bill.total - newPaid) <= 0 ? "paid" : newPaid > 0 ? "partial" : "unpaid";
 
         await tx.purchaseBill.update({
           where: { id },
@@ -130,6 +136,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     await logActivity(auth.session.user.id, "record_purchase_payment", `Recorded ₹${amount} payment for bill ${billCheck.billNumber}`, id, "purchase_bill");
     revalidateTag("purchase-bills", { expire: 0 });
+    revalidateTag("reports", { expire: 0 });
     return NextResponse.json(payment, { status: 201 });
   } catch (error) {
     if (error instanceof PaymentExceedsBalanceError) {

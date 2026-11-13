@@ -182,7 +182,7 @@ export default function EditPurchaseBillPage() {
   useFormDraft(DRAFT_KEY, {
     vendorId, billDate, dueDate, category, notes, discount, items, attachmentUrl, attachmentName, attachmentSize,
     transportChargeEnabled, transportCharge, transportChargeGstRate,
-  }, !draftReady || saving || !isDirty);
+  }, !draftReady || saving || !isDirty, { active: showDraftBanner, onTakeOver: () => { setShowDraftBanner(false); setDraftReady(true); } });
 
   useEffect(() => {
     Promise.all([

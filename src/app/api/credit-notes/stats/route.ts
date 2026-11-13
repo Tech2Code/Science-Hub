@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       prisma.return.count({ where: allTimeWhere }),
       prisma.return.aggregate({ where: periodWhere, _sum: { total: true } }),
       prisma.return.count({ where: periodWhere }),
-      prisma.$queryRaw<{ year: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM ("date" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata'))::int AS year FROM "Return" WHERE "deletedAt" IS NULL ORDER BY year DESC`,
+      prisma.$queryRaw<{ year: number }[]>`SELECT DISTINCT EXTRACT(YEAR FROM (r."date" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata'))::int AS year FROM "Return" r INNER JOIN "Invoice" i ON i."id" = r."invoiceId" WHERE r."deletedAt" IS NULL AND i."deletedAt" IS NULL ORDER BY year DESC`,
     ]);
 
     return NextResponse.json({

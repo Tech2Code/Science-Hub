@@ -153,6 +153,16 @@ export default function PurchaseReportsPage() {
   const showLedgerSkeleton = loadingLedger && !ledgerResponse;
   const isLedgerRefetching = loadingLedger && !!ledgerResponse;
 
+  const outLastPage = Math.max(1, Math.ceil(outTotal / outPageSize));
+  useEffect(() => {
+    if (outstandingResponse && !loadingOut && outPage > outLastPage) setOutPage(outLastPage); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [outstandingResponse, loadingOut, outPage, outLastPage]);
+
+  const ledgerLastPage = Math.max(1, Math.ceil(ledgerTotal / ledgerPageSize));
+  useEffect(() => {
+    if (ledgerResponse && !loadingLedger && ledgerPage > ledgerLastPage) setLedgerPage(ledgerLastPage); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [ledgerResponse, loadingLedger, ledgerPage, ledgerLastPage]);
+
   const [exportingOutstanding, setExportingOutstanding] = useState(false);
   const [exportingCategory, setExportingCategory] = useState(false);
   const [exportingLedger, setExportingLedger] = useState(false);
