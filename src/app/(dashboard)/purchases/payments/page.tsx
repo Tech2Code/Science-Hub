@@ -141,7 +141,7 @@ export default function PurchasePaymentsPage() {
               onChange={(e) => handleSearch(e.target.value)}
               className={`${styles.searchInput}`}
             />
-            <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} />
+            <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} countScope="purchase-payments" />
             <SortSelect ariaLabel="Sort purchase payments" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
           {data && (
@@ -197,7 +197,7 @@ export default function PurchasePaymentsPage() {
             </tbody>
           </table>
         </div>
-        {data && total > 0 && (
+        {data && (
           <Pagination total={total} page={page} showAll={showAll} onPage={setPage} label="payments" loading={isRefetching} />
         )}
       </div>

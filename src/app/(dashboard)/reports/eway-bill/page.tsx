@@ -166,6 +166,7 @@ export default function EwayBillReportPage() {
         <ReportPeriodFilter
           startDate={startDate} endDate={endDate} todayStr={todayS}
           onStartChange={setStartDate} onEndChange={setEndDate}
+          countScope="eway-bill"
         />
       </div>
 

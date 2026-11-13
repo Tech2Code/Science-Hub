@@ -16,7 +16,7 @@ import { useFetch } from "@/lib/useCache";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
-import { OverlayLoader } from "@/components/ui/Spinner";
+import { FloatingSpinner, OverlayLoader } from "@/components/ui/Spinner";
 import { downloadXlsx } from "@/lib/downloadXlsx";
 import { formatDate, formatTime } from "@/lib/formatDate";
 import { toIstDateStr } from "@/lib/validation";
@@ -135,6 +135,8 @@ export default function PurchaseReportsPage() {
   const outOverdueCount = outstandingResponse?.overdueCount ?? 0;
   const showOutSkeleton = loadingOut && !outstandingResponse;
   const isOutRefetching = loadingOut && !!outstandingResponse;
+  const showCatSkeleton = loadingCat && !categoryData;
+  const isCatRefetching = loadingCat && !!categoryData;
   const categoryRows = categoryData ?? [];
 
   const [ledgerSearch, setLedgerSearch] = useState("");
@@ -304,6 +306,7 @@ export default function PurchaseReportsPage() {
             todayStr={todayStr}
             onStartChange={(v) => { setStartDate(v); setOutPage(1); }}
             onEndChange={(v) => { setEndDate(v); setOutPage(1); }}
+            countScope="purchase-reports"
           />
         )}
 
@@ -370,7 +373,7 @@ export default function PurchaseReportsPage() {
                 </tbody>
               </table>
             </div>
-            {outstandingResponse && outTotal > 0 && (
+            {outstandingResponse && (
               <Pagination total={outTotal} page={outPage} showAll={outShowAll} onPage={setOutPage} label="bills" loading={isOutRefetching} />
             )}
           </>
@@ -436,10 +439,10 @@ export default function PurchaseReportsPage() {
               )}
             </div>
             <div className="table-wrap">
-              <table className="table-base">
+              <table className="table-base" style={isCatRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
                 <thead><tr>{CAT_COLS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr></thead>
                 <tbody>
-                  {loadingCat ? <TableSkeleton columns={CAT_COLS} /> : categoryRows.length === 0 ? (
+                  {showCatSkeleton ? <TableSkeleton columns={CAT_COLS} /> : categoryRows.length === 0 ? (
                     <tr><td colSpan={CAT_COLS.length} className="table-empty-cell">No purchase data available.</td></tr>
                   ) : categoryRows.map((row) => (
                     <tr key={row.category}>
@@ -459,6 +462,7 @@ export default function PurchaseReportsPage() {
                 </tbody>
               </table>
             </div>
+            {isCatRefetching && <FloatingSpinner />}
           </>
         )}
 
@@ -522,7 +526,7 @@ export default function PurchaseReportsPage() {
                 </tbody>
               </table>
             </div>
-            {ledgerResponse && ledgerTotal > 0 && (
+            {ledgerResponse && (
               <Pagination total={ledgerTotal} page={ledgerPage} showAll={ledgerShowAll} onPage={setLedgerPage} label="movements" loading={isLedgerRefetching} />
             )}
           </>

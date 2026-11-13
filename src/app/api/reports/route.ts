@@ -6,6 +6,7 @@ import { parsePageParams } from "@/lib/listQuery";
 import { istDayStartUtc, istDayEndUtc, istMonthStartUtc, istNextMonthStartUtc, istTodayStartUtc, istMonthBoundsUtc, toIstDateStr } from "@/lib/validation";
 import { getIndianFinancialYear } from "@/lib/documentNumbering";
 import { buildGstFilingReport } from "@/lib/gstFiling";
+import { EWAY_BILL_THRESHOLD } from "@/lib/ewayBill";
 import { Prisma } from "@prisma/client";
 
 // A reporting period selected via the two dropdowns (Financial Year + Month):
@@ -87,6 +88,180 @@ async function getAvailableFinancialYears(): Promise<{ years: { startYear: numbe
   const years: { startYear: number; label: string }[] = [];
   for (let y = currentFy; y >= earliestFy; y--) years.push({ startYear: y, label: FY_LABEL(y) });
   return { years };
+}
+
+type MonthCountRow = { month0: number; count: bigint | number };
+
+function rowsToMonthMap(rows: MonthCountRow[]): Record<number, number> {
+  const out: Record<number, number> = {};
+  for (const r of rows) {
+    const c = Number(r.count) || 0;
+    if (c > 0 && r.month0 >= 0 && r.month0 <= 11) out[r.month0] = c;
+  }
+  return out;
+}
+
+// Per-month document counts for a financial year (Apr fyYear → Mar fyYear+1), bucketed by IST
+// calendar month (+330 minutes before EXTRACT(MONTH)) so counts in the PeriodFilter dropdown match
+// the exact documents each page lists or aggregates for that month.
+async function getMonthCounts(
+  scope: string,
+  fyYear: number,
+  statusRaw: string | null,
+  canSeeSales: boolean,
+  canSeePurchases: boolean,
+) {
+  const fyStart = istMonthBoundsUtc(fyYear, 3).start;
+  const fyEnd = istMonthBoundsUtc(fyYear + 1, 3).start;
+  const todayStart = istTodayStartUtc(new Date());
+  const status = statusRaw ? statusRaw.trim().toLowerCase() : "all";
+
+  if (scope === "dashboard") {
+    const [salesRows, purchaseRows] = await Promise.all([
+      canSeeSales
+        ? prisma.$queryRaw<MonthCountRow[]>`
+            SELECT (EXTRACT(MONTH FROM ("date" + interval '330 minutes'))::int - 1) AS month0,
+                   COUNT(*)::int AS count
+            FROM "Invoice"
+            WHERE "deletedAt" IS NULL
+              AND "date" >= ${fyStart} AND "date" < ${fyEnd}
+            GROUP BY month0
+          `
+        : Promise.resolve([] as MonthCountRow[]),
+      canSeePurchases
+        ? prisma.$queryRaw<MonthCountRow[]>`
+            SELECT (EXTRACT(MONTH FROM ("billDate" + interval '330 minutes'))::int - 1) AS month0,
+                   COUNT(*)::int AS count
+            FROM "PurchaseBill"
+            WHERE "deletedAt" IS NULL AND "status" <> 'cancelled'
+              AND "billDate" >= ${fyStart} AND "billDate" < ${fyEnd}
+            GROUP BY month0
+          `
+        : Promise.resolve([] as MonthCountRow[]),
+    ]);
+    const salesMap = rowsToMonthMap(salesRows);
+    const purchasesMap = rowsToMonthMap(purchaseRows);
+    const months: Record<number, { sales: number; purchases: number }> = {};
+    for (let m = 0; m < 12; m++) {
+      const s = salesMap[m] ?? 0;
+      const p = purchasesMap[m] ?? 0;
+      if (s > 0 || p > 0) months[m] = { sales: s, purchases: p };
+    }
+    return { mode: "split" as const, canSeeSales, canSeePurchases, months };
+  }
+
+  if (scope === "eway-bill") {
+    const [salesRows, purchaseRows] = await Promise.all([
+      canSeeSales
+        ? prisma.$queryRaw<MonthCountRow[]>`
+            SELECT (EXTRACT(MONTH FROM ("date" + interval '330 minutes'))::int - 1) AS month0,
+                   COUNT(*)::int AS count
+            FROM "Invoice"
+            WHERE "deletedAt" IS NULL AND "total" >= ${EWAY_BILL_THRESHOLD}
+              AND "date" >= ${fyStart} AND "date" < ${fyEnd}
+            GROUP BY month0
+          `
+        : Promise.resolve([] as MonthCountRow[]),
+      canSeePurchases
+        ? prisma.$queryRaw<MonthCountRow[]>`
+            SELECT (EXTRACT(MONTH FROM ("billDate" + interval '330 minutes'))::int - 1) AS month0,
+                   COUNT(*)::int AS count
+            FROM "PurchaseBill"
+            WHERE "deletedAt" IS NULL AND "status" <> 'cancelled' AND "total" >= ${EWAY_BILL_THRESHOLD}
+              AND "billDate" >= ${fyStart} AND "billDate" < ${fyEnd}
+            GROUP BY month0
+          `
+        : Promise.resolve([] as MonthCountRow[]),
+    ]);
+    const salesMap = rowsToMonthMap(salesRows);
+    const purchasesMap = rowsToMonthMap(purchaseRows);
+    const months: Record<number, { sales: number; purchases: number }> = {};
+    for (let m = 0; m < 12; m++) {
+      const s = salesMap[m] ?? 0;
+      const p = purchasesMap[m] ?? 0;
+      if (s > 0 || p > 0) months[m] = { sales: s, purchases: p };
+    }
+    return { mode: "split" as const, canSeeSales, canSeePurchases, months };
+  }
+
+  if (scope === "invoices" || scope === "sales-overview" || scope === "sales-reports") {
+    const statusClause =
+      scope !== "invoices" || !status || status === "all"
+        ? Prisma.empty
+        : status === "overdue"
+          ? Prisma.sql`AND "status" <> 'paid' AND "dueDate" < ${todayStart}`
+          : Prisma.sql`AND "status" = ${status}`;
+    const rows = await prisma.$queryRaw<MonthCountRow[]>`
+      SELECT (EXTRACT(MONTH FROM ("date" + interval '330 minutes'))::int - 1) AS month0,
+             COUNT(*)::int AS count
+      FROM "Invoice"
+      WHERE "deletedAt" IS NULL
+        AND "date" >= ${fyStart} AND "date" < ${fyEnd}
+        ${statusClause}
+      GROUP BY month0
+    `;
+    return { mode: "single" as const, months: rowsToMonthMap(rows) };
+  }
+
+  if (scope === "purchase-bills" || scope === "purchases-overview" || scope === "purchase-reports") {
+    const statusClause =
+      scope !== "purchase-bills"
+        ? Prisma.sql`AND "status" <> 'cancelled'`
+        : !status || status === "all"
+          ? Prisma.empty
+          : status === "overdue"
+            ? Prisma.sql`AND "status" NOT IN ('paid', 'cancelled') AND "dueDate" < ${todayStart}`
+            : Prisma.sql`AND "status" = ${status}`;
+    const rows = await prisma.$queryRaw<MonthCountRow[]>`
+      SELECT (EXTRACT(MONTH FROM ("billDate" + interval '330 minutes'))::int - 1) AS month0,
+             COUNT(*)::int AS count
+      FROM "PurchaseBill"
+      WHERE "deletedAt" IS NULL
+        AND "billDate" >= ${fyStart} AND "billDate" < ${fyEnd}
+        ${statusClause}
+      GROUP BY month0
+    `;
+    return { mode: "single" as const, months: rowsToMonthMap(rows) };
+  }
+
+  if (scope === "credit-notes") {
+    const rows = await prisma.$queryRaw<MonthCountRow[]>`
+      SELECT (EXTRACT(MONTH FROM (r."date" + interval '330 minutes'))::int - 1) AS month0,
+             COUNT(*)::int AS count
+      FROM "Return" r
+      INNER JOIN "Invoice" i ON i."id" = r."invoiceId" AND i."deletedAt" IS NULL
+      WHERE r."deletedAt" IS NULL
+        AND r."date" >= ${fyStart} AND r."date" < ${fyEnd}
+      GROUP BY month0
+    `;
+    return { mode: "single" as const, months: rowsToMonthMap(rows) };
+  }
+
+  if (scope === "sales-payments") {
+    const rows = await prisma.$queryRaw<MonthCountRow[]>`
+      SELECT (EXTRACT(MONTH FROM (p."date" + interval '330 minutes'))::int - 1) AS month0,
+             COUNT(*)::int AS count
+      FROM "Payment" p
+      INNER JOIN "Invoice" i ON i."id" = p."invoiceId" AND i."deletedAt" IS NULL
+      WHERE p."date" >= ${fyStart} AND p."date" < ${fyEnd}
+      GROUP BY month0
+    `;
+    return { mode: "single" as const, months: rowsToMonthMap(rows) };
+  }
+
+  if (scope === "purchase-payments") {
+    const rows = await prisma.$queryRaw<MonthCountRow[]>`
+      SELECT (EXTRACT(MONTH FROM (p."date" + interval '330 minutes'))::int - 1) AS month0,
+             COUNT(*)::int AS count
+      FROM "PurchasePayment" p
+      INNER JOIN "PurchaseBill" b ON b."id" = p."purchaseBillId" AND b."deletedAt" IS NULL AND b."status" <> 'cancelled'
+      WHERE p."date" >= ${fyStart} AND p."date" < ${fyEnd}
+      GROUP BY month0
+    `;
+    return { mode: "single" as const, months: rowsToMonthMap(rows) };
+  }
+
+  return { mode: "single" as const, months: {} as Record<number, number> };
 }
 
 // kpiOnly=true skips recentInvoices/topCustomers/monthlyRevenue — every one of those fields is
@@ -651,6 +826,45 @@ export async function GET(request: NextRequest) {
     }
     if (type === "stock")              return NextResponse.json(await getReportStock());
     if (type === "financial-years")    return NextResponse.json(await getAvailableFinancialYears());
+    if (type === "month-counts") {
+      const scope = searchParams.get("scope") || "";
+      if (scope === "sales-overview") {
+        const gate = await requireSectionAccess("sales_overview");
+        if (!gate.ok) return gate.response;
+      } else if (scope === "purchases-overview") {
+        const gate = await requireSectionAccess("purchase_overview");
+        if (!gate.ok) return gate.response;
+      } else if (scope === "sales-reports" || scope === "credit-notes") {
+        const gate = await requireSectionAccess("reports_sales");
+        if (!gate.ok) return gate.response;
+      } else if (scope === "purchase-reports") {
+        const gate = await requireSectionAccess("reports_purchases");
+        if (!gate.ok) return gate.response;
+      } else if (scope === "sales-payments") {
+        const gate = await requireSectionAccess("payments_received");
+        if (!gate.ok) return gate.response;
+      } else if (scope === "purchase-payments") {
+        const gate = await requireSectionAccess("payments_made");
+        if (!gate.ok) return gate.response;
+      } else if (scope === "eway-bill") {
+        const gate = await requireGstFilingAccess();
+        if (!gate.ok) return gate.response;
+      }
+      const role = auth.session.user.role;
+      const sections = Array.isArray(auth.session.user.sections) ? auth.session.user.sections : [];
+      const canSeeSales =
+        scope === "eway-bill"
+          ? role === "admin" || sections.includes("reports_sales")
+          : role === "admin" || sections.includes("sales_overview");
+      const canSeePurchases =
+        scope === "eway-bill"
+          ? role === "admin" || sections.includes("reports_purchases")
+          : role === "admin" || sections.includes("purchase_overview");
+      const fyParam = parsePeriodParam(searchParams);
+      const fyStartYear = fyParam && typeof fyParam === "object" ? fyParam.fyStartYear : getIndianFinancialYear(new Date());
+      const status = searchParams.get("status");
+      return NextResponse.json(await getMonthCounts(scope, fyStartYear, status, canSeeSales, canSeePurchases));
+    }
     const kpiOnly = searchParams.get("kpiOnly") === "1";
     if (type === "sales-dashboard")    return NextResponse.json(await getSalesDashboard(parsePeriodParam(searchParams), kpiOnly));
     if (type === "purchase-dashboard") return NextResponse.json(await getPurchaseDashboard(parsePeriodParam(searchParams), kpiOnly));

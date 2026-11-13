@@ -428,7 +428,7 @@ export default function InvoicesPage() {
               onChange={(v) => { setSort(v); setPage(1); }}
               options={SORT_OPTIONS}
             />
-            <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} />
+            <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} countScope="invoices" statusFilter={filter} />
             <Button
               variant="secondary"
               size="sm"
@@ -542,7 +542,7 @@ export default function InvoicesPage() {
             </tbody>
           </table>
         </div>
-        {data && total > 0 && (
+        {data && (
           <Pagination
             total={total}
             page={page}

@@ -300,7 +300,7 @@ export default function CreditNotesPage() {
                 className={styles.searchInput}
               />
               <SortSelect ariaLabel="Sort credit notes" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
-              <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} />
+              <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} countScope="credit-notes" />
             </div>
             <HeaderActionsRow>
               {data && total > 0 && (
@@ -365,7 +365,7 @@ export default function CreditNotesPage() {
               </tbody>
             </table>
           </div>
-          {data && total > 0 && (
+          {data && (
             <Pagination
               total={total}
               page={page}

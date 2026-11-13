@@ -13,8 +13,32 @@ export interface PeriodValue {
   month0: number | "all";
 }
 
+export type PeriodCountScope =
+  | "invoices"
+  | "purchase-bills"
+  | "credit-notes"
+  | "sales-payments"
+  | "purchase-payments"
+  | "sales-overview"
+  | "purchases-overview"
+  | "sales-reports"
+  | "purchase-reports"
+  | "dashboard"
+  | "eway-bill";
+
+type MonthCountsResponse =
+  | { mode: "single"; months: Record<number, number> }
+  | { mode: "split"; canSeeSales: boolean; canSeePurchases: boolean; months: Record<number, { sales: number; purchases: number }> };
+
 interface FinancialYearsResponse {
   years: { startYear: number; label: string }[];
+}
+
+function formatSplitSuffix(s: number, p: number, canSeeSales: boolean, canSeePurchases: boolean): string {
+  const parts: string[] = [];
+  if (canSeeSales && s > 0) parts.push(`${s}S`);
+  if (canSeePurchases && p > 0) parts.push(`${p}P`);
+  return parts.length > 0 ? ` (${parts.join(" · ")})` : "";
 }
 
 const FY_LABEL = (startYear: number) => `FY ${startYear}-${String(startYear + 1).slice(2)}`;
@@ -83,13 +107,21 @@ function fyMonths(fyStartYear: number): { month0: number; label: string; future:
 
 // Two dropdowns — Financial Year + Month — sharing the app's common <Select>. Changing the FY keeps
 // the month choice if that month exists & isn't in the future, otherwise falls back to "Full year".
-export function PeriodFilter({ value, onChange, disabled, className }: {
+export function PeriodFilter({ value, onChange, disabled, className, countScope, statusFilter }: {
   value: PeriodValue;
   onChange: (p: PeriodValue) => void;
   disabled?: boolean;
   className?: string;
+  countScope?: PeriodCountScope;
+  statusFilter?: string;
 }) {
   const { data } = useFetch<FinancialYearsResponse>("/api/reports?type=financial-years");
+  const normalizedStatus = statusFilter && statusFilter.toLowerCase() !== "all" ? statusFilter.toLowerCase() : "";
+  const countsUrl = countScope
+    ? `/api/reports?type=month-counts&scope=${countScope}&fy=${value.fyStartYear}${normalizedStatus ? `&status=${encodeURIComponent(normalizedStatus)}` : ""}`
+    : null;
+  const { data: countData } = useFetch<MonthCountsResponse>(countsUrl);
+
   // Always include the current FY and the currently-selected FY, even before the list loads.
   const years = useMemo(() => {
     const fromApi = data?.years?.map((y) => y.startYear) ?? [];
@@ -99,9 +131,36 @@ export function PeriodFilter({ value, onChange, disabled, className }: {
 
   const months = useMemo(() => fyMonths(value.fyStartYear), [value.fyStartYear]);
 
+  const fullYearSuffix = useMemo(() => {
+    if (!countData) return "";
+    if (countData.mode === "single") {
+      const total = Object.values(countData.months).reduce((sum, n) => sum + (Number(n) || 0), 0);
+      return total > 0 ? ` (${total})` : "";
+    }
+    let totalS = 0;
+    let totalP = 0;
+    for (const entry of Object.values(countData.months)) {
+      totalS += Number(entry?.sales) || 0;
+      totalP += Number(entry?.purchases) || 0;
+    }
+    return formatSplitSuffix(totalS, totalP, countData.canSeeSales, countData.canSeePurchases);
+  }, [countData]);
+
+  function getMonthSuffix(month0: number): string {
+    if (!countData) return "";
+    if (countData.mode === "single") {
+      const c = Number(countData.months[month0]) || 0;
+      return c > 0 ? ` (${c})` : "";
+    }
+    const entry = countData.months[month0];
+    if (!entry) return "";
+    return formatSplitSuffix(Number(entry.sales) || 0, Number(entry.purchases) || 0, countData.canSeeSales, countData.canSeePurchases);
+  }
+
   return (
     <div className={`${styles.group} ${className ?? ""}`}>
       <Select
+        fitContent
         value={String(value.fyStartYear)}
         disabled={disabled}
         aria-label="Select financial year"
@@ -117,15 +176,16 @@ export function PeriodFilter({ value, onChange, disabled, className }: {
       </Select>
 
       <Select
+        fitContent
         value={value.month0 === "all" ? "all" : String(value.month0)}
         disabled={disabled}
         aria-label="Select month"
         wrapClassName={styles.monthSelect}
         onChange={(e) => onChange({ fyStartYear: value.fyStartYear, month0: e.target.value === "all" ? "all" : Number(e.target.value) })}
       >
-        <option value="all">Full year</option>
+        <option value="all">{`Full year${fullYearSuffix}`}</option>
         {months.map((m) => (
-          <option key={m.month0} value={m.month0} disabled={m.future}>{m.label}</option>
+          <option key={m.month0} value={m.month0} disabled={m.future}>{`${m.label}${getMonthSuffix(m.month0)}`}</option>
         ))}
       </Select>
     </div>

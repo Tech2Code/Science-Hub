@@ -32,12 +32,14 @@ export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElemen
   sz?: "sm" | "md";
   /** Applied to the outer wrapper div (className goes to the visible trigger button instead). */
   wrapClassName?: string;
+  /** Sizes the trigger and listbox automatically to the widest option label (for static/fixed option sets like Month, Year, Sort). */
+  fitContent?: boolean;
 }
 
 // Custom-styled dropdown mirroring native <select>'s API; a visually-hidden native <select> stays the
 // real controlled element — commit() drives it via React's native setter so onChange keeps firing normally.
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { sz, className, wrapClassName, children, value, onChange, name, id, disabled, required, "aria-label": ariaLabel, ...rest },
+  { sz, className, wrapClassName, fitContent = false, children, value, onChange, name, id, disabled, required, "aria-label": ariaLabel, ...rest },
   forwardedRef
 ) {
   const hiddenRef = useRef<HTMLSelectElement>(null);
@@ -182,7 +184,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
 
   const triggerCls = [styles.trigger, sz === "sm" && styles.sm, disabled && styles.disabled, className].filter(Boolean).join(" ");
 
-  const wrapCls = [styles.wrap, wrapClassName].filter(Boolean).join(" ");
+  const wrapCls = [styles.wrap, fitContent && styles.fitWrap, wrapClassName].filter(Boolean).join(" ");
 
   return (
     <div className={wrapCls} ref={wrapRef}>
@@ -199,7 +201,16 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
         aria-controls={listboxId}
         aria-activedescendant={open && activeIndex >= 0 ? `${listboxId}-opt-${activeIndex}` : undefined}
       >
-        <span className={styles.value}>{selected?.label ?? ""}</span>
+        {fitContent ? (
+          <span className={styles.valueGrid}>
+            {options.map((o, i) => (
+              <span key={o.value + i} className={styles.valueSizer} aria-hidden="true">{o.label}</span>
+            ))}
+            <span className={styles.valueActive}>{selected?.label ?? ""}</span>
+          </span>
+        ) : (
+          <span className={styles.value}>{selected?.label ?? ""}</span>
+        )}
         <svg className={styles.chevron} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
         </svg>
@@ -211,7 +222,12 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
           id={listboxId}
           role="listbox"
           className={styles.listbox}
-          style={{ position: "fixed", left: pos.left, width: pos.width, ...(pos.top !== undefined ? { top: pos.top } : { bottom: pos.bottom }) }}
+          style={{
+            position: "fixed",
+            left: pos.left,
+            ...(fitContent ? { minWidth: pos.width, width: "max-content" } : { width: pos.width }),
+            ...(pos.top !== undefined ? { top: pos.top } : { bottom: pos.bottom }),
+          }}
         >
           {options.map((o, i) => (
             <li

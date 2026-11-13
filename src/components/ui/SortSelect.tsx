@@ -22,6 +22,7 @@ export function SortSelect<T extends string>({ value, onChange, options, ariaLab
     <label className={shared.wrap}>
       <span className={shared.label}>{label}</span>
       <Select
+        fitContent
         aria-label={ariaLabel}
         value={value}
         onChange={(e) => onChange(e.target.value as T)}

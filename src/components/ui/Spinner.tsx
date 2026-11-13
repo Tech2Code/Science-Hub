@@ -43,13 +43,45 @@ export function OverlayLoader({ text }: { text: string }) {
   );
 }
 
-/* ── Bare spinner, no backdrop/card — for background refetches where content is already dimmed ──
-   Portaled for the same reason as OverlayLoader above. */
+/* ── Dual-ring counter-rotating gradient spinner with center core ──
+   High-contrast multi-tone gradients so it never blends into light or dark UI. */
 export function FloatingSpinner() {
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className={styles.floatingSpinner}>
-      <Spinner size="lg" />
+    <div className={styles.floatingSpinner} role="status" aria-label="Loading">
+      <svg className={styles.floatingSvg} viewBox="0 0 56 56" fill="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="spinOuterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="var(--spin-outer-start)" />
+            <stop offset="50%" stopColor="var(--spin-outer-mid)" />
+            <stop offset="100%" stopColor="var(--spin-outer-end)" stopOpacity="0.15" />
+          </linearGradient>
+          <linearGradient id="spinInnerGrad" x1="100%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="var(--spin-inner-start)" />
+            <stop offset="100%" stopColor="var(--spin-inner-end)" stopOpacity="0.2" />
+          </linearGradient>
+        </defs>
+        <circle className={styles.floatingTrackOuter} cx="28" cy="28" r="22" strokeWidth="4" />
+        <circle className={styles.floatingTrackInner} cx="28" cy="28" r="14" strokeWidth="3" />
+        <circle
+          className={styles.floatingArcOuter}
+          cx="28"
+          cy="28"
+          r="22"
+          stroke="url(#spinOuterGrad)"
+          strokeWidth="4.2"
+          strokeLinecap="round"
+        />
+        <circle
+          className={styles.floatingArcInner}
+          cx="28"
+          cy="28"
+          r="14"
+          stroke="url(#spinInnerGrad)"
+          strokeWidth="3.4"
+          strokeLinecap="round"
+        />
+      </svg>
     </div>,
     document.body
   );

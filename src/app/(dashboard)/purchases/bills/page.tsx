@@ -484,7 +484,7 @@ export default function PurchasesPage() {
               onChange={(v) => { setSort(v); setPage(1); }}
               options={SORT_OPTIONS}
             />
-            <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} />
+            <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} countScope="purchase-bills" statusFilter={filter} />
             <Button
               variant="secondary"
               size="sm"
@@ -623,7 +623,7 @@ export default function PurchasesPage() {
             </tbody>
           </table>
         </div>
-        {data && total > 0 && (
+        {data && (
           <Pagination total={total} page={page} showAll={showAll} onPage={setPage} label="bills" loading={isRefetching} />
         )}
       </div>

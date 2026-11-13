@@ -260,7 +260,7 @@ export default function DashboardPage() {
               {" · "}{finPeriodLabel}
             </div>
           </div>
-          <PeriodFilter value={finPeriod} onChange={setFinPeriod} disabled={loading} className={styles.financialsSelectWrap} />
+          <PeriodFilter value={finPeriod} onChange={setFinPeriod} disabled={loading} className={styles.financialsSelectWrap} countScope="dashboard" />
         </div>
 
         <div className={styles.finTileGrid}>

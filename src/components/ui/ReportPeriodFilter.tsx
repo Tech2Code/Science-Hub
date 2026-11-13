@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PeriodFilter, calYearOf, type PeriodValue } from "@/components/dashboard/PeriodFilter";
+import { PeriodFilter, calYearOf, type PeriodCountScope, type PeriodValue } from "@/components/dashboard/PeriodFilter";
 import { defaultListPeriod } from "@/lib/listPeriod";
 import { DateRangeFilter } from "./DateRangeFilter";
 import { Button } from "./Button";
@@ -59,12 +59,13 @@ interface Props {
   onEndChange: (value: string) => void;
   minDate?: string;
   inline?: boolean;
+  countScope?: PeriodCountScope;
 }
 
 // Report period picker with both ways of choosing a period: Financial Year + Month (default — current FY, full year, and
 // month) or a Custom From/To range (e.g. a quarter). It reports through the same startDate/endDate strings the
 // report pages already use, so switching a page over is only a swap of this component for DateRangeFilter.
-export function ReportPeriodFilter({ startDate, endDate, todayStr, onStartChange, onEndChange, minDate, inline = false }: Props) {
+export function ReportPeriodFilter({ startDate, endDate, todayStr, onStartChange, onEndChange, minDate, inline = false, countScope }: Props) {
   const [mode, setMode] = useState<"period" | "custom">("period");
   const [period, setPeriod] = useState<PeriodValue>(() => defaultListPeriod());
 
@@ -85,7 +86,7 @@ export function ReportPeriodFilter({ startDate, endDate, todayStr, onStartChange
         <Button size="sm" variant={mode === "custom" ? "primary" : "secondary"} aria-pressed={mode === "custom"} onClick={() => switchMode("custom")}>Custom range</Button>
       </div>
       {mode === "period" ? (
-        <PeriodFilter value={period} onChange={changePeriod} />
+        <PeriodFilter value={period} onChange={changePeriod} countScope={countScope} />
       ) : (
         <DateRangeFilter
           inline

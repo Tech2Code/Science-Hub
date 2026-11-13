@@ -1,75 +1,25 @@
-@keyframes spinAnim {
-  to { transform: rotate(360deg); }
-}
-
-.spinner {
-  display: inline-block;
-  flex-shrink: 0;
-  animation: spinAnim 0.7s linear infinite;
-  color: var(--c-blue, #2563eb);
-}
-
-.sm  { width: 1rem;    height: 1rem;    }
-.md  { width: 1.75rem; height: 1.75rem; }
-.lg  { width: 2.5rem;  height: 2.5rem;  }
-
-/* OverlayLoader */
-.overlayBackdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.overlayCard {
-  background: var(--c-bg-card);
-  border-radius: var(--c-radius);
-  padding: 2rem 2.5rem;
-  box-shadow: var(--c-shadow-lg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.875rem;
-  min-width: 13rem;
-}
-
-.overlayText {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--c-text-2);
-}
-
-/* FloatingSpinner — dims the whole page like a translucent scrim (not a
-   solid dark card) while a spinner stays fixed at the viewport center */
-.floatingSpinner {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  background: rgba(248, 250, 252, 0.6);
-}
-:global(.dark) .floatingSpinner {
-  background: rgba(2, 6, 23, 0.6);
-}
-
-/* PageLoader */
-.pageLoader {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 5rem 1rem;
-  gap: 1rem;
-}
-
-.pageLoaderText {
-  font-size: 0.875rem;
-  color: var(--c-text-4);
-  font-weight: 500;
-}
+/* Section: Keyframes & Base Spinner */
+@keyframes spinAnim { to { transform: rotate(360deg); } }
+@keyframes spinReverseAnim { to { transform: rotate(-360deg); } }
+.spinner { display: inline-block; flex-shrink: 0; animation: spinAnim 0.7s linear infinite; color: var(--c-blue, #2563eb); }
+.sm { width: 16px; height: 16px; }
+.md { width: 28px; height: 28px; }
+.lg { width: 40px; height: 40px; }
+/* Section: OverlayLoader */
+.overlayBackdrop { position: fixed; inset: 0; z-index: 9999; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; }
+.overlayBackdrop .overlayCard { background: var(--c-bg-card); border-radius: var(--c-radius); padding: 32px 40px; box-shadow: var(--c-shadow-lg); display: flex; flex-direction: column; align-items: center; gap: 14px; min-width: 208px; }
+.overlayCard .overlayText { font-size: 14px; font-weight: 500; color: var(--c-text-2); }
+/* Section: FloatingSpinner (Dual-Ring Counter-Rotating Multi-Tone Spinner) */
+.floatingSpinner { --spin-outer-start: #7c3aed; --spin-outer-mid: #2563eb; --spin-outer-end: #06b6d4; --spin-inner-start: #f59e0b; --spin-inner-end: #ec4899; position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; pointer-events: none; background: rgba(248, 250, 252, 0.38); backdrop-filter: blur(1px); }
+:global(.dark) .floatingSpinner { --spin-outer-start: #38bdf8; --spin-outer-mid: #a855f7; --spin-outer-end: #f472b6; --spin-inner-start: #fbbf24; --spin-inner-end: #2dd4bf; background: rgba(2, 6, 23, 0.42); backdrop-filter: blur(1px); }
+.floatingSpinner .floatingSvg { width: 52px; height: 52px; overflow: visible; filter: drop-shadow(0 2px 6px rgba(15, 23, 42, 0.22)); }
+:global(.dark) .floatingSpinner .floatingSvg { filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.65)); }
+.floatingSvg .floatingTrackOuter { stroke: rgba(15, 23, 42, 0.12); }
+.floatingSvg .floatingTrackInner { stroke: rgba(15, 23, 42, 0.1); }
+:global(.dark) .floatingSvg .floatingTrackOuter { stroke: rgba(255, 255, 255, 0.18); }
+:global(.dark) .floatingSvg .floatingTrackInner { stroke: rgba(255, 255, 255, 0.14); }
+.floatingSvg .floatingArcOuter { stroke-dasharray: 88 140; transform-origin: 28px 28px; animation: spinAnim 0.78s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite; }
+.floatingSvg .floatingArcInner { stroke-dasharray: 48 90; transform-origin: 28px 28px; animation: spinReverseAnim 0.95s linear infinite; }
+/* Section: PageLoader */
+.pageLoader { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 16px; gap: 16px; }
+.pageLoader .pageLoaderText { font-size: 14px; color: var(--c-text-4); font-weight: 500; }

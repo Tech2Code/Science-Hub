@@ -372,7 +372,7 @@ export default function CategoriesPage() {
             </tbody>
           </table>
         </div>
-        {data && total > 0 && (
+        {data && (
           <Pagination
             total={total}
             page={page}

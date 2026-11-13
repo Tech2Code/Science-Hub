@@ -140,7 +140,7 @@ export default function PaymentsPage() {
               onChange={(e) => handleSearch(e.target.value)}
               className={`${styles.searchInput}`}
             />
-            <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} />
+            <ListPeriodFilter value={period} onChange={(p) => { setPeriod(p); setPage(1); }} countScope="sales-payments" />
             <SortSelect ariaLabel="Sort payments" value={sort} onChange={(v) => { setSort(v); setPage(1); }} options={SORT_OPTIONS} />
           </div>
           {data && (
@@ -196,7 +196,7 @@ export default function PaymentsPage() {
             </tbody>
           </table>
         </div>
-        {data && total > 0 && (
+        {data && (
           <Pagination
             total={total}
             page={page}

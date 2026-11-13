@@ -156,7 +156,7 @@ export default function PurchaseDashboardPage() {
       <div {...animateSection(1, styles.kpiSection)}>
         <div className={styles.kpiSectionHead}>
           <h2 className={styles.sectionTitle}>Key figures</h2>
-          <PeriodFilter value={period} onChange={setPeriod} disabled={kpiLoading} className={styles.periodSelectWrap} />
+          <PeriodFilter value={period} onChange={setPeriod} disabled={kpiLoading} className={styles.periodSelectWrap} countScope="purchases-overview" />
         </div>
         <div className={styles.kpiRow}>
           <KpiCard label={`Spend (${periodLabel})`} value={kpiLoading ? "—" : fmt(scoped?.spendThisMonth ?? 0)} sub={kpiLoading ? undefined : `${fmt(scoped?.spendTaxable ?? 0)} taxable + ${fmt(scoped?.spendGst ?? 0)} GST`} loading={kpiLoading} color="var(--c-amber)" />

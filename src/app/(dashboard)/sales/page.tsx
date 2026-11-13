@@ -159,7 +159,7 @@ export default function SalesDashboardPage() {
       <div {...animateSection(1, styles.kpiSection)}>
         <div className={styles.kpiSectionHead}>
           <h2 className={styles.sectionTitle}>Key figures</h2>
-          <PeriodFilter value={period} onChange={setPeriod} disabled={kpiLoading} className={styles.periodSelectWrap} />
+          <PeriodFilter value={period} onChange={setPeriod} disabled={kpiLoading} className={styles.periodSelectWrap} countScope="sales-overview" />
         </div>
         <div className={styles.kpiRow}>
           <KpiCard

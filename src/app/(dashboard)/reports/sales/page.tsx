@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/lib/useCache";
 import { animateSection } from "@/lib/animateSection";
 import { Cell, type Column } from "@/components/ui/Table";
-import { OverlayLoader } from "@/components/ui/Spinner";
+import { FloatingSpinner, OverlayLoader } from "@/components/ui/Spinner";
 import { downloadXlsx } from "@/lib/downloadXlsx";
 import { formatDate } from "@/lib/formatDate";
 import { toIstDateStr } from "@/lib/validation";
@@ -85,6 +85,8 @@ export default function SalesReportsPage() {
   const outTotalBalance = outstandingResponse?.totalBalance ?? 0;
   const showOutSkeleton = loadingOut && !outstandingResponse;
   const isOutRefetching = loadingOut && !!outstandingResponse;
+  const showGstSkeleton = loadingGst && !gstData;
+  const isGstRefetching = loadingGst && !!gstData;
   const gstRows = gstData ?? [];
 
   const outLastPage = Math.max(1, Math.ceil(outTotal / outPageSize));
@@ -202,6 +204,7 @@ export default function SalesReportsPage() {
             todayStr={todayStr}
             onStartChange={(v) => { setStartDate(v); setOutPage(1); }}
             onEndChange={(v) => { setEndDate(v); setOutPage(1); }}
+            countScope="sales-reports"
           />
         )}
 
@@ -262,7 +265,7 @@ export default function SalesReportsPage() {
                 </tbody>
               </table>
             </div>
-            {outstandingResponse && outTotal > 0 && (
+            {outstandingResponse && (
               <Pagination total={outTotal} page={outPage} showAll={outShowAll} onPage={setOutPage} label="invoices" loading={isOutRefetching} />
             )}
           </>
@@ -308,10 +311,10 @@ export default function SalesReportsPage() {
               )}
             </div>
             <div className="table-wrap">
-              <table className="table-base">
+              <table className="table-base" style={isGstRefetching ? { opacity: 0.5, transition: "opacity 0.15s" } : undefined}>
                 <thead><tr>{GST_COLUMNS.map(col => <th key={col.label} className={col.cls}>{col.label}</th>)}</tr></thead>
                 <tbody>
-                  {loadingGst ? <TableSkeleton columns={GST_COLUMNS} /> : gstRows.length === 0 ? (
+                  {showGstSkeleton ? <TableSkeleton columns={GST_COLUMNS} /> : gstRows.length === 0 ? (
                     <tr><td colSpan={GST_COLUMNS.length} className="table-empty-cell">No invoice data available.</td></tr>
                   ) : gstRows.map((row) => {
                     const totalGstRow = row.cgst + row.sgst + row.igst;
@@ -341,6 +344,7 @@ export default function SalesReportsPage() {
                 )}
               </table>
             </div>
+            {isGstRefetching && <FloatingSpinner />}
           </>
         )}
       </div>

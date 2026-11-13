@@ -306,7 +306,7 @@ export default function RateListsPage() {
             </tbody>
           </table>
         </div>
-        {data && total > 0 && (
+        {data && (
           <Pagination total={total} page={page} showAll={showAll} onPage={setPage} label="rate lists" loading={isRefetching} />
         )}
       </div>
